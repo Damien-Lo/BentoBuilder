@@ -1,0 +1,45 @@
+import express from "express";
+import mongoose from "mongoose";
+import cors from "cors";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 5050;
+
+app.use(cors());
+app.use(express.json());
+
+app.get("/api/health", (req, res) => {
+  console.log("Health route requested");
+
+  return res.status(200).json({
+    success: true,
+    message: "BentoBuilder API is running",
+    database:
+      mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+  });
+});
+
+async function startServer() {
+  try {
+    if (!process.env.MONGODB_URI) {
+      throw new Error("MONGODB_URI is missing from .env");
+    }
+
+    await mongoose.connect(process.env.MONGODB_URI);
+
+    console.log("Connected to MongoDB Atlas");
+    console.log(`Database: ${mongoose.connection.name}`);
+
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`BentoBuilder server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
+}
+
+startServer();
