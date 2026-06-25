@@ -24,10 +24,15 @@ export interface Ingredient {
   updatedAt: string;
 }
 
+export interface StorageLocationOption {
+  _id: string;
+  name: string;
+}
+
 export interface PantryItem {
   _id: string;
   ingredient: Ingredient;
-  storageLocation: string;
+  storageLocation: string | StorageLocationOption;
   quantityAvailable: number;
   quantityUnit: string;
   purchaseDate: string;

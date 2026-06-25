@@ -7,6 +7,9 @@ import ingredientRoutes from "./routes/ingredientRoutes.js";
 import pantryRoutes from "./routes/pantryRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import storageLocationRoutes from "./routes/storageLocationRoutes.js";
+import brandRoutes from "./routes/brandRoutes.js";
+
+
 
 dotenv.config();
 
@@ -38,6 +41,7 @@ app.use("/api/ingredients", ingredientRoutes);
 app.use("/api/pantry", pantryRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/storage-locations", storageLocationRoutes);
+app.use("/api/brands", brandRoutes);
 
 
 app.use((req, res) => {
