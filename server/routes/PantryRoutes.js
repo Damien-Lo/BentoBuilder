@@ -11,13 +11,19 @@ const router = express.Router();
 router.get("/", async (req, res) => {
   try {
     const pantryItems = await PantryItem.find({
-      isFinished: false,
-    })
-      .populate("ingredient")
-      .sort({
-        expiryDate: 1,
-        createdAt: -1,
-      });
+        isFinished: false,
+        })
+        .populate({
+            path: "ingredient",
+            populate: {
+            path: "category",
+            },
+        })
+        .populate("storageLocation")
+        .sort({
+            expiryDate: 1,
+            createdAt: -1,
+        });
 
     return res.status(200).json({
       success: true,
@@ -97,6 +103,102 @@ router.post("/", async (req, res) => {
     });
   }
 });
+
+
+/**
+ * POST /api/pantry/create
+ *
+ * Creates an Ingredient and immediately adds it to the pantry.
+ */
+router.post("/create", async (req, res) => {
+  let ingredient = null;
+
+  try {
+    const {
+      name,
+      description,
+      category,
+      brand,
+      barcode,
+      storageLocation,
+      quantityAvailable,
+      quantityUnit,
+      purchaseDate,
+      expiryDate,
+      purchasePrice,
+      lowStockThreshold,
+      notes,
+      nutrition,
+      nutritionBasis,
+    } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Ingredient name is required",
+      });
+    }
+
+    ingredient = await Ingredient.create({
+      name: name.trim(),
+      description: description?.trim() ?? "",
+      category,
+      brand: brand?.trim() ?? "",
+      barcode: barcode?.trim() || undefined,
+      nutrition: nutrition || {},
+      nutritionBasis: nutritionBasis || "per-serving",
+    });
+
+    const pantryItem = await PantryItem.create({
+      ingredient: ingredient._id,
+      storageLocation,
+      quantityAvailable: Number(quantityAvailable),
+      quantityUnit: quantityUnit.trim(),
+      purchaseDate: purchaseDate || undefined,
+      expiryDate: expiryDate || null,
+      purchasePrice:
+        purchasePrice === "" || purchasePrice === undefined
+          ? null
+          : Number(purchasePrice),
+      lowStockThreshold:
+        lowStockThreshold === "" || lowStockThreshold === undefined
+          ? 0
+          : Number(lowStockThreshold),
+      notes: notes?.trim() ?? "",
+    });
+
+    await pantryItem.populate([
+      {
+        path: "ingredient",
+        populate: {
+          path: "category",
+        },
+      },
+      {
+        path: "storageLocation",
+      },
+    ]);
+
+    return res.status(201).json({
+      success: true,
+      data: pantryItem,
+    });
+  } catch (error) {
+    console.error("Create pantry ingredient error:", error);
+
+    if (ingredient?._id) {
+      await Ingredient.findByIdAndDelete(ingredient._id).catch(() => {});
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+
 
 /**
  * PATCH /api/pantry/:id

@@ -5,6 +5,8 @@ import dotenv from "dotenv";
 
 import ingredientRoutes from "./routes/ingredientRoutes.js";
 import pantryRoutes from "./routes/pantryRoutes.js";
+import categoryRoutes from "./routes/categoryRoutes.js";
+import storageLocationRoutes from "./routes/storageLocationRoutes.js";
 
 dotenv.config();
 
@@ -34,6 +36,9 @@ app.get("/api/health", (req, res) => {
 
 app.use("/api/ingredients", ingredientRoutes);
 app.use("/api/pantry", pantryRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/storage-locations", storageLocationRoutes);
+
 
 app.use((req, res) => {
   return res.status(404).json({

@@ -53,20 +53,9 @@ const ingredientSchema = new mongoose.Schema(
     },
 
     category: {
-      type: String,
-      enum: [
-        "protein",
-        "vegetable",
-        "fruit",
-        "grain",
-        "dairy",
-        "sauce",
-        "seasoning",
-        "snack",
-        "beverage",
-        "other",
-      ],
-      default: "other",
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "IngredientCategory",
+        required: true,
     },
 
     brand: {
