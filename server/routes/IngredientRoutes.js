@@ -63,7 +63,15 @@ router.get("/:id", async (req, res) => {
  */
 router.post("/", async (req, res) => {
   try {
-    const ingredient = await Ingredient.create(req.body);
+    const ingredientData = {
+      ...req.body,
+      barcode:
+        typeof req.body.barcode === "string" && req.body.barcode.trim()
+          ? req.body.barcode.trim()
+          : undefined,
+    };
+
+    const ingredient = await Ingredient.create(ingredientData);
 
     return res.status(201).json({
       success: true,

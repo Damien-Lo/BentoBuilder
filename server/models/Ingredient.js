@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+
 const nutritionSchema = new mongoose.Schema(
   {
     calories: {
@@ -59,15 +60,14 @@ const ingredientSchema = new mongoose.Schema(
     },
 
     brand: {
-      type: String,
-      trim: true,
-      default: "",
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Brand",
+        default: null,
     },
 
     barcode: {
       type: String,
       trim: true,
-      default: null,
     },
 
     defaultPortionAmount: {
@@ -121,10 +121,14 @@ ingredientSchema.index(
   { barcode: 1 },
   {
     unique: true,
-    sparse: true,
+    partialFilterExpression: {
+      barcode: {
+        $type: "string",
+        $ne: "",
+      },
+    },
   }
 );
-
 const Ingredient = mongoose.model("Ingredient", ingredientSchema);
 
 export default Ingredient;
