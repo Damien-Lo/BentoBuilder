@@ -3,17 +3,23 @@ import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 
+import ingredientRoutes from "./routes/ingredientRoutes.js";
+import pantryRoutes from "./routes/pantryRoutes.js";
+
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5050;
+const PORT = Number(process.env.PORT) || 5050;
 
 app.use(cors());
 app.use(express.json());
 
-app.get("/api/health", (req, res) => {
-  console.log("Health route requested");
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
 
+app.get("/api/health", (req, res) => {
   return res.status(200).json({
     success: true,
     message: "BentoBuilder API is running",
@@ -22,10 +28,24 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+
+
+
+
+app.use("/api/ingredients", ingredientRoutes);
+app.use("/api/pantry", pantryRoutes);
+
+app.use((req, res) => {
+  return res.status(404).json({
+    success: false,
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
+  });
+});
+
 async function startServer() {
   try {
     if (!process.env.MONGODB_URI) {
-      throw new Error("MONGODB_URI is missing from .env");
+      throw new Error("MONGODB_URI is missing from server/.env");
     }
 
     await mongoose.connect(process.env.MONGODB_URI);
