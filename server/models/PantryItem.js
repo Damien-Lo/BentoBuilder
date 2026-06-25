@@ -9,16 +9,9 @@ const pantryItemSchema = new mongoose.Schema(
     },
 
     storageLocation: {
-      type: String,
-      enum: [
-        "pantry",
-        "refrigerator",
-        "freezer",
-        "counter",
-        "spice-rack",
-        "other",
-      ],
-      default: "pantry",
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "StorageLocation",
+        required: true,
     },
 
     quantityAvailable: {
@@ -50,7 +43,7 @@ const pantryItemSchema = new mongoose.Schema(
       default: null,
     },
 
-    minimumQuantity: {
+    lowStockThreshold: {
       type: Number,
       min: 0,
       default: 0,
