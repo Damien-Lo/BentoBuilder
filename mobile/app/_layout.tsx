@@ -30,8 +30,41 @@ export default function RootLayout() {
           }}
         />
 
+        {/* Add an existing ingredient to the pantry */}
+        <Stack.Screen
+          name="pantry/add_by_ingredient"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        {/* Create a pantry item manually */}
         <Stack.Screen
           name="pantry/add_manual"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        {/* Create a standalone ingredient manually */}
+        <Stack.Screen
+          name="ingredients/add_manual"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        {/* Edit an existing ingredient */}
+        <Stack.Screen
+          name="ingredients/edit/[id]"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        {/* Edit an existing pantry item */}
+        <Stack.Screen
+          name="pantry/edit/[id]"
           options={{
             headerShown: false,
           }}
