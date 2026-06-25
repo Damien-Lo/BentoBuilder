@@ -4,11 +4,14 @@ import {
   FlatList,
   Keyboard,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
-  ScrollView
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -19,6 +22,14 @@ import {
   getStorageLocations,
   type SelectOption,
 } from "@/src/services/optionsApi";
+
+import {
+  getIngredients,
+  type Ingredient,
+} from "@/src/services/ingredientApi";
+
+
+
 import { getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 
@@ -33,6 +44,8 @@ type GroupedPantryItems = {
   name: string;
   items: PantryItem[];
 };
+
+type ActivePage = "pantry" | "ingredients";
 
 function isReferenceObject(value: unknown): value is ReferenceObject {
   return typeof value === "object" && value !== null;
@@ -105,13 +118,16 @@ function getIngredientCategoryName(item: PantryItem): string {
 
 export default function PantryMainPage() {
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
 
   const [addMenuVisible, setAddMenuVisible] = useState(false);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchText, setSearchText] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
+  const [activePage, setActivePage] =useState<ActivePage>("pantry");
 
   useEffect(() => {
     let cancelled = false;
@@ -120,9 +136,14 @@ export default function PantryMainPage() {
       setIsLoading(true);
 
       try {
-        const [loadedLocations, loadedItems] = await Promise.all([
+        const [
+          loadedLocations,
+          loadedPantryItems,
+          loadedIngredients,
+        ] = await Promise.all([
           getStorageLocations(),
           getPantryItems(),
+          getIngredients(),
         ]);
 
         if (cancelled) {
@@ -132,7 +153,12 @@ export default function PantryMainPage() {
         setStorageLocations(
           Array.isArray(loadedLocations) ? loadedLocations : []
         );
-        setPantryItems(Array.isArray(loadedItems) ? loadedItems : []);
+        setPantryItems(
+          Array.isArray(loadedPantryItems) ? loadedPantryItems : []);
+
+        setIngredients(
+          Array.isArray(loadedIngredients) ? loadedIngredients : []
+        );
       } catch (error) {
         console.error("Error loading pantry page:", error);
 
@@ -196,6 +222,38 @@ export default function PantryMainPage() {
     });
   }, [pantryItems, searchText, storageLocationById]);
 
+
+  const filteredIngredients = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+
+    if (!query) {
+      return ingredients;
+    }
+
+    return ingredients.filter((ingredient) => {
+      const brandName =
+        typeof ingredient.brand === "object" &&
+        ingredient.brand !== null
+          ? ingredient.brand.name ?? ""
+          : "";
+
+      const categoryName =
+        typeof ingredient.category === "object" &&
+        ingredient.category !== null
+          ? ingredient.category.name ?? ""
+          : "";
+
+      return [
+        ingredient.name,
+        brandName,
+        categoryName,
+        ingredient.barcode ?? "",
+      ].some((value) =>
+        value.toLowerCase().includes(query)
+      );
+    });
+  }, [ingredients, searchText]);
+
   const groupedItems = useMemo<GroupedPantryItems[]>(() => {
     const groups = new Map<string, GroupedPantryItems>();
 
@@ -236,70 +294,215 @@ export default function PantryMainPage() {
     );
   }
 
+  const handleHorizontalScrollEnd = (
+    event: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
+    const pageIndex = Math.round(
+      event.nativeEvent.contentOffset.x / screenWidth
+    );
+
+    setActivePage(pageIndex === 0 ? "pantry" : "ingredients");
+
+    Keyboard.dismiss();
+    setIsSearchActive(false);
+    setSearchText("");
+  };
+
 return (
   <SafeAreaView className="flex-1 bg-slate-50">
     <View className="flex-1">
-      {/* Pantry heading */}
-      <View className="px-5 pt-24">
-        <Text className="text-3xl font-bold text-slate-950">
-          Your Pantry
-        </Text>
-
-        <Text className="mt-1 text-base text-slate-500">
-          Browse ingredients by storage location
-        </Text>
-      </View>
-
-      {/* Scrollable storage-location cards */}
+      {/* Swipe horizontally between Pantry and All Ingredients */}
       <ScrollView
+        horizontal
+        pagingEnabled
+        bounces={false}
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         className="flex-1"
-        contentContainerStyle={{
-          paddingHorizontal: 20,
-          paddingTop: 24,
-          paddingBottom: 120,
-        }}
-        showsVerticalScrollIndicator={false}
+        onMomentumScrollEnd={handleHorizontalScrollEnd}
       >
-        <View className="flex-row flex-wrap justify-between">
-          {storageLocations.map((location) => {
-            const locationId = String(location._id);
+        {/* Page 1: Pantry by storage location */}
+        <View style={{ width: screenWidth }} className="flex-1">
+          <View className="px-5 pt-24">
+            <Text className="text-3xl font-bold text-slate-950">
+              Your Pantry
+            </Text>
 
-            const itemCount = pantryItems.filter((item) => {
-              const itemLocationId = getReferenceId(
-                item.storageLocation as unknown
-              );
+            <Text className="mt-1 text-base text-slate-500">
+              Browse ingredients by storage location
+            </Text>
 
-              return itemLocationId === locationId;
-            }).length;
+            <View className="mt-3 flex-row items-center">
+              <View className="h-2 w-6 rounded-full bg-blue-600" />
+              <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
+              <Text className="ml-3 text-xs font-medium text-slate-400">
+                Swipe left for all ingredients
+              </Text>
+            </View>
+          </View>
 
-            return (
-              <Pressable
-                key={locationId}
-                className="mb-4 h-44 w-[48%] justify-between rounded-3xl bg-white p-5 shadow-sm"
-                onPress={() => {
-                  console.log("Open location:", location.name);
-                }}
-              >
-                <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
-                  <Ionicons
-                    name="file-tray-stacked-outline"
-                    size={25}
-                    color="#2563EB"
-                  />
-                </View>
+          <ScrollView
+            className="flex-1"
+            contentContainerStyle={{
+              paddingHorizontal: 20,
+              paddingTop: 24,
+              paddingBottom: 120,
+            }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View className="flex-row flex-wrap justify-between">
+              {storageLocations.map((location) => {
+                const locationId = String(location._id);
 
-                <View>
-                  <Text className="text-lg font-bold text-slate-900">
-                    {location.name}
-                  </Text>
+                const itemCount = pantryItems.filter((item) => {
+                  const itemLocationId = getReferenceId(
+                    item.storageLocation as unknown
+                  );
 
-                  <Text className="mt-1 text-sm text-slate-500">
-                    {itemCount} {itemCount === 1 ? "item" : "items"}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
+                  return itemLocationId === locationId;
+                }).length;
+
+                return (
+                  <Pressable
+                    key={locationId}
+                    className="mb-4 h-44 w-[48%] justify-between rounded-3xl bg-white p-5 shadow-sm"
+                    onPress={() => {
+                      console.log("Open location:", location.name);
+                    }}
+                  >
+                    <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
+                      <Ionicons
+                        name="file-tray-stacked-outline"
+                        size={25}
+                        color="#2563EB"
+                      />
+                    </View>
+
+                    <View>
+                      <Text className="text-lg font-bold text-slate-900">
+                        {location.name}
+                      </Text>
+
+                      <Text className="mt-1 text-sm text-slate-500">
+                        {itemCount} {itemCount === 1 ? "item" : "items"}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </View>
+
+        {/* Page 2: All ingredients list */}
+        <View style={{ width: screenWidth }} className="flex-1">
+          <View className="px-5 pt-24">
+            <Text className="text-3xl font-bold text-slate-950">
+              All Your Ingredients
+            </Text>
+
+            <Text className="mt-1 text-base text-slate-500">
+              View every ingredient in one list
+            </Text>
+
+            <View className="mt-3 flex-row items-center">
+              <View className="h-2 w-2 rounded-full bg-slate-300" />
+              <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
+              <Text className="ml-3 text-xs font-medium text-slate-400">
+                Swipe right to return to pantry
+              </Text>
+            </View>
+          </View>
+
+          <ScrollView
+            className="flex-1"
+            contentContainerStyle={{
+              paddingHorizontal: 20,
+              paddingTop: 24,
+              paddingBottom: 120,
+            }}
+            showsVerticalScrollIndicator={false}
+          >
+            {pantryItems.length === 0 ? (
+              <View className="items-center rounded-3xl bg-white px-6 py-16 shadow-sm">
+                <Ionicons
+                  name="nutrition-outline"
+                  size={42}
+                  color="#94A3B8"
+                />
+
+                <Text className="mt-4 text-lg font-bold text-slate-900">
+                  No ingredients yet
+                </Text>
+
+                <Text className="mt-2 text-center text-slate-500">
+                  Add an ingredient to start building your pantry.
+                </Text>
+              </View>
+            ) : (
+              pantryItems.map((pantryItem) => {
+                const quantity = Number(
+                  pantryItem.quantityAvailable ?? 0
+                );
+                const isInStock = quantity > 0;
+
+                return (
+                  <Pressable
+                    key={pantryItem._id}
+                    className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm"
+                    onPress={() => {
+                      console.log(
+                        "Open ingredient:",
+                        pantryItem._id
+                      );
+                    }}
+                  >
+                    <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
+                      <Ionicons
+                        name="nutrition-outline"
+                        size={23}
+                        color="#2563EB"
+                      />
+                    </View>
+
+                    <View className="ml-4 flex-1">
+                      <Text className="text-base font-bold text-slate-900">
+                        {getIngredientName(pantryItem)}
+                      </Text>
+
+                      <Text className="mt-1 text-sm text-slate-500">
+                        {getStorageLocationName(pantryItem)}
+                      </Text>
+                    </View>
+
+                    <View className="items-end">
+                      <Text
+                        className={`text-sm font-semibold ${
+                          isInStock
+                            ? "text-emerald-600"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        {isInStock ? "In stock" : "Out of stock"}
+                      </Text>
+
+                      <Text className="mt-1 text-sm text-slate-500">
+                        {pantryItem.quantityAvailable}{" "}
+                        {pantryItem.quantityUnit}
+                      </Text>
+                    </View>
+
+                    <Ionicons
+                      name="chevron-forward"
+                      size={20}
+                      color="#94A3B8"
+                      style={{ marginLeft: 10 }}
+                    />
+                  </Pressable>
+                );
+              })
+            )}
+          </ScrollView>
         </View>
       </ScrollView>
 
@@ -310,7 +513,7 @@ return (
         />
       )}
 
-      {/* Search bar */}
+      {/* Search bar stays fixed above both pages */}
       <View
         className={`absolute left-4 right-4 top-3 z-20 overflow-hidden rounded-3xl bg-white shadow-lg ${
           isSearchActive ? "bottom-4" : ""
@@ -328,7 +531,11 @@ return (
               value={searchText}
               onChangeText={setSearchText}
               onFocus={() => setIsSearchActive(true)}
-              placeholder="Search entire pantry"
+              placeholder={
+                activePage === "pantry"
+                  ? "Search entire pantry"
+                  : "Search all ingredients"
+              }
               placeholderTextColor="#94a3b8"
               className="ml-3 flex-1 text-base text-slate-900"
             />
@@ -346,7 +553,14 @@ return (
 
           <Pressable
             className="ml-3 h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
-            onPress={() => setAddMenuVisible(true)}
+            onPress={() => {
+              // if (activePage === "pantry") {
+              //   router.push("/pantry/add_by_ingredient");
+              //   return;
+              // }
+
+              setAddMenuVisible(true);
+            }}
           >
             <Ionicons name="add" size={28} color="white" />
           </Pressable>
@@ -456,18 +670,18 @@ return (
           <View className="mb-5 self-center h-1.5 w-12 rounded-full bg-slate-300" />
 
           <Text className="text-2xl font-bold text-slate-950">
-            Add pantry item
+            Add ingredient
           </Text>
 
           <Text className="mt-1 text-base text-slate-500">
-            Choose how you would like to add an ingredient.
+            Choose how you would like to create a new ingredient.
           </Text>
 
           <Pressable
             className="mt-6 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
             onPress={() => {
               setAddMenuVisible(false);
-              router.push("/pantry/add_manual");
+              router.push("/ingredients/add_manual");
             }}
           >
             <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
@@ -484,8 +698,8 @@ return (
               </Text>
 
               <Text className="mt-1 text-sm leading-5 text-slate-500">
-                Enter the ingredient, quantity, storage, and nutrition
-                information.
+                Enter the ingredient details, brand, category, and
+                nutrition information.
               </Text>
             </View>
 
