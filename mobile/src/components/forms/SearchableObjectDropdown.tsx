@@ -103,12 +103,14 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
     <View
       className="relative"
       style={{
+        width: "100%",
         zIndex: open ? 1000 : 1,
         elevation: open ? 20 : 0,
       }}
     >
       <View
-        className={`h-[52px] flex-row items-center rounded-2xl border bg-white px-4 ${
+        style={{ height: 56 }}
+        className={`flex-row items-center rounded-2xl border bg-white px-4 ${
           disabled
             ? "border-slate-100 opacity-60"
             : open
