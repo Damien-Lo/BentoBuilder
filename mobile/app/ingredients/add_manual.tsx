@@ -85,7 +85,7 @@ const initialForm: FormState = {
 
   quantityAvailable: "",
   quantityUnit: "",
-  purchaseDate: "",
+  purchaseDate: new Date().toISOString().split("T")[0],
   expiryDate: "",
   lowStockThreshold: "0",
 
@@ -529,7 +529,11 @@ export default function AddManualPantryItemScreen() {
 
         <ScrollView
           className="flex-1"
-          contentContainerClassName="px-4 pb-16 pt-5"
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingBottom: 64,
+            paddingTop: 20,
+          }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}

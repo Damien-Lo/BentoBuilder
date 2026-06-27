@@ -42,11 +42,10 @@ export function CreatableObjectDropdown({
 }: CreatableObjectDropdownProps) {
   const safeOptions = useMemo(
     () => (Array.isArray(options) ? options : []),
-    [options]
+    [options],
   );
 
-  const safeSelectedName =
-    typeof selectedName === "string" ? selectedName : "";
+  const safeSelectedName = typeof selectedName === "string" ? selectedName : "";
 
   const [query, setQuery] = useState(safeSelectedName);
   const [open, setOpen] = useState(false);
@@ -58,44 +57,27 @@ export function CreatableObjectDropdown({
 
   const normalizedQuery = query.trim().toLowerCase();
 
-  const normalizedSelectedName = safeSelectedName
-    .trim()
-    .toLowerCase();
+  const normalizedSelectedName = safeSelectedName.trim().toLowerCase();
 
   const filteredOptions = useMemo(() => {
     if (!normalizedQuery) {
       return showAllWhenEmpty ? safeOptions : [];
     }
 
-    if (
-      showAllWhenEmpty &&
-      normalizedQuery === normalizedSelectedName
-    ) {
+    if (showAllWhenEmpty && normalizedQuery === normalizedSelectedName) {
       return safeOptions;
     }
 
     return safeOptions.filter((option) =>
-      option.name
-        .trim()
-        .toLowerCase()
-        .includes(normalizedQuery)
+      option.name.trim().toLowerCase().includes(normalizedQuery),
     );
-  }, [
-    normalizedQuery,
-    normalizedSelectedName,
-    safeOptions,
-    showAllWhenEmpty,
-  ]);
+  }, [normalizedQuery, normalizedSelectedName, safeOptions, showAllWhenEmpty]);
 
   const exactMatch = safeOptions.some(
-    (option) =>
-      option.name.trim().toLowerCase() === normalizedQuery
+    (option) => option.name.trim().toLowerCase() === normalizedQuery,
   );
 
-  const canCreate =
-    normalizedQuery.length > 0 &&
-    !exactMatch &&
-    !creating;
+  const canCreate = normalizedQuery.length > 0 && !exactMatch && !creating;
 
   function openDropdown() {
     if (!disabled) {
@@ -159,12 +141,14 @@ export function CreatableObjectDropdown({
     <View
       className="relative"
       style={{
+        width: "100%",
         zIndex: open ? 1000 : 1,
         elevation: open ? 20 : 0,
       }}
     >
       <View
-        className={`h-[52px] flex-row items-center rounded-2xl border bg-white px-4 ${
+        style={{ height: 56 }}
+        className={`flex-row items-center rounded-2xl border bg-white px-4 ${
           disabled
             ? "border-slate-100 opacity-60"
             : open
@@ -172,11 +156,7 @@ export function CreatableObjectDropdown({
               : "border-slate-200"
         }`}
       >
-        <Ionicons
-          name="search-outline"
-          size={20}
-          color="#64748B"
-        />
+        <Ionicons name="search-outline" size={20} color="#64748B" />
 
         <TextInput
           value={query}
@@ -192,15 +172,8 @@ export function CreatableObjectDropdown({
         />
 
         {query.length > 0 && !disabled ? (
-          <Pressable
-            hitSlop={10}
-            onPress={handleClear}
-          >
-            <Ionicons
-              name="close-circle"
-              size={20}
-              color="#94A3B8"
-            />
+          <Pressable hitSlop={10} onPress={handleClear}>
+            <Ionicons name="close-circle" size={20} color="#94A3B8" />
           </Pressable>
         ) : (
           <Pressable
@@ -252,11 +225,7 @@ export function CreatableObjectDropdown({
                   </Text>
 
                   {isSelected && (
-                    <Ionicons
-                      name="checkmark"
-                      size={20}
-                      color="#2563EB"
-                    />
+                    <Ionicons name="checkmark" size={20} color="#2563EB" />
                   )}
                 </Pressable>
               );
@@ -269,11 +238,7 @@ export function CreatableObjectDropdown({
                 onPress={() => void handleCreate()}
               >
                 <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-100">
-                  <Ionicons
-                    name="add"
-                    size={19}
-                    color="#2563EB"
-                  />
+                  <Ionicons name="add" size={19} color="#2563EB" />
                 </View>
 
                 <Text className="ml-3 flex-1 text-base font-semibold text-blue-700">
@@ -284,10 +249,7 @@ export function CreatableObjectDropdown({
 
             {creating && (
               <View className="flex-row items-center px-4 py-4">
-                <ActivityIndicator
-                  size="small"
-                  color="#2563EB"
-                />
+                <ActivityIndicator size="small" color="#2563EB" />
 
                 <Text className="ml-3 text-base text-slate-500">
                   Creating...
@@ -295,15 +257,13 @@ export function CreatableObjectDropdown({
               </View>
             )}
 
-            {filteredOptions.length === 0 &&
-              !canCreate &&
-              !creating && (
-                <View className="px-4 py-5">
-                  <Text className="text-center text-sm text-slate-500">
-                    No matching options
-                  </Text>
-                </View>
-              )}
+            {filteredOptions.length === 0 && !canCreate && !creating && (
+              <View className="px-4 py-5">
+                <Text className="text-center text-sm text-slate-500">
+                  No matching options
+                </Text>
+              </View>
+            )}
           </ScrollView>
         </View>
       )}
