@@ -4,7 +4,7 @@ import type { PantryItem } from "@/src/types/pantry";
 export interface CreatePantryItemInput {
   name: string;
   description?: string;
-  category: string;
+  category?: string;
   brand?: string;
   barcode?: string;
 
@@ -52,11 +52,7 @@ interface ErrorResponse {
 }
 
 function isErrorResponse(value: unknown): value is ErrorResponse {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "message" in value
-  );
+  return typeof value === "object" && value !== null && "message" in value;
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -86,8 +82,32 @@ export async function getPantryItems(): Promise<PantryItem[]> {
   return result.data;
 }
 
+export interface AddIngredientToPantryInput {
+  ingredient: string;
+  storageLocation: string;
+  quantityAvailable: number;
+  quantityUnit: string;
+  purchaseDate?: string;
+  expiryDate?: string;
+  lowStockThreshold?: number;
+}
+
+export async function addIngredientToPantry(
+  input: AddIngredientToPantryInput,
+): Promise<PantryItem> {
+  const response = await fetch(`${API_BASE_URL}/api/pantry`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  const result = await parseResponse<PantryItemResponse>(response);
+
+  return result.data;
+}
+
 export async function createPantryItem(
-  input: CreatePantryItemInput
+  input: CreatePantryItemInput,
 ): Promise<PantryItem> {
   const response = await fetch(`${API_BASE_URL}/api/pantry/create`, {
     method: "POST",
@@ -104,18 +124,15 @@ export async function createPantryItem(
 
 export async function updatePantryItem(
   pantryItemId: string,
-  updates: Partial<CreatePantryItemInput>
+  updates: Partial<CreatePantryItemInput>,
 ): Promise<PantryItem> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/pantry/${pantryItemId}`,
-    {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(updates),
-    }
-  );
+  const response = await fetch(`${API_BASE_URL}/api/pantry/${pantryItemId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(updates),
+  });
 
   const result = await parseResponse<PantryItemResponse>(response);
 
@@ -124,7 +141,7 @@ export async function updatePantryItem(
 
 export async function usePantryItem(
   pantryItemId: string,
-  amount: number
+  amount: number,
 ): Promise<PantryItem> {
   const response = await fetch(
     `${API_BASE_URL}/api/pantry/${pantryItemId}/use`,
@@ -136,7 +153,7 @@ export async function usePantryItem(
       body: JSON.stringify({
         amount,
       }),
-    }
+    },
   );
 
   const result = await parseResponse<PantryItemResponse>(response);
@@ -144,15 +161,10 @@ export async function usePantryItem(
   return result.data;
 }
 
-export async function deletePantryItem(
-  pantryItemId: string
-): Promise<void> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/pantry/${pantryItemId}`,
-    {
-      method: "DELETE",
-    }
-  );
+export async function deletePantryItem(pantryItemId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/pantry/${pantryItemId}`, {
+    method: "DELETE",
+  });
 
   await parseResponse<{
     success: boolean;

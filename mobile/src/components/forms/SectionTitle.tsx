@@ -13,9 +13,7 @@ export function SectionTitle({
 }: SectionTitleProps) {
   return (
     <View className={`mb-1 ${first ? "mt-0" : "mt-8"}`}>
-      <Text className="text-xl font-bold text-slate-950">
-        {title}
-      </Text>
+      <Text className="text-xl font-bold text-slate-950">{title}</Text>
 
       <Text className="mt-1 text-sm leading-5 text-slate-500">
         {description}

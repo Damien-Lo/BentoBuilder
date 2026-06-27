@@ -56,8 +56,7 @@ export interface CreateIngredientInput {
   isArchived?: boolean;
 }
 
-export type UpdateIngredientInput =
-  Partial<CreateIngredientInput>;
+export type UpdateIngredientInput = Partial<CreateIngredientInput>;
 
 interface IngredientListResponse {
   success: boolean;
@@ -71,12 +70,8 @@ interface IngredientResponse {
   message?: string;
 }
 
-async function parseResponse<T>(
-  response: Response,
-): Promise<T> {
-  const data: unknown = await response
-    .json()
-    .catch(() => null);
+async function parseResponse<T>(response: Response): Promise<T> {
+  const data: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
     const message =
@@ -91,29 +86,18 @@ async function parseResponse<T>(
   }
 
   if (data === null) {
-    throw new Error(
-      "The server returned an empty response",
-    );
+    throw new Error("The server returned an empty response");
   }
 
   return data as T;
 }
 
-export async function getIngredients(): Promise<
-  Ingredient[]
-> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/ingredients`,
-  );
+export async function getIngredients(): Promise<Ingredient[]> {
+  const response = await fetch(`${API_BASE_URL}/api/ingredients`);
 
-  const result =
-    await parseResponse<IngredientListResponse>(
-      response,
-    );
+  const result = await parseResponse<IngredientListResponse>(response);
 
-  return Array.isArray(result.data)
-    ? result.data
-    : [];
+  return Array.isArray(result.data) ? result.data : [];
 }
 
 export async function getIngredientById(
@@ -125,14 +109,9 @@ export async function getIngredientById(
     throw new Error("Ingredient ID is required");
   }
 
-  const response = await fetch(
-    `${API_BASE_URL}/api/ingredients/${trimmedId}`,
-  );
+  const response = await fetch(`${API_BASE_URL}/api/ingredients/${trimmedId}`);
 
-  const result =
-    await parseResponse<IngredientResponse>(
-      response,
-    );
+  const result = await parseResponse<IngredientResponse>(response);
 
   return result.data;
 }
@@ -143,71 +122,51 @@ export async function createIngredient(
   const name = input.name.trim();
 
   if (!name) {
-    throw new Error(
-      "Ingredient name is required",
-    );
+    throw new Error("Ingredient name is required");
   }
 
   const payload: CreateIngredientInput = {
     ...input,
     name,
 
-    barcode:
-      input.barcode?.trim() || null,
+    barcode: input.barcode?.trim() || null,
 
-    description:
-      input.description?.trim() || "",
+    description: input.description?.trim() || "",
 
-    imageUrl:
-      input.imageUrl?.trim() || "",
+    imageUrl: input.imageUrl?.trim() || "",
 
-    brand:
-      input.brand || null,
+    brand: input.brand || null,
 
-    category:
-      input.category || null,
+    category: input.category || null,
 
-    defaultPortionUnit:
-      input.defaultPortionUnit?.trim() || "",
+    defaultPortionUnit: input.defaultPortionUnit?.trim() || "",
 
     nutrition: input.nutrition
       ? {
-          calories:
-            input.nutrition.calories,
+          calories: input.nutrition.calories,
 
-          protein:
-            input.nutrition.protein,
+          protein: input.nutrition.protein,
 
-          carbs:
-            input.nutrition.carbs,
+          carbs: input.nutrition.carbs,
 
-          fats:
-            input.nutrition.fats,
+          fats: input.nutrition.fats,
 
-          fiber:
-            input.nutrition.fiber,
+          fiber: input.nutrition.fiber,
 
-          sodium:
-            input.nutrition.sodium,
+          sodium: input.nutrition.sodium,
         }
       : undefined,
   };
 
-  const response = await fetch(
-    `${API_BASE_URL}/api/ingredients`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+  const response = await fetch(`${API_BASE_URL}/api/ingredients`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify(payload),
+  });
 
-  const result =
-    await parseResponse<IngredientResponse>(
-      response,
-    );
+  const result = await parseResponse<IngredientResponse>(response);
 
   return result.data;
 }
@@ -231,43 +190,30 @@ export async function updateIngredient(
   }
 
   if (typeof input.barcode === "string") {
-    payload.barcode =
-      input.barcode.trim() || null;
+    payload.barcode = input.barcode.trim() || null;
   }
 
   if (typeof input.description === "string") {
-    payload.description =
-      input.description.trim();
+    payload.description = input.description.trim();
   }
 
   if (typeof input.imageUrl === "string") {
-    payload.imageUrl =
-      input.imageUrl.trim();
+    payload.imageUrl = input.imageUrl.trim();
   }
 
-  if (
-    typeof input.defaultPortionUnit ===
-    "string"
-  ) {
-    payload.defaultPortionUnit =
-      input.defaultPortionUnit.trim();
+  if (typeof input.defaultPortionUnit === "string") {
+    payload.defaultPortionUnit = input.defaultPortionUnit.trim();
   }
 
-  const response = await fetch(
-    `${API_BASE_URL}/api/ingredients/${trimmedId}`,
-    {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+  const response = await fetch(`${API_BASE_URL}/api/ingredients/${trimmedId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify(payload),
+  });
 
-  const result =
-    await parseResponse<IngredientResponse>(
-      response,
-    );
+  const result = await parseResponse<IngredientResponse>(response);
 
   return result.data;
 }

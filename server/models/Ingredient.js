@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 
-
 const nutritionSchema = new mongoose.Schema(
   {
     calories: {
@@ -36,7 +35,7 @@ const nutritionSchema = new mongoose.Schema(
   },
   {
     _id: false,
-  }
+  },
 );
 
 const ingredientSchema = new mongoose.Schema(
@@ -54,15 +53,15 @@ const ingredientSchema = new mongoose.Schema(
     },
 
     category: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "IngredientCategory",
-        required: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "IngredientCategory",
+      required: true,
     },
 
     brand: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Brand",
-        default: null,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Brand",
+      default: null,
     },
 
     barcode: {
@@ -112,7 +111,7 @@ const ingredientSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Prevent multiple ingredient records from using the same barcode.
@@ -127,7 +126,7 @@ ingredientSchema.index(
         $ne: "",
       },
     },
-  }
+  },
 );
 const Ingredient = mongoose.model("Ingredient", ingredientSchema);
 

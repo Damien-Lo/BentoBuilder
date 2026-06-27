@@ -1,21 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 interface BaseDropdownOption {
   _id: string;
   name: string;
 }
 
-interface SearchableObjectDropdownProps<
-  T extends BaseDropdownOption
-> {
+interface SearchableObjectDropdownProps<T extends BaseDropdownOption> {
   options?: T[];
   selectedId?: string;
   selectedName?: string;
@@ -29,9 +21,7 @@ interface SearchableObjectDropdownProps<
   onTextChange?: (value: string) => void;
 }
 
-export function SearchableObjectDropdown<
-  T extends BaseDropdownOption
->({
+export function SearchableObjectDropdown<T extends BaseDropdownOption>({
   options,
   selectedId = "",
   selectedName = "",
@@ -43,11 +33,10 @@ export function SearchableObjectDropdown<
 }: SearchableObjectDropdownProps<T>) {
   const safeOptions = useMemo<T[]>(
     () => (Array.isArray(options) ? options : []),
-    [options]
+    [options],
   );
 
-  const safeSelectedName =
-    typeof selectedName === "string" ? selectedName : "";
+  const safeSelectedName = typeof selectedName === "string" ? selectedName : "";
 
   const [query, setQuery] = useState(safeSelectedName);
   const [open, setOpen] = useState(false);
@@ -58,34 +47,21 @@ export function SearchableObjectDropdown<
 
   const normalizedQuery = query.trim().toLowerCase();
 
-  const normalizedSelectedName = safeSelectedName
-    .trim()
-    .toLowerCase();
+  const normalizedSelectedName = safeSelectedName.trim().toLowerCase();
 
   const filteredOptions = useMemo(() => {
     if (!normalizedQuery) {
       return showAllWhenEmpty ? safeOptions : [];
     }
 
-    if (
-      showAllWhenEmpty &&
-      normalizedQuery === normalizedSelectedName
-    ) {
+    if (showAllWhenEmpty && normalizedQuery === normalizedSelectedName) {
       return safeOptions;
     }
 
     return safeOptions.filter((option) =>
-      option.name
-        .trim()
-        .toLowerCase()
-        .includes(normalizedQuery)
+      option.name.trim().toLowerCase().includes(normalizedQuery),
     );
-  }, [
-    normalizedQuery,
-    normalizedSelectedName,
-    safeOptions,
-    showAllWhenEmpty,
-  ]);
+  }, [normalizedQuery, normalizedSelectedName, safeOptions, showAllWhenEmpty]);
 
   function openDropdown() {
     if (!disabled) {
@@ -140,11 +116,7 @@ export function SearchableObjectDropdown<
               : "border-slate-200"
         }`}
       >
-        <Ionicons
-          name="search-outline"
-          size={20}
-          color="#64748B"
-        />
+        <Ionicons name="search-outline" size={20} color="#64748B" />
 
         <TextInput
           value={query}
@@ -160,15 +132,8 @@ export function SearchableObjectDropdown<
         />
 
         {query.length > 0 && !disabled ? (
-          <Pressable
-            hitSlop={10}
-            onPress={handleClear}
-          >
-            <Ionicons
-              name="close-circle"
-              size={20}
-              color="#94A3B8"
-            />
+          <Pressable hitSlop={10} onPress={handleClear}>
+            <Ionicons name="close-circle" size={20} color="#94A3B8" />
           </Pressable>
         ) : (
           <Pressable
@@ -207,8 +172,7 @@ export function SearchableObjectDropdown<
             showsVerticalScrollIndicator={false}
           >
             {filteredOptions.map((option) => {
-              const isSelected =
-                option._id === selectedId;
+              const isSelected = option._id === selectedId;
 
               return (
                 <Pressable
@@ -221,11 +185,7 @@ export function SearchableObjectDropdown<
                   </Text>
 
                   {isSelected && (
-                    <Ionicons
-                      name="checkmark"
-                      size={20}
-                      color="#2563EB"
-                    />
+                    <Ionicons name="checkmark" size={20} color="#2563EB" />
                   )}
                 </Pressable>
               );

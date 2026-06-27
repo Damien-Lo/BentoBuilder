@@ -696,7 +696,7 @@ export default function AddManualPantryItemScreen() {
           </Pressable>
 
           <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">
-            Add pantry item
+            Add Ingredient
           </Text>
 
           <Pressable
@@ -727,11 +727,11 @@ export default function AddManualPantryItemScreen() {
           }
           removeClippedSubviews={false}
         >
-          <SectionTitle
+          {/* <SectionTitle
             first
             title="Ingredient"
             description="Choose an existing ingredient from your ingredient catalog."
-          />
+          /> */}
 
           <FieldLabel
             text="Ingredient name"
