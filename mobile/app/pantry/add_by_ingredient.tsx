@@ -14,10 +14,7 @@ import {
 } from "react-native";
 
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  getIngredients,
-  type Ingredient,
-} from "@/src/services/ingredientApi";
+import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 
 import {
   getStorageLocations,
@@ -33,7 +30,7 @@ type SelectedIngredientCardProps = {
 };
 
 function getReferenceName(
-  reference: string | SelectOption | null | undefined
+  reference: string | SelectOption | null | undefined,
 ): string {
   if (
     typeof reference === "object" &&
@@ -57,11 +54,7 @@ function SelectedIngredientCard({
     <View className="rounded-3xl border border-blue-200 bg-blue-50 p-4">
       <View className="flex-row items-center">
         <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
-          <Ionicons
-            name="nutrition-outline"
-            size={27}
-            color="#2563EB"
-          />
+          <Ionicons name="nutrition-outline" size={27} color="#2563EB" />
         </View>
 
         <View className="ml-4 flex-1">
@@ -80,11 +73,7 @@ function SelectedIngredientCard({
           className="h-10 w-10 items-center justify-center rounded-full bg-white"
           onPress={onClear}
         >
-          <Ionicons
-            name="close"
-            size={21}
-            color="#475569"
-          />
+          <Ionicons name="close" size={21} color="#475569" />
         </Pressable>
       </View>
     </View>
@@ -95,9 +84,7 @@ export default function AddPantryItemByIngredientScreen() {
   const router = useRouter();
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [storageLocations, setStorageLocations] = useState<
-    SelectOption[]
-  >([]);
+  const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
 
   const [selectedIngredient, setSelectedIngredient] =
@@ -109,8 +96,7 @@ export default function AddPantryItemByIngredientScreen() {
   const [storageLocationId, setStorageLocationId] = useState("");
 
   const [showUnitOptions, setShowUnitOptions] = useState(false);
-  const [showLocationOptions, setShowLocationOptions] =
-    useState(false);
+  const [showLocationOptions, setShowLocationOptions] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -120,35 +106,26 @@ export default function AddPantryItemByIngredientScreen() {
 
     async function loadPageData() {
       try {
-        const [
-          loadedIngredients,
-          loadedStorageLocations,
-          loadedUnits,
-        ] = await Promise.all([
-          getIngredients(),
-          getStorageLocations(),
-          getUnitSuggestions(),
-        ]);
+        const [loadedIngredients, loadedStorageLocations, loadedUnits] =
+          await Promise.all([
+            getIngredients(),
+            getStorageLocations(),
+            getUnitSuggestions(),
+          ]);
 
         if (cancelled) {
           return;
         }
 
         setIngredients(
-          Array.isArray(loadedIngredients)
-            ? loadedIngredients
-            : []
+          Array.isArray(loadedIngredients) ? loadedIngredients : [],
         );
 
         setStorageLocations(
-          Array.isArray(loadedStorageLocations)
-            ? loadedStorageLocations
-            : []
+          Array.isArray(loadedStorageLocations) ? loadedStorageLocations : [],
         );
 
-        setUnitOptions(
-          Array.isArray(loadedUnits) ? loadedUnits : []
-        );
+        setUnitOptions(Array.isArray(loadedUnits) ? loadedUnits : []);
       } catch (error) {
         const message =
           error instanceof Error
@@ -174,7 +151,7 @@ export default function AddPantryItemByIngredientScreen() {
     const query = searchText.trim().toLowerCase();
 
     const activeIngredients = ingredients.filter(
-      (ingredient) => !ingredient.isArchived
+      (ingredient) => !ingredient.isArchived,
     );
 
     if (!query) {
@@ -183,9 +160,7 @@ export default function AddPantryItemByIngredientScreen() {
 
     return activeIngredients.filter((ingredient) => {
       const brandName = getReferenceName(ingredient.brand);
-      const categoryName = getReferenceName(
-        ingredient.category
-      );
+      const categoryName = getReferenceName(ingredient.category);
 
       const searchableValues = [
         ingredient.name,
@@ -196,53 +171,45 @@ export default function AddPantryItemByIngredientScreen() {
       ];
 
       return searchableValues.some((value) =>
-        value.toLowerCase().includes(query)
+        value.toLowerCase().includes(query),
       );
     });
   }, [ingredients, searchText]);
 
   const selectedStorageLocation = useMemo(
     () =>
-      storageLocations.find(
-        (location) => location._id === storageLocationId
-      ),
-    [storageLocationId, storageLocations]
+      storageLocations.find((location) => location._id === storageLocationId),
+    [storageLocationId, storageLocations],
   );
 
   async function handleSave() {
     if (!selectedIngredient) {
       Alert.alert(
         "Select an ingredient",
-        "Choose an ingredient before adding it to your pantry."
+        "Choose an ingredient before adding it to your pantry.",
       );
       return;
     }
 
     const parsedQuantity = Number(quantity);
 
-    if (
-      !Number.isFinite(parsedQuantity) ||
-      parsedQuantity < 0
-    ) {
+    if (!Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
       Alert.alert(
         "Invalid quantity",
-        "Enter a valid quantity of zero or greater."
+        "Enter a valid quantity of zero or greater.",
       );
       return;
     }
 
     if (!quantityUnit.trim()) {
-      Alert.alert(
-        "Unit required",
-        "Select or enter a quantity unit."
-      );
+      Alert.alert("Unit required", "Select or enter a quantity unit.");
       return;
     }
 
     if (!storageLocationId) {
       Alert.alert(
         "Storage location required",
-        "Select where this ingredient is stored."
+        "Select where this ingredient is stored.",
       );
       return;
     }
@@ -281,7 +248,7 @@ export default function AddPantryItemByIngredientScreen() {
             text: "Done",
             onPress: () => router.back(),
           },
-        ]
+        ],
       );
     } catch (error) {
       const message =
@@ -319,11 +286,7 @@ export default function AddPantryItemByIngredientScreen() {
             className="h-11 w-11 items-center justify-center rounded-full"
             onPress={() => router.back()}
           >
-            <Ionicons
-              name="chevron-back"
-              size={26}
-              color="#0F172A"
-            />
+            <Ionicons name="chevron-back" size={26} color="#0F172A" />
           </Pressable>
 
           <View className="ml-2 flex-1">
@@ -341,11 +304,7 @@ export default function AddPantryItemByIngredientScreen() {
           <View className="flex-1 px-5 pt-5">
             {/* Search */}
             <View className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
-              <Ionicons
-                name="search-outline"
-                size={21}
-                color="#64748B"
-              />
+              <Ionicons name="search-outline" size={21} color="#64748B" />
 
               <TextInput
                 value={searchText}
@@ -358,14 +317,8 @@ export default function AddPantryItemByIngredientScreen() {
               />
 
               {searchText.length > 0 && (
-                <Pressable
-                  onPress={() => setSearchText("")}
-                >
-                  <Ionicons
-                    name="close-circle"
-                    size={21}
-                    color="#94A3B8"
-                  />
+                <Pressable onPress={() => setSearchText("")}>
+                  <Ionicons name="close-circle" size={21} color="#94A3B8" />
                 </Pressable>
               )}
             </View>
@@ -383,13 +336,9 @@ export default function AddPantryItemByIngredientScreen() {
                 paddingBottom: 40,
               }}
               renderItem={({ item: ingredient }) => {
-                const brandName = getReferenceName(
-                  ingredient.brand
-                );
+                const brandName = getReferenceName(ingredient.brand);
 
-                const categoryName = getReferenceName(
-                  ingredient.category
-                );
+                const categoryName = getReferenceName(ingredient.category);
 
                 return (
                   <Pressable
@@ -398,20 +347,11 @@ export default function AddPantryItemByIngredientScreen() {
                       setSelectedIngredient(ingredient);
 
                       if (ingredient.defaultPortionUnit) {
-                        setQuantityUnit(
-                          ingredient.defaultPortionUnit
-                        );
+                        setQuantityUnit(ingredient.defaultPortionUnit);
                       }
 
-                      if (
-                        ingredient.defaultPortionAmount !==
-                        undefined
-                      ) {
-                        setQuantity(
-                          String(
-                            ingredient.defaultPortionAmount
-                          )
-                        );
+                      if (ingredient.defaultPortionAmount !== undefined) {
+                        setQuantity(String(ingredient.defaultPortionAmount));
                       }
                     }}
                   >
@@ -447,19 +387,15 @@ export default function AddPantryItemByIngredientScreen() {
               }}
               ListEmptyComponent={
                 <View className="items-center px-6 py-16">
-                  <Ionicons
-                    name="search-outline"
-                    size={44}
-                    color="#94A3B8"
-                  />
+                  <Ionicons name="search-outline" size={44} color="#94A3B8" />
 
                   <Text className="mt-4 text-lg font-bold text-slate-950">
                     No ingredients found
                   </Text>
 
                   <Text className="mt-2 text-center text-slate-500">
-                    Try another search or create a new ingredient
-                    from the ingredients page.
+                    Try another search or create a new ingredient from the
+                    ingredients page.
                   </Text>
                 </View>
               }
@@ -501,20 +437,14 @@ export default function AddPantryItemByIngredientScreen() {
                 >
                   <Text
                     className={`flex-1 text-base ${
-                      quantityUnit
-                        ? "text-slate-950"
-                        : "text-slate-400"
+                      quantityUnit ? "text-slate-950" : "text-slate-400"
                     }`}
                   >
                     {quantityUnit || "Unit"}
                   </Text>
 
                   <Ionicons
-                    name={
-                      showUnitOptions
-                        ? "chevron-up"
-                        : "chevron-down"
-                    }
+                    name={showUnitOptions ? "chevron-up" : "chevron-down"}
                     size={18}
                     color="#64748B"
                   />
@@ -574,16 +504,11 @@ export default function AddPantryItemByIngredientScreen() {
                       : "text-slate-400"
                   }`}
                 >
-                  {selectedStorageLocation?.name ??
-                    "Choose a storage location"}
+                  {selectedStorageLocation?.name ?? "Choose a storage location"}
                 </Text>
 
                 <Ionicons
-                  name={
-                    showLocationOptions
-                      ? "chevron-up"
-                      : "chevron-down"
-                  }
+                  name={showLocationOptions ? "chevron-up" : "chevron-down"}
                   size={18}
                   color="#64748B"
                 />
