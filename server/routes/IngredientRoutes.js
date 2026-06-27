@@ -11,9 +11,10 @@ router.get("/", async (req, res) => {
   try {
     const ingredients = await Ingredient.find({
       isArchived: false,
-    }).sort({
-      name: 1,
-    });
+    })
+      .populate("category")
+      .populate("brand")
+      .sort({ name: 1 });
 
     return res.status(200).json({
       success: true,

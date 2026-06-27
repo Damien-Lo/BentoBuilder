@@ -47,6 +47,11 @@ type GroupedPantryItems = {
   items: PantryItem[];
 };
 
+type GroupedIngredients = {
+  category: string;
+  items: Ingredient[];
+};
+
 type ActivePage = "pantry" | "ingredients";
 
 function isReferenceObject(value: unknown): value is ReferenceObject {
@@ -272,6 +277,30 @@ export default function PantryMainPage() {
     );
   }, [filteredItems, storageLocationById]);
 
+  const groupedIngredients = useMemo<GroupedIngredients[]>(() => {
+    const groups = new Map<string, GroupedIngredients>();
+
+    for (const ingredient of filteredIngredients) {
+      const category =
+        typeof ingredient.category === "object" && ingredient.category !== null
+          ? (ingredient.category.name ?? "Uncategorised")
+          : "Uncategorised";
+
+      const existing = groups.get(category);
+      if (existing) {
+        existing.items.push(ingredient);
+      } else {
+        groups.set(category, { category, items: [ingredient] });
+      }
+    }
+
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.category === "Uncategorised") return 1;
+      if (b.category === "Uncategorised") return -1;
+      return a.category.localeCompare(b.category);
+    });
+  }, [filteredIngredients]);
+
   const closeSearch = () => {
     Keyboard.dismiss();
     setIsSearchActive(false);
@@ -467,100 +496,115 @@ export default function PantryMainPage() {
                   </Text>
                 </View>
               ) : (
-                filteredIngredients.map((ingredientItem) => {
-                  const pantryItem = pantryItems.find(
-                    (p) =>
-                      getReferenceId(p.ingredient as unknown) ===
-                      ingredientItem._id,
-                  );
+                groupedIngredients.map((group) => (
+                  <View key={group.category} className="mb-2">
+                    <Text className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+                      {group.category}
+                    </Text>
 
-                  const quantity = pantryItem
-                    ? Number(pantryItem.quantityAvailable ?? 0)
-                    : 0;
-                  const isInStock = quantity > 0;
-                  const locationName = pantryItem
-                    ? getStorageLocationName(pantryItem)
-                    : null;
+                    {group.items.map((ingredientItem) => {
+                      const ingredientPantryItems = pantryItems.filter(
+                        (p) =>
+                          getReferenceId(p.ingredient as unknown) ===
+                          ingredientItem._id,
+                      );
 
-                  return (
-                    <ReanimatedSwipeable
-                      key={ingredientItem._id}
-                      friction={2}
-                      rightThreshold={40}
-                      renderLeftActions={() => (
-                        <Pressable
-                          className="mb-3 w-20 items-center justify-center rounded-3xl bg-red-500 active:bg-red-600"
-                          onPress={() =>
-                            handleDeleteIngredient(
-                              ingredientItem._id,
-                              ingredientItem.name,
-                            )
-                          }
+                      const totalQuantity = ingredientPantryItems.reduce(
+                        (sum, p) => sum + Number(p.quantityAvailable ?? 0),
+                        0,
+                      );
+                      const isInStock = totalQuantity > 0;
+                      const locationNames = [
+                        ...new Set(
+                          ingredientPantryItems.map((p) =>
+                            getStorageLocationName(p),
+                          ),
+                        ),
+                      ].join(", ");
+
+                      return (
+                        <ReanimatedSwipeable
+                          key={ingredientItem._id}
+                          friction={2}
+                          rightThreshold={40}
+                          renderLeftActions={() => (
+                            <Pressable
+                              className="mb-3 w-20 items-center justify-center rounded-3xl bg-red-500 active:bg-red-600"
+                              onPress={() =>
+                                handleDeleteIngredient(
+                                  ingredientItem._id,
+                                  ingredientItem.name,
+                                )
+                              }
+                            >
+                              <Ionicons
+                                name="trash-outline"
+                                size={22}
+                                color="white"
+                              />
+                            </Pressable>
+                          )}
                         >
-                          <Ionicons
-                            name="trash-outline"
-                            size={22}
-                            color="white"
-                          />
-                        </Pressable>
-                      )}
-                    >
-                      <Pressable
-                        className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm"
-                        onPress={() => {
-                          router.push({
-                            pathname: "/ingredients/edit/[id]",
-                            params: { id: ingredientItem._id },
-                          });
-                        }}
-                      >
-                        <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
-                          <Ionicons
-                            name="nutrition-outline"
-                            size={23}
-                            color="#2563EB"
-                          />
-                        </View>
-
-                        <View className="ml-4 flex-1">
-                          <Text className="text-base font-bold text-slate-900">
-                            {ingredientItem.name}
-                          </Text>
-
-                          {locationName ? (
-                            <Text className="mt-1 text-sm text-slate-500">
-                              {locationName}
-                            </Text>
-                          ) : null}
-                        </View>
-
-                        <View className="items-end">
-                          <Text
-                            className={`text-sm font-semibold ${
-                              isInStock ? "text-emerald-600" : "text-slate-400"
-                            }`}
+                          <Pressable
+                            className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm"
+                            onPress={() => {
+                              router.push({
+                                pathname: "/ingredients/edit/[id]",
+                                params: { id: ingredientItem._id },
+                              });
+                            }}
                           >
-                            {isInStock ? "In stock" : "Out of stock"}
-                          </Text>
+                            <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
+                              <Ionicons
+                                name="nutrition-outline"
+                                size={23}
+                                color="#2563EB"
+                              />
+                            </View>
 
-                          {pantryItem ? (
-                            <Text className="mt-1 text-sm text-slate-500">
-                              {pantryItem.quantityAvailable}{" "}
-                              {pantryItem.quantityUnit}
-                            </Text>
-                          ) : null}
-                        </View>
+                            <View className="ml-4 flex-1">
+                              <Text className="text-base font-bold text-slate-900">
+                                {ingredientItem.name}
+                              </Text>
 
-                        <Ionicons
-                          name="chevron-forward"
-                          size={20}
-                          color="#94A3B8"
-                          style={{ marginLeft: 10 }}
-                        />
-                      </Pressable>
-                    </ReanimatedSwipeable>
-                  );
-                })
+                              {locationNames ? (
+                                <Text className="mt-1 text-sm text-slate-500">
+                                  {locationNames}
+                                </Text>
+                              ) : null}
+                            </View>
+
+                            <View className="items-end">
+                              <Text
+                                className={`text-sm font-semibold ${
+                                  isInStock
+                                    ? "text-emerald-600"
+                                    : "text-slate-400"
+                                }`}
+                              >
+                                {isInStock ? "In stock" : "Out of stock"}
+                              </Text>
+
+                              {isInStock ? (
+                                <Text className="mt-1 text-sm text-slate-500">
+                                  {totalQuantity}{" "}
+                                  {ingredientPantryItems[0]?.quantityUnit}
+                                </Text>
+                              ) : null}
+                            </View>
+
+                            <Ionicons
+                              name="chevron-forward"
+                              size={20}
+                              color="#94A3B8"
+                              style={{ marginLeft: 10 }}
+                            />
+                          </Pressable>
+                        </ReanimatedSwipeable>
+                      );
+                    })}
+                  </View>
+                ))
               )}
             </ScrollView>
           </View>
