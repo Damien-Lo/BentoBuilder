@@ -22,10 +22,7 @@ import {
   SectionTitle,
 } from "@/src/components/forms";
 
-import {
-  getIngredients,
-  type Ingredient,
-} from "@/src/services/ingredientApi";
+import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 
 import {
   createBrand,
@@ -37,13 +34,10 @@ import {
   getUnitSuggestions,
 } from "@/src/services/optionsApi";
 
-import { createPantryItem } from "@/src/services/pantryApi";
+import { addIngredientToPantry } from "@/src/services/pantryApi";
 import { createIngredient } from "@/src/services/ingredientApi";
 
-import type {
-  IngredientOption,
-  SelectOption,
-} from "@/src/types/options";
+import type { IngredientOption, SelectOption } from "@/src/types/options";
 
 interface FormState {
   ingredientId: string;
@@ -103,29 +97,21 @@ const initialForm: FormState = {
   sodium: "",
 };
 
-function optionalNumber(
-  value: string,
-): number | undefined {
+function optionalNumber(value: string): number | undefined {
   if (!value.trim()) {
     return undefined;
   }
 
   const parsedValue = Number(value);
 
-  return Number.isFinite(parsedValue)
-    ? parsedValue
-    : undefined;
+  return Number.isFinite(parsedValue) ? parsedValue : undefined;
 }
 
-function numberToFormValue(
-  value: number | undefined,
-): string {
+function numberToFormValue(value: number | undefined): string {
   return value != null ? String(value) : "";
 }
 
-function isValidDateString(
-  value: string,
-): boolean {
+function isValidDateString(value: string): boolean {
   if (!value.trim()) {
     return true;
   }
@@ -141,12 +127,9 @@ function isValidDateString(
   return !Number.isNaN(date.getTime());
 }
 
-function ingredientToOption(
-  ingredient: Ingredient,
-): IngredientOption {
+function ingredientToOption(ingredient: Ingredient): IngredientOption {
   const category =
-    typeof ingredient.category === "object" &&
-    ingredient.category !== null
+    typeof ingredient.category === "object" && ingredient.category !== null
       ? ingredient.category
       : undefined;
 
@@ -158,32 +141,23 @@ function ingredientToOption(
 
     unit: ingredient.defaultPortionUnit ?? "",
 
-    lowStockThreshold:
-      ingredient.lowStockThreshold,
+    lowStockThreshold: ingredient.lowStockThreshold,
 
-    calories:
-      ingredient.nutrition?.calories,
+    calories: ingredient.nutrition?.calories,
 
-    protein:
-      ingredient.nutrition?.protein,
+    protein: ingredient.nutrition?.protein,
 
-    carbs:
-      ingredient.nutrition?.carbs,
+    carbs: ingredient.nutrition?.carbs,
 
-    fat:
-      ingredient.nutrition?.fats,
+    fat: ingredient.nutrition?.fats,
 
-    fiber:
-      ingredient.nutrition?.fiber,
+    fiber: ingredient.nutrition?.fiber,
 
-    sodium:
-      ingredient.nutrition?.sodium,
+    sodium: ingredient.nutrition?.sodium,
 
     categoryId:
       category?._id ??
-      (typeof ingredient.category === "string"
-        ? ingredient.category
-        : ""),
+      (typeof ingredient.category === "string" ? ingredient.category : ""),
 
     categoryName: category?.name ?? "",
 
@@ -199,34 +173,21 @@ function ingredientToOption(
 export default function AddManualPantryItemScreen() {
   const router = useRouter();
 
-  const [form, setForm] =
-    useState<FormState>(initialForm);
+  const [form, setForm] = useState<FormState>(initialForm);
 
-  const [saving, setSaving] =
-    useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const [loadingOptions, setLoadingOptions] =
-    useState(true);
+  const [loadingOptions, setLoadingOptions] = useState(true);
 
-  const [ingredients, setIngredients] = useState<
-    IngredientOption[]
-  >([]);
+  const [ingredients, setIngredients] = useState<IngredientOption[]>([]);
 
-  const [categories, setCategories] = useState<
-    SelectOption[]
-  >([]);
+  const [categories, setCategories] = useState<SelectOption[]>([]);
 
-  const [
-    storageLocations,
-    setStorageLocations,
-  ] = useState<SelectOption[]>([]);
+  const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
 
-  const [brands, setBrands] = useState<
-    SelectOption[]
-  >([]);
+  const [brands, setBrands] = useState<SelectOption[]>([]);
 
-  const [units, setUnits] =
-    useState<string[]>([]);
+  const [units, setUnits] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -253,47 +214,26 @@ export default function AddManualPantryItemScreen() {
 
         setIngredients(
           Array.isArray(loadedIngredients)
-            ? loadedIngredients.map(
-                ingredientToOption,
-              )
+            ? loadedIngredients.map(ingredientToOption)
             : [],
         );
 
-        setCategories(
-          Array.isArray(loadedCategories)
-            ? loadedCategories
-            : [],
-        );
+        setCategories(Array.isArray(loadedCategories) ? loadedCategories : []);
 
         setStorageLocations(
-          Array.isArray(
-            loadedStorageLocations,
-          )
-            ? loadedStorageLocations
-            : [],
+          Array.isArray(loadedStorageLocations) ? loadedStorageLocations : [],
         );
 
-        setBrands(
-          Array.isArray(loadedBrands)
-            ? loadedBrands
-            : [],
-        );
+        setBrands(Array.isArray(loadedBrands) ? loadedBrands : []);
 
-        setUnits(
-          Array.isArray(loadedUnits)
-            ? loadedUnits
-            : [],
-        );
+        setUnits(Array.isArray(loadedUnits) ? loadedUnits : []);
       } catch (error) {
         const message =
           error instanceof Error
             ? error.message
             : "Could not load form options.";
 
-        Alert.alert(
-          "Unable to load options",
-          message,
-        );
+        Alert.alert("Unable to load options", message);
       } finally {
         if (!cancelled) {
           setLoadingOptions(false);
@@ -308,9 +248,7 @@ export default function AddManualPantryItemScreen() {
     };
   }, []);
 
-  function updateForm<
-    K extends keyof FormState,
-  >(
+  function updateForm<K extends keyof FormState>(
     field: K,
     value: FormState[K],
   ) {
@@ -320,83 +258,50 @@ export default function AddManualPantryItemScreen() {
     }));
   }
 
-  function applySelectedIngredient(
-    option: IngredientOption,
-  ) {
+  function applySelectedIngredient(option: IngredientOption) {
     setForm((current) => ({
       ...current,
 
       ingredientId: option._id,
       ingredientName: option.name,
 
-      description:
-        option.description ?? "",
+      description: option.description ?? "",
 
-      quantityUnit:
-        option.unit ?? "",
+      quantityUnit: option.unit ?? "",
 
       lowStockThreshold:
         option.lowStockThreshold != null
-          ? String(
-              option.lowStockThreshold,
-            )
+          ? String(option.lowStockThreshold)
           : "0",
 
-      calories: numberToFormValue(
-        option.calories,
-      ),
+      calories: numberToFormValue(option.calories),
 
-      protein: numberToFormValue(
-        option.protein,
-      ),
+      protein: numberToFormValue(option.protein),
 
-      carbs: numberToFormValue(
-        option.carbs,
-      ),
+      carbs: numberToFormValue(option.carbs),
 
-      fats: numberToFormValue(
-        option.fat,
-      ),
+      fats: numberToFormValue(option.fat),
 
-      fiber: numberToFormValue(
-        option.fiber,
-      ),
+      fiber: numberToFormValue(option.fiber),
 
-      sodium: numberToFormValue(
-        option.sodium,
-      ),
+      sodium: numberToFormValue(option.sodium),
 
-      categoryId:
-        option.categoryId ??
-        option.category?._id ??
-        "",
+      categoryId: option.categoryId ?? option.category?._id ?? "",
 
-      categoryName:
-        option.categoryName ??
-        option.category?.name ??
-        "",
+      categoryName: option.categoryName ?? option.category?.name ?? "",
     }));
   }
 
-  async function handleCreateCategory(
-    name: string,
-  ): Promise<SelectOption> {
-    const category =
-      await createCategory(name);
+  async function handleCreateCategory(name: string): Promise<SelectOption> {
+    const category = await createCategory(name);
 
     setCategories((current) => {
-      const exists = current.some(
-        (item) =>
-          item._id === category._id,
-      );
+      const exists = current.some((item) => item._id === category._id);
 
       return exists
         ? current
-        : [...current, category].sort(
-            (first, second) =>
-              first.name.localeCompare(
-                second.name,
-              ),
+        : [...current, category].sort((first, second) =>
+            first.name.localeCompare(second.name),
           );
     });
 
@@ -406,46 +311,31 @@ export default function AddManualPantryItemScreen() {
   async function handleCreateStorageLocation(
     name: string,
   ): Promise<SelectOption> {
-    const location =
-      await createStorageLocation(name);
+    const location = await createStorageLocation(name);
 
     setStorageLocations((current) => {
-      const exists = current.some(
-        (item) =>
-          item._id === location._id,
-      );
+      const exists = current.some((item) => item._id === location._id);
 
       return exists
         ? current
-        : [...current, location].sort(
-            (first, second) =>
-              first.name.localeCompare(
-                second.name,
-              ),
+        : [...current, location].sort((first, second) =>
+            first.name.localeCompare(second.name),
           );
     });
 
     return location;
   }
 
-  async function handleCreateBrand(
-    name: string,
-  ): Promise<SelectOption> {
+  async function handleCreateBrand(name: string): Promise<SelectOption> {
     const brand = await createBrand(name);
 
     setBrands((current) => {
-      const exists = current.some(
-        (item) =>
-          item._id === brand._id,
-      );
+      const exists = current.some((item) => item._id === brand._id);
 
       return exists
         ? current
-        : [...current, brand].sort(
-            (first, second) =>
-              first.name.localeCompare(
-                second.name,
-              ),
+        : [...current, brand].sort((first, second) =>
+            first.name.localeCompare(second.name),
           );
     });
 
@@ -461,23 +351,17 @@ export default function AddManualPantryItemScreen() {
 
     setUnits((current) => {
       const exists = current.some(
-        (item) =>
-          item.toLowerCase() ===
-          trimmedUnit.toLowerCase(),
+        (item) => item.toLowerCase() === trimmedUnit.toLowerCase(),
       );
 
       return exists
         ? current
-        : [...current, trimmedUnit].sort(
-            (first, second) =>
-              first.localeCompare(second),
+        : [...current, trimmedUnit].sort((first, second) =>
+            first.localeCompare(second),
           );
     });
 
-    updateForm(
-      "quantityUnit",
-      trimmedUnit,
-    );
+    updateForm("quantityUnit", trimmedUnit);
   }
 
   /**
@@ -485,15 +369,13 @@ export default function AddManualPantryItemScreen() {
    * Save the current form data as a new pantry item, add new ingredient if ingreident does not exist.
    */
   async function handleSave() {
-    const quantityAvailable =
-      form.quantityAvailable.trim()
-        ? Number(form.quantityAvailable)
-        : 0;
+    const quantityAvailable = form.quantityAvailable.trim()
+      ? Number(form.quantityAvailable)
+      : 0;
 
-    const lowStockThreshold =
-      form.lowStockThreshold.trim()
-        ? Number(form.lowStockThreshold)
-        : 0;
+    const lowStockThreshold = form.lowStockThreshold.trim()
+      ? Number(form.lowStockThreshold)
+      : 0;
 
     if (!form.ingredientName.trim()) {
       Alert.alert(
@@ -504,26 +386,13 @@ export default function AddManualPantryItemScreen() {
       return;
     }
 
-    if (
-      !Number.isFinite(
-        quantityAvailable,
-      ) ||
-      quantityAvailable < 0
-    ) {
-      Alert.alert(
-        "Invalid quantity",
-        "Enter a quantity of zero or greater.",
-      );
+    if (!Number.isFinite(quantityAvailable) || quantityAvailable < 0) {
+      Alert.alert("Invalid quantity", "Enter a quantity of zero or greater.");
 
       return;
     }
 
-    if (
-      !Number.isFinite(
-        lowStockThreshold,
-      ) ||
-      lowStockThreshold < 0
-    ) {
+    if (!Number.isFinite(lowStockThreshold) || lowStockThreshold < 0) {
       Alert.alert(
         "Invalid low-stock threshold",
         "Enter a threshold of zero or greater.",
@@ -532,11 +401,7 @@ export default function AddManualPantryItemScreen() {
       return;
     }
 
-    if (
-      !isValidDateString(
-        form.purchaseDate,
-      )
-    ) {
+    if (!isValidDateString(form.purchaseDate)) {
       Alert.alert(
         "Invalid purchase date",
         "Enter the date in YYYY-MM-DD format.",
@@ -545,11 +410,7 @@ export default function AddManualPantryItemScreen() {
       return;
     }
 
-    if (
-      !isValidDateString(
-        form.expiryDate,
-      )
-    ) {
+    if (!isValidDateString(form.expiryDate)) {
       Alert.alert(
         "Invalid expiry date",
         "Enter the date in YYYY-MM-DD format.",
@@ -559,10 +420,7 @@ export default function AddManualPantryItemScreen() {
     }
 
     if (!form.categoryId) {
-      Alert.alert(
-        "Category is required",
-        "Select or create a category.",
-      );
+      Alert.alert("Category is required", "Select or create a category.");
       return;
     }
 
@@ -601,35 +459,14 @@ export default function AddManualPantryItemScreen() {
         ingredientId = newIngredient._id;
       }
 
-      await createPantryItem({
-        name: form.ingredientName.trim(),
-
-        description:
-          form.description.trim() || undefined,
-
-        brand:
-          form.brandId || undefined,
-
-        category: form.categoryId,
-
+      await addIngredientToPantry({
+        ingredient: ingredientId,
         storageLocation: form.storageLocationId,
-
         quantityAvailable,
-
-        quantityUnit:
-          form.quantityUnit.trim(),
-
-        purchaseDate:
-          form.purchaseDate.trim() || undefined,
-
-        expiryDate:
-          form.expiryDate.trim() || undefined,
-
+        quantityUnit: form.quantityUnit.trim(),
+        purchaseDate: form.purchaseDate.trim() || undefined,
+        expiryDate: form.expiryDate.trim() || undefined,
         lowStockThreshold,
-
-        nutrition,
-
-        nutritionBasis: "per-serving",
       });
 
       router.back();
@@ -639,10 +476,7 @@ export default function AddManualPantryItemScreen() {
           ? error.message
           : "The pantry item could not be saved.";
 
-      Alert.alert(
-        "Unable to save pantry item",
-        message,
-      );
+      Alert.alert("Unable to save pantry item", message);
     } finally {
       setSaving(false);
     }
@@ -651,14 +485,9 @@ export default function AddManualPantryItemScreen() {
   if (loadingOptions) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator
-          size="large"
-          color="#2563EB"
-        />
+        <ActivityIndicator size="large" color="#2563EB" />
 
-        <Text className="mt-3 text-slate-500">
-          Loading form options...
-        </Text>
+        <Text className="mt-3 text-slate-500">Loading form options...</Text>
       </SafeAreaView>
     );
   }
@@ -666,33 +495,19 @@ export default function AddManualPantryItemScreen() {
   return (
     <SafeAreaView
       className="flex-1 bg-slate-50"
-      edges={[
-        "top",
-        "left",
-        "right",
-      ]}
+      edges={["top", "left", "right"]}
     >
       <KeyboardAvoidingView
         className="flex-1"
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : undefined
-        }
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
           <Pressable
             disabled={saving}
             className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-            onPress={() =>
-              router.back()
-            }
+            onPress={() => router.back()}
           >
-            <Ionicons
-              name="chevron-back"
-              size={26}
-              color="#0F172A"
-            />
+            <Ionicons name="chevron-back" size={26} color="#0F172A" />
           </Pressable>
 
           <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">
@@ -702,29 +517,21 @@ export default function AddManualPantryItemScreen() {
           <Pressable
             disabled={saving}
             className={`rounded-xl px-4 py-2 ${
-              saving
-                ? "bg-blue-300"
-                : "bg-blue-600 active:bg-blue-700"
+              saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
             }`}
-            onPress={() =>
-              void handleSave()
-            }
+            onPress={() => void handleSave()}
           >
             <Text className="font-semibold text-white">
-              {saving
-                ? "Saving..."
-                : "Save"}
+              {saving ? "Saving..." : "Save"}
             </Text>
           </Pressable>
         </View>
 
         <ScrollView
           className="flex-1"
-          contentContainerClassName="px-5 pb-16 pt-5"
+          contentContainerClassName="px-4 pb-16 pt-5"
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={
-            false
-          }
+          showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}
         >
           {/* <SectionTitle
@@ -733,48 +540,28 @@ export default function AddManualPantryItemScreen() {
             description="Choose an existing ingredient from your ingredient catalog."
           /> */}
 
-          <FieldLabel
-            text="Ingredient name"
-            required
-          />
+          <FieldLabel text="Ingredient name" required />
 
           <SearchableObjectDropdown<IngredientOption>
             options={ingredients}
-            selectedId={
-              form.ingredientId
-            }
-            selectedName={
-              form.ingredientName
-            }
+            selectedId={form.ingredientId}
+            selectedName={form.ingredientName}
             placeholder="Search for an ingredient"
             showAllWhenEmpty={false}
-            onTextChange={(value) => {
-              const selectedIngredient =
-                ingredients.find(
-                  (ingredient) =>
-                    ingredient._id ===
-                    form.ingredientId,
-                );
+            onTextChange={(value: string) => {
+              const selectedIngredient = ingredients.find(
+                (ingredient) => ingredient._id === form.ingredientId,
+              );
 
-              const stillMatchesSelection =
-                selectedIngredient?.name ===
-                value;
+              const stillMatchesSelection = selectedIngredient?.name === value;
 
               if (!stillMatchesSelection) {
-                updateForm(
-                  "ingredientId",
-                  "",
-                );
+                updateForm("ingredientId", "");
               }
 
-              updateForm(
-                "ingredientName",
-                value,
-              );
+              updateForm("ingredientName", value);
             }}
-            onSelect={
-              applySelectedIngredient
-            }
+            onSelect={applySelectedIngredient}
           />
 
           <FieldLabel text="Brand" />
@@ -786,15 +573,9 @@ export default function AddManualPantryItemScreen() {
             placeholder="Search or create a brand"
             createLabel="Create brand"
             onSelect={(option) => {
-              updateForm(
-                "brandId",
-                option._id,
-              );
+              updateForm("brandId", option._id);
 
-              updateForm(
-                "brandName",
-                option.name,
-              );
+              updateForm("brandName", option.name);
             }}
             onCreate={handleCreateBrand}
           />
@@ -805,43 +586,23 @@ export default function AddManualPantryItemScreen() {
             value={form.description}
             placeholder="Optional description"
             multiline
-            onChangeText={(value) =>
-              updateForm(
-                "description",
-                value,
-              )
-            }
+            onChangeText={(value) => updateForm("description", value)}
           />
 
-          <FieldLabel
-            text="Category"
-            required
-          />
+          <FieldLabel text="Category" required />
 
           <CreatableObjectDropdown
             options={categories}
-            selectedId={
-              form.categoryId
-            }
-            selectedName={
-              form.categoryName
-            }
+            selectedId={form.categoryId}
+            selectedName={form.categoryName}
             placeholder="Search or create a category"
             createLabel="Create category"
             onSelect={(option) => {
-              updateForm(
-                "categoryId",
-                option._id,
-              );
+              updateForm("categoryId", option._id);
 
-              updateForm(
-                "categoryName",
-                option.name,
-              );
+              updateForm("categoryName", option.name);
             }}
-            onCreate={
-              handleCreateCategory
-            }
+            onCreate={handleCreateCategory}
           />
 
           <SectionTitle
@@ -849,78 +610,43 @@ export default function AddManualPantryItemScreen() {
             description="Where the item is stored and how much you currently have."
           />
 
-          <FieldLabel
-            text="Storage location"
-            required
-          />
+          <FieldLabel text="Storage location" required />
 
           <CreatableObjectDropdown
             options={storageLocations}
-            selectedId={
-              form.storageLocationId
-            }
-            selectedName={
-              form.storageLocationName
-            }
+            selectedId={form.storageLocationId}
+            selectedName={form.storageLocationName}
             placeholder="Search or create a storage location"
             createLabel="Create location"
             onSelect={(option) => {
-              updateForm(
-                "storageLocationId",
-                option._id,
-              );
+              updateForm("storageLocationId", option._id);
 
-              updateForm(
-                "storageLocationName",
-                option.name,
-              );
+              updateForm("storageLocationName", option.name);
             }}
-            onCreate={
-              handleCreateStorageLocation
-            }
+            onCreate={handleCreateStorageLocation}
           />
 
           <View className="flex-row">
             <View className="mr-3 flex-1">
-              <FieldLabel
-                text="Quantity"
-                required
-              />
+              <FieldLabel text="Quantity" required />
 
               <FormInput
-                value={
-                  form.quantityAvailable
-                }
+                value={form.quantityAvailable}
                 placeholder="0"
                 keyboardType="decimal-pad"
-                onChangeText={(value) =>
-                  updateForm(
-                    "quantityAvailable",
-                    value,
-                  )
-                }
+                onChangeText={(value) => updateForm("quantityAvailable", value)}
               />
             </View>
 
             <View className="flex-1">
-              <FieldLabel
-                text="Unit"
-                required
-              />
+              <FieldLabel text="Unit" required />
 
               <CreatableStringDropdown
                 options={units}
-                selectedValue={
-                  form.quantityUnit
-                }
+                selectedValue={form.quantityUnit}
                 placeholder="Search or create a unit"
                 createLabel="Use unit"
-                onSelect={(unit) =>
-                  updateForm(
-                    "quantityUnit",
-                    unit,
-                  )
-                }
+                onSelect={(unit) => updateForm("quantityUnit", unit)}
                 onCreate={handleAddUnit}
               />
             </View>
@@ -933,12 +659,7 @@ export default function AddManualPantryItemScreen() {
             placeholder="YYYY-MM-DD"
             keyboardType="numbers-and-punctuation"
             autoCapitalize="none"
-            onChangeText={(value) =>
-              updateForm(
-                "purchaseDate",
-                value,
-              )
-            }
+            onChangeText={(value) => updateForm("purchaseDate", value)}
           />
 
           <FieldLabel text="Expiry date" />
@@ -948,33 +669,20 @@ export default function AddManualPantryItemScreen() {
             placeholder="YYYY-MM-DD"
             keyboardType="numbers-and-punctuation"
             autoCapitalize="none"
-            onChangeText={(value) =>
-              updateForm(
-                "expiryDate",
-                value,
-              )
-            }
+            onChangeText={(value) => updateForm("expiryDate", value)}
           />
 
           <FieldLabel text="Low-stock threshold" />
 
           <FormInput
-            value={
-              form.lowStockThreshold
-            }
+            value={form.lowStockThreshold}
             placeholder="0"
             keyboardType="decimal-pad"
-            onChangeText={(value) =>
-              updateForm(
-                "lowStockThreshold",
-                value,
-              )
-            }
+            onChangeText={(value) => updateForm("lowStockThreshold", value)}
           />
 
           <Text className="mt-2 text-sm leading-5 text-slate-500">
-            The item is considered low stock
-            when its quantity reaches this
+            The item is considered low stock when its quantity reaches this
             value.
           </Text>
 
@@ -991,12 +699,7 @@ export default function AddManualPantryItemScreen() {
                 value={form.calories}
                 keyboardType="decimal-pad"
                 placeholder="0"
-                onChangeText={(value) =>
-                  updateForm(
-                    "calories",
-                    value,
-                  )
-                }
+                onChangeText={(value) => updateForm("calories", value)}
               />
             </View>
 
@@ -1007,12 +710,7 @@ export default function AddManualPantryItemScreen() {
                 value={form.protein}
                 keyboardType="decimal-pad"
                 placeholder="0"
-                onChangeText={(value) =>
-                  updateForm(
-                    "protein",
-                    value,
-                  )
-                }
+                onChangeText={(value) => updateForm("protein", value)}
               />
             </View>
           </View>
@@ -1025,12 +723,7 @@ export default function AddManualPantryItemScreen() {
                 value={form.carbs}
                 keyboardType="decimal-pad"
                 placeholder="0"
-                onChangeText={(value) =>
-                  updateForm(
-                    "carbs",
-                    value,
-                  )
-                }
+                onChangeText={(value) => updateForm("carbs", value)}
               />
             </View>
 
@@ -1041,12 +734,7 @@ export default function AddManualPantryItemScreen() {
                 value={form.fats}
                 keyboardType="decimal-pad"
                 placeholder="0"
-                onChangeText={(value) =>
-                  updateForm(
-                    "fats",
-                    value,
-                  )
-                }
+                onChangeText={(value) => updateForm("fats", value)}
               />
             </View>
           </View>
@@ -1059,12 +747,7 @@ export default function AddManualPantryItemScreen() {
                 value={form.fiber}
                 keyboardType="decimal-pad"
                 placeholder="0"
-                onChangeText={(value) =>
-                  updateForm(
-                    "fiber",
-                    value,
-                  )
-                }
+                onChangeText={(value) => updateForm("fiber", value)}
               />
             </View>
 
@@ -1075,12 +758,7 @@ export default function AddManualPantryItemScreen() {
                 value={form.sodium}
                 keyboardType="decimal-pad"
                 placeholder="0"
-                onChangeText={(value) =>
-                  updateForm(
-                    "sodium",
-                    value,
-                  )
-                }
+                onChangeText={(value) => updateForm("sodium", value)}
               />
             </View>
           </View>

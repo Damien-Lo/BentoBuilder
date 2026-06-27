@@ -233,3 +233,12 @@ export async function restoreIngredient(
     isArchived: false,
   });
 }
+
+export async function deleteIngredient(ingredientId: string): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/ingredients/${ingredientId}`,
+    { method: "DELETE" },
+  );
+
+  await parseResponse<{ success: boolean; message: string }>(response);
+}

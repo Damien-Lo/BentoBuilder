@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Keyboard,
   Modal,
@@ -14,6 +15,8 @@ import {
   View,
 } from "react-native";
 
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -23,7 +26,11 @@ import {
   type SelectOption,
 } from "@/src/services/optionsApi";
 
-import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import {
+  deleteIngredient,
+  getIngredients,
+  type Ingredient,
+} from "@/src/services/ingredientApi";
 
 import { getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
@@ -271,6 +278,38 @@ export default function PantryMainPage() {
     setSearchText("");
   };
 
+  const handleDeleteIngredient = (id: string, name: string) => {
+    Alert.alert(
+      "Delete ingredient",
+      `Delete "${name}"? This will remove it and all its pantry entries.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void deleteIngredient(id)
+              .then(() => {
+                setIngredients((prev) => prev.filter((i) => i._id !== id));
+                setPantryItems((prev) =>
+                  prev.filter(
+                    (p) => getReferenceId(p.ingredient as unknown) !== id,
+                  ),
+                );
+              })
+              .catch((err: unknown) => {
+                const message =
+                  err instanceof Error
+                    ? err.message
+                    : "Could not delete ingredient.";
+                Alert.alert("Error", message);
+              });
+          },
+        },
+      ],
+    );
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
@@ -380,7 +419,9 @@ export default function PantryMainPage() {
             </ScrollView>
           </View>
 
-          {/* Page 2: All ingredients list */}
+          {/* 
+          Page 2: All ingredients list 
+          */}
           <View style={{ width: screenWidth }} className="flex-1">
             <View className="px-5 pt-24">
               <Text className="text-3xl font-bold text-slate-950">
@@ -442,60 +483,82 @@ export default function PantryMainPage() {
                     : null;
 
                   return (
-                    <Pressable
+                    <ReanimatedSwipeable
                       key={ingredientItem._id}
-                      className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm"
-                      onPress={() => {
-                        router.push({
-                          pathname: "/ingredients/edit/[id]",
-                          params: { id: ingredientItem._id },
-                        });
-                      }}
-                    >
-                      <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
-                        <Ionicons
-                          name="nutrition-outline"
-                          size={23}
-                          color="#2563EB"
-                        />
-                      </View>
-
-                      <View className="ml-4 flex-1">
-                        <Text className="text-base font-bold text-slate-900">
-                          {ingredientItem.name}
-                        </Text>
-
-                        {locationName ? (
-                          <Text className="mt-1 text-sm text-slate-500">
-                            {locationName}
-                          </Text>
-                        ) : null}
-                      </View>
-
-                      <View className="items-end">
-                        <Text
-                          className={`text-sm font-semibold ${
-                            isInStock ? "text-emerald-600" : "text-slate-400"
-                          }`}
+                      friction={2}
+                      rightThreshold={40}
+                      renderLeftActions={() => (
+                        <Pressable
+                          className="mb-3 w-20 items-center justify-center rounded-3xl bg-red-500 active:bg-red-600"
+                          onPress={() =>
+                            handleDeleteIngredient(
+                              ingredientItem._id,
+                              ingredientItem.name,
+                            )
+                          }
                         >
-                          {isInStock ? "In stock" : "Out of stock"}
-                        </Text>
+                          <Ionicons
+                            name="trash-outline"
+                            size={22}
+                            color="white"
+                          />
+                        </Pressable>
+                      )}
+                    >
+                      <Pressable
+                        className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm"
+                        onPress={() => {
+                          router.push({
+                            pathname: "/ingredients/edit/[id]",
+                            params: { id: ingredientItem._id },
+                          });
+                        }}
+                      >
+                        <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
+                          <Ionicons
+                            name="nutrition-outline"
+                            size={23}
+                            color="#2563EB"
+                          />
+                        </View>
 
-                        {pantryItem ? (
-                          <Text className="mt-1 text-sm text-slate-500">
-                            {pantryItem.quantityAvailable}{" "}
-                            {pantryItem.quantityUnit}
+                        <View className="ml-4 flex-1">
+                          <Text className="text-base font-bold text-slate-900">
+                            {ingredientItem.name}
                           </Text>
-                        ) : null}
-                      </View>
 
-                      <Ionicons
-                        name="chevron-forward"
-                        size={20}
-                        color="#94A3B8"
-                        style={{ marginLeft: 10 }}
-                      />
-                    </Pressable>
+                          {locationName ? (
+                            <Text className="mt-1 text-sm text-slate-500">
+                              {locationName}
+                            </Text>
+                          ) : null}
+                        </View>
+
+                        <View className="items-end">
+                          <Text
+                            className={`text-sm font-semibold ${
+                              isInStock ? "text-emerald-600" : "text-slate-400"
+                            }`}
+                          >
+                            {isInStock ? "In stock" : "Out of stock"}
+                          </Text>
+
+                          {pantryItem ? (
+                            <Text className="mt-1 text-sm text-slate-500">
+                              {pantryItem.quantityAvailable}{" "}
+                              {pantryItem.quantityUnit}
+                            </Text>
+                          ) : null}
+                        </View>
+
+                        <Ionicons
+                          name="chevron-forward"
+                          size={20}
+                          color="#94A3B8"
+                          style={{ marginLeft: 10 }}
+                        />
+                      </Pressable>
+                    </ReanimatedSwipeable>
                   );
                 })
               )}
