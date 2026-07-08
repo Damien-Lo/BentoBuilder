@@ -73,6 +73,27 @@ export default function RootLayout() {
         />
 
         <Stack.Screen
+          name="recipes/add"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="recipes/[id]"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="recipes/edit/[id]"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
           name="modal"
           options={{
             presentation: "modal",
