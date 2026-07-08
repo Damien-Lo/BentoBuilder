@@ -32,6 +32,14 @@ export default function RootLayout() {
           }}
         />
 
+        {/* Storage location detail — lists all pantry items in that location */}
+        <Stack.Screen
+          name="pantry/location/[id]"
+          options={{
+            headerShown: false,
+          }}
+        />
+
         {/* Add an existing ingredient to the pantry */}
         <Stack.Screen
           name="pantry/add_by_ingredient"

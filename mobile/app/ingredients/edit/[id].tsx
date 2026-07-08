@@ -95,6 +95,7 @@ interface FormState {
   defaultPortionAmount: string;
   defaultPortionUnit: string;
   barcode: string;
+  lowStockThreshold: string;
   calories: string;
   protein: string;
   carbs: string;
@@ -121,6 +122,10 @@ function ingredientToForm(ingredient: Ingredient): FormState {
         : "",
     defaultPortionUnit: ingredient.defaultPortionUnit ?? "",
     barcode: ingredient.barcode ?? "",
+    lowStockThreshold:
+      ingredient.lowStockThreshold != null
+        ? String(ingredient.lowStockThreshold)
+        : "",
     calories:
       ingredient.nutrition?.calories != null
         ? String(ingredient.nutrition.calories)
@@ -293,6 +298,7 @@ export default function IngredientDetailScreen() {
         category: form.categoryId || null,
         defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
         defaultPortionUnit: form.defaultPortionUnit.trim() || undefined,
+        lowStockThreshold: optionalNumber(form.lowStockThreshold),
         nutrition: {
           calories: optionalNumber(form.calories),
           protein: optionalNumber(form.protein),
@@ -619,6 +625,14 @@ export default function IngredientDetailScreen() {
                 </View>
               </View>
 
+              <FieldLabel text="Low stock threshold" />
+              <FormInput
+                value={form.lowStockThreshold}
+                placeholder={`Alert when total falls below this (${form.defaultPortionUnit || "units"})`}
+                keyboardType="decimal-pad"
+                onChangeText={(v) => updateForm("lowStockThreshold", v)}
+              />
+
               <SectionTitle
                 title="Nutrition per serving"
                 description="Optional nutrition values for one serving."
@@ -935,9 +949,32 @@ export default function IngredientDetailScreen() {
           {/* Pantry entries — view mode only */}
           {!isEditing && (
             <>
-              <Text className="mb-3 mt-2 text-base font-bold text-slate-900">
-                Pantry entries
-              </Text>
+              <View className="mb-3 mt-2 flex-row items-center">
+                <Text className="flex-1 text-base font-bold text-slate-900">
+                  Pantry entries
+                </Text>
+                {ingredient.lowStockThreshold != null && (
+                  <View
+                    className={`flex-row items-center rounded-full px-2.5 py-1 ${
+                      isLowStock ? "bg-amber-100" : "bg-slate-100"
+                    }`}
+                  >
+                    <Ionicons
+                      name="alert-circle-outline"
+                      size={13}
+                      color={isLowStock ? "#D97706" : "#94A3B8"}
+                    />
+                    <Text
+                      className={`ml-1 text-xs font-semibold ${
+                        isLowStock ? "text-amber-700" : "text-slate-500"
+                      }`}
+                    >
+                      Low: {ingredient.lowStockThreshold}{" "}
+                      {ingredient.defaultPortionUnit || "units"}
+                    </Text>
+                  </View>
+                )}
+              </View>
 
               {ingredientPantryItems.length === 0 ? (
                 <View className="items-center rounded-3xl bg-white px-6 py-10 shadow-sm">

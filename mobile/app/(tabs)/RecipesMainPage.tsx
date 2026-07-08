@@ -297,10 +297,19 @@ export default function RecipesMainPage() {
                       </View>
 
                       <View className="items-end">
-                        <Text className="text-sm text-slate-400">
-                          {recipe.ingredientList.length}{" "}
-                          {recipe.ingredientList.length === 1 ? "ingredient" : "ingredients"}
-                        </Text>
+                        {recipe.nutrition?.calories ? (
+                          <>
+                            <Text className="text-sm font-semibold text-slate-700">
+                              {Math.round(recipe.nutrition.calories)} kcal
+                            </Text>
+                            <Text className="text-xs text-slate-400">per serving</Text>
+                          </>
+                        ) : (
+                          <Text className="text-sm text-slate-400">
+                            {recipe.ingredientList.length}{" "}
+                            {recipe.ingredientList.length === 1 ? "ingredient" : "ingredients"}
+                          </Text>
+                        )}
                       </View>
 
                       <Ionicons

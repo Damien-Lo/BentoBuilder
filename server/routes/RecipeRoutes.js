@@ -69,6 +69,31 @@ function normalizeMealCategory(body) {
   return body;
 }
 
+// Calculate per-serving nutrition from a populated recipe document.
+// Returns null if no ingredient has nutrition data.
+function calcNutrition(recipe) {
+  const servings = Math.max(1, recipe.servings || 1);
+  let calories = 0, protein = 0, carbs = 0, fats = 0, fiber = 0, sodium = 0;
+  let hasData = false;
+
+  for (const entry of recipe.ingredientList) {
+    const ing = entry.ingredient;
+    if (!ing || typeof ing !== "object" || !ing.nutrition) continue;
+    const multiplier = entry.quantity / (ing.defaultPortionAmount || 1);
+    calories += (ing.nutrition.calories || 0) * multiplier;
+    protein  += (ing.nutrition.protein  || 0) * multiplier;
+    carbs    += (ing.nutrition.carbs    || 0) * multiplier;
+    fats     += (ing.nutrition.fats     || 0) * multiplier;
+    fiber    += (ing.nutrition.fiber    || 0) * multiplier;
+    sodium   += (ing.nutrition.sodium   || 0) * multiplier;
+    hasData = true;
+  }
+
+  if (!hasData) return null;
+  const r = (n) => Math.round(n / servings * 10) / 10;
+  return { calories: r(calories), protein: r(protein), carbs: r(carbs), fats: r(fats), fiber: r(fiber), sodium: r(sodium) };
+}
+
 /**
  * POST /api/recipes
  */
@@ -81,6 +106,12 @@ router.post("/", async (req, res) => {
       path: "ingredientList.ingredient",
       populate: { path: "category" },
     });
+
+    const nutrition = calcNutrition(recipe);
+    if (nutrition) {
+      recipe.nutrition = nutrition;
+      await recipe.save();
+    }
 
     return res.status(201).json({
       success: true,
@@ -116,6 +147,12 @@ router.patch("/:id", async (req, res) => {
         success: false,
         message: "Recipe not found",
       });
+    }
+
+    const nutrition = calcNutrition(recipe);
+    if (nutrition) {
+      recipe.nutrition = nutrition;
+      await recipe.save();
     }
 
     return res.status(200).json({
