@@ -131,19 +131,21 @@ router.patch("/:id", async (req, res) => {
 
 /**
  * DELETE /api/ingredients/:id
- * Archive rather than permanently delete.
+ * Pass ?permanent=true to hard-delete. Default: soft archive.
  */
 router.delete("/:id", async (req, res) => {
   try {
-    const ingredient = await Ingredient.findByIdAndUpdate(
-      req.params.id,
-      {
-        isArchived: true,
-      },
-      {
-        new: true,
-      }
-    );
+    let ingredient;
+
+    if (req.query.permanent === "true") {
+      ingredient = await Ingredient.findByIdAndDelete(req.params.id);
+    } else {
+      ingredient = await Ingredient.findByIdAndUpdate(
+        req.params.id,
+        { isArchived: true },
+        { new: true },
+      );
+    }
 
     if (!ingredient) {
       return res.status(404).json({
@@ -154,7 +156,7 @@ router.delete("/:id", async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Ingredient archived",
+      message: req.query.permanent === "true" ? "Ingredient deleted" : "Ingredient archived",
     });
   } catch (error) {
     return res.status(400).json({

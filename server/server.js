@@ -8,6 +8,8 @@ import pantryRoutes from "./routes/pantryRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import storageLocationRoutes from "./routes/storageLocationRoutes.js";
 import brandRoutes from "./routes/brandRoutes.js";
+import recipeRoutes from "./routes/RecipeRoutes.js";
+import recipeCategoryRoutes from "./routes/RecipeCategoryRoutes.js";
 
 
 
@@ -42,6 +44,8 @@ app.use("/api/pantry", pantryRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/storage-locations", storageLocationRoutes);
 app.use("/api/brands", brandRoutes);
+app.use("/api/recipes", recipeRoutes);
+app.use("/api/recipe-categories", recipeCategoryRoutes);
 
 
 app.use((req, res) => {

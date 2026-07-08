@@ -172,6 +172,7 @@ export default function IngredientDetailScreen() {
   const [quickAddExpiryDate, setQuickAddExpiryDate] = useState("");
   const [quickAddLocationId, setQuickAddLocationId] = useState("");
   const [quickAddLocationName, setQuickAddLocationName] = useState("");
+  const [quickAddQuantity, setQuickAddQuantity] = useState("");
   const [savingEntry, setSavingEntry] = useState(false);
 
   useEffect(() => {
@@ -397,7 +398,7 @@ export default function IngredientDetailScreen() {
       const newEntry = await addIngredientToPantry({
         ingredient: id,
         storageLocation: storageLocationId,
-        quantityAvailable: lastEntry.quantityAvailable,
+        quantityAvailable: quickAddQuantity ? Number(quickAddQuantity) : 0,
         quantityUnit: lastEntry.quantityUnit,
         purchaseDate: quickAddPurchaseDate || undefined,
         expiryDate: quickAddExpiryDate || undefined,
@@ -407,6 +408,7 @@ export default function IngredientDetailScreen() {
       setPantryItems((current) => [...current, newEntry]);
       setQuickAddPurchaseDate(new Date().toISOString().split("T")[0]);
       setQuickAddExpiryDate("");
+      setQuickAddQuantity("");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not add pantry entry.";
@@ -965,9 +967,9 @@ export default function IngredientDetailScreen() {
                   return (
                     <View key={entry._id} className="mb-3">
                       <ReanimatedSwipeable
-                        renderRightActions={() => (
+                        renderLeftActions={() => (
                           <Pressable
-                            className="w-24 items-center justify-center rounded-r-3xl bg-red-500 active:bg-red-600"
+                            className="w-24 items-center justify-center rounded-l-3xl bg-red-500 active:bg-red-600"
                             onPress={() => void handleDeleteEntry(entry._id)}
                           >
                             <Ionicons
@@ -1063,29 +1065,44 @@ export default function IngredientDetailScreen() {
 
               {/* Quick-add new entry */}
               <View className="mt-1 rounded-3xl bg-white px-5 py-4 shadow-sm">
-                <FieldLabel text="Storage location" />
-                <CreatableObjectDropdown
-                  options={storageLocations}
-                  selectedId={quickAddLocationId}
-                  selectedName={quickAddLocationName}
-                  placeholder="Search or create a location"
-                  createLabel="Create location"
-                  onSelect={(option) => {
-                    setQuickAddLocationId(option._id);
-                    setQuickAddLocationName(option.name);
-                  }}
-                  onCreate={async (name) => {
-                    const loc = await createStorageLocation(name);
-                    setStorageLocations((current) =>
-                      current.some((l) => l._id === loc._id)
-                        ? current
-                        : [...current, loc].sort((a, b) =>
-                            a.name.localeCompare(b.name),
-                          ),
-                    );
-                    return loc;
-                  }}
-                />
+                <View className="flex-row">
+                  <View className="mr-3 flex-[2]">
+                    <FieldLabel text="Storage location" />
+                    <CreatableObjectDropdown
+                      options={storageLocations}
+                      selectedId={quickAddLocationId}
+                      selectedName={quickAddLocationName}
+                      placeholder="Location"
+                      createLabel="Create location"
+                      onSelect={(option) => {
+                        setQuickAddLocationId(option._id);
+                        setQuickAddLocationName(option.name);
+                      }}
+                      onCreate={async (name) => {
+                        const loc = await createStorageLocation(name);
+                        setStorageLocations((current) =>
+                          current.some((l) => l._id === loc._id)
+                            ? current
+                            : [...current, loc].sort((a, b) =>
+                                a.name.localeCompare(b.name),
+                              ),
+                        );
+                        return loc;
+                      }}
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <FieldLabel text={`Qty (${ingredientPantryItems[0]?.quantityUnit ?? ""})`} />
+                    <TextInput
+                      className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900"
+                      placeholder="0"
+                      placeholderTextColor="#94a3b8"
+                      value={quickAddQuantity}
+                      onChangeText={setQuickAddQuantity}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
 
                 <View className="flex-row">
                   <View className="mr-3 flex-1">

@@ -134,6 +134,19 @@ export default function PantryMainPage() {
   const [searchText, setSearchText] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [activePage, setActivePage] = useState<ActivePage>("pantry");
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -496,13 +509,26 @@ export default function PantryMainPage() {
                   </Text>
                 </View>
               ) : (
-                groupedIngredients.map((group) => (
+                groupedIngredients.map((group) => {
+                  const isCollapsed = collapsedCategories.has(group.category);
+                  return (
                   <View key={group.category} className="mb-2">
-                    <Text className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
-                      {group.category}
-                    </Text>
+                    <Pressable
+                      className="mb-2 flex-row items-center justify-between py-1"
+                      onPress={() => toggleCategory(group.category)}
+                    >
+                      <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+                        {group.category}
+                        <Text className="font-normal"> ({group.items.length})</Text>
+                      </Text>
+                      <Ionicons
+                        name={isCollapsed ? "chevron-forward" : "chevron-down"}
+                        size={16}
+                        color="#94A3B8"
+                      />
+                    </Pressable>
 
-                    {group.items.map((ingredientItem) => {
+                    {!isCollapsed && group.items.map((ingredientItem) => {
                       const ingredientPantryItems = pantryItems.filter(
                         (p) =>
                           getReferenceId(p.ingredient as unknown) ===
@@ -604,7 +630,8 @@ export default function PantryMainPage() {
                       );
                     })}
                   </View>
-                ))
+                  );
+                })
               )}
             </ScrollView>
           </View>
@@ -666,7 +693,7 @@ export default function PantryMainPage() {
             <View className="flex-1 border-t border-slate-100 px-4 pb-4">
               <View className="flex-row items-center justify-between py-3">
                 <Text className="text-lg font-bold text-slate-900">
-                  Pantry ingredients
+                  {activePage === "pantry" ? "Pantry" : "All ingredients"}
                 </Text>
 
                 <Pressable onPress={closeSearch}>
@@ -674,23 +701,94 @@ export default function PantryMainPage() {
                 </Pressable>
               </View>
 
-              <FlatList
-                data={groupedItems}
-                keyExtractor={(group) => group.id}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                renderItem={({ item: group }) => (
-                  <View className="mb-5">
-                    <Text className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
-                      {group.name}
-                    </Text>
+              {activePage === "pantry" ? (
+                <FlatList
+                  data={groupedItems}
+                  keyExtractor={(group) => group.id}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  renderItem={({ item: group }) => (
+                    <View className="mb-5">
+                      <Text className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+                        {group.name}
+                      </Text>
 
-                    {group.items.map((pantryItem) => (
+                      {group.items.map((pantryItem) => (
+                        <Pressable
+                          key={pantryItem._id}
+                          className="mb-2 flex-row items-center rounded-2xl bg-slate-50 p-3"
+                          onPress={() => {
+                            closeSearch();
+                          }}
+                        >
+                          <View className="h-11 w-11 items-center justify-center rounded-xl bg-blue-100">
+                            <Ionicons
+                              name="nutrition-outline"
+                              size={21}
+                              color="#2563EB"
+                            />
+                          </View>
+
+                          <View className="ml-3 flex-1">
+                            <Text className="font-semibold text-slate-900">
+                              {getIngredientName(pantryItem)}
+                            </Text>
+
+                            <Text className="mt-0.5 text-sm text-slate-500">
+                              {pantryItem.quantityAvailable}{" "}
+                              {pantryItem.quantityUnit}
+                            </Text>
+                          </View>
+
+                          <Ionicons
+                            name="chevron-forward"
+                            size={20}
+                            color="#94a3b8"
+                          />
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                  ListEmptyComponent={
+                    <View className="items-center px-6 py-16">
+                      <Ionicons name="search-outline" size={42} color="#94a3b8" />
+                      <Text className="mt-4 text-lg font-bold text-slate-900">
+                        No pantry items found
+                      </Text>
+                      <Text className="mt-2 text-center text-slate-500">
+                        Try a different ingredient name, category, or location.
+                      </Text>
+                    </View>
+                  }
+                />
+              ) : (
+                <FlatList
+                  data={filteredIngredients}
+                  keyExtractor={(ing) => ing._id}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  renderItem={({ item: ingredient }) => {
+                    const categoryName =
+                      typeof ingredient.category === "object" &&
+                      ingredient.category !== null
+                        ? (ingredient.category.name ?? "")
+                        : "";
+
+                    const brandName =
+                      typeof ingredient.brand === "object" &&
+                      ingredient.brand !== null
+                        ? (ingredient.brand.name ?? "")
+                        : "";
+
+                    return (
                       <Pressable
-                        key={pantryItem._id}
                         className="mb-2 flex-row items-center rounded-2xl bg-slate-50 p-3"
                         onPress={() => {
-                          console.log("Open ingredient:", pantryItem._id);
+                          closeSearch();
+                          router.push({
+                            pathname: "/ingredients/edit/[id]",
+                            params: { id: ingredient._id },
+                          });
                         }}
                       >
                         <View className="h-11 w-11 items-center justify-center rounded-xl bg-blue-100">
@@ -703,12 +801,10 @@ export default function PantryMainPage() {
 
                         <View className="ml-3 flex-1">
                           <Text className="font-semibold text-slate-900">
-                            {getIngredientName(pantryItem)}
+                            {ingredient.name}
                           </Text>
-
                           <Text className="mt-0.5 text-sm text-slate-500">
-                            {pantryItem.quantityAvailable}{" "}
-                            {pantryItem.quantityUnit}
+                            {[brandName, categoryName].filter(Boolean).join(" · ")}
                           </Text>
                         </View>
 
@@ -718,24 +814,21 @@ export default function PantryMainPage() {
                           color="#94a3b8"
                         />
                       </Pressable>
-                    ))}
-                  </View>
-                )}
-                ListEmptyComponent={
-                  <View className="items-center px-6 py-16">
-                    <Ionicons name="search-outline" size={42} color="#94a3b8" />
-
-                    <Text className="mt-4 text-lg font-bold text-slate-900">
-                      No ingredients found
-                    </Text>
-
-                    <Text className="mt-2 text-center text-slate-500">
-                      Try searching for another ingredient, category, or storage
-                      location.
-                    </Text>
-                  </View>
-                }
-              />
+                    );
+                  }}
+                  ListEmptyComponent={
+                    <View className="items-center px-6 py-16">
+                      <Ionicons name="search-outline" size={42} color="#94a3b8" />
+                      <Text className="mt-4 text-lg font-bold text-slate-900">
+                        No ingredients found
+                      </Text>
+                      <Text className="mt-2 text-center text-slate-500">
+                        Try searching by name, brand, or category.
+                      </Text>
+                    </View>
+                  }
+                />
+              )}
             </View>
           )}
         </View>
