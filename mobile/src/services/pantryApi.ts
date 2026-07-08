@@ -82,6 +82,14 @@ export async function getPantryItems(): Promise<PantryItem[]> {
   return result.data;
 }
 
+export async function getPantryItemById(id: string): Promise<PantryItem> {
+  const response = await fetch(`${API_BASE_URL}/api/pantry/${id}`);
+
+  const result = await parseResponse<PantryItemResponse>(response);
+
+  return result.data;
+}
+
 export interface AddIngredientToPantryInput {
   ingredient: string;
   storageLocation: string;

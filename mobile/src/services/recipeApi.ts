@@ -22,6 +22,7 @@ export interface PopulatedIngredient {
   nutrition?: RecipeNutrition;
   defaultPortionAmount?: number;
   defaultPortionUnit?: string;
+  lowStockThreshold?: number | null;
 }
 
 export interface RecipeIngredientEntry {

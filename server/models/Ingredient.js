@@ -92,6 +92,12 @@ const ingredientSchema = new mongoose.Schema(
       default: "per-serving",
     },
 
+    lowStockThreshold: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+
     imageUrl: {
       type: String,
       trim: true,

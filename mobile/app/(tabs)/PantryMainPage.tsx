@@ -434,7 +434,10 @@ export default function PantryMainPage() {
                       key={locationId}
                       className="mb-4 h-44 w-[48%] justify-between rounded-3xl bg-white p-5 shadow-sm"
                       onPress={() => {
-                        console.log("Open location:", location.name);
+                        router.push({
+                          pathname: "/pantry/location/[id]",
+                          params: { id: locationId, name: location.name },
+                        });
                       }}
                     >
                       <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
@@ -677,10 +680,10 @@ export default function PantryMainPage() {
             <Pressable
               className="ml-3 h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
               onPress={() => {
-                // if (activePage === "pantry") {
-                //   router.push("/pantry/add_by_ingredient");
-                //   return;
-                // }
+                if (activePage === "pantry") {
+                  router.push("/pantry/add_by_ingredient");
+                  return;
+                }
 
                 setAddMenuVisible(true);
               }}

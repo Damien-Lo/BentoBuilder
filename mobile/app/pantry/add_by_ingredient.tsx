@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,7 +22,7 @@ import {
   type SelectOption,
 } from "@/src/services/optionsApi";
 
-import { createPantryItem } from "@/src/services/pantryApi";
+import { addIngredientToPantry } from "@/src/services/pantryApi";
 
 type SelectedIngredientCardProps = {
   ingredient: Ingredient;
@@ -82,6 +82,10 @@ function SelectedIngredientCard({
 
 export default function AddPantryItemByIngredientScreen() {
   const router = useRouter();
+  const { locationId, locationName } = useLocalSearchParams<{
+    locationId?: string;
+    locationName?: string;
+  }>();
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
@@ -93,7 +97,7 @@ export default function AddPantryItemByIngredientScreen() {
   const [searchText, setSearchText] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [quantityUnit, setQuantityUnit] = useState("item");
-  const [storageLocationId, setStorageLocationId] = useState("");
+  const [storageLocationId, setStorageLocationId] = useState(locationId ?? "");
 
   const [showUnitOptions, setShowUnitOptions] = useState(false);
   const [showLocationOptions, setShowLocationOptions] = useState(false);
@@ -217,25 +221,11 @@ export default function AddPantryItemByIngredientScreen() {
     try {
       setSaving(true);
 
-      await createPantryItem({
+      await addIngredientToPantry({
         ingredient: selectedIngredient._id,
         storageLocation: storageLocationId,
         quantityAvailable: parsedQuantity,
         quantityUnit: quantityUnit.trim(),
-
-        /*
-         * Add any other fields required by your backend here.
-         *
-         * Examples:
-         *
-         * minimumQuantity: 0,
-         * lowStockThreshold: 0,
-         * purchasedDate: new Date().toISOString(),
-         * expiryDate: null,
-         * openedDate: null,
-         * purchasePrice: null,
-         * notes: "",
-         */
       });
 
       Alert.alert(
@@ -295,7 +285,7 @@ export default function AddPantryItemByIngredientScreen() {
             </Text>
 
             <Text className="text-sm text-slate-500">
-              Choose an existing ingredient
+              {locationName ? `Storing in ${locationName}` : "Choose an existing ingredient"}
             </Text>
           </View>
         </View>

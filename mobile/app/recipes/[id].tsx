@@ -15,6 +15,8 @@ import {
   type PopulatedIngredient,
   type Recipe,
 } from "@/src/services/recipeApi";
+import { getPantryItems } from "@/src/services/pantryApi";
+import type { PantryItem } from "@/src/types/pantry";
 
 const MEAL_CATEGORY_LABEL: Record<string, string> = {
   breakfast: "Breakfast",
@@ -37,6 +39,7 @@ export default function RecipeDetailPage() {
   const router = useRouter();
 
   const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPerServing, setShowPerServing] = useState(true);
@@ -48,8 +51,14 @@ export default function RecipeDetailPage() {
     async function load() {
       setIsLoading(true);
       try {
-        const loaded = await getRecipeById(id);
-        if (!cancelled) setRecipe(loaded);
+        const [loaded, loadedPantry] = await Promise.all([
+          getRecipeById(id),
+          getPantryItems(),
+        ]);
+        if (!cancelled) {
+          setRecipe(loaded);
+          setPantryItems(Array.isArray(loadedPantry) ? loadedPantry : []);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load recipe");
@@ -100,6 +109,22 @@ export default function RecipeDetailPage() {
       sodium:   round1(totalNutrition.sodium   / s),
     };
   }, [totalNutrition, showPerServing, recipe]);
+
+  const pantryStockMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of pantryItems) {
+      const raw = item.ingredient as unknown;
+      const ingId =
+        typeof raw === "string"
+          ? raw
+          : typeof raw === "object" && raw !== null && "_id" in raw
+            ? String((raw as Record<string, unknown>)._id)
+            : "";
+      if (!ingId) continue;
+      map.set(ingId, (map.get(ingId) ?? 0) + (item.quantityAvailable ?? 0));
+    }
+    return map;
+  }, [pantryItems]);
 
   if (isLoading) {
     return (
@@ -255,25 +280,56 @@ export default function RecipeDetailPage() {
                 const displayQty = showPerServing
                   ? round1(entry.quantity / Math.max(1, servings))
                   : entry.quantity;
+
+                const ing = typeof entry.ingredient === "string" ? null : entry.ingredient;
+                const ingId = ing?._id ?? (typeof entry.ingredient === "string" ? entry.ingredient : "");
+                const inStock = pantryStockMap.get(ingId) ?? 0;
+                const remaining = inStock - displayQty;
+                const threshold = ing?.lowStockThreshold ?? 0;
+                const barState: "green" | "yellow" | "red" =
+                  remaining > threshold ? "green" :
+                  remaining >= 0 ? "yellow" :
+                  "red";
+
                 return (
                   <View
                     key={index}
-                    className={`flex-row items-center px-4 py-3 ${
-                      index < recipe.ingredientList.length - 1 ? "border-b border-slate-100" : ""
-                    }`}
+                    className={index < recipe.ingredientList.length - 1 ? "border-b border-slate-100" : ""}
                   >
-                    <View className="h-8 w-8 items-center justify-center rounded-xl bg-blue-100">
-                      <Ionicons name="nutrition-outline" size={16} color="#2563EB" />
+                    <View className="flex-row items-center px-4 py-3">
+                      <View className="h-8 w-8 items-center justify-center rounded-xl bg-blue-100">
+                        <Ionicons name="nutrition-outline" size={16} color="#2563EB" />
+                      </View>
+
+                      <Text className="ml-3 flex-1 text-base text-slate-800">
+                        {getIngredientName(entry.ingredient)}
+                      </Text>
+
+                      <View className="items-end">
+                        <Text className="text-sm font-semibold text-slate-500">
+                          {displayQty}
+                          {entry.unit ? ` × ${entry.unit}` : ""}
+                        </Text>
+                        {ing?.nutrition?.calories != null && (
+                          <Text className="mt-0.5 text-xs text-slate-400">
+                            {Math.round(ing.nutrition.calories * (displayQty / (ing.defaultPortionAmount ?? 1)))} kcal
+                          </Text>
+                        )}
+                      </View>
                     </View>
 
-                    <Text className="ml-3 flex-1 text-base text-slate-800">
-                      {getIngredientName(entry.ingredient)}
-                    </Text>
-
-                    <Text className="text-sm font-semibold text-slate-500">
-                      {displayQty}
-                      {entry.unit ? ` × ${entry.unit}` : ""}
-                    </Text>
+                    {/* Pantry availability bar */}
+                    <View className="h-[3px] w-full bg-slate-100">
+                      <View
+                        className={
+                          barState === "green"
+                            ? "h-full w-full bg-emerald-400"
+                            : barState === "yellow"
+                              ? "h-full w-1/2 bg-amber-400"
+                              : "h-full w-[8%] bg-red-400"
+                        }
+                      />
+                    </View>
                   </View>
                 );
               })}
