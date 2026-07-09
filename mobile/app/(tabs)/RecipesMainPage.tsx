@@ -22,6 +22,9 @@ import {
   type MealCategory,
   type Recipe,
 } from "@/src/services/recipeApi";
+import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import { getPantryItems } from "@/src/services/pantryApi";
+import type { PantryItem } from "@/src/types/pantry";
 
 type SortMode = "category" | "meal";
 
@@ -54,6 +57,8 @@ export default function RecipesMainPage() {
   const router = useRouter();
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchText, setSearchText] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
@@ -66,8 +71,16 @@ export default function RecipesMainPage() {
     async function load() {
       setIsLoading(true);
       try {
-        const loaded = await getRecipes();
-        if (!cancelled) setRecipes(Array.isArray(loaded) ? loaded : []);
+        const [loaded, loadedIngredients, loadedPantry] = await Promise.all([
+          getRecipes(),
+          getIngredients(),
+          getPantryItems(),
+        ]);
+        if (!cancelled) {
+          setRecipes(Array.isArray(loaded) ? loaded : []);
+          setIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
+          setPantryItems(Array.isArray(loadedPantry) ? loadedPantry : []);
+        }
       } catch (error) {
         console.error("Error loading recipes:", error);
         if (!cancelled) setRecipes([]);
@@ -80,10 +93,31 @@ export default function RecipesMainPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const ingredientMap = useMemo(
+    () => new Map(ingredients.map((i) => [i._id, i])),
+    [ingredients],
+  );
+
+  const pantryStockMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of pantryItems) {
+      const raw = item.ingredient as unknown;
+      const ingId =
+        typeof raw === "string"
+          ? raw
+          : typeof raw === "object" && raw !== null && "_id" in raw
+            ? String((raw as Record<string, unknown>)._id)
+            : "";
+      if (!ingId) continue;
+      map.set(ingId, (map.get(ingId) ?? 0) + (item.quantityAvailable ?? 0));
+    }
+    return map;
+  }, [pantryItems]);
+
   // Reset collapsed groups when switching sort mode
   const handleSortMode = (mode: SortMode) => {
     setSortMode(mode);
-    setCollapsedGroups(new Set());
+    setCollapsedGroups(mode === "meal" ? new Set(MEAL_CATEGORY_ORDER) : new Set());
   };
 
   const toggleGroup = (key: string) => {
@@ -252,7 +286,32 @@ export default function RecipesMainPage() {
                   />
                 </Pressable>
 
-                {!isCollapsed && group.items.map((recipe) => (
+                {!isCollapsed && group.items.map((recipe) => {
+                  // Worst-case pantry availability across all ingredients
+                  let availability: "green" | "yellow" | "red" | null = null;
+                  for (const entry of recipe.ingredientList) {
+                    const ingId = typeof entry.ingredient === "string"
+                      ? entry.ingredient
+                      : (entry.ingredient as { _id: string })._id;
+                    const ing = ingredientMap.get(ingId);
+                    if (!ing) continue;
+                    const inStock = pantryStockMap.get(ingId) ?? 0;
+                    const remaining = inStock - entry.quantity;
+                    const threshold = ing.lowStockThreshold ?? 0;
+                    const state: "green" | "yellow" | "red" =
+                      remaining > threshold ? "green" :
+                      remaining >= 0 ? "yellow" : "red";
+                    if (availability === null) availability = state;
+                    else if (state === "red") { availability = "red"; break; }
+                    else if (state === "yellow" && availability === "green") availability = "yellow";
+                  }
+
+                  const dotColor =
+                    availability === "green" ? "#34D399" :
+                    availability === "yellow" ? "#FBBF24" :
+                    availability === "red" ? "#F87171" : null;
+
+                  return (
                   <ReanimatedSwipeable
                     key={recipe._id}
                     friction={2}
@@ -312,15 +371,23 @@ export default function RecipesMainPage() {
                         )}
                       </View>
 
+                      {dotColor && (
+                        <View
+                          className="ml-3 h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: dotColor }}
+                        />
+                      )}
+
                       <Ionicons
                         name="chevron-forward"
                         size={20}
                         color="#94A3B8"
-                        style={{ marginLeft: 10 }}
+                        style={{ marginLeft: 8 }}
                       />
                     </Pressable>
                   </ReanimatedSwipeable>
-                ))}
+                  );
+                })}
               </View>
             );
           }}
