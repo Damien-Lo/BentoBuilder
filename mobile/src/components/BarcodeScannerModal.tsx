@@ -1,0 +1,234 @@
+import { CameraView, useCameraPermissions } from "expo-camera";
+import { useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+
+export interface ScannedProduct {
+  name: string;
+  barcode: string;
+  brand?: string;
+  packageQuantity?: number;
+  packageUnit?: string;
+  servingSize: number;
+  servingUnit: string;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fats?: number;
+  fiber?: number;
+  sodium?: number;
+}
+
+interface Props {
+  visible: boolean;
+  onClose: () => void;
+  onProductFound: (product: ScannedProduct) => void;
+}
+
+export function BarcodeScannerModal({
+  visible,
+  onClose,
+  onProductFound,
+}: Props) {
+  const [permission, requestPermission] = useCameraPermissions();
+  const [looking, setLooking] = useState(false);
+  const processingRef = useRef(false);
+
+  async function handleBarcode({ data }: { type: string; data: string }) {
+    if (processingRef.current || looking) return;
+    processingRef.current = true;
+    setLooking(true);
+
+    try {
+      const res = await fetch(
+        `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(data)}.json`,
+      );
+      const json = (await res.json()) as {
+        status: number;
+        product?: Record<string, unknown>;
+      };
+
+      console.log(`Scanned barcode: ${data}, lookup status: ${json.status}`);
+      console.log("Product data:", json);
+
+      if (json.status !== 1 || !json.product) {
+        Alert.alert(
+          "Product not found",
+          "This barcode wasn't in the database. Fill in the details manually.",
+          [{ text: "OK", onPress: onClose }],
+        );
+        return;
+      }
+
+      const p = json.product;
+      const nutriments = (p.nutriments ?? {}) as Record<string, unknown>;
+
+      // Serving size — numeric grams per serving
+      const servingQty =
+        p.serving_quantity != null
+          ? parseFloat(String(p.serving_quantity))
+          : NaN;
+      const hasServing = Number.isFinite(servingQty) && servingQty > 0;
+      const portionAmount = hasServing ? servingQty : 100;
+
+      // Open Food Facts uses several suffix variants depending on product type:
+      // _prepared_serving (cooked/instant foods), _serving, _prepared_100g, _100g
+      function getNum(key: string): number | undefined {
+        const candidates = hasServing
+          ? [
+              nutriments[key + "_prepared_serving"],
+              nutriments[key + "_serving"],
+            ]
+          : [];
+        for (const v of candidates) {
+          if (typeof v === "number" && Number.isFinite(v)) return v;
+        }
+        // Fall back to per-100g variants, scaled to serving size
+        const per100Candidates = [
+          nutriments[key + "_prepared_100g"],
+          nutriments[key + "_100g"],
+        ];
+        for (const v of per100Candidates) {
+          if (typeof v === "number" && Number.isFinite(v)) {
+            return hasServing ? (v / 100) * servingQty : v;
+          }
+        }
+        return undefined;
+      }
+
+      const sodiumG = getNum("sodium");
+
+      // Brand — take the first brand when multiple are comma-separated
+      const rawBrand = String(p.brands ?? "").trim();
+      const brand = rawBrand ? rawBrand.split(",")[0].trim() : undefined;
+
+      const name = String(p.product_name_en ?? p.product_name ?? "").trim();
+
+      if (!name) {
+        Alert.alert(
+          "No product name",
+          "Barcode found but the product has no name. Fill it in manually.",
+          [{ text: "OK", onPress: onClose }],
+        );
+        return;
+      }
+
+      const pkgQty = p.product_quantity != null ? parseFloat(String(p.product_quantity)) : NaN;
+      const pkgUnit = String(p.product_quantity_unit ?? "g").trim() || "g";
+
+      onProductFound({
+        name,
+        barcode: data,
+        brand: brand || undefined,
+        packageQuantity: Number.isFinite(pkgQty) && pkgQty > 0 ? pkgQty : undefined,
+        packageUnit: pkgUnit,
+        servingSize: portionAmount,
+        servingUnit: "g",
+        calories: getNum("energy-kcal"),
+        protein: getNum("proteins"),
+        carbs: getNum("carbohydrates"),
+        fats: getNum("fat"),
+        fiber: getNum("fiber"),
+        // Open Food Facts stores sodium in g; our model uses mg
+        sodium: sodiumG != null ? Math.round(sodiumG * 1000) : undefined,
+      });
+      onClose();
+    } catch {
+      Alert.alert(
+        "Lookup failed",
+        "Could not reach the product database. Check your connection.",
+        [{ text: "OK", onPress: onClose }],
+      );
+    } finally {
+      setLooking(false);
+      processingRef.current = false;
+    }
+  }
+
+  if (!visible) return null;
+
+  if (!permission) return null;
+
+  if (!permission.granted) {
+    return (
+      <Modal visible animationType="slide" onRequestClose={onClose}>
+        <SafeAreaView className="flex-1 items-center justify-center bg-black px-8">
+          <Ionicons name="camera-outline" size={48} color="white" />
+          <Text className="mt-4 text-center text-lg font-bold text-white">
+            Camera access needed
+          </Text>
+          <Text className="mt-2 text-center text-slate-400">
+            Allow camera access to scan barcodes.
+          </Text>
+          <Pressable
+            className="mt-6 rounded-2xl bg-blue-600 px-8 py-3"
+            onPress={() => void requestPermission()}
+          >
+            <Text className="font-bold text-white">Allow camera</Text>
+          </Pressable>
+          <Pressable className="mt-4" onPress={onClose}>
+            <Text className="text-slate-400">Cancel</Text>
+          </Pressable>
+        </SafeAreaView>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <View className="flex-1 bg-black">
+        <CameraView
+          style={StyleSheet.absoluteFillObject}
+          facing="back"
+          onBarcodeScanned={looking ? undefined : handleBarcode}
+          barcodeScannerSettings={{
+            barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"],
+          }}
+        />
+
+        <SafeAreaView className="flex-1">
+          {/* Top bar */}
+          <View className="flex-row items-center px-4 py-3">
+            <Pressable
+              className="h-11 w-11 items-center justify-center rounded-full bg-black/50"
+              onPress={onClose}
+            >
+              <Ionicons name="close" size={24} color="white" />
+            </Pressable>
+            <Text className="ml-3 text-lg font-bold text-white">
+              Scan barcode
+            </Text>
+          </View>
+
+          {/* Viewfinder */}
+          <View className="flex-1 items-center justify-center">
+            <View className="h-44 w-72 rounded-2xl border-2 border-white/80" />
+            <Text className="mt-4 text-sm text-white/70">
+              Point the camera at a product barcode
+            </Text>
+          </View>
+        </SafeAreaView>
+
+        {/* Lookup overlay */}
+        {looking && (
+          <View
+            style={StyleSheet.absoluteFillObject}
+            className="items-center justify-center bg-black/70"
+          >
+            <ActivityIndicator size="large" color="white" />
+            <Text className="mt-3 text-white">Looking up product…</Text>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+}

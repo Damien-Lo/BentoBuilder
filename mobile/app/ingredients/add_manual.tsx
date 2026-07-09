@@ -1,6 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
+import {
+  BarcodeScannerModal,
+  type ScannedProduct,
+} from "@/src/components/BarcodeScannerModal";
 import {
   ActivityIndicator,
   Alert,
@@ -42,6 +46,8 @@ import type { IngredientOption, SelectOption } from "@/src/types/options";
 interface FormState {
   ingredientId: string;
   ingredientName: string;
+  barcode: string;
+  defaultPortionAmount: string;
 
   description: string;
 
@@ -71,6 +77,8 @@ interface FormState {
 const initialForm: FormState = {
   ingredientId: "",
   ingredientName: "",
+  barcode: "",
+  defaultPortionAmount: "",
 
   description: "",
 
@@ -172,8 +180,43 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
 
 export default function AddManualPantryItemScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    scannedName?: string;
+    scannedBarcode?: string;
+    scannedBrand?: string;
+    scannedQuantity?: string;
+    scannedQuantityUnit?: string;
+    scannedServingSize?: string;
+    scannedServingUnit?: string;
+    scannedCalories?: string;
+    scannedProtein?: string;
+    scannedCarbs?: string;
+    scannedFats?: string;
+    scannedFiber?: string;
+    scannedSodium?: string;
+  }>();
 
-  const [form, setForm] = useState<FormState>(initialForm);
+  const [form, setForm] = useState<FormState>(() => {
+    if (params.scannedName) {
+      return {
+        ...initialForm,
+        ingredientName: params.scannedName,
+        barcode: params.scannedBarcode ?? "",
+        brandName: params.scannedBrand ?? "",
+        quantityAvailable: params.scannedQuantity ?? "",
+        quantityUnit: params.scannedQuantityUnit || params.scannedServingUnit || "",
+        defaultPortionAmount: params.scannedServingSize ?? "",
+        calories: params.scannedCalories ?? "",
+        protein: params.scannedProtein ?? "",
+        carbs: params.scannedCarbs ?? "",
+        fats: params.scannedFats ?? "",
+        fiber: params.scannedFiber ?? "",
+        sodium: params.scannedSodium ?? "",
+      };
+    }
+    return initialForm;
+  });
+  const [scannerVisible, setScannerVisible] = useState(false);
 
   const [saving, setSaving] = useState(false);
 
@@ -255,6 +298,25 @@ export default function AddManualPantryItemScreen() {
     setForm((current) => ({
       ...current,
       [field]: value,
+    }));
+  }
+
+  function applyScannedProduct(product: ScannedProduct) {
+    setForm((current) => ({
+      ...current,
+      ingredientId: "",
+      ingredientName: product.name,
+      barcode: product.barcode,
+      brandName: product.brand ?? current.brandName,
+      quantityAvailable: product.packageQuantity != null ? String(product.packageQuantity) : current.quantityAvailable,
+      quantityUnit: product.packageUnit || product.servingUnit,
+      defaultPortionAmount: String(product.servingSize),
+      calories: product.calories != null ? String(Math.round(product.calories)) : current.calories,
+      protein: product.protein != null ? String(Math.round(product.protein * 10) / 10) : current.protein,
+      carbs: product.carbs != null ? String(Math.round(product.carbs * 10) / 10) : current.carbs,
+      fats: product.fats != null ? String(Math.round(product.fats * 10) / 10) : current.fats,
+      fiber: product.fiber != null ? String(Math.round(product.fiber * 10) / 10) : current.fiber,
+      sodium: product.sodium != null ? String(product.sodium) : current.sodium,
     }));
   }
 
@@ -449,10 +511,12 @@ export default function AddManualPantryItemScreen() {
       if (!ingredientId) {
         const newIngredient = await createIngredient({
           name: form.ingredientName.trim(),
+          barcode: form.barcode.trim() || null,
           description: form.description.trim() || undefined,
           brand: form.brandId || null,
           category: form.categoryId || null,
           defaultPortionUnit: form.quantityUnit.trim() || undefined,
+          defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
           lowStockThreshold,
           nutrition,
         });
@@ -513,6 +577,14 @@ export default function AddManualPantryItemScreen() {
           <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">
             Add Ingredient
           </Text>
+
+          <Pressable
+            disabled={saving}
+            className="mr-2 h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
+            onPress={() => setScannerVisible(true)}
+          >
+            <Ionicons name="barcode-outline" size={26} color="#2563EB" />
+          </Pressable>
 
           <Pressable
             disabled={saving}
@@ -702,7 +774,7 @@ export default function AddManualPantryItemScreen() {
               <FormInput
                 value={form.calories}
                 keyboardType="decimal-pad"
-                placeholder="0"
+                placeholder="N/A"
                 onChangeText={(value) => updateForm("calories", value)}
               />
             </View>
@@ -713,7 +785,7 @@ export default function AddManualPantryItemScreen() {
               <FormInput
                 value={form.protein}
                 keyboardType="decimal-pad"
-                placeholder="0"
+                placeholder="N/A"
                 onChangeText={(value) => updateForm("protein", value)}
               />
             </View>
@@ -726,7 +798,7 @@ export default function AddManualPantryItemScreen() {
               <FormInput
                 value={form.carbs}
                 keyboardType="decimal-pad"
-                placeholder="0"
+                placeholder="N/A"
                 onChangeText={(value) => updateForm("carbs", value)}
               />
             </View>
@@ -737,7 +809,7 @@ export default function AddManualPantryItemScreen() {
               <FormInput
                 value={form.fats}
                 keyboardType="decimal-pad"
-                placeholder="0"
+                placeholder="N/A"
                 onChangeText={(value) => updateForm("fats", value)}
               />
             </View>
@@ -750,7 +822,7 @@ export default function AddManualPantryItemScreen() {
               <FormInput
                 value={form.fiber}
                 keyboardType="decimal-pad"
-                placeholder="0"
+                placeholder="N/A"
                 onChangeText={(value) => updateForm("fiber", value)}
               />
             </View>
@@ -761,13 +833,19 @@ export default function AddManualPantryItemScreen() {
               <FormInput
                 value={form.sodium}
                 keyboardType="decimal-pad"
-                placeholder="0"
+                placeholder="N/A"
                 onChangeText={(value) => updateForm("sodium", value)}
               />
             </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <BarcodeScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onProductFound={applyScannedProduct}
+      />
     </SafeAreaView>
   );
 }

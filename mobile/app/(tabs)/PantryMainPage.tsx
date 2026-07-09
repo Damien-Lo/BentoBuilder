@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  BarcodeScannerModal,
+  type ScannedProduct,
+} from "@/src/components/BarcodeScannerModal";
+import {
   ActivityIndicator,
   Alert,
   FlatList,
@@ -127,6 +131,7 @@ export default function PantryMainPage() {
   const { width: screenWidth } = useWindowDimensions();
 
   const [addMenuVisible, setAddMenuVisible] = useState(false);
+  const [scannerVisible, setScannerVisible] = useState(false);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
@@ -889,10 +894,11 @@ export default function PantryMainPage() {
               className="mt-3 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
               onPress={() => {
                 setAddMenuVisible(false);
+                setScannerVisible(true);
               }}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
-                <Ionicons name="barcode-outline" size={29} color="#475569" />
+              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
+                <Ionicons name="barcode-outline" size={29} color="#2563EB" />
               </View>
 
               <View className="ml-4 flex-1">
@@ -905,11 +911,7 @@ export default function PantryMainPage() {
                 </Text>
               </View>
 
-              <View className="rounded-full bg-slate-100 px-3 py-1">
-                <Text className="text-xs font-semibold text-slate-500">
-                  Soon
-                </Text>
-              </View>
+              <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
             </Pressable>
 
             <Pressable
@@ -923,6 +925,32 @@ export default function PantryMainPage() {
           </View>
         </View>
       </Modal>
+
+      <BarcodeScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onProductFound={(product: ScannedProduct) => {
+          setScannerVisible(false);
+          router.push({
+            pathname: "/ingredients/add_manual",
+            params: {
+              scannedName: product.name,
+              scannedBarcode: product.barcode,
+              scannedBrand: product.brand ?? "",
+              scannedQuantity: product.packageQuantity != null ? String(product.packageQuantity) : "",
+              scannedQuantityUnit: product.packageUnit ?? "",
+              scannedServingSize: String(product.servingSize),
+              scannedServingUnit: product.servingUnit,
+              scannedCalories: product.calories != null ? String(Math.round(product.calories)) : "",
+              scannedProtein: product.protein != null ? String(Math.round(product.protein * 10) / 10) : "",
+              scannedCarbs: product.carbs != null ? String(Math.round(product.carbs * 10) / 10) : "",
+              scannedFats: product.fats != null ? String(Math.round(product.fats * 10) / 10) : "",
+              scannedFiber: product.fiber != null ? String(Math.round(product.fiber * 10) / 10) : "",
+              scannedSodium: product.sodium != null ? String(product.sodium) : "",
+            },
+          });
+        }}
+      />
     </SafeAreaView>
   );
 }

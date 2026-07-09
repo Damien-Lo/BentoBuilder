@@ -643,7 +643,7 @@ export default function IngredientDetailScreen() {
                   <FieldLabel text="Calories" />
                   <FormInput
                     value={form.calories}
-                    placeholder="0"
+                    placeholder="N/A"
                     keyboardType="decimal-pad"
                     onChangeText={(v) => updateForm("calories", v)}
                   />
@@ -652,7 +652,7 @@ export default function IngredientDetailScreen() {
                   <FieldLabel text="Protein (g)" />
                   <FormInput
                     value={form.protein}
-                    placeholder="0"
+                    placeholder="N/A"
                     keyboardType="decimal-pad"
                     onChangeText={(v) => updateForm("protein", v)}
                   />
@@ -664,7 +664,7 @@ export default function IngredientDetailScreen() {
                   <FieldLabel text="Carbs (g)" />
                   <FormInput
                     value={form.carbs}
-                    placeholder="0"
+                    placeholder="N/A"
                     keyboardType="decimal-pad"
                     onChangeText={(v) => updateForm("carbs", v)}
                   />
@@ -673,7 +673,7 @@ export default function IngredientDetailScreen() {
                   <FieldLabel text="Fats (g)" />
                   <FormInput
                     value={form.fats}
-                    placeholder="0"
+                    placeholder="N/A"
                     keyboardType="decimal-pad"
                     onChangeText={(v) => updateForm("fats", v)}
                   />
@@ -685,7 +685,7 @@ export default function IngredientDetailScreen() {
                   <FieldLabel text="Fiber (g)" />
                   <FormInput
                     value={form.fiber}
-                    placeholder="0"
+                    placeholder="N/A"
                     keyboardType="decimal-pad"
                     onChangeText={(v) => updateForm("fiber", v)}
                   />
@@ -694,7 +694,7 @@ export default function IngredientDetailScreen() {
                   <FieldLabel text="Sodium (mg)" />
                   <FormInput
                     value={form.sodium}
-                    placeholder="0"
+                    placeholder="N/A"
                     keyboardType="decimal-pad"
                     onChangeText={(v) => updateForm("sodium", v)}
                   />
@@ -870,77 +870,50 @@ export default function IngredientDetailScreen() {
                       : "serving"}
                   </Text>
 
-                  {nutrition.calories != null ? (
-                    <View className="mb-3 items-center rounded-2xl bg-blue-50 py-3">
-                      <Text className="text-3xl font-bold text-blue-700">
-                        {nutrition.calories}
-                      </Text>
-                      <Text className="mt-0.5 text-xs font-medium text-blue-500">
-                        Calories
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  <View className="flex-row">
-                    {nutrition.protein != null ? (
-                      <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3">
-                        <Text className="text-lg font-bold text-slate-900">
-                          {nutrition.protein}g
-                        </Text>
-                        <Text className="mt-0.5 text-xs text-slate-500">
-                          Protein
-                        </Text>
-                      </View>
-                    ) : null}
-                    {nutrition.carbs != null ? (
-                      <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3">
-                        <Text className="text-lg font-bold text-slate-900">
-                          {nutrition.carbs}g
-                        </Text>
-                        <Text className="mt-0.5 text-xs text-slate-500">
-                          Carbs
-                        </Text>
-                      </View>
-                    ) : null}
-                    {nutrition.fats != null ? (
-                      <View className="flex-1 items-center rounded-2xl bg-slate-50 py-3">
-                        <Text className="text-lg font-bold text-slate-900">
-                          {nutrition.fats}g
-                        </Text>
-                        <Text className="mt-0.5 text-xs text-slate-500">
-                          Fats
-                        </Text>
-                      </View>
-                    ) : null}
+                  <View className="mb-3 items-center rounded-2xl bg-blue-50 py-3">
+                    <Text className={`text-3xl font-bold ${nutrition.calories != null ? "text-blue-700" : "text-blue-300"}`}>
+                      {nutrition.calories != null ? nutrition.calories : "N/A"}
+                    </Text>
+                    <Text className="mt-0.5 text-xs font-medium text-blue-500">
+                      Calories
+                    </Text>
                   </View>
 
-                  {nutrition.fiber != null || nutrition.sodium != null ? (
-                    <View className="mt-2 flex-row">
-                      {nutrition.fiber != null ? (
-                        <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3">
-                          <Text className="text-lg font-bold text-slate-900">
-                            {nutrition.fiber}g
-                          </Text>
-                          <Text className="mt-0.5 text-xs text-slate-500">
-                            Fiber
-                          </Text>
-                        </View>
-                      ) : null}
-                      {nutrition.sodium != null ? (
-                        <View className="flex-1 items-center rounded-2xl bg-slate-50 py-3">
-                          <Text className="text-lg font-bold text-slate-900">
-                            {nutrition.sodium}mg
-                          </Text>
-                          <Text className="mt-0.5 text-xs text-slate-500">
-                            Sodium
-                          </Text>
-                        </View>
-                      ) : null}
-                      {nutrition.fiber != null && nutrition.sodium == null ? (
-                        <View className="flex-1" />
-                      ) : null}
+                  <View className="flex-row">
+                    <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3">
+                      <Text className={`text-lg font-bold ${nutrition.protein != null ? "text-slate-900" : "text-slate-300"}`}>
+                        {nutrition.protein != null ? `${nutrition.protein}g` : "N/A"}
+                      </Text>
+                      <Text className="mt-0.5 text-xs text-slate-500">Protein</Text>
                     </View>
-                  ) : null}
+                    <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3">
+                      <Text className={`text-lg font-bold ${nutrition.carbs != null ? "text-slate-900" : "text-slate-300"}`}>
+                        {nutrition.carbs != null ? `${nutrition.carbs}g` : "N/A"}
+                      </Text>
+                      <Text className="mt-0.5 text-xs text-slate-500">Carbs</Text>
+                    </View>
+                    <View className="flex-1 items-center rounded-2xl bg-slate-50 py-3">
+                      <Text className={`text-lg font-bold ${nutrition.fats != null ? "text-slate-900" : "text-slate-300"}`}>
+                        {nutrition.fats != null ? `${nutrition.fats}g` : "N/A"}
+                      </Text>
+                      <Text className="mt-0.5 text-xs text-slate-500">Fats</Text>
+                    </View>
+                  </View>
+
+                  <View className="mt-2 flex-row">
+                    <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3">
+                      <Text className={`text-lg font-bold ${nutrition.fiber != null ? "text-slate-900" : "text-slate-300"}`}>
+                        {nutrition.fiber != null ? `${nutrition.fiber}g` : "N/A"}
+                      </Text>
+                      <Text className="mt-0.5 text-xs text-slate-500">Fiber</Text>
+                    </View>
+                    <View className="flex-1 items-center rounded-2xl bg-slate-50 py-3">
+                      <Text className={`text-lg font-bold ${nutrition.sodium != null ? "text-slate-900" : "text-slate-300"}`}>
+                        {nutrition.sodium != null ? `${nutrition.sodium}mg` : "N/A"}
+                      </Text>
+                      <Text className="mt-0.5 text-xs text-slate-500">Sodium</Text>
+                    </View>
+                  </View>
                 </View>
               ) : null}
             </>
