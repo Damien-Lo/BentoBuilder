@@ -23,6 +23,7 @@ import {
   type MealPlanEntry,
   type MealSlot,
 } from "@/src/services/mealPlanApi";
+import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -84,10 +85,11 @@ interface DayNutrition {
   carbs: number;
   fats: number;
   fiber: number;
+  sodium: number;
 }
 
 function computeDayNutrition(entries: MealPlanEntry[]): DayNutrition {
-  let calories = 0, protein = 0, carbs = 0, fats = 0, fiber = 0;
+  let calories = 0, protein = 0, carbs = 0, fats = 0, fiber = 0, sodium = 0;
   for (const entry of entries) {
     for (const course of entry.meal?.courses ?? []) {
       const recipe = course.recipe;
@@ -100,6 +102,7 @@ function computeDayNutrition(entries: MealPlanEntry[]): DayNutrition {
       if (n.carbs)    carbs    += n.carbs    * s;
       if (n.fats)     fats     += n.fats     * s;
       if (n.fiber)    fiber    += n.fiber    * s;
+      if (n.sodium)   sodium   += n.sodium   * s;
     }
   }
   return {
@@ -108,7 +111,13 @@ function computeDayNutrition(entries: MealPlanEntry[]): DayNutrition {
     carbs:    Math.round(carbs    * 10) / 10,
     fats:     Math.round(fats     * 10) / 10,
     fiber:    Math.round(fiber    * 10) / 10,
+    sodium:   Math.round(sodium),
   };
+}
+
+function pct(value: number, limit: number | null): number {
+  if (!limit || limit <= 0) return 0;
+  return Math.min(value / limit, 1);
 }
 
 function getMealKcal(meal: Meal): number | null {
@@ -158,6 +167,7 @@ export default function HomeScreen() {
   const [entries, setEntries] = useState<MealPlanEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
   // Add modal
   const [showAdd, setShowAdd] = useState(false);
@@ -167,9 +177,10 @@ export default function HomeScreen() {
 
   const dateStripRef = useRef<FlatList<string>>(null);
 
-  // Load all available meals once
+  // Load all available meals + settings once
   useEffect(() => {
     getMeals().then(setAllMeals).catch(() => {});
+    loadSettings().then(setAppSettings).catch(() => {});
   }, []);
 
   // Load plan for selected date (also refresh on focus)
@@ -183,6 +194,12 @@ export default function HomeScreen() {
 
   useFocusEffect(loadEntries);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadSettings().then(setAppSettings).catch(() => {});
+    }, []),
+  );
+
   // Scroll date strip to today on mount
   useEffect(() => {
     setTimeout(() => {
@@ -195,7 +212,6 @@ export default function HomeScreen() {
   const selectedMonthLabel = `${MONTH_NAMES[selectedD.getMonth()]} ${selectedD.getFullYear()}`;
   const isToday = selectedDate === today;
   const nutrition = useMemo(() => computeDayNutrition(entries), [entries]);
-  const hasNutrition = nutrition.calories > 0;
 
   const entriesBySlot = useMemo(() => {
     const map = new Map<MealSlot, MealPlanEntry[]>();
@@ -418,36 +434,113 @@ export default function HomeScreen() {
             })}
 
             {/* Daily nutrition summary */}
-            <View className="mt-2 overflow-hidden rounded-3xl bg-white shadow-sm">
-              <View className="border-b border-slate-100 px-5 py-4">
-                <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
-                  Daily nutrition
-                </Text>
-                <View className="mt-2 flex-row items-end">
-                  <Text className="text-4xl font-bold text-slate-900">
-                    {hasNutrition ? nutrition.calories : "—"}
-                  </Text>
-                  {hasNutrition && (
-                    <Text className="mb-1 ml-2 text-base text-slate-400">kcal</Text>
+            {(() => {
+              const s = appSettings;
+              const calPct = pct(nutrition.calories, s?.dailyCalorieLimit ?? null);
+              const macros = [
+                { label: "Protein", value: nutrition.protein, unit: "g",  limit: s?.dailyProteinLimit ?? null, bar: "#3B82F6" },
+                { label: "Carbs",   value: nutrition.carbs,   unit: "g",  limit: s?.dailyCarbsLimit   ?? null, bar: "#F59E0B" },
+                { label: "Fats",    value: nutrition.fats,    unit: "g",  limit: s?.dailyFatsLimit    ?? null, bar: "#F43F5E" },
+                { label: "Fiber",   value: nutrition.fiber,   unit: "g",  limit: s?.dailyFiberLimit   ?? null, bar: "#10B981" },
+              ] as const;
+              const hasSodiumData = nutrition.sodium > 0 || (s?.dailySodiumLimit ?? null) != null;
+
+              return (
+                <View className="mt-2 overflow-hidden rounded-3xl bg-white shadow-sm">
+                  {/* Calories row */}
+                  <View className="border-b border-slate-100 px-5 pb-4 pt-4">
+                    <Text className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                      Daily nutrition
+                    </Text>
+                    <View className="mt-2 flex-row items-end justify-between">
+                      <View className="flex-row items-end">
+                        <Text className="text-4xl font-bold text-slate-900">
+                          {nutrition.calories}
+                        </Text>
+                        <Text className="mb-1 ml-1.5 text-base text-slate-400">kcal</Text>
+                      </View>
+                      {s?.dailyCalorieLimit != null && (
+                        <Text className="mb-1 text-sm text-slate-400">
+                          / {s.dailyCalorieLimit} kcal
+                        </Text>
+                      )}
+                    </View>
+                    {s?.dailyCalorieLimit != null && (
+                      <View className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                        <View
+                          className={`h-2 rounded-full ${calPct >= 1 ? "bg-red-400" : "bg-blue-500"}`}
+                          style={{ width: `${calPct * 100}%` }}
+                        />
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Macro columns */}
+                  <View className={`flex-row px-4 pt-4 ${hasSodiumData ? "border-b border-slate-100 pb-4" : "pb-4"}`}>
+                    {macros.map(({ label, value, unit, limit, bar }) => {
+                      const f = pct(value, limit);
+                      return (
+                        <View key={label} className="flex-1 items-center px-1">
+                          <Text className="text-sm font-bold text-slate-800">
+                            {value}{unit}
+                          </Text>
+                          <Text className="mt-0.5 text-xs text-slate-400">{label}</Text>
+                          {limit != null && (
+                            <View className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                              <View
+                                style={{
+                                  width: `${f * 100}%`,
+                                  height: 6,
+                                  borderRadius: 9999,
+                                  backgroundColor: f >= 1 ? "#F87171" : bar,
+                                }}
+                              />
+                            </View>
+                          )}
+                          {limit != null && (
+                            <Text className="mt-0.5 text-[10px] text-slate-300">
+                              /{limit}{unit}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+
+                  {/* Sodium row */}
+                  {hasSodiumData && (
+                    <View className="px-5 pb-4 pt-3">
+                      {(() => {
+                        const f = pct(nutrition.sodium, s?.dailySodiumLimit ?? null);
+                        return (
+                          <>
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-xs font-semibold text-slate-500">Sodium</Text>
+                              <Text className="text-xs text-slate-400">
+                                {nutrition.sodium} mg
+                                {s?.dailySodiumLimit != null && ` / ${s.dailySodiumLimit} mg`}
+                              </Text>
+                            </View>
+                            {s?.dailySodiumLimit != null && (
+                              <View className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                                <View
+                                  style={{
+                                    width: `${f * 100}%`,
+                                    height: 6,
+                                    borderRadius: 9999,
+                                    backgroundColor: f >= 1 ? "#F87171" : "#A855F7",
+                                  }}
+                                />
+                              </View>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </View>
                   )}
                 </View>
-              </View>
-              <View className="flex-row px-5 py-4">
-                {[
-                  { label: "Protein", value: nutrition.protein, unit: "g", color: "text-blue-600" },
-                  { label: "Carbs",   value: nutrition.carbs,   unit: "g", color: "text-amber-600" },
-                  { label: "Fats",    value: nutrition.fats,    unit: "g", color: "text-rose-600" },
-                  { label: "Fiber",   value: nutrition.fiber,   unit: "g", color: "text-emerald-600" },
-                ].map(({ label, value, unit, color }) => (
-                  <View key={label} className="flex-1 items-center">
-                    <Text className={`text-base font-bold ${hasNutrition ? color : "text-slate-300"}`}>
-                      {hasNutrition ? `${value}${unit}` : "—"}
-                    </Text>
-                    <Text className="mt-0.5 text-xs text-slate-400">{label}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
+              );
+            })()}
           </>
         )}
       </ScrollView>

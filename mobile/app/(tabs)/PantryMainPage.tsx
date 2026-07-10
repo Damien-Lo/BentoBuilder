@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   BarcodeScannerModal,
   type ScannedProduct,
@@ -22,7 +22,7 @@ import {
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -142,11 +142,11 @@ export default function PantryMainPage() {
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [activePage, setActivePage] = useState<ActivePage>("pantry");
   const [pantryViewMode, setPantryViewMode] = useState<"locations" | "list">("locations");
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
-  const [collapsedLocations, setCollapsedLocations] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
 
   const toggleLocation = (id: string) => {
-    setCollapsedLocations((prev) => {
+    setExpandedLocations((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -155,67 +155,57 @@ export default function PantryMainPage() {
   };
 
   const toggleCategory = (category: string) => {
-    setCollapsedCategories((prev) => {
+    setExpandedCategories((prev) => {
       const next = new Set(prev);
-      if (next.has(category)) {
-        next.delete(category);
-      } else {
-        next.add(category);
-      }
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
       return next;
     });
   };
 
-  useEffect(() => {
-    let cancelled = false;
+  const isFirstLoad = useRef(true);
 
-    async function loadPantryPage() {
-      setIsLoading(true);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-      try {
-        const [loadedLocations, loadedPantryItems, loadedIngredients] =
-          await Promise.all([
-            getStorageLocations(),
-            getPantryItems(),
-            getIngredients(),
-          ]);
+      const showSpinner = isFirstLoad.current;
+      if (showSpinner) setIsLoading(true);
 
-        if (cancelled) {
-          return;
-        }
+      async function loadPantryPage() {
+        try {
+          const [loadedLocations, loadedPantryItems, loadedIngredients] =
+            await Promise.all([
+              getStorageLocations(),
+              getPantryItems(),
+              getIngredients(),
+            ]);
 
-        setStorageLocations(
-          Array.isArray(loadedLocations) ? loadedLocations : [],
-        );
-        setPantryItems(
-          Array.isArray(loadedPantryItems) ? loadedPantryItems : [],
-        );
+          if (cancelled) return;
 
-        setIngredients(
-          Array.isArray(loadedIngredients) ? loadedIngredients : [],
-        );
-
-        console.log("Loaded Ingredients: ", loadedIngredients);
-      } catch (error) {
-        console.error("Error loading pantry page:", error);
-
-        if (!cancelled) {
-          setStorageLocations([]);
-          setPantryItems([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
+          setStorageLocations(Array.isArray(loadedLocations) ? loadedLocations : []);
+          setPantryItems(Array.isArray(loadedPantryItems) ? loadedPantryItems : []);
+          setIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
+        } catch (error) {
+          console.error("Error loading pantry page:", error);
+          if (!cancelled && showSpinner) {
+            setStorageLocations([]);
+            setPantryItems([]);
+            setIngredients([]);
+          }
+        } finally {
+          if (!cancelled) {
+            isFirstLoad.current = false;
+            setIsLoading(false);
+          }
         }
       }
-    }
 
-    void loadPantryPage();
+      void loadPantryPage();
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      return () => { cancelled = true; };
+    }, []),
+  );
 
   const storageLocationById = useMemo(() => {
     return new Map(
@@ -489,7 +479,7 @@ export default function PantryMainPage() {
                   </View>
                 ) : (
                   groupedItems.map((group) => {
-                    const isCollapsed = collapsedLocations.has(group.id);
+                    const isCollapsed = !expandedLocations.has(group.id);
                     return (
                       <View key={group.id} className="mb-2">
                         <Pressable
@@ -614,7 +604,7 @@ export default function PantryMainPage() {
                 </View>
               ) : (
                 groupedIngredients.map((group) => {
-                  const isCollapsed = collapsedCategories.has(group.category);
+                  const isCollapsed = !expandedCategories.has(group.category);
                   return (
                   <View key={group.category} className="mb-2">
                     <Pressable

@@ -84,7 +84,7 @@ export default function RecipesMainPage() {
   const [searchText, setSearchText] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("category");
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [activePage, setActivePage] = useState<"meals" | "recipes">("meals");
   const scrollRef = useRef<ScrollView>(null);
   const [mealSearchText, setMealSearchText] = useState("");
@@ -141,14 +141,14 @@ export default function RecipesMainPage() {
     return map;
   }, [pantryItems]);
 
-  // Reset collapsed groups when switching sort mode
+  // Reset to all collapsed when switching sort mode
   const handleSortMode = (mode: SortMode) => {
     setSortMode(mode);
-    setCollapsedGroups(mode === "meal" ? new Set(MEAL_CATEGORY_ORDER) : new Set());
+    setExpandedGroups(new Set());
   };
 
   const toggleGroup = (key: string) => {
-    setCollapsedGroups((prev) => {
+    setExpandedGroups((prev: Set<string>) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -547,7 +547,7 @@ export default function RecipesMainPage() {
                 </View>
               }
               renderItem={({ item: group }) => {
-                const isCollapsed = collapsedGroups.has(group.key);
+                const isCollapsed = !expandedGroups.has(group.key);
                 return (
                   <View className="mb-2">
                     <Pressable
