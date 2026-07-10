@@ -10,6 +10,9 @@ import storageLocationRoutes from "./routes/storageLocationRoutes.js";
 import brandRoutes from "./routes/brandRoutes.js";
 import recipeRoutes from "./routes/RecipeRoutes.js";
 import recipeCategoryRoutes from "./routes/RecipeCategoryRoutes.js";
+import mealRoutes from "./routes/MealRoutes.js";
+import mealTagRoutes from "./routes/MealTagRoutes.js";
+import mealPlanRoutes from "./routes/MealPlanRoutes.js";
 
 
 
@@ -46,6 +49,9 @@ app.use("/api/storage-locations", storageLocationRoutes);
 app.use("/api/brands", brandRoutes);
 app.use("/api/recipes", recipeRoutes);
 app.use("/api/recipe-categories", recipeCategoryRoutes);
+app.use("/api/meals", mealRoutes);
+app.use("/api/meal-tags", mealTagRoutes);
+app.use("/api/meal-plan", mealPlanRoutes);
 
 
 app.use((req, res) => {

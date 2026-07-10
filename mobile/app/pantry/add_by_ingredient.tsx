@@ -82,9 +82,10 @@ function SelectedIngredientCard({
 
 export default function AddPantryItemByIngredientScreen() {
   const router = useRouter();
-  const { locationId, locationName } = useLocalSearchParams<{
+  const { locationId, locationName, ingredientId } = useLocalSearchParams<{
     locationId?: string;
     locationName?: string;
+    ingredientId?: string;
   }>();
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -121,15 +122,22 @@ export default function AddPantryItemByIngredientScreen() {
           return;
         }
 
-        setIngredients(
-          Array.isArray(loadedIngredients) ? loadedIngredients : [],
-        );
+        const ingredientList = Array.isArray(loadedIngredients) ? loadedIngredients : [];
+        setIngredients(ingredientList);
 
         setStorageLocations(
           Array.isArray(loadedStorageLocations) ? loadedStorageLocations : [],
         );
 
         setUnitOptions(Array.isArray(loadedUnits) ? loadedUnits : []);
+
+        if (ingredientId) {
+          const match = ingredientList.find((i) => i._id === ingredientId);
+          if (match) {
+            setSelectedIngredient(match);
+            setQuantityUnit(match.defaultPortionUnit ?? "item");
+          }
+        }
       } catch (error) {
         const message =
           error instanceof Error

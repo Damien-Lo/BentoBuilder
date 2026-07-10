@@ -131,7 +131,9 @@ export default function PantryMainPage() {
   const { width: screenWidth } = useWindowDimensions();
 
   const [addMenuVisible, setAddMenuVisible] = useState(false);
+  const [pantryAddMenuVisible, setPantryAddMenuVisible] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [scanContext, setScanContext] = useState<"ingredient" | "pantry">("ingredient");
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
@@ -139,7 +141,18 @@ export default function PantryMainPage() {
   const [searchText, setSearchText] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [activePage, setActivePage] = useState<ActivePage>("pantry");
+  const [pantryViewMode, setPantryViewMode] = useState<"locations" | "list">("locations");
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [collapsedLocations, setCollapsedLocations] = useState<Set<string>>(new Set());
+
+  const toggleLocation = (id: string) => {
+    setCollapsedLocations((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const toggleCategory = (category: string) => {
     setCollapsedCategories((prev) => {
@@ -396,12 +409,26 @@ export default function PantryMainPage() {
           {/* Page 1: Pantry by storage location */}
           <View style={{ width: screenWidth }} className="flex-1">
             <View className="px-5 pt-24">
-              <Text className="text-3xl font-bold text-slate-950">
-                Your Pantry
-              </Text>
+              <View className="flex-row items-center">
+                <Text className="flex-1 text-3xl font-bold text-slate-950">
+                  Your Pantry
+                </Text>
+                <Pressable
+                  className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                  onPress={() => setPantryViewMode((m) => m === "locations" ? "list" : "locations")}
+                >
+                  <Ionicons
+                    name={pantryViewMode === "locations" ? "list-outline" : "apps-outline"}
+                    size={20}
+                    color="#475569"
+                  />
+                </Pressable>
+              </View>
 
               <Text className="mt-1 text-base text-slate-500">
-                Browse ingredients by storage location
+                {pantryViewMode === "locations"
+                  ? "Browse ingredients by storage location"
+                  : "All pantry items grouped by location"}
               </Text>
 
               <View className="mt-3 flex-row items-center">
@@ -413,60 +440,129 @@ export default function PantryMainPage() {
               </View>
             </View>
 
-            <ScrollView
-              className="flex-1"
-              contentContainerStyle={{
-                paddingHorizontal: 20,
-                paddingTop: 24,
-                paddingBottom: 120,
-              }}
-              showsVerticalScrollIndicator={false}
-            >
-              <View className="flex-row flex-wrap justify-between">
-                {storageLocations.map((location) => {
-                  const locationId = String(location._id);
+            {pantryViewMode === "locations" ? (
+              <ScrollView
+                className="flex-1"
+                contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 120 }}
+                showsVerticalScrollIndicator={false}
+              >
+                <View className="flex-row flex-wrap justify-between">
+                  {storageLocations.map((location) => {
+                    const locationId = String(location._id);
+                    const itemCount = pantryItems.filter((item) =>
+                      getReferenceId(item.storageLocation as unknown) === locationId
+                    ).length;
 
-                  const itemCount = pantryItems.filter((item) => {
-                    const itemLocationId = getReferenceId(
-                      item.storageLocation as unknown,
+                    return (
+                      <Pressable
+                        key={locationId}
+                        className="mb-4 h-44 w-[48%] justify-between rounded-3xl bg-white p-5 shadow-sm"
+                        onPress={() =>
+                          router.push({ pathname: "/pantry/location/[id]", params: { id: locationId, name: location.name } })
+                        }
+                      >
+                        <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
+                          <Ionicons name="file-tray-stacked-outline" size={25} color="#2563EB" />
+                        </View>
+                        <View>
+                          <Text className="text-lg font-bold text-slate-900">{location.name}</Text>
+                          <Text className="mt-1 text-sm text-slate-500">
+                            {itemCount} {itemCount === 1 ? "item" : "items"}
+                          </Text>
+                        </View>
+                      </Pressable>
                     );
+                  })}
+                </View>
+              </ScrollView>
+            ) : (
+              <ScrollView
+                className="flex-1"
+                contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 120 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {groupedItems.length === 0 ? (
+                  <View className="items-center rounded-3xl bg-white px-6 py-16 shadow-sm">
+                    <Ionicons name="file-tray-outline" size={42} color="#94A3B8" />
+                    <Text className="mt-4 text-lg font-bold text-slate-900">Pantry is empty</Text>
+                    <Text className="mt-2 text-center text-slate-500">Add items to get started.</Text>
+                  </View>
+                ) : (
+                  groupedItems.map((group) => {
+                    const isCollapsed = collapsedLocations.has(group.id);
+                    return (
+                      <View key={group.id} className="mb-2">
+                        <Pressable
+                          className="mb-2 flex-row items-center justify-between py-1"
+                          onPress={() => toggleLocation(group.id)}
+                        >
+                          <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+                            {group.name}
+                            <Text className="font-normal"> ({group.items.length})</Text>
+                          </Text>
+                          <Ionicons
+                            name={isCollapsed ? "chevron-forward" : "chevron-down"}
+                            size={16}
+                            color="#94A3B8"
+                          />
+                        </Pressable>
 
-                    return itemLocationId === locationId;
-                  }).length;
+                        {!isCollapsed && group.items.map((pantryItem) => {
+                          const ingName = getIngredientName(pantryItem);
+                          const expiryDate = pantryItem.expiryDate ? new Date(pantryItem.expiryDate) : null;
+                          const now = new Date();
+                          const daysUntilExpiry = expiryDate
+                            ? Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                            : null;
+                          const expiryState =
+                            daysUntilExpiry == null ? null :
+                            daysUntilExpiry < 0 ? "expired" :
+                            daysUntilExpiry <= 7 ? "soon" : "ok";
 
-                  return (
-                    <Pressable
-                      key={locationId}
-                      className="mb-4 h-44 w-[48%] justify-between rounded-3xl bg-white p-5 shadow-sm"
-                      onPress={() => {
-                        router.push({
-                          pathname: "/pantry/location/[id]",
-                          params: { id: locationId, name: location.name },
-                        });
-                      }}
-                    >
-                      <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
-                        <Ionicons
-                          name="file-tray-stacked-outline"
-                          size={25}
-                          color="#2563EB"
-                        />
+                          return (
+                            <Pressable
+                              key={pantryItem._id}
+                              className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm active:bg-slate-50"
+                              onPress={() =>
+                                router.push({ pathname: "/pantry/edit/[id]", params: { id: pantryItem._id } })
+                              }
+                            >
+                              <View className="h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
+                                <Ionicons name="nutrition-outline" size={19} color="#2563EB" />
+                              </View>
+
+                              <View className="ml-3 flex-1">
+                                <Text className="font-semibold text-slate-900" numberOfLines={1}>
+                                  {ingName}
+                                </Text>
+                                <Text className="mt-0.5 text-sm text-slate-500">
+                                  {pantryItem.quantityAvailable} {pantryItem.quantityUnit}
+                                </Text>
+                              </View>
+
+                              {expiryState === "expired" && (
+                                <View className="mr-3 rounded-full bg-red-100 px-2.5 py-1">
+                                  <Text className="text-xs font-semibold text-red-600">Expired</Text>
+                                </View>
+                              )}
+                              {expiryState === "soon" && (
+                                <View className="mr-3 rounded-full bg-amber-100 px-2.5 py-1">
+                                  <Text className="text-xs font-semibold text-amber-600">
+                                    {daysUntilExpiry === 0 ? "Today" : `${daysUntilExpiry}d`}
+                                  </Text>
+                                </View>
+                              )}
+
+                              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+                            </Pressable>
+                          );
+                        })}
                       </View>
-
-                      <View>
-                        <Text className="text-lg font-bold text-slate-900">
-                          {location.name}
-                        </Text>
-
-                        <Text className="mt-1 text-sm text-slate-500">
-                          {itemCount} {itemCount === 1 ? "item" : "items"}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </ScrollView>
+                    );
+                  })
+                )}
+              </ScrollView>
+            )}
           </View>
 
           {/* 
@@ -601,11 +697,15 @@ export default function PantryMainPage() {
                                 {ingredientItem.name}
                               </Text>
 
-                              {locationNames ? (
-                                <Text className="mt-1 text-sm text-slate-500">
-                                  {locationNames}
-                                </Text>
-                              ) : null}
+                              {(() => {
+                                const brandName = getReferenceName(ingredientItem.brand);
+                                const subtitle = [brandName, locationNames].filter(Boolean).join(" · ");
+                                return subtitle ? (
+                                  <Text className="mt-1 text-sm text-slate-500" numberOfLines={1}>
+                                    {subtitle}
+                                  </Text>
+                                ) : null;
+                              })()}
                             </View>
 
                             <View className="items-end">
@@ -686,7 +786,7 @@ export default function PantryMainPage() {
               className="ml-3 h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
               onPress={() => {
                 if (activePage === "pantry") {
-                  router.push("/pantry/add_by_ingredient");
+                  setPantryAddMenuVisible(true);
                   return;
                 }
 
@@ -894,6 +994,7 @@ export default function PantryMainPage() {
               className="mt-3 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
               onPress={() => {
                 setAddMenuVisible(false);
+                setScanContext("ingredient");
                 setScannerVisible(true);
               }}
             >
@@ -926,29 +1027,119 @@ export default function PantryMainPage() {
         </View>
       </Modal>
 
+      {/* Pantry add menu */}
+      <Modal
+        visible={pantryAddMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPantryAddMenuVisible(false)}
+      >
+        <View className="flex-1 justify-end bg-black/30">
+          <Pressable
+            className="absolute inset-0"
+            onPress={() => setPantryAddMenuVisible(false)}
+          />
+
+          <View className="rounded-t-[32px] bg-white px-5 pb-10 pt-4">
+            <View className="mb-5 self-center h-1.5 w-12 rounded-full bg-slate-300" />
+
+            <Text className="text-2xl font-bold text-slate-950">Add pantry item</Text>
+            <Text className="mt-1 text-base text-slate-500">
+              Choose how you would like to add an item.
+            </Text>
+
+            <Pressable
+              className="mt-6 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+              onPress={() => {
+                setPantryAddMenuVisible(false);
+                router.push("/pantry/add_by_ingredient");
+              }}
+            >
+              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
+                <Ionicons name="create-outline" size={27} color="#2563EB" />
+              </View>
+              <View className="ml-4 flex-1">
+                <Text className="text-lg font-bold text-slate-900">Add manually</Text>
+                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                  Search or create an ingredient and set the quantity.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
+            </Pressable>
+
+            <Pressable
+              className="mt-3 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+              onPress={() => {
+                setPantryAddMenuVisible(false);
+                setScanContext("pantry");
+                setScannerVisible(true);
+              }}
+            >
+              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
+                <Ionicons name="barcode-outline" size={29} color="#2563EB" />
+              </View>
+              <View className="ml-4 flex-1">
+                <Text className="text-lg font-bold text-slate-900">Scan barcode</Text>
+                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                  Scan a product barcode to fill in its details.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
+            </Pressable>
+
+            <Pressable
+              className="mt-5 items-center rounded-2xl bg-slate-100 py-4"
+              onPress={() => setPantryAddMenuVisible(false)}
+            >
+              <Text className="text-base font-semibold text-slate-700">Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <BarcodeScannerModal
         visible={scannerVisible}
         onClose={() => setScannerVisible(false)}
         onProductFound={(product: ScannedProduct) => {
           setScannerVisible(false);
-          router.push({
-            pathname: "/ingredients/add_manual",
-            params: {
-              scannedName: product.name,
-              scannedBarcode: product.barcode,
-              scannedBrand: product.brand ?? "",
-              scannedQuantity: product.packageQuantity != null ? String(product.packageQuantity) : "",
-              scannedQuantityUnit: product.packageUnit ?? "",
-              scannedServingSize: String(product.servingSize),
-              scannedServingUnit: product.servingUnit,
-              scannedCalories: product.calories != null ? String(Math.round(product.calories)) : "",
-              scannedProtein: product.protein != null ? String(Math.round(product.protein * 10) / 10) : "",
-              scannedCarbs: product.carbs != null ? String(Math.round(product.carbs * 10) / 10) : "",
-              scannedFats: product.fats != null ? String(Math.round(product.fats * 10) / 10) : "",
-              scannedFiber: product.fiber != null ? String(Math.round(product.fiber * 10) / 10) : "",
-              scannedSodium: product.sodium != null ? String(product.sodium) : "",
-            },
-          });
+
+          const scannedParams = {
+            scannedName: product.name,
+            scannedBarcode: product.barcode,
+            scannedBrand: product.brand ?? "",
+            scannedQuantity: product.packageQuantity != null ? String(product.packageQuantity) : "",
+            scannedQuantityUnit: product.packageUnit ?? "",
+            scannedServingSize: String(product.servingSize),
+            scannedServingUnit: product.servingUnit,
+            scannedCalories: product.calories != null ? String(Math.round(product.calories)) : "",
+            scannedProtein: product.protein != null ? String(Math.round(product.protein * 10) / 10) : "",
+            scannedCarbs: product.carbs != null ? String(Math.round(product.carbs * 10) / 10) : "",
+            scannedFats: product.fats != null ? String(Math.round(product.fats * 10) / 10) : "",
+            scannedFiber: product.fiber != null ? String(Math.round(product.fiber * 10) / 10) : "",
+            scannedSodium: product.sodium != null ? String(product.sodium) : "",
+          };
+
+          if (scanContext === "pantry") {
+            const match = ingredients.find((i) => i.barcode === product.barcode);
+            if (match) {
+              router.push({
+                pathname: "/pantry/add_by_ingredient",
+                params: { ingredientId: match._id },
+              });
+            } else {
+              Alert.alert(
+                "No ingredient found",
+                `"${product.name}" isn't in your ingredient catalog yet. You'll be taken to create it first.`,
+                [{
+                  text: "Continue",
+                  onPress: () => router.push({ pathname: "/ingredients/add_manual", params: scannedParams }),
+                }],
+              );
+            }
+            return;
+          }
+
+          router.push({ pathname: "/ingredients/add_manual", params: scannedParams });
         }}
       />
     </SafeAreaView>

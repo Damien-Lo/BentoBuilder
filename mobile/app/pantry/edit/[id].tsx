@@ -52,6 +52,10 @@ function getIngredientName(item: PantryItem): string {
   return "Unknown ingredient";
 }
 
+function getIngredientId(item: PantryItem): string {
+  return getReferenceId(item.ingredient as unknown);
+}
+
 function toDateInput(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
   return dateStr.slice(0, 10);
@@ -183,6 +187,7 @@ export default function EditPantryItemScreen() {
   if (!item || !form) return null;
 
   const ingredientName = getIngredientName(item);
+  const ingredientId = getIngredientId(item);
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
@@ -224,6 +229,32 @@ export default function EditPantryItemScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Ingredient info link */}
+          {ingredientId ? (
+            <Pressable
+              className="mb-6 flex-row items-center rounded-2xl bg-white p-4 shadow-sm active:bg-slate-50"
+              onPress={() =>
+                router.push({
+                  pathname: "/ingredients/edit/[id]",
+                  params: { id: ingredientId },
+                })
+              }
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
+                <Ionicons name="nutrition-outline" size={20} color="#2563EB" />
+              </View>
+              <View className="ml-3 flex-1">
+                <Text className="text-sm font-semibold text-slate-900">
+                  {ingredientName}
+                </Text>
+                <Text className="mt-0.5 text-xs text-slate-400">
+                  Tap to view ingredient details
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </Pressable>
+          ) : null}
+
           {/* Quantity row */}
           <Text className="mb-1.5 text-sm font-semibold text-slate-700">
             Quantity
