@@ -13,6 +13,7 @@ import recipeCategoryRoutes from "./routes/RecipeCategoryRoutes.js";
 import mealRoutes from "./routes/MealRoutes.js";
 import mealTagRoutes from "./routes/MealTagRoutes.js";
 import mealPlanRoutes from "./routes/MealPlanRoutes.js";
+import userProfileRoutes from "./routes/UserProfileRoutes.js";
 
 
 
@@ -52,6 +53,7 @@ app.use("/api/recipe-categories", recipeCategoryRoutes);
 app.use("/api/meals", mealRoutes);
 app.use("/api/meal-tags", mealTagRoutes);
 app.use("/api/meal-plan", mealPlanRoutes);
+app.use("/api/profile", userProfileRoutes);
 
 
 app.use((req, res) => {

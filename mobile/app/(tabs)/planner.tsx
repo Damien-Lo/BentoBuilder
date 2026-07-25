@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -13,7 +12,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-import { useFocusEffect } from "expo-router";
 
 import { getMeals, type Meal, type MealRecipeRef } from "@/src/services/mealApi";
 import {
@@ -24,58 +22,13 @@ import {
   type MealSlot,
 } from "@/src/services/mealPlanApi";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
+import { friendlyDayLabel, getMealKcal, parseLocalDate, SLOT_MAP, SLOTS, todayStr, toDateStr } from "@/src/utils/mealPlan";
 
-// ── Date helpers ──────────────────────────────────────────────────────────────
-
-const DAY_ABBREVS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
-const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function toDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function todayStr(): string {
-  return toDateStr(new Date());
-}
-
-function parseLocalDate(s: string): Date {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function friendlyDayLabel(dateStr: string): string {
-  const today = todayStr();
-  const d = parseLocalDate(dateStr);
-  const offset = (parseLocalDate(dateStr).getTime() - parseLocalDate(today).getTime()) / 86400000;
-  if (offset === 0) return "Today";
-  if (offset === 1) return "Tomorrow";
-  if (offset === -1) return "Yesterday";
-  return `${DAY_FULL[d.getDay()]}, ${MONTH_SHORT[d.getMonth()]} ${d.getDate()}`;
-}
-
-// ── Slots config ──────────────────────────────────────────────────────────────
-
-const SLOTS: {
-  id: MealSlot;
-  label: string;
-  time: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  iconColor: string;
-  chipBg: string;
-  chipText: string;
-}[] = [
-  { id: "breakfast", label: "Breakfast", time: "Morning", icon: "sunny-outline",         iconColor: "#F59E0B", chipBg: "bg-amber-100",   chipText: "text-amber-700"   },
-  { id: "lunch",     label: "Lunch",     time: "Midday",  icon: "partly-sunny-outline",  iconColor: "#10B981", chipBg: "bg-emerald-100", chipText: "text-emerald-700" },
-  { id: "dinner",    label: "Dinner",    time: "Evening", icon: "moon-outline",           iconColor: "#6366F1", chipBg: "bg-indigo-100",  chipText: "text-indigo-700"  },
-  { id: "snack",     label: "Snack",     time: "Anytime", icon: "cafe-outline",           iconColor: "#EC4899", chipBg: "bg-pink-100",    chipText: "text-pink-700"    },
-];
-
-const SLOT_MAP = Object.fromEntries(SLOTS.map(s => [s.id, s])) as Record<MealSlot, typeof SLOTS[0]>;
+const DAY_ABBREVS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // ── Nutrition helper ──────────────────────────────────────────────────────────
 
@@ -120,22 +73,6 @@ function pct(value: number, limit: number | null): number {
   return Math.min(value / limit, 1);
 }
 
-function getMealKcal(meal: Meal): number | null {
-  if (!meal.courses?.length) return null;
-  let total = 0;
-  let hasAny = false;
-  for (const course of meal.courses) {
-    const recipe = course.recipe;
-    if (!recipe || typeof recipe === "string") continue;
-    const cal = (recipe as MealRecipeRef).nutrition?.calories;
-    if (cal != null) {
-      total += cal * course.servings;
-      hasAny = true;
-    }
-  }
-  return hasAny ? Math.round(total) : null;
-}
-
 // ── Date strip config ─────────────────────────────────────────────────────────
 
 const DAYS_BEFORE = 14;
@@ -169,7 +106,7 @@ export default function HomeScreen() {
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
-  // Add modal
+  // Add-to-plan overlay (plain local state — no navigation involved)
   const [showAdd, setShowAdd] = useState(false);
   const [addSlot, setAddSlot] = useState<MealSlot>("breakfast");
   const [mealSearch, setMealSearch] = useState("");
@@ -177,13 +114,12 @@ export default function HomeScreen() {
 
   const dateStripRef = useRef<FlatList<string>>(null);
 
-  // Load all available meals + settings once
+  // Load available meals for the add overlay, once on mount
   useEffect(() => {
     getMeals().then(setAllMeals).catch(() => {});
-    loadSettings().then(setAppSettings).catch(() => {});
   }, []);
 
-  // Load plan for selected date (also refresh on focus)
+  // Load plan for the selected date
   const loadEntries = useCallback(() => {
     setIsLoading(true);
     getMealPlanForDate(selectedDate)
@@ -192,13 +128,13 @@ export default function HomeScreen() {
       .finally(() => setIsLoading(false));
   }, [selectedDate]);
 
-  useFocusEffect(loadEntries);
+  useEffect(() => {
+    loadEntries();
+  }, [loadEntries]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadSettings().then(setAppSettings).catch(() => {});
-    }, []),
-  );
+  useEffect(() => {
+    loadSettings().then(setAppSettings).catch(() => {});
+  }, []);
 
   // Scroll date strip to today on mount
   useEffect(() => {
@@ -298,7 +234,6 @@ export default function HomeScreen() {
             {d.getDate()}
           </Text>
         </View>
-        {/* dot if entries exist for this date — shown only for selected to keep it simple */}
         {isSelected && entries.length > 0 && (
           <View className="mt-1 h-1.5 w-1.5 rounded-full bg-blue-600" />
         )}
@@ -309,7 +244,9 @@ export default function HomeScreen() {
   // ── Render entry card ──
   function renderEntry(entry: MealPlanEntry) {
     const kcal = getMealKcal(entry.meal);
+    const title = entry.meal.name;
     const courseCount = entry.meal.courses?.length ?? 0;
+    const subtitle = `${courseCount} ${courseCount === 1 ? "course" : "courses"}`;
     return (
       <ReanimatedSwipeable
         key={entry._id}
@@ -326,12 +263,8 @@ export default function HomeScreen() {
       >
         <View className="mb-2 flex-row items-center rounded-2xl bg-white px-4 py-3 shadow-sm">
           <View className="flex-1">
-            <Text className="font-semibold text-slate-900" numberOfLines={1}>
-              {entry.meal.name}
-            </Text>
-            <Text className="mt-0.5 text-xs text-slate-400">
-              {courseCount} {courseCount === 1 ? "course" : "courses"}
-            </Text>
+            <Text className="font-semibold text-slate-900" numberOfLines={1}>{title}</Text>
+            <Text className="mt-0.5 text-xs text-slate-400">{subtitle}</Text>
           </View>
           {kcal != null && (
             <Text className="text-sm font-semibold text-slate-500">{kcal} kcal</Text>
@@ -545,15 +478,12 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* ── Add entry modal ── */}
-      <Modal
-        visible={showAdd}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowAdd(false)}
-      >
-        <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
-          {/* Modal header */}
+      {/* ── Add-to-plan overlay ── plain absolutely-positioned View, no
+          RN Modal and no navigation — sidesteps the navigation-context
+          crash entirely by never leaving this already-mounted screen. */}
+      {showAdd && (
+        <View className="absolute inset-0 bg-slate-50">
+          {/* Header */}
           <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
             <Text className="flex-1 text-lg font-bold text-slate-950">Add to plan</Text>
             <Pressable onPress={() => setShowAdd(false)}>
@@ -594,7 +524,7 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
 
-          {/* Meal search */}
+          {/* Search */}
           <View className="border-b border-slate-100 bg-white px-4 pb-3">
             <View className="h-11 flex-row items-center rounded-2xl bg-slate-100 px-4">
               <Ionicons name="search-outline" size={18} color="#64748B" />
@@ -603,7 +533,6 @@ export default function HomeScreen() {
                 onChangeText={setMealSearch}
                 placeholder="Search meals…"
                 placeholderTextColor="#94A3B8"
-                autoFocus
                 className="ml-3 flex-1 text-base text-slate-900"
               />
               {mealSearch.length > 0 && (
@@ -614,7 +543,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Meal list */}
+          {/* List */}
           <FlatList
             data={filteredMeals}
             keyExtractor={m => m._id}
@@ -656,8 +585,8 @@ export default function HomeScreen() {
               </View>
             }
           />
-        </SafeAreaView>
-      </Modal>
+        </View>
+      )}
     </SafeAreaView>
   );
 }

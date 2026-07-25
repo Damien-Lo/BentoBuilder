@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -58,6 +58,39 @@ function getMealLabel(mealCategory: MealCategory | MealCategory[]): string {
   return cats.map((c) => MEAL_CATEGORY_LABEL[c] ?? c).join(", ");
 }
 
+function getMealAvailability(
+  meal: Meal,
+  recipeMap: Map<string, Recipe>,
+  ingredientMap: Map<string, Ingredient>,
+  pantryStockMap: Map<string, number>,
+): "green" | "yellow" | "red" | null {
+  if (!meal.courses?.length) return null;
+  let overall: "green" | "yellow" | "red" | null = null;
+  for (const course of meal.courses) {
+    const ref = course.recipe;
+    if (!ref) continue;
+    const recipeId = typeof ref === "string" ? ref : ref._id;
+    const recipe = recipeMap.get(recipeId);
+    if (!recipe?.ingredientList?.length) continue;
+    for (const entry of recipe.ingredientList) {
+      const ingId = typeof entry.ingredient === "string"
+        ? entry.ingredient
+        : (entry.ingredient as { _id: string })._id;
+      const ing = ingredientMap.get(ingId);
+      if (!ing) continue;
+      const inStock = pantryStockMap.get(ingId) ?? 0;
+      const remaining = inStock - entry.quantity;
+      const threshold = ing.lowStockThreshold ?? 0;
+      const state: "green" | "yellow" | "red" =
+        remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
+      if (overall === null) overall = state;
+      else if (state === "red") { overall = "red"; break; }
+      else if (state === "yellow" && overall === "green") overall = "yellow";
+    }
+  }
+  return overall;
+}
+
 function getMealCalories(meal: Meal): number | null {
   if (!meal.courses?.length) return null;
   let total = 0;
@@ -92,37 +125,52 @@ export default function RecipesMainPage() {
   const [mealSearchMode, setMealSearchMode] = useState<"name" | "tag">("name");
   const [meals, setMeals] = useState<Meal[]>([]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const isFirstLoad = useRef(true);
 
-    async function load() {
-      setIsLoading(true);
-      try {
-        const [loaded, loadedIngredients, loadedPantry] = await Promise.all([
-          getRecipes(),
-          getIngredients(),
-          getPantryItems(),
-        ]);
-        if (!cancelled) {
-          setRecipes(Array.isArray(loaded) ? loaded : []);
-          setIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
-          setPantryItems(Array.isArray(loadedPantry) ? loadedPantry : []);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+
+      const showSpinner = isFirstLoad.current;
+      if (showSpinner) setIsLoading(true);
+
+      async function load() {
+        try {
+          const [loaded, loadedIngredients, loadedPantry] = await Promise.all([
+            getRecipes(),
+            getIngredients(),
+            getPantryItems(),
+          ]);
+          if (!cancelled) {
+            setRecipes(Array.isArray(loaded) ? loaded : []);
+            setIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
+            setPantryItems(Array.isArray(loadedPantry) ? loadedPantry : []);
+          }
+        } catch (error) {
+          console.error("Error loading recipes:", error);
+          if (!cancelled && showSpinner) setRecipes([]);
+        } finally {
+          if (!cancelled) {
+            isFirstLoad.current = false;
+            setIsLoading(false);
+          }
         }
-      } catch (error) {
-        console.error("Error loading recipes:", error);
-        if (!cancelled) setRecipes([]);
-      } finally {
-        if (!cancelled) setIsLoading(false);
       }
-    }
 
-    void load();
-    return () => { cancelled = true; };
-  }, []);
+      void load();
+      return () => { cancelled = true; };
+    }, []),
+  );
 
   const ingredientMap = useMemo(
     () => new Map(ingredients.map((i) => [i._id, i])),
     [ingredients],
+  );
+
+  // Keyed by recipe _id — gives us full ingredientList for meal availability checks
+  const recipeMap = useMemo(
+    () => new Map(recipes.map((r) => [r._id, r])),
+    [recipes],
   );
 
   const pantryStockMap = useMemo(() => {
@@ -480,7 +528,13 @@ export default function RecipesMainPage() {
                       );
                     })()}
 
-                    <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+                    {(() => {
+                      const av = getMealAvailability(meal, recipeMap, ingredientMap, pantryStockMap);
+                      const color = av === "green" ? "#34D399" : av === "yellow" ? "#FBBF24" : av === "red" ? "#F87171" : null;
+                      return color ? <View className="ml-2 h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} /> : null;
+                    })()}
+
+                    <Ionicons name="chevron-forward" size={20} color="#94A3B8" style={{ marginLeft: 8 }} />
                   </Pressable>
                 </ReanimatedSwipeable>
               )}
@@ -756,6 +810,11 @@ export default function RecipesMainPage() {
                           {meal.courses?.length ?? 0} {(meal.courses?.length ?? 0) === 1 ? "course" : "courses"}
                         </Text>
                       </View>
+                      {(() => {
+                        const av = getMealAvailability(meal, recipeMap, ingredientMap, pantryStockMap);
+                        const color = av === "green" ? "#34D399" : av === "yellow" ? "#FBBF24" : av === "red" ? "#F87171" : null;
+                        return color ? <View className="mr-2 h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} /> : null;
+                      })()}
                       <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
                     </Pressable>
                   )}

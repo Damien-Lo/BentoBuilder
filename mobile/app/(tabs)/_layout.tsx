@@ -1,24 +1,20 @@
 import { Tabs } from "expo-router";
 import React from "react";
 
-import { HapticTab } from "@/components/haptic-tab";
-import { Colors } from "@/constants/theme";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Ionicons } from "@expo/vector-icons";
+import { CustomTabBar } from "@/src/components/CustomTabBar";
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
+      tabBar={props => <CustomTabBar {...props} />}
+      initialRouteName="RecipesMainPage"
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
         headerShown: false,
-        tabBarButton: HapticTab,
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="planner"
         options={{
           title: "Planner",
           tabBarIcon: ({ color }) => (
@@ -46,12 +42,7 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="sever_test_page"
-        options={{
-          title: "Test",
-          tabBarIcon: ({ color }) => (
-            <Ionicons size={26} name="flask-outline" color={color} />
-          ),
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="settings"

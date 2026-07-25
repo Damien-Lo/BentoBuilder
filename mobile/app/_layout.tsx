@@ -13,7 +13,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export const unstable_settings = {
-  anchor: "(tabs)",
+  initialRouteName: "index",
 };
 
 export default function RootLayout() {
@@ -25,6 +25,12 @@ export default function RootLayout() {
       value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
     >
       <Stack>
+        <Stack.Screen
+          name="index"
+          options={{
+            headerShown: false,
+          }}
+        />
         <Stack.Screen
           name="(tabs)"
           options={{
@@ -43,14 +49,6 @@ export default function RootLayout() {
         {/* Add an existing ingredient to the pantry */}
         <Stack.Screen
           name="pantry/add_by_ingredient"
-          options={{
-            headerShown: false,
-          }}
-        />
-
-        {/* Create a pantry item manually */}
-        <Stack.Screen
-          name="pantry/add_manual"
           options={{
             headerShown: false,
           }}

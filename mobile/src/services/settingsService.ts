@@ -1,6 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const SETTINGS_KEY = "@bentobuilder_settings";
+import { API_BASE_URL } from "@/src/config/api";
 
 export interface AppSettings {
   displayName: string;
@@ -22,16 +20,37 @@ const DEFAULTS: AppSettings = {
   dailySodiumLimit: null,
 };
 
+async function parseResponse<T>(res: Response): Promise<T> {
+  const json = await res.json() as { success: boolean; message?: string };
+  if (!res.ok) throw new Error((json as { message?: string }).message ?? `Request failed: ${res.status}`);
+  return json as T;
+}
+
 export async function loadSettings(): Promise<AppSettings> {
   try {
-    const raw = await AsyncStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) as Partial<AppSettings> };
+    const res = await fetch(`${API_BASE_URL}/api/profile`);
+    const result = await parseResponse<{ success: boolean; data: Record<string, unknown> }>(res);
+    const d = result.data;
+    // Only pick known AppSettings fields — never let _id / __v etc. into state
+    return {
+      displayName:       typeof d.displayName       === "string" ? d.displayName       : DEFAULTS.displayName,
+      dailyCalorieLimit: typeof d.dailyCalorieLimit === "number" ? d.dailyCalorieLimit : DEFAULTS.dailyCalorieLimit,
+      dailyProteinLimit: typeof d.dailyProteinLimit === "number" ? d.dailyProteinLimit : DEFAULTS.dailyProteinLimit,
+      dailyCarbsLimit:   typeof d.dailyCarbsLimit   === "number" ? d.dailyCarbsLimit   : DEFAULTS.dailyCarbsLimit,
+      dailyFatsLimit:    typeof d.dailyFatsLimit    === "number" ? d.dailyFatsLimit    : DEFAULTS.dailyFatsLimit,
+      dailyFiberLimit:   typeof d.dailyFiberLimit   === "number" ? d.dailyFiberLimit   : DEFAULTS.dailyFiberLimit,
+      dailySodiumLimit:  typeof d.dailySodiumLimit  === "number" ? d.dailySodiumLimit  : DEFAULTS.dailySodiumLimit,
+    };
   } catch {
     return { ...DEFAULTS };
   }
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
-  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  const res = await fetch(`${API_BASE_URL}/api/profile`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  await parseResponse<{ success: boolean }>(res);
 }

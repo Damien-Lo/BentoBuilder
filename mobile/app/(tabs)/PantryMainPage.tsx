@@ -56,7 +56,13 @@ type GroupedIngredients = {
   items: Ingredient[];
 };
 
-type ActivePage = "pantry" | "ingredients";
+type ActivePage = "pantry" | "ingredients" | "grocery";
+
+type GroceryItem = {
+  id: string;
+  name: string;
+  checked: boolean;
+};
 
 function isReferenceObject(value: unknown): value is ReferenceObject {
   return typeof value === "object" && value !== null;
@@ -144,6 +150,8 @@ export default function PantryMainPage() {
   const [pantryViewMode, setPantryViewMode] = useState<"locations" | "list">("locations");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
+  const [groceryItems, setGroceryItems] = useState<GroceryItem[]>([]);
+  const [newGroceryText, setNewGroceryText] = useState("");
 
   const toggleLocation = (id: string) => {
     setExpandedLocations((prev) => {
@@ -162,6 +170,31 @@ export default function PantryMainPage() {
       return next;
     });
   };
+
+  const addGroceryItem = () => {
+    const name = newGroceryText.trim();
+    if (!name) return;
+    setGroceryItems(prev => [...prev, { id: Date.now().toString(), name, checked: false }]);
+    setNewGroceryText("");
+  };
+
+  const toggleGroceryItem = (id: string) => {
+    setGroceryItems(prev => prev.map(i => i.id === id ? { ...i, checked: !i.checked } : i));
+  };
+
+  const deleteGroceryItem = (id: string) => {
+    setGroceryItems(prev => prev.filter(i => i.id !== id));
+  };
+
+  const clearCheckedGroceryItems = () => {
+    setGroceryItems(prev => prev.filter(i => !i.checked));
+  };
+
+  const grocerySuggestions = useMemo(() => {
+    const q = newGroceryText.trim().toLowerCase();
+    if (!q) return [];
+    return ingredients.filter(i => i.name.toLowerCase().includes(q)).slice(0, 5);
+  }, [ingredients, newGroceryText]);
 
   const isFirstLoad = useRef(true);
 
@@ -376,7 +409,9 @@ export default function PantryMainPage() {
       event.nativeEvent.contentOffset.x / screenWidth,
     );
 
-    setActivePage(pageIndex === 0 ? "pantry" : "ingredients");
+    if (pageIndex === 0) setActivePage("pantry");
+    else if (pageIndex === 1) setActivePage("ingredients");
+    else setActivePage("grocery");
 
     Keyboard.dismiss();
     setIsSearchActive(false);
@@ -424,8 +459,9 @@ export default function PantryMainPage() {
               <View className="mt-3 flex-row items-center">
                 <View className="h-2 w-6 rounded-full bg-blue-600" />
                 <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
+                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
                 <Text className="ml-3 text-xs font-medium text-slate-400">
-                  Swipe left for all ingredients
+                  Swipe left for ingredients
                 </Text>
               </View>
             </View>
@@ -571,8 +607,9 @@ export default function PantryMainPage() {
               <View className="mt-3 flex-row items-center">
                 <View className="h-2 w-2 rounded-full bg-slate-300" />
                 <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
+                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
                 <Text className="ml-3 text-xs font-medium text-slate-400">
-                  Swipe right to return to pantry
+                  Swipe left for grocery list
                 </Text>
               </View>
             </View>
@@ -733,6 +770,172 @@ export default function PantryMainPage() {
               )}
             </ScrollView>
           </View>
+
+          {/* Page 3: Grocery list */}
+          <View style={{ width: screenWidth }} className="flex-1">
+            <View className="px-5 pt-24">
+              <Text className="text-3xl font-bold text-slate-950">Grocery List</Text>
+              <Text className="mt-1 text-base text-slate-500">Items to pick up</Text>
+              <View className="mt-3 flex-row items-center">
+                <View className="h-2 w-2 rounded-full bg-slate-300" />
+                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
+                <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
+                <Text className="ml-3 text-xs font-medium text-slate-400">
+                  Swipe right to return to ingredients
+                </Text>
+              </View>
+            </View>
+
+            {/* Add item row */}
+            <View className="mx-5 mt-5 flex-row items-center gap-3">
+              <View className="h-12 flex-1 flex-row items-center rounded-2xl bg-white px-4 shadow-sm">
+                <TextInput
+                  value={newGroceryText}
+                  onChangeText={setNewGroceryText}
+                  onSubmitEditing={addGroceryItem}
+                  returnKeyType="done"
+                  placeholder="Search ingredients or add any item…"
+                  placeholderTextColor="#94A3B8"
+                  className="flex-1 text-base text-slate-900"
+                />
+                {newGroceryText.length > 0 && (
+                  <Pressable onPress={() => setNewGroceryText("")}>
+                    <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                  </Pressable>
+                )}
+              </View>
+              <Pressable
+                onPress={addGroceryItem}
+                className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
+              >
+                <Ionicons name="add" size={26} color="white" />
+              </Pressable>
+            </View>
+
+            {/* Ingredient suggestions */}
+            {grocerySuggestions.length > 0 && (
+              <View className="mx-5 mt-2 overflow-hidden rounded-2xl bg-white shadow-sm">
+                {grocerySuggestions.map((ing, idx) => {
+                  const categoryName =
+                    typeof ing.category === "object" && ing.category !== null
+                      ? ((ing.category as { name?: string }).name ?? "")
+                      : "";
+                  return (
+                    <Pressable
+                      key={ing._id}
+                      onPress={() => {
+                        setGroceryItems(prev => [
+                          ...prev,
+                          { id: Date.now().toString(), name: ing.name, checked: false },
+                        ]);
+                        setNewGroceryText("");
+                      }}
+                      className={`flex-row items-center px-4 py-3 active:bg-slate-50 ${
+                        idx > 0 ? "border-t border-slate-100" : ""
+                      }`}
+                    >
+                      <View className="h-8 w-8 items-center justify-center rounded-xl bg-blue-100">
+                        <Ionicons name="nutrition-outline" size={16} color="#2563EB" />
+                      </View>
+                      <View className="ml-3 flex-1">
+                        <Text className="font-medium text-slate-900">{ing.name}</Text>
+                        {categoryName ? (
+                          <Text className="text-xs text-slate-400">{categoryName}</Text>
+                        ) : null}
+                      </View>
+                      <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
+                    </Pressable>
+                  );
+                })}
+                {/* Option to add exactly what was typed if it doesn't exactly match */}
+                {!grocerySuggestions.some(
+                  i => i.name.toLowerCase() === newGroceryText.trim().toLowerCase(),
+                ) && (
+                  <Pressable
+                    onPress={addGroceryItem}
+                    className="flex-row items-center border-t border-slate-100 px-4 py-3 active:bg-slate-50"
+                  >
+                    <View className="h-8 w-8 items-center justify-center rounded-xl bg-slate-100">
+                      <Ionicons name="add" size={16} color="#475569" />
+                    </View>
+                    <Text className="ml-3 flex-1 font-medium text-slate-700">
+                      Add &quot;{newGroceryText.trim()}&quot;
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+
+            <ScrollView
+              className="flex-1"
+              contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 120 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {groceryItems.length === 0 ? (
+                <View className="mt-8 items-center rounded-3xl bg-white px-6 py-16 shadow-sm">
+                  <Ionicons name="cart-outline" size={42} color="#94A3B8" />
+                  <Text className="mt-4 text-lg font-bold text-slate-900">List is empty</Text>
+                  <Text className="mt-2 text-center text-slate-500">
+                    Add items above to start your grocery list.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {groceryItems.map((item) => (
+                    <ReanimatedSwipeable
+                      key={item.id}
+                      friction={2}
+                      rightThreshold={40}
+                      renderLeftActions={() => (
+                        <Pressable
+                          className="mb-3 w-20 items-center justify-center rounded-3xl bg-red-500 active:bg-red-600"
+                          onPress={() => deleteGroceryItem(item.id)}
+                        >
+                          <Ionicons name="trash-outline" size={22} color="white" />
+                        </Pressable>
+                      )}
+                    >
+                      <Pressable
+                        onPress={() => toggleGroceryItem(item.id)}
+                        className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm active:bg-slate-50"
+                      >
+                        <View
+                          className={`h-6 w-6 items-center justify-center rounded-full border-2 ${
+                            item.checked ? "border-emerald-500 bg-emerald-500" : "border-slate-300"
+                          }`}
+                        >
+                          {item.checked && (
+                            <Ionicons name="checkmark" size={14} color="white" />
+                          )}
+                        </View>
+                        <Text
+                          className={`ml-4 flex-1 text-base ${
+                            item.checked
+                              ? "text-slate-400 line-through"
+                              : "font-medium text-slate-900"
+                          }`}
+                        >
+                          {item.name}
+                        </Text>
+                      </Pressable>
+                    </ReanimatedSwipeable>
+                  ))}
+
+                  {groceryItems.some(i => i.checked) && (
+                    <Pressable
+                      onPress={clearCheckedGroceryItems}
+                      className="mt-2 items-center rounded-2xl bg-slate-100 py-3 active:bg-slate-200"
+                    >
+                      <Text className="text-sm font-semibold text-slate-500">
+                        Clear checked items
+                      </Text>
+                    </Pressable>
+                  )}
+                </>
+              )}
+            </ScrollView>
+          </View>
         </ScrollView>
 
         {isSearchActive && (
@@ -759,7 +962,9 @@ export default function PantryMainPage() {
                 placeholder={
                   activePage === "pantry"
                     ? "Search entire pantry"
-                    : "Search all ingredients"
+                    : activePage === "ingredients"
+                    ? "Search all ingredients"
+                    : "Grocery list"
                 }
                 placeholderTextColor="#94a3b8"
                 className="ml-3 flex-1 text-base text-slate-900"
@@ -772,19 +977,20 @@ export default function PantryMainPage() {
               )}
             </View>
 
-            <Pressable
-              className="ml-3 h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
-              onPress={() => {
-                if (activePage === "pantry") {
-                  setPantryAddMenuVisible(true);
-                  return;
-                }
-
-                setAddMenuVisible(true);
-              }}
-            >
-              <Ionicons name="add" size={28} color="white" />
-            </Pressable>
+            {activePage !== "grocery" && (
+              <Pressable
+                className="ml-3 h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
+                onPress={() => {
+                  if (activePage === "pantry") {
+                    setPantryAddMenuVisible(true);
+                    return;
+                  }
+                  setAddMenuVisible(true);
+                }}
+              >
+                <Ionicons name="add" size={28} color="white" />
+              </Pressable>
+            )}
           </View>
 
           {isSearchActive && (
