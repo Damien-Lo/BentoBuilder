@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 
 import type { Meal, MealRecipeRef } from "@/src/services/mealApi";
 import type { MealSlot } from "@/src/services/mealPlanApi";
+import type { Recipe } from "@/src/services/recipeApi";
+import type { Ingredient } from "@/src/services/ingredientApi";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -66,4 +68,58 @@ export function getMealKcal(meal: Meal): number | null {
     }
   }
   return hasAny ? Math.round(total) : null;
+}
+
+// ── Recipe nutrition scaling (per-serving nutrition × servings eaten) ──────────
+
+export interface ScaledNutrition {
+  calories: number | null;
+  protein: number | null;
+  carbs: number | null;
+  fats: number | null;
+  fiber: number | null;
+  sodium: number | null;
+}
+
+export function scaleRecipeNutrition(recipe: Recipe, servings: number): ScaledNutrition {
+  const n = recipe.nutrition ?? {};
+  const scale = (v?: number | null) => (v == null ? null : v * servings);
+  return {
+    calories: scale(n.calories),
+    protein:  scale(n.protein),
+    carbs:    scale(n.carbs),
+    fats:     scale(n.fats),
+    fiber:    scale(n.fiber),
+    sodium:   scale(n.sodium),
+  };
+}
+
+export function getRecipeKcal(recipe: Recipe, servings: number): number | null {
+  const cal = scaleRecipeNutrition(recipe, servings).calories;
+  return cal == null ? null : Math.round(cal);
+}
+
+// ── Ingredient nutrition scaling ────────────────────────────────────────────────
+// Ingredient nutrition is stored per `defaultPortionAmount` of `defaultPortionUnit`
+// (e.g. "per 100g" is just defaultPortionAmount=100, defaultPortionUnit="g").
+// Scaling to an actually-planned quantity is quantity / defaultPortionAmount —
+// the same formula the server already uses in RecipeRoutes.js's calcNutrition().
+
+export function scaleIngredientNutrition(ingredient: Ingredient, quantity: number): ScaledNutrition {
+  const n = ingredient.nutrition ?? {};
+  const multiplier = quantity / (ingredient.defaultPortionAmount || 1);
+  const scale = (v?: number | null) => (v == null ? null : v * multiplier);
+  return {
+    calories: scale(n.calories),
+    protein:  scale(n.protein),
+    carbs:    scale(n.carbs),
+    fats:     scale(n.fats),
+    fiber:    scale(n.fiber),
+    sodium:   scale(n.sodium),
+  };
+}
+
+export function getIngredientKcal(ingredient: Ingredient, quantity: number): number | null {
+  const cal = scaleIngredientNutrition(ingredient, quantity).calories;
+  return cal == null ? null : Math.round(cal);
 }

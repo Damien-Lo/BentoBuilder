@@ -1,5 +1,7 @@
 import { API_BASE_URL } from "@/src/config/api";
 import type { Meal } from "./mealApi";
+import type { Recipe } from "./recipeApi";
+import type { Ingredient } from "./ingredientApi";
 
 export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 
@@ -7,7 +9,16 @@ export interface MealPlanEntry {
   _id: string;
   date: string; // "YYYY-MM-DD"
   slot: MealSlot;
-  meal: Meal;
+
+  meal?: Meal;
+
+  recipe?: Recipe;
+  recipeServings?: number;
+
+  ingredient?: Ingredient;
+  ingredientQuantity?: number;
+  ingredientUnit?: string;
+
   notes?: string;
   createdAt?: string;
 }
@@ -15,7 +26,16 @@ export interface MealPlanEntry {
 export interface CreateMealPlanEntryInput {
   date: string;
   slot: MealSlot;
-  meal: string; // meal _id
+
+  meal?: string; // meal _id
+
+  recipe?: string; // recipe _id
+  recipeServings?: number;
+
+  ingredient?: string; // ingredient _id
+  ingredientQuantity?: number;
+  ingredientUnit?: string;
+
   notes?: string;
 }
 

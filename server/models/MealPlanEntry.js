@@ -8,12 +8,27 @@ const mealPlanEntrySchema = new mongoose.Schema(
       enum: ["breakfast", "lunch", "dinner", "snack"],
       required: [true, "Slot is required"],
     },
-    meal:       { type: mongoose.Schema.Types.ObjectId, ref: "Meal", required: [true, "Meal is required"] },
+    meal:               { type: mongoose.Schema.Types.ObjectId, ref: "Meal" },
+
+    recipe:             { type: mongoose.Schema.Types.ObjectId, ref: "Recipe" },
+    recipeServings:     { type: Number, min: 0, default: 1 },
+
+    ingredient:         { type: mongoose.Schema.Types.ObjectId, ref: "Ingredient" },
+    ingredientQuantity: { type: Number, min: 0 },
+    ingredientUnit:     { type: String, trim: true, default: "" },
+
     notes:      { type: String, trim: true, default: "" },
     isArchived: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
+
+mealPlanEntrySchema.pre("validate", function () {
+  const count = [this.meal, this.recipe, this.ingredient].filter(Boolean).length;
+  if (count !== 1) {
+    throw new Error("Exactly one of meal, recipe, or ingredient is required");
+  }
+});
 
 mealPlanEntrySchema.index({ date: 1 });
 

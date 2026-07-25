@@ -4,13 +4,16 @@ import MealPlanEntry from "../models/MealPlanEntry.js";
 const router = express.Router();
 
 function populateEntry(query) {
-  return query.populate({
-    path: "meal",
-    populate: [
-      { path: "tags" },
-      { path: "courses.recipe", select: "name mealCategory nutrition servings" },
-    ],
-  });
+  return query
+    .populate({
+      path: "meal",
+      populate: [
+        { path: "tags" },
+        { path: "courses.recipe", select: "name mealCategory nutrition servings" },
+      ],
+    })
+    .populate("recipe")
+    .populate("ingredient");
 }
 
 /**
