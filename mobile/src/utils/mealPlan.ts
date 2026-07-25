@@ -10,6 +10,8 @@ import type { Ingredient } from "@/src/services/ingredientApi";
 const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+export const DAY_ABBREVS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -31,6 +33,33 @@ export function friendlyDayLabel(dateStr: string): string {
   if (offset === 1) return "Tomorrow";
   if (offset === -1) return "Yesterday";
   return `${DAY_FULL[d.getDay()]}, ${MONTH_SHORT[d.getMonth()]} ${d.getDate()}`;
+}
+
+// Returns the 7 date strings ("YYYY-MM-DD") for the week containing `dateStr`,
+// starting on `weekStartDay` (0 = Sunday … 6 = Saturday, matching Date#getDay()).
+export function getWeekDates(dateStr: string, weekStartDay: number): string[] {
+  const d = parseLocalDate(dateStr);
+  const diff = (d.getDay() - weekStartDay + 7) % 7;
+  const start = new Date(d);
+  start.setDate(d.getDate() - diff);
+
+  const dates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    dates.push(toDateStr(day));
+  }
+  return dates;
+}
+
+export function weekRangeLabel(weekDates: string[]): string {
+  const start = parseLocalDate(weekDates[0]);
+  const end = parseLocalDate(weekDates[weekDates.length - 1]);
+  const startLabel = `${MONTH_SHORT[start.getMonth()]} ${start.getDate()}`;
+  const endLabel = start.getMonth() === end.getMonth()
+    ? `${end.getDate()}`
+    : `${MONTH_SHORT[end.getMonth()]} ${end.getDate()}`;
+  return `${startLabel} – ${endLabel}`;
 }
 
 // ── Slots config ──────────────────────────────────────────────────────────────

@@ -8,6 +8,8 @@ export interface AppSettings {
   dailyFatsLimit: number | null;
   dailyFiberLimit: number | null;
   dailySodiumLimit: number | null;
+  // 0 = Sunday … 6 = Saturday, matching JS Date#getDay()
+  weekStartDay: number;
 }
 
 const DEFAULTS: AppSettings = {
@@ -18,6 +20,7 @@ const DEFAULTS: AppSettings = {
   dailyFatsLimit: null,
   dailyFiberLimit: null,
   dailySodiumLimit: null,
+  weekStartDay: 1,
 };
 
 async function parseResponse<T>(res: Response): Promise<T> {
@@ -40,6 +43,7 @@ export async function loadSettings(): Promise<AppSettings> {
       dailyFatsLimit:    typeof d.dailyFatsLimit    === "number" ? d.dailyFatsLimit    : DEFAULTS.dailyFatsLimit,
       dailyFiberLimit:   typeof d.dailyFiberLimit   === "number" ? d.dailyFiberLimit   : DEFAULTS.dailyFiberLimit,
       dailySodiumLimit:  typeof d.dailySodiumLimit  === "number" ? d.dailySodiumLimit  : DEFAULTS.dailySodiumLimit,
+      weekStartDay:      typeof d.weekStartDay      === "number" ? d.weekStartDay      : DEFAULTS.weekStartDay,
     };
   } catch {
     return { ...DEFAULTS };

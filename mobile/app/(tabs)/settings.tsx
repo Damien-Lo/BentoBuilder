@@ -7,6 +7,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -14,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
+import { DAY_ABBREVS } from "@/src/utils/mealPlan";
 
 function SectionHeader({ title }: { title: string }) {
   return (
@@ -81,6 +83,46 @@ function NumericInput({
   );
 }
 
+function WeekStartPicker({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (day: number) => void;
+}) {
+  return (
+    <View className="flex-row gap-1.5 px-4 py-3.5">
+      {DAY_ABBREVS.map((label, day) => {
+        const isSelected = day === value;
+        return (
+          <Pressable
+            key={day}
+            onPress={() => onChange(day)}
+            className="h-10 w-10 items-center justify-center rounded-full bg-slate-100"
+            style={isSelected ? pickerStyles.selectedDay : undefined}
+          >
+            <Text
+              className="text-xs font-semibold text-slate-600"
+              style={isSelected ? pickerStyles.selectedDayText : undefined}
+            >
+              {label[0]}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const pickerStyles = StyleSheet.create({
+  selectedDay: {
+    backgroundColor: "#2563EB",
+  },
+  selectedDayText: {
+    color: "#fff",
+  },
+});
+
 export default function SettingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -90,6 +132,9 @@ export default function SettingsScreen() {
     dailyProteinLimit: null,
     dailyCarbsLimit: null,
     dailyFatsLimit: null,
+    dailyFiberLimit: null,
+    dailySodiumLimit: null,
+    weekStartDay: 1,
   });
 
   useEffect(() => {
@@ -165,6 +210,18 @@ export default function SettingsScreen() {
                 <Text className="mt-0.5 text-sm text-slate-400">How we'll greet you in the app</Text>
               </View>
             </View>
+          </View>
+
+          {/* ── Planner ── */}
+          <SectionHeader title="Planner" />
+          <View className="overflow-hidden rounded-3xl bg-white shadow-sm">
+            <View className="border-b border-slate-100 px-4 pt-3.5">
+              <Text className="text-xs font-semibold text-slate-400">Week starts on</Text>
+            </View>
+            <WeekStartPicker
+              value={settings.weekStartDay}
+              onChange={day => patch({ weekStartDay: day })}
+            />
           </View>
 
           {/* ── Daily nutrition goals ── */}
