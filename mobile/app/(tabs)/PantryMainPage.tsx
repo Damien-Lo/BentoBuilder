@@ -519,37 +519,33 @@ export default function PantryMainPage() {
           </View>
 
           <View className="ml-4 flex-1">
-            <View className="flex-row items-center">
-              <Text
-                className="mr-2 flex-shrink text-base font-bold text-slate-900"
-                numberOfLines={1}
-              >
-                {ingredientItem.name}
+            <Text
+              className="text-base font-bold text-slate-900"
+              numberOfLines={1}
+            >
+              {ingredientItem.name}
+            </Text>
+
+            {ingredientItem.isGeneric ? (
+              <Text className="mt-1 text-sm font-medium text-violet-600">
+                Generic
               </Text>
-
-              {ingredientItem.isGeneric && (
-                <View className="rounded-full bg-violet-50 px-2 py-0.5">
-                  <Text className="text-xs font-semibold text-violet-600">
-                    Generic
+            ) : (
+              (() => {
+                const brandName = getReferenceName(ingredientItem.brand);
+                const subtitle = [brandName, locationNames]
+                  .filter(Boolean)
+                  .join(" · ");
+                return subtitle ? (
+                  <Text
+                    className="mt-1 text-sm text-slate-500"
+                    numberOfLines={1}
+                  >
+                    {subtitle}
                   </Text>
-                </View>
-              )}
-            </View>
-
-            {(() => {
-              const brandName = getReferenceName(ingredientItem.brand);
-              const subtitle = [brandName, locationNames]
-                .filter(Boolean)
-                .join(" · ");
-              return subtitle ? (
-                <Text
-                  className="mt-1 text-sm text-slate-500"
-                  numberOfLines={1}
-                >
-                  {subtitle}
-                </Text>
-              ) : null;
-            })()}
+                ) : null;
+              })()
+            )}
           </View>
 
           <View className="items-end">
@@ -1215,25 +1211,22 @@ export default function PantryMainPage() {
                         </View>
 
                         <View className="ml-3 flex-1">
-                          <View className="flex-row items-center">
-                            <Text
-                              className="mr-2 flex-shrink font-semibold text-slate-900"
-                              numberOfLines={1}
-                            >
-                              {ingredient.name}
-                            </Text>
-
-                            {ingredient.isGeneric && (
-                              <View className="rounded-full bg-violet-50 px-2 py-0.5">
-                                <Text className="text-xs font-semibold text-violet-600">
-                                  Generic
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text className="mt-0.5 text-sm text-slate-500">
-                            {[brandName, categoryName].filter(Boolean).join(" · ")}
+                          <Text
+                            className="font-semibold text-slate-900"
+                            numberOfLines={1}
+                          >
+                            {ingredient.name}
                           </Text>
+
+                          {ingredient.isGeneric ? (
+                            <Text className="mt-0.5 text-sm font-medium text-violet-600">
+                              Generic
+                            </Text>
+                          ) : (
+                            <Text className="mt-0.5 text-sm text-slate-500">
+                              {[brandName, categoryName].filter(Boolean).join(" · ")}
+                            </Text>
+                          )}
                         </View>
 
                         <Ionicons

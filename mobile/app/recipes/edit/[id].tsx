@@ -15,7 +15,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-  CreatableObjectDropdown,
   FieldLabel,
   FormInput,
   SearchableObjectDropdown,
@@ -33,6 +32,7 @@ import {
   type RecipeCategory,
   type RecipeNutrition,
 } from "@/src/services/recipeApi";
+import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 
 const MEAL_CATEGORIES: { value: MealCategory; label: string }[] = [
   { value: "breakfast", label: "Breakfast" },
@@ -111,6 +111,7 @@ export default function EditRecipePage() {
   const [mealCategories, setMealCategories] = useState<MealCategory[]>([]);
   const [recipeCategoryId, setRecipeCategoryId] = useState("");
   const [recipeCategoryName, setRecipeCategoryName] = useState("");
+  const [recipeCategoryDraft, setRecipeCategoryDraft] = useState("");
   const [description, setDescription] = useState("");
   const [servings, setServings] = useState("1");
   const [notes, setNotes] = useState("");
@@ -155,6 +156,7 @@ export default function EditRecipePage() {
         if (recipe.recipeCategory && typeof recipe.recipeCategory !== "string") {
           setRecipeCategoryId(recipe.recipeCategory._id);
           setRecipeCategoryName(recipe.recipeCategory.name);
+          setRecipeCategoryDraft(recipe.recipeCategory.name);
         }
 
         const rows: IngredientRow[] = [];
@@ -298,10 +300,17 @@ export default function EditRecipePage() {
 
     setSaving(true);
     try {
+      const recipeCategory = await resolveOrCreateOption(
+        recipeCategories,
+        recipeCategoryId,
+        recipeCategoryDraft,
+        handleCreateRecipeCategory,
+      );
+
       await updateRecipe(id, {
         name: name.trim(),
         mealCategory: mealCategories,
-        recipeCategory: recipeCategoryId || null,
+        recipeCategory: recipeCategory?._id || null,
         description: description.trim() || undefined,
         servings: numServings,
         notes: notes.trim() || undefined,
@@ -409,17 +418,22 @@ export default function EditRecipePage() {
           </View>
 
           <FieldLabel text="Category" />
-          <CreatableObjectDropdown
+          <SearchableObjectDropdown<RecipeCategory>
             options={recipeCategories}
             selectedId={recipeCategoryId}
             selectedName={recipeCategoryName}
-            placeholder="Search or create a category"
-            createLabel="Create category"
+            placeholder="Search or type a new category"
+            onTextChange={(value) => {
+              if (value !== recipeCategoryName) {
+                setRecipeCategoryId("");
+              }
+              setRecipeCategoryDraft(value);
+            }}
             onSelect={(option) => {
               setRecipeCategoryId(option._id);
               setRecipeCategoryName(option.name);
+              setRecipeCategoryDraft(option.name);
             }}
-            onCreate={handleCreateRecipeCategory}
           />
 
           <FieldLabel text="Description" />

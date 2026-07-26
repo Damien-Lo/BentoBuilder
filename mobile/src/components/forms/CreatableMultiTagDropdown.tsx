@@ -1,13 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import type { SelectOption } from "@/src/types/options";
 
@@ -15,22 +8,18 @@ interface CreatableMultiTagDropdownProps {
   options?: SelectOption[];
   selectedItems?: SelectOption[];
   placeholder?: string;
-  createLabel?: string;
   disabled?: boolean;
   onAdd: (option: SelectOption) => void;
   onRemove: (id: string) => void;
-  onCreate: (name: string) => Promise<SelectOption>;
 }
 
 export function CreatableMultiTagDropdown({
   options,
   selectedItems = [],
   placeholder = "Add a tag…",
-  createLabel = "Create",
   disabled = false,
   onAdd,
   onRemove,
-  onCreate,
 }: CreatableMultiTagDropdownProps) {
   const safeOptions = useMemo(
     () => (Array.isArray(options) ? options : []),
@@ -39,7 +28,6 @@ export function CreatableMultiTagDropdown({
 
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
 
   const selectedIds = useMemo(
     () => new Set(selectedItems.map((s) => s._id)),
@@ -56,12 +44,6 @@ export function CreatableMultiTagDropdown({
     );
   }, [safeOptions, selectedIds, normalizedQuery]);
 
-  const exactMatch = safeOptions.some(
-    (o) => o.name.trim().toLowerCase() === normalizedQuery,
-  );
-
-  const canCreate = normalizedQuery.length > 0 && !exactMatch && !creating;
-
   function handleTextChange(value: string) {
     setQuery(value);
     if (!disabled) setOpen(true);
@@ -73,20 +55,28 @@ export function CreatableMultiTagDropdown({
     onAdd(option);
   }
 
-  async function handleCreate() {
+  // Pressing return commits whatever's typed as a tag — matching an existing
+  // one if there is one, or adding a pending tag (no real _id yet) if not.
+  // The real record gets created (or matched) when the screen saves.
+  function handleSubmit() {
     const trimmedName = query.trim();
-    if (!trimmedName || creating) return;
-    try {
-      setCreating(true);
-      const created = await onCreate(trimmedName);
-      setQuery("");
-      setOpen(false);
-      onAdd(created);
-    } catch (error) {
-      console.error("Failed to create tag:", error);
-    } finally {
-      setCreating(false);
+    if (!trimmedName || disabled) return;
+
+    const alreadySelected = selectedItems.some(
+      (item) => item.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+    );
+
+    if (!alreadySelected) {
+      const existingMatch = safeOptions.find(
+        (option) =>
+          option.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+      );
+
+      onAdd(existingMatch ?? { _id: "", name: trimmedName });
     }
+
+    setQuery("");
+    setOpen(false);
   }
 
   return (
@@ -96,7 +86,7 @@ export function CreatableMultiTagDropdown({
         <View className="mb-2 flex-row flex-wrap gap-2">
           {selectedItems.map((tag) => (
             <View
-              key={tag._id}
+              key={tag._id || tag.name}
               className="flex-row items-center rounded-full bg-blue-100 px-3 py-1"
             >
               <Text className="mr-1 text-sm font-medium text-blue-700">
@@ -135,7 +125,7 @@ export function CreatableMultiTagDropdown({
           className="ml-3 flex-1 text-base text-slate-950"
           onFocus={() => { if (!disabled) setOpen(true); }}
           onChangeText={handleTextChange}
-          onSubmitEditing={() => setOpen(false)}
+          onSubmitEditing={handleSubmit}
         />
 
         {query.length > 0 && !disabled ? (
@@ -180,32 +170,12 @@ export function CreatableMultiTagDropdown({
               </Pressable>
             ))}
 
-            {canCreate && (
-              <Pressable
-                className="flex-row items-center px-4 py-4 active:bg-blue-50"
-                disabled={creating}
-                onPress={() => void handleCreate()}
-              >
-                <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-100">
-                  <Ionicons name="add" size={19} color="#2563EB" />
-                </View>
-                <Text className="ml-3 flex-1 text-base font-semibold text-blue-700">
-                  {createLabel} "{query.trim()}"
-                </Text>
-              </Pressable>
-            )}
-
-            {creating && (
-              <View className="flex-row items-center px-4 py-4">
-                <ActivityIndicator size="small" color="#2563EB" />
-                <Text className="ml-3 text-base text-slate-500">Creating…</Text>
-              </View>
-            )}
-
-            {filteredOptions.length === 0 && !canCreate && !creating && (
+            {filteredOptions.length === 0 && (
               <View className="px-4 py-5">
                 <Text className="text-center text-sm text-slate-500">
-                  No matching tags
+                  {normalizedQuery
+                    ? "No matching tags — press return to add it"
+                    : "No matching tags"}
                 </Text>
               </View>
             )}

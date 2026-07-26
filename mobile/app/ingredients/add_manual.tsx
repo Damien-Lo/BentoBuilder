@@ -18,7 +18,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-  CreatableObjectDropdown,
   CreatableStringDropdown,
   FieldLabel,
   FormInput,
@@ -43,6 +42,7 @@ import { addIngredientToPantry } from "@/src/services/pantryApi";
 import { createIngredient } from "@/src/services/ingredientApi";
 
 import type { IngredientOption, SelectOption } from "@/src/types/options";
+import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 
 interface FormState {
   ingredientId: string;
@@ -266,6 +266,10 @@ export default function AddManualPantryItemScreen() {
 
   const [genericParentDraft, setGenericParentDraft] = useState("");
 
+  const [categoryDraft, setCategoryDraft] = useState("");
+
+  const [storageLocationDraft, setStorageLocationDraft] = useState("");
+
   const [units, setUnits] = useState<string[]>([]);
 
   const genericIngredientOptions = ingredients.filter(
@@ -402,6 +406,9 @@ export default function AddManualPantryItemScreen() {
 
       categoryName: option.categoryName ?? option.category?.name ?? "",
     }));
+
+    setGenericParentDraft(option.genericParentName ?? "");
+    setCategoryDraft(option.categoryName ?? option.category?.name ?? "");
   }
 
   async function handleCreateCategory(name: string): Promise<SelectOption> {
@@ -490,8 +497,8 @@ export default function AddManualPantryItemScreen() {
       return;
     }
 
-    if (!form.categoryId) {
-      Alert.alert("Category is required", "Select or create a category.");
+    if (!form.categoryId && !categoryDraft.trim()) {
+      Alert.alert("Category is required", "Search or type a category.");
       return;
     }
 
@@ -519,110 +526,85 @@ export default function AddManualPantryItemScreen() {
     // recipe, not a physical thing you can own — whatever is actually in the
     // pantry is always some specific product. So a generic ingredient is
     // only ever a catalog definition, never a pantry item.
-    if (form.isGeneric) {
-      if (form.ingredientId) {
-        Alert.alert(
-          "Nothing to save",
-          "This is already a generic ingredient — it can't be stocked in the pantry. Select or create a specific/branded ingredient instead.",
-        );
-
-        return;
-      }
-
-      try {
-        setSaving(true);
-
-        const nutrition = {
-          calories: optionalNumber(form.calories),
-          protein: optionalNumber(form.protein),
-          carbs: optionalNumber(form.carbs),
-          fats: optionalNumber(form.fats),
-          fiber: optionalNumber(form.fiber),
-          sodium: optionalNumber(form.sodium),
-        };
-
-        await createIngredient({
-          name: form.ingredientName.trim(),
-          barcode: form.barcode.trim() || null,
-          description: form.description.trim() || undefined,
-          isGeneric: true,
-          brand: null,
-          category: form.categoryId || null,
-          defaultPortionUnit: form.quantityUnit.trim() || undefined,
-          defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
-          lowStockThreshold: ingredientLowStockThreshold,
-          nutrition,
-        });
-
-        router.back();
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "The ingredient could not be saved.";
-
-        Alert.alert("Unable to save ingredient", message);
-      } finally {
-        setSaving(false);
-      }
+    if (form.isGeneric && form.ingredientId) {
+      Alert.alert(
+        "Nothing to save",
+        "This is already a generic ingredient — it can't be stocked in the pantry. Select or create a specific/branded ingredient instead.",
+      );
 
       return;
     }
 
     let quantityAvailable = 0;
 
-    if (pantryInventoryExpanded) {
-      quantityAvailable = form.quantityAvailable.trim()
-        ? Number(form.quantityAvailable)
-        : 0;
+    if (!form.isGeneric) {
+      if (pantryInventoryExpanded) {
+        quantityAvailable = form.quantityAvailable.trim()
+          ? Number(form.quantityAvailable)
+          : 0;
 
-      if (!Number.isFinite(quantityAvailable) || quantityAvailable < 0) {
+        if (!Number.isFinite(quantityAvailable) || quantityAvailable < 0) {
+          Alert.alert(
+            "Invalid quantity",
+            "Enter a quantity of zero or greater.",
+          );
+
+          return;
+        }
+
+        if (!isValidDateString(form.purchaseDate)) {
+          Alert.alert(
+            "Invalid purchase date",
+            "Enter the date in YYYY-MM-DD format.",
+          );
+
+          return;
+        }
+
+        if (!isValidDateString(form.expiryDate)) {
+          Alert.alert(
+            "Invalid expiry date",
+            "Enter the date in YYYY-MM-DD format.",
+          );
+
+          return;
+        }
+
+        if (!form.storageLocationId && !storageLocationDraft.trim()) {
+          Alert.alert(
+            "Storage location is required",
+            "Search or type a storage location.",
+          );
+          return;
+        }
+      } else if (form.ingredientId) {
+        // An existing ingredient was selected (nothing new to create) and
+        // the pantry section is collapsed — there's nothing for Save to do.
         Alert.alert(
-          "Invalid quantity",
-          "Enter a quantity of zero or greater.",
+          "Nothing to save",
+          "Expand Pantry inventory to add stock for this ingredient.",
         );
 
         return;
       }
-
-      if (!isValidDateString(form.purchaseDate)) {
-        Alert.alert(
-          "Invalid purchase date",
-          "Enter the date in YYYY-MM-DD format.",
-        );
-
-        return;
-      }
-
-      if (!isValidDateString(form.expiryDate)) {
-        Alert.alert(
-          "Invalid expiry date",
-          "Enter the date in YYYY-MM-DD format.",
-        );
-
-        return;
-      }
-
-      if (!form.storageLocationId) {
-        Alert.alert(
-          "Storage location is required",
-          "Select or create a storage location.",
-        );
-        return;
-      }
-    } else if (form.ingredientId) {
-      // An existing ingredient was selected (nothing new to create) and the
-      // pantry section is collapsed — there's nothing for Save to do.
-      Alert.alert(
-        "Nothing to save",
-        "Expand Pantry inventory to add stock for this ingredient.",
-      );
-
-      return;
     }
 
     try {
       setSaving(true);
+
+      // Every "creatable" field here works the same way: type a name, and
+      // if it doesn't match an existing option, resolveOrCreateOption makes
+      // one at save time — no separate "create" tap required.
+      const category = await resolveOrCreateOption(
+        categories,
+        form.categoryId,
+        categoryDraft,
+        handleCreateCategory,
+      );
+
+      if (!category) {
+        throw new Error("Enter a category name.");
+      }
 
       const nutrition = {
         calories: optionalNumber(form.calories),
@@ -633,23 +615,33 @@ export default function AddManualPantryItemScreen() {
         sodium: optionalNumber(form.sodium),
       };
 
+      if (form.isGeneric) {
+        await createIngredient({
+          name: form.ingredientName.trim(),
+          barcode: form.barcode.trim() || null,
+          description: form.description.trim() || undefined,
+          isGeneric: true,
+          brand: null,
+          category: category._id,
+          defaultPortionUnit: form.quantityUnit.trim() || undefined,
+          defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
+          lowStockThreshold: ingredientLowStockThreshold,
+          nutrition,
+        });
+
+        router.back();
+        return;
+      }
+
       let ingredientId = form.ingredientId;
 
       if (!ingredientId) {
-        let brandId = form.brandId;
-        const trimmedBrandName = brandDraft.trim();
-
-        if (!brandId && trimmedBrandName) {
-          const existingBrand = brands.find(
-            (brand) =>
-              brand.name.trim().toLowerCase() ===
-              trimmedBrandName.toLowerCase(),
-          );
-
-          brandId = existingBrand
-            ? existingBrand._id
-            : (await handleCreateBrand(trimmedBrandName))._id;
-        }
+        const brand = await resolveOrCreateOption(
+          brands,
+          form.brandId,
+          brandDraft,
+          handleCreateBrand,
+        );
 
         // If an existing generic was picked, its id is sent as-is. If the
         // user just typed a name that didn't match one, no genericParent is
@@ -663,12 +655,12 @@ export default function AddManualPantryItemScreen() {
           barcode: form.barcode.trim() || null,
           description: form.description.trim() || undefined,
           isGeneric: false,
-          brand: brandId || null,
+          brand: brand?._id || null,
           genericParent: form.genericParentId || undefined,
           genericName: !form.genericParentId && trimmedGenericName
             ? trimmedGenericName
             : undefined,
-          category: form.categoryId || null,
+          category: category._id,
           defaultPortionUnit: form.quantityUnit.trim() || undefined,
           defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
           lowStockThreshold: ingredientLowStockThreshold,
@@ -678,9 +670,20 @@ export default function AddManualPantryItemScreen() {
       }
 
       if (pantryInventoryExpanded) {
+        const storageLocation = await resolveOrCreateOption(
+          storageLocations,
+          form.storageLocationId,
+          storageLocationDraft,
+          handleCreateStorageLocation,
+        );
+
+        if (!storageLocation) {
+          throw new Error("Enter a storage location.");
+        }
+
         await addIngredientToPantry({
           ingredient: ingredientId,
-          storageLocation: form.storageLocationId,
+          storageLocation: storageLocation._id,
           quantityAvailable,
           quantityUnit: form.quantityUnit.trim(),
           purchaseDate: form.purchaseDate.trim() || undefined,
@@ -834,12 +837,11 @@ export default function AddManualPantryItemScreen() {
             <>
               <FieldLabel text="Generic ingredient" />
 
-              <CreatableObjectDropdown
+              <SearchableObjectDropdown<IngredientOption>
                 options={genericIngredientOptions}
                 selectedId={form.genericParentId}
                 selectedName={form.genericParentName}
-                placeholder="Search or name a generic ingredient"
-                createLabel="Use generic name"
+                placeholder="Search or type a new generic ingredient"
                 onTextChange={(value: string) => {
                   if (value !== form.genericParentName) {
                     updateForm("genericParentId", "");
@@ -852,32 +854,20 @@ export default function AddManualPantryItemScreen() {
                   updateForm("genericParentName", option.name);
                   setGenericParentDraft(option.name);
 
-                  if (option._id) {
-                    const matchedGeneric = genericIngredientOptions.find(
-                      (generic) => generic._id === option._id,
-                    );
+                  const categoryId = option.categoryId ?? option.category?._id;
+                  const categoryName =
+                    option.categoryName ?? option.category?.name;
 
-                    if (matchedGeneric) {
-                      updateForm(
-                        "categoryId",
-                        matchedGeneric.categoryId ??
-                          matchedGeneric.category?._id ??
-                          "",
-                      );
-                      updateForm(
-                        "categoryName",
-                        matchedGeneric.categoryName ??
-                          matchedGeneric.category?.name ??
-                          "",
-                      );
+                  if (categoryId) {
+                    updateForm("categoryId", categoryId);
+                    updateForm("categoryName", categoryName ?? "");
+                    setCategoryDraft(categoryName ?? "");
+                  }
 
-                      if (matchedGeneric.unit) {
-                        updateForm("quantityUnit", matchedGeneric.unit);
-                      }
-                    }
+                  if (option.unit) {
+                    updateForm("quantityUnit", option.unit);
                   }
                 }}
-                onCreate={async (name) => ({ _id: "", name })}
               />
 
               <Text className="mt-2 text-sm leading-5 text-slate-500">
@@ -891,12 +881,11 @@ export default function AddManualPantryItemScreen() {
 
               <FieldLabel text="Brand" />
 
-              <CreatableObjectDropdown
+              <SearchableObjectDropdown<SelectOption>
                 options={brands}
                 selectedId={form.brandId}
                 selectedName={form.brandName}
-                placeholder="Search or create a brand"
-                createLabel="Create brand"
+                placeholder="Search or type a new brand"
                 onTextChange={(value: string) => {
                   if (value !== form.brandName) {
                     updateForm("brandId", "");
@@ -911,7 +900,6 @@ export default function AddManualPantryItemScreen() {
 
                   setBrandDraft(option.name);
                 }}
-                onCreate={handleCreateBrand}
               />
             </>
           )}
@@ -927,18 +915,23 @@ export default function AddManualPantryItemScreen() {
 
           <FieldLabel text="Category" required />
 
-          <CreatableObjectDropdown
+          <SearchableObjectDropdown<SelectOption>
             options={categories}
             selectedId={form.categoryId}
             selectedName={form.categoryName}
-            placeholder="Search or create a category"
-            createLabel="Create category"
+            placeholder="Search or type a new category"
+            onTextChange={(value) => {
+              if (value !== form.categoryName) {
+                updateForm("categoryId", "");
+              }
+
+              setCategoryDraft(value);
+            }}
             onSelect={(option) => {
               updateForm("categoryId", option._id);
-
               updateForm("categoryName", option.name);
+              setCategoryDraft(option.name);
             }}
-            onCreate={handleCreateCategory}
           />
 
           <SectionTitle
@@ -964,10 +957,8 @@ export default function AddManualPantryItemScreen() {
               <CreatableStringDropdown
                 options={units}
                 selectedValue={form.quantityUnit}
-                placeholder="Search or create a unit"
-                createLabel="Use unit"
-                onSelect={(unit) => updateForm("quantityUnit", unit)}
-                onCreate={handleAddUnit}
+                placeholder="Search or type a new unit"
+                onSelect={handleAddUnit}
               />
             </View>
           </View>
@@ -1094,18 +1085,23 @@ export default function AddManualPantryItemScreen() {
                 <>
                   <FieldLabel text="Storage location" required />
 
-                  <CreatableObjectDropdown
+                  <SearchableObjectDropdown<SelectOption>
                     options={storageLocations}
                     selectedId={form.storageLocationId}
                     selectedName={form.storageLocationName}
-                    placeholder="Search or create a storage location"
-                    createLabel="Create location"
+                    placeholder="Search or type a new storage location"
+                    onTextChange={(value) => {
+                      if (value !== form.storageLocationName) {
+                        updateForm("storageLocationId", "");
+                      }
+
+                      setStorageLocationDraft(value);
+                    }}
                     onSelect={(option) => {
                       updateForm("storageLocationId", option._id);
-
                       updateForm("storageLocationName", option.name);
+                      setStorageLocationDraft(option.name);
                     }}
-                    onCreate={handleCreateStorageLocation}
                   />
 
                   <FieldLabel text="Quantity" required />

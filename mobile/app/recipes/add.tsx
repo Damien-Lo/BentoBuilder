@@ -15,14 +15,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-  CreatableObjectDropdown,
   FieldLabel,
   FormInput,
   SearchableObjectDropdown,
   SectionTitle,
 } from "@/src/components/forms";
 
-import { getIngredients } from "@/src/services/ingredientApi";
+import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import {
   createRecipe,
   createRecipeCategory,
@@ -31,6 +30,7 @@ import {
   type RecipeCategory,
   type RecipeNutrition,
 } from "@/src/services/recipeApi";
+import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 
 const MEAL_CATEGORIES: { value: MealCategory; label: string }[] = [
   { value: "breakfast", label: "Breakfast" },
@@ -83,6 +83,7 @@ export default function AddRecipePage() {
   const [mealCategories, setMealCategories] = useState<MealCategory[]>([]);
   const [recipeCategoryId, setRecipeCategoryId] = useState("");
   const [recipeCategoryName, setRecipeCategoryName] = useState("");
+  const [recipeCategoryDraft, setRecipeCategoryDraft] = useState("");
   const [description, setDescription] = useState("");
   const [servings, setServings] = useState("1");
   const [notes, setNotes] = useState("");
@@ -268,10 +269,17 @@ export default function AddRecipePage() {
 
     setSaving(true);
     try {
+      const recipeCategory = await resolveOrCreateOption(
+        recipeCategories,
+        recipeCategoryId,
+        recipeCategoryDraft,
+        handleCreateRecipeCategory,
+      );
+
       await createRecipe({
         name: name.trim(),
         mealCategory: mealCategories,
-        recipeCategory: recipeCategoryId || null,
+        recipeCategory: recipeCategory?._id || null,
         description: description.trim() || undefined,
         servings: numServings,
         notes: notes.trim() || undefined,
@@ -394,17 +402,22 @@ export default function AddRecipePage() {
           </View>
 
           <FieldLabel text="Category" />
-          <CreatableObjectDropdown
+          <SearchableObjectDropdown<RecipeCategory>
             options={recipeCategories}
             selectedId={recipeCategoryId}
             selectedName={recipeCategoryName}
-            placeholder="Search or create a category"
-            createLabel="Create category"
+            placeholder="Search or type a new category"
+            onTextChange={(value) => {
+              if (value !== recipeCategoryName) {
+                setRecipeCategoryId("");
+              }
+              setRecipeCategoryDraft(value);
+            }}
             onSelect={(option) => {
               setRecipeCategoryId(option._id);
               setRecipeCategoryName(option.name);
+              setRecipeCategoryDraft(option.name);
             }}
-            onCreate={handleCreateRecipeCategory}
           />
 
           <FieldLabel text="Description" />

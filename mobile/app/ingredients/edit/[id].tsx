@@ -16,10 +16,10 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-  CreatableObjectDropdown,
   CreatableStringDropdown,
   FieldLabel,
   FormInput,
+  SearchableObjectDropdown,
   SectionTitle,
 } from "@/src/components/forms";
 
@@ -50,6 +50,8 @@ import {
 import type { PantryItem } from "@/src/types/pantry";
 
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+
+import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 
 type ReferenceObject = { _id?: string; id?: string; name?: string };
 
@@ -169,12 +171,15 @@ export default function IngredientDetailScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState | null>(null);
+  const [brandDraft, setBrandDraft] = useState("");
+  const [categoryDraft, setCategoryDraft] = useState("");
   const [quickAddPurchaseDate, setQuickAddPurchaseDate] = useState(
     new Date().toISOString().split("T")[0],
   );
   const [quickAddExpiryDate, setQuickAddExpiryDate] = useState("");
   const [quickAddLocationId, setQuickAddLocationId] = useState("");
   const [quickAddLocationName, setQuickAddLocationName] = useState("");
+  const [quickAddLocationDraft, setQuickAddLocationDraft] = useState("");
   const [quickAddQuantity, setQuickAddQuantity] = useState("");
   const [savingEntry, setSavingEntry] = useState(false);
 
@@ -208,8 +213,11 @@ export default function IngredientDetailScreen() {
 
         if (cancelled) return;
 
+        const loadedForm = ingredientToForm(loadedIngredient);
         setCurrentIngredient(loadedIngredient);
-        setForm(ingredientToForm(loadedIngredient));
+        setForm(loadedForm);
+        setBrandDraft(loadedForm.brandName);
+        setCategoryDraft(loadedForm.categoryName);
 
         if (loadedIngredient.isGeneric) {
           setLoadingAvailability(true);
@@ -274,6 +282,7 @@ export default function IngredientDetailScreen() {
       "";
     setQuickAddLocationId(locId);
     setQuickAddLocationName(locName);
+    setQuickAddLocationDraft(locName);
   }, [ingredientPantryItems, storageLocationById]);
 
   function getLocationName(item: PantryItem): string {
@@ -293,7 +302,10 @@ export default function IngredientDetailScreen() {
 
   function handleCancel() {
     if (currentIngredient) {
-      setForm(ingredientToForm(currentIngredient));
+      const revertedForm = ingredientToForm(currentIngredient);
+      setForm(revertedForm);
+      setBrandDraft(revertedForm.brandName);
+      setCategoryDraft(revertedForm.categoryName);
     }
     setIsEditing(false);
   }
@@ -309,12 +321,25 @@ export default function IngredientDetailScreen() {
     try {
       setSaving(true);
 
+      // Typing a brand/category that doesn't match an existing one creates
+      // it here at save time — no separate "create" tap required.
+      const brand = currentIngredient?.isGeneric
+        ? null
+        : await resolveOrCreateOption(brands, form.brandId, brandDraft, handleCreateBrand);
+
+      const category = await resolveOrCreateOption(
+        categories,
+        form.categoryId,
+        categoryDraft,
+        handleCreateCategory,
+      );
+
       const updated = await updateIngredient(id, {
         name: form.name.trim(),
         description: form.description.trim() || undefined,
         barcode: form.barcode.trim() || null,
-        brand: currentIngredient?.isGeneric ? null : form.brandId || null,
-        category: form.categoryId || null,
+        brand: brand?._id || null,
+        category: category?._id || null,
         defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
         defaultPortionUnit: form.defaultPortionUnit.trim() || undefined,
         lowStockThreshold: optionalNumber(form.lowStockThreshold),
@@ -328,8 +353,11 @@ export default function IngredientDetailScreen() {
         },
       });
 
+      const updatedForm = ingredientToForm(updated);
       setCurrentIngredient(updated);
-      setForm(ingredientToForm(updated));
+      setForm(updatedForm);
+      setBrandDraft(updatedForm.brandName);
+      setCategoryDraft(updatedForm.categoryName);
       setIsEditing(false);
     } catch (err) {
       const message =
@@ -350,6 +378,18 @@ export default function IngredientDetailScreen() {
         : [...current, brand].sort((a, b) => a.name.localeCompare(b.name)),
     );
     return brand;
+  }
+
+  async function handleCreateStorageLocation(
+    name: string,
+  ): Promise<SelectOption> {
+    const location = await createStorageLocation(name);
+    setStorageLocations((current) =>
+      current.some((l) => l._id === location._id)
+        ? current
+        : [...current, location].sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    return location;
   }
 
   async function handleCreateCategory(name: string): Promise<SelectOption> {
@@ -407,12 +447,10 @@ export default function IngredientDetailScreen() {
       return;
     }
 
-    const storageLocationId = quickAddLocationId;
-
-    if (!storageLocationId) {
+    if (!quickAddLocationId && !quickAddLocationDraft.trim()) {
       Alert.alert(
         "Missing storage location",
-        "Select a storage location before adding an entry.",
+        "Search or type a storage location before adding an entry.",
       );
       return;
     }
@@ -420,9 +458,20 @@ export default function IngredientDetailScreen() {
     try {
       setSavingEntry(true);
 
+      const storageLocation = await resolveOrCreateOption(
+        storageLocations,
+        quickAddLocationId,
+        quickAddLocationDraft,
+        handleCreateStorageLocation,
+      );
+
+      if (!storageLocation) {
+        throw new Error("Enter a storage location.");
+      }
+
       const newEntry = await addIngredientToPantry({
         ingredient: id,
-        storageLocation: storageLocationId,
+        storageLocation: storageLocation._id,
         quantityAvailable: quickAddQuantity ? Number(quickAddQuantity) : 0,
         quantityUnit: lastEntry.quantityUnit,
         purchaseDate: quickAddPurchaseDate || undefined,
@@ -594,33 +643,43 @@ export default function IngredientDetailScreen() {
               {!ingredient.isGeneric && (
                 <>
                   <FieldLabel text="Brand" />
-                  <CreatableObjectDropdown
+                  <SearchableObjectDropdown<SelectOption>
                     options={brands}
                     selectedId={form.brandId}
                     selectedName={form.brandName}
-                    placeholder="Search or create a brand"
-                    createLabel="Create brand"
+                    placeholder="Search or type a new brand"
+                    onTextChange={(value) => {
+                      if (value !== form.brandName) {
+                        updateForm("brandId", "");
+                      }
+                      setBrandDraft(value);
+                    }}
                     onSelect={(option) => {
                       updateForm("brandId", option._id);
                       updateForm("brandName", option.name);
+                      setBrandDraft(option.name);
                     }}
-                    onCreate={handleCreateBrand}
                   />
                 </>
               )}
 
               <FieldLabel text="Category" />
-              <CreatableObjectDropdown
+              <SearchableObjectDropdown<SelectOption>
                 options={categories}
                 selectedId={form.categoryId}
                 selectedName={form.categoryName}
-                placeholder="Search or create a category"
-                createLabel="Create category"
+                placeholder="Search or type a new category"
+                onTextChange={(value) => {
+                  if (value !== form.categoryName) {
+                    updateForm("categoryId", "");
+                  }
+                  setCategoryDraft(value);
+                }}
                 onSelect={(option) => {
                   updateForm("categoryId", option._id);
                   updateForm("categoryName", option.name);
+                  setCategoryDraft(option.name);
                 }}
-                onCreate={handleCreateCategory}
               />
 
               <FieldLabel text="Description" />
@@ -655,10 +714,8 @@ export default function IngredientDetailScreen() {
                   <CreatableStringDropdown
                     options={units}
                     selectedValue={form.defaultPortionUnit}
-                    placeholder="Search or create"
-                    createLabel="Use unit"
-                    onSelect={(unit) => updateForm("defaultPortionUnit", unit)}
-                    onCreate={handleAddUnit}
+                    placeholder="Search or type a new unit"
+                    onSelect={handleAddUnit}
                   />
                 </View>
               </View>
@@ -1175,26 +1232,21 @@ export default function IngredientDetailScreen() {
                 <View className="flex-row">
                   <View className="mr-3 flex-[2]">
                     <FieldLabel text="Storage location" />
-                    <CreatableObjectDropdown
+                    <SearchableObjectDropdown<SelectOption>
                       options={storageLocations}
                       selectedId={quickAddLocationId}
                       selectedName={quickAddLocationName}
-                      placeholder="Location"
-                      createLabel="Create location"
+                      placeholder="Search or type a new location"
+                      onTextChange={(value) => {
+                        if (value !== quickAddLocationName) {
+                          setQuickAddLocationId("");
+                        }
+                        setQuickAddLocationDraft(value);
+                      }}
                       onSelect={(option) => {
                         setQuickAddLocationId(option._id);
                         setQuickAddLocationName(option.name);
-                      }}
-                      onCreate={async (name) => {
-                        const loc = await createStorageLocation(name);
-                        setStorageLocations((current) =>
-                          current.some((l) => l._id === loc._id)
-                            ? current
-                            : [...current, loc].sort((a, b) =>
-                                a.name.localeCompare(b.name),
-                              ),
-                        );
-                        return loc;
+                        setQuickAddLocationDraft(option.name);
                       }}
                     />
                   </View>

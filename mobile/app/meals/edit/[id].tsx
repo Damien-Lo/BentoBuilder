@@ -28,6 +28,7 @@ import {
 } from "@/src/services/mealApi";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import type { SelectOption } from "@/src/types/options";
+import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 
 const MEAL_TYPE_OPTIONS: {
   value: MealType;
@@ -166,6 +167,12 @@ export default function EditMealScreen() {
     setCourses(prev => prev.filter(c => c.id !== courseId));
   }
 
+  async function handleCreateMealTag(tagName: string): Promise<MealTag> {
+    const tag = await createMealTag(tagName);
+    setAllTags(prev => (prev.some(t => t._id === tag._id) ? prev : [...prev, tag]));
+    return tag;
+  }
+
   async function handleSave() {
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -179,10 +186,21 @@ export default function EditMealScreen() {
 
     try {
       setSaving(true);
+
+      // Tags typed but not yet matched to a real record (pending, no _id
+      // yet) get created here — no separate "create" tap was needed for them.
+      const resolvedTags = await Promise.all(
+        selectedTags.map((tag) =>
+          tag._id
+            ? tag
+            : resolveOrCreateOption(allTags, "", tag.name, handleCreateMealTag),
+        ),
+      );
+
       await updateMeal(id, {
         name: trimmedName,
         type: mealType,
-        tags: selectedTags.map(t => t._id),
+        tags: resolvedTags.filter((t): t is MealTag => t != null).map(t => t._id),
         notes: notes.trim() || undefined,
         courses: courses.map((c, i) => ({
           label: `Course ${i + 1}`,
@@ -357,22 +375,20 @@ export default function EditMealScreen() {
               options={allTags}
               selectedItems={selectedTags}
               placeholder="Add a tag…"
-              createLabel="Create tag"
               onAdd={(option: SelectOption) => {
-                if (!selectedTags.some(t => t._id === option._id)) {
+                const isDuplicate = option._id
+                  ? selectedTags.some(t => t._id === option._id)
+                  : selectedTags.some(
+                      t => t.name.trim().toLowerCase() === option.name.trim().toLowerCase(),
+                    );
+
+                if (!isDuplicate) {
                   setSelectedTags(prev => [...prev, option]);
                 }
               }}
               onRemove={(id: string) =>
                 setSelectedTags(prev => prev.filter(t => t._id !== id))
               }
-              onCreate={async (name: string) => {
-                const tag = await createMealTag(name);
-                setAllTags(prev =>
-                  prev.some(t => t._id === tag._id) ? prev : [...prev, tag],
-                );
-                return tag;
-              }}
             />
           </View>
 

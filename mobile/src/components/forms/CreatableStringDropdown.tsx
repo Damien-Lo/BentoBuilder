@@ -13,10 +13,8 @@ interface CreatableStringDropdownProps {
   options?: string[];
   selectedValue?: string;
   placeholder: string;
-  createLabel: string;
   disabled?: boolean;
   onSelect: (value: string) => void;
-  onCreate: (value: string) => void;
 }
 
 interface DropdownPosition {
@@ -29,10 +27,8 @@ export function CreatableStringDropdown({
   options,
   selectedValue = "",
   placeholder,
-  createLabel,
   disabled = false,
   onSelect,
-  onCreate,
 }: CreatableStringDropdownProps) {
   const safeOptions = useMemo(
     () => (Array.isArray(options) ? options : []),
@@ -80,14 +76,6 @@ export function CreatableStringDropdown({
     );
   }, [normalizedQuery, safeOptions, safeSelectedValue]);
 
-  const exactMatch = safeOptions.some(
-    (option) =>
-      option.trim().toLowerCase() === normalizedQuery,
-  );
-
-  const canCreate =
-    normalizedQuery.length > 0 && !exactMatch;
-
   function openDropdown() {
     if (disabled) {
       return;
@@ -111,6 +99,13 @@ export function CreatableStringDropdown({
     );
   }
 
+  // Typing commits the value immediately — there's no separate "create" step
+  // for a plain string like a unit; whatever's typed just becomes the value.
+  function handleTextChange(value: string) {
+    setQuery(value);
+    onSelect(value);
+  }
+
   function closeDropdown() {
     setOpen(false);
     setQuery(safeSelectedValue);
@@ -120,20 +115,6 @@ export function CreatableStringDropdown({
     setQuery(value);
     setOpen(false);
     onSelect(value);
-  }
-
-  function handleCreate() {
-    const value = query.trim();
-
-    if (!value) {
-      return;
-    }
-
-    onCreate(value);
-    onSelect(value);
-
-    setQuery(value);
-    setOpen(false);
   }
 
   return (
@@ -206,7 +187,8 @@ export function CreatableStringDropdown({
                 autoCapitalize="none"
                 autoCorrect={false}
                 className="h-[52px] flex-1 px-3 text-base text-slate-950"
-                onChangeText={setQuery}
+                onChangeText={handleTextChange}
+                onSubmitEditing={closeDropdown}
               />
 
               {query.length > 0 && (
@@ -214,6 +196,7 @@ export function CreatableStringDropdown({
                   hitSlop={10}
                   onPress={() => {
                     setQuery("");
+                    onSelect("");
                     inputRef.current?.focus();
                   }}
                 >
@@ -257,33 +240,13 @@ export function CreatableStringDropdown({
                 );
               })}
 
-              {canCreate && (
-                <Pressable
-                  className="flex-row items-center bg-blue-50 px-4 py-4 active:bg-blue-100"
-                  onPress={handleCreate}
-                >
-                  <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-100">
-                    <Ionicons
-                      name="add"
-                      size={19}
-                      color="#2563EB"
-                    />
-                  </View>
-
-                  <Text className="ml-3 flex-1 text-base font-semibold text-blue-700">
-                    {createLabel} “{query.trim()}”
+              {filteredOptions.length === 0 && (
+                <View className="px-4 py-5">
+                  <Text className="text-center text-sm text-slate-500">
+                    No matching options
                   </Text>
-                </Pressable>
+                </View>
               )}
-
-              {filteredOptions.length === 0 &&
-                !canCreate && (
-                  <View className="px-4 py-5">
-                    <Text className="text-center text-sm text-slate-500">
-                      No matching options
-                    </Text>
-                  </View>
-                )}
             </ScrollView>
           </View>
         </View>
