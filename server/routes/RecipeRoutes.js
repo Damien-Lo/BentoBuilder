@@ -38,7 +38,7 @@ router.get("/:id", async (req, res) => {
       .populate("recipeCategory")
       .populate({
         path: "ingredientList.ingredient",
-        populate: { path: "category" },
+        populate: [{ path: "category" }, { path: "brand" }],
       });
 
     if (!recipe) {
@@ -104,7 +104,7 @@ router.post("/", async (req, res) => {
     await recipe.populate("recipeCategory");
     await recipe.populate({
       path: "ingredientList.ingredient",
-      populate: { path: "category" },
+      populate: [{ path: "category" }, { path: "brand" }],
     });
 
     const nutrition = calcNutrition(recipe);
@@ -139,7 +139,7 @@ router.patch("/:id", async (req, res) => {
       .populate("recipeCategory")
       .populate({
         path: "ingredientList.ingredient",
-        populate: { path: "category" },
+        populate: [{ path: "category" }, { path: "brand" }],
       });
 
     if (!recipe) {

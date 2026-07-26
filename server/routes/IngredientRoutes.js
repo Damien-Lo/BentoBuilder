@@ -37,7 +37,9 @@ router.get("/", async (req, res) => {
  */
 router.get("/:id", async (req, res) => {
   try {
-    const ingredient = await Ingredient.findById(req.params.id);
+    const ingredient = await Ingredient.findById(req.params.id)
+      .populate("category")
+      .populate("brand");
 
     if (!ingredient) {
       return res.status(404).json({
@@ -73,6 +75,8 @@ router.post("/", async (req, res) => {
     };
 
     const ingredient = await Ingredient.create(ingredientData);
+    await ingredient.populate("category");
+    await ingredient.populate("brand");
 
     return res.status(201).json({
       success: true,
@@ -108,7 +112,9 @@ router.patch("/:id", async (req, res) => {
         new: true,
         runValidators: true,
       }
-    );
+    )
+      .populate("category")
+      .populate("brand");
 
     if (!ingredient) {
       return res.status(404).json({

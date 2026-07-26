@@ -88,11 +88,9 @@ function getReferenceId(value: unknown): string {
   return "";
 }
 
+// Only trust a populated reference object's `.name` — a bare string means the
+// ref wasn't populated (it's just the raw ObjectId), so never display it.
 function getReferenceName(value: unknown): string {
-  if (typeof value === "string") {
-    return value;
-  }
-
   if (isReferenceObject(value) && typeof value.name === "string") {
     return value.name;
   }

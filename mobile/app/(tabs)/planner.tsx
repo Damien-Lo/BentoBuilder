@@ -226,7 +226,10 @@ export default function HomeScreen() {
     Promise.all(weekDates.map(d => getMealPlanForDate(d)))
       .then(setWeekEntries)
       .catch(() => setWeekEntries(weekDates.map(() => [])));
-  }, [weekDates]);
+    // `entries` is included so that adding/deleting/toggling an item on the
+    // selected day (which updates `entries` locally, not `weekDates`) also
+    // refreshes the weekly total instead of leaving it stale.
+  }, [weekDates, entries]);
 
   // Scroll date strip to today on mount
   useEffect(() => {

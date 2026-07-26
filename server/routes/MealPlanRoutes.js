@@ -13,7 +13,10 @@ function populateEntry(query) {
       ],
     })
     .populate("recipe")
-    .populate("ingredient");
+    .populate({
+      path: "ingredient",
+      populate: [{ path: "category" }, { path: "brand" }],
+    });
 }
 
 /**

@@ -7,6 +7,7 @@ export interface IngredientOption
   extends SelectOption {
   description?: string;
   unit?: string;
+  defaultPortionAmount?: number;
 
   lowStockThreshold?: number;
 

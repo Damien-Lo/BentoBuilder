@@ -109,13 +109,9 @@ function ingredientToForm(ingredient: Ingredient): FormState {
     name: ingredient.name,
     description: ingredient.description ?? "",
     brandId: getReferenceId(ingredient.brand),
-    brandName:
-      getReferenceName(ingredient.brand) ||
-      (typeof ingredient.brand === "string" ? ingredient.brand : ""),
+    brandName: getReferenceName(ingredient.brand),
     categoryId: getReferenceId(ingredient.category),
-    categoryName:
-      getReferenceName(ingredient.category) ||
-      (typeof ingredient.category === "string" ? ingredient.category : ""),
+    categoryName: getReferenceName(ingredient.category),
     defaultPortionAmount:
       ingredient.defaultPortionAmount != null
         ? String(ingredient.defaultPortionAmount)
@@ -464,12 +460,8 @@ export default function IngredientDetailScreen() {
   }
 
   const ingredient = currentIngredient;
-  const brandName =
-    getReferenceName(ingredient.brand) ||
-    (typeof ingredient.brand === "string" ? ingredient.brand : "");
-  const categoryName =
-    getReferenceName(ingredient.category) ||
-    (typeof ingredient.category === "string" ? ingredient.category : "");
+  const brandName = getReferenceName(ingredient.brand);
+  const categoryName = getReferenceName(ingredient.category);
   const nutrition = ingredient.nutrition;
   const totalQuantity = ingredientPantryItems.reduce(
     (sum, p) => sum + (p.quantityAvailable ?? 0),

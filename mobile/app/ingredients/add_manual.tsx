@@ -148,6 +148,7 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
     description: ingredient.description ?? "",
 
     unit: ingredient.defaultPortionUnit ?? "",
+    defaultPortionAmount: ingredient.defaultPortionAmount,
 
     lowStockThreshold: ingredient.lowStockThreshold,
 
@@ -229,6 +230,8 @@ export default function AddManualPantryItemScreen() {
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
 
   const [brands, setBrands] = useState<SelectOption[]>([]);
+
+  const [brandDraft, setBrandDraft] = useState(() => params.scannedBrand ?? "");
 
   const [units, setUnits] = useState<string[]>([]);
 
@@ -318,6 +321,10 @@ export default function AddManualPantryItemScreen() {
       fiber: product.fiber != null ? String(Math.round(product.fiber * 10) / 10) : current.fiber,
       sodium: product.sodium != null ? String(product.sodium) : current.sodium,
     }));
+
+    if (product.brand) {
+      setBrandDraft(product.brand);
+    }
   }
 
   function applySelectedIngredient(option: IngredientOption) {
@@ -330,6 +337,7 @@ export default function AddManualPantryItemScreen() {
       description: option.description ?? "",
 
       quantityUnit: option.unit ?? "",
+      defaultPortionAmount: numberToFormValue(option.defaultPortionAmount),
 
       lowStockThreshold:
         option.lowStockThreshold != null
@@ -509,11 +517,26 @@ export default function AddManualPantryItemScreen() {
       let ingredientId = form.ingredientId;
 
       if (!ingredientId) {
+        let brandId = form.brandId;
+        const trimmedBrandName = brandDraft.trim();
+
+        if (!brandId && trimmedBrandName) {
+          const existingBrand = brands.find(
+            (brand) =>
+              brand.name.trim().toLowerCase() ===
+              trimmedBrandName.toLowerCase(),
+          );
+
+          brandId = existingBrand
+            ? existingBrand._id
+            : (await handleCreateBrand(trimmedBrandName))._id;
+        }
+
         const newIngredient = await createIngredient({
           name: form.ingredientName.trim(),
           barcode: form.barcode.trim() || null,
           description: form.description.trim() || undefined,
-          brand: form.brandId || null,
+          brand: brandId || null,
           category: form.categoryId || null,
           defaultPortionUnit: form.quantityUnit.trim() || undefined,
           defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
@@ -648,10 +671,19 @@ export default function AddManualPantryItemScreen() {
             selectedName={form.brandName}
             placeholder="Search or create a brand"
             createLabel="Create brand"
+            onTextChange={(value: string) => {
+              if (value !== form.brandName) {
+                updateForm("brandId", "");
+              }
+
+              setBrandDraft(value);
+            }}
             onSelect={(option) => {
               updateForm("brandId", option._id);
 
               updateForm("brandName", option.name);
+
+              setBrandDraft(option.name);
             }}
             onCreate={handleCreateBrand}
           />
@@ -764,8 +796,31 @@ export default function AddManualPantryItemScreen() {
 
           <SectionTitle
             title="Nutrition per serving"
-            description="Optional nutrition values for one serving."
+            description="Define what one serving is, then enter nutrition for that amount."
           />
+
+          <FieldLabel text="Serving size" />
+
+          <View className="flex-row items-center">
+            <View className="flex-1">
+              <FormInput
+                value={form.defaultPortionAmount}
+                placeholder="1"
+                keyboardType="decimal-pad"
+                onChangeText={(value) => updateForm("defaultPortionAmount", value)}
+              />
+            </View>
+
+            <Text className="ml-3 text-base font-medium text-slate-600">
+              {form.quantityUnit.trim() || "unit"}
+            </Text>
+          </View>
+
+          <Text className="mt-2 text-sm leading-5 text-slate-500">
+            How much of the unit above is one serving. For example, a spice
+            might have a 120 g bottle but a 5 g serving — enter 5 here, and
+            the nutrition values below should be for that 5 g.
+          </Text>
 
           <View className="flex-row">
             <View className="mr-3 flex-1">

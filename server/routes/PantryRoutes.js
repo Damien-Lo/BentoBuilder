@@ -4,6 +4,11 @@ import PantryItem from "../models/PantryItem.js";
 
 const router = express.Router();
 
+const INGREDIENT_POPULATE = {
+  path: "ingredient",
+  populate: [{ path: "category" }, { path: "brand" }],
+};
+
 /**
  * GET /api/pantry
  * Return all pantry records and their ingredient details.
@@ -13,12 +18,7 @@ router.get("/", async (req, res) => {
     const pantryItems = await PantryItem.find({
         isFinished: false,
         })
-        .populate({
-            path: "ingredient",
-            populate: {
-            path: "category",
-            },
-        })
+        .populate(INGREDIENT_POPULATE)
         .populate("storageLocation")
         .sort({
             expiryDate: 1,
@@ -46,7 +46,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const pantryItem = await PantryItem.findById(req.params.id).populate(
-      "ingredient"
+      INGREDIENT_POPULATE
     );
 
     if (!pantryItem) {
@@ -88,7 +88,7 @@ router.post("/", async (req, res) => {
 
     const pantryItem = await PantryItem.create(req.body);
 
-    await pantryItem.populate("ingredient");
+    await pantryItem.populate(INGREDIENT_POPULATE);
 
     return res.status(201).json({
       success: true,
@@ -168,12 +168,7 @@ router.post("/create", async (req, res) => {
     });
 
     await pantryItem.populate([
-      {
-        path: "ingredient",
-        populate: {
-          path: "category",
-        },
-      },
+      INGREDIENT_POPULATE,
       {
         path: "storageLocation",
       },
@@ -212,7 +207,7 @@ router.patch("/:id", async (req, res) => {
         new: true,
         runValidators: true,
       }
-    ).populate("ingredient");
+    ).populate(INGREDIENT_POPULATE);
 
     if (!pantryItem) {
       return res.status(404).json({
@@ -271,7 +266,7 @@ router.post("/:id/use", async (req, res) => {
     }
 
     await pantryItem.save();
-    await pantryItem.populate("ingredient");
+    await pantryItem.populate(INGREDIENT_POPULATE);
 
     return res.status(200).json({
       success: true,
