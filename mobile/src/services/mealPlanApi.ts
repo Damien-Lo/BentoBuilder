@@ -5,10 +5,14 @@ import type { Ingredient } from "./ingredientApi";
 
 export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 
+// "planned" = tentative, not yet eaten; "confirmed" = logged as actually eaten
+export type MealPlanEntryStatus = "planned" | "confirmed";
+
 export interface MealPlanEntry {
   _id: string;
   date: string; // "YYYY-MM-DD"
   slot: MealSlot;
+  status: MealPlanEntryStatus;
 
   meal?: Meal;
 
@@ -26,6 +30,7 @@ export interface MealPlanEntry {
 export interface CreateMealPlanEntryInput {
   date: string;
   slot: MealSlot;
+  status?: MealPlanEntryStatus;
 
   meal?: string; // meal _id
 
@@ -56,6 +61,16 @@ export async function createMealPlanEntry(input: CreateMealPlanEntryInput): Prom
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+  });
+  const result = await parseResponse<{ success: boolean; data: MealPlanEntry }>(res);
+  return result.data;
+}
+
+export async function updateMealPlanEntryStatus(id: string, status: MealPlanEntryStatus): Promise<MealPlanEntry> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
   });
   const result = await parseResponse<{ success: boolean; data: MealPlanEntry }>(res);
   return result.data;

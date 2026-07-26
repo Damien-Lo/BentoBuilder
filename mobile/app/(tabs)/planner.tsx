@@ -13,16 +13,18 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { getMeals, type Meal, type MealRecipeRef } from "@/src/services/mealApi";
-import { getRecipes, type Recipe } from "@/src/services/recipeApi";
+import { getRecipeById, getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import {
   createMealPlanEntry,
   deleteMealPlanEntry,
   getMealPlanForDate,
+  updateMealPlanEntryStatus,
   type MealPlanEntry,
+  type MealPlanEntryStatus,
   type MealSlot,
 } from "@/src/services/mealPlanApi";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
@@ -112,6 +114,14 @@ function pct(value: number, limit: number | null): number {
   return Math.min(value / limit, 1);
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // ── Date strip config ─────────────────────────────────────────────────────────
 
 const DAYS_BEFORE = 14;
@@ -150,11 +160,12 @@ export default function HomeScreen() {
   // Daily / weekly nutrition card paging
   const [nutritionView, setNutritionView] = useState<0 | 1>(0);
   const [weekEntries, setWeekEntries] = useState<MealPlanEntry[][]>([]);
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   // Add-to-plan overlay (plain local state — no navigation involved)
   const [showAdd, setShowAdd] = useState(false);
   const [addSlot, setAddSlot] = useState<MealSlot>("breakfast");
+  const [addStatus, setAddStatus] = useState<MealPlanEntryStatus>("planned");
   const [addMode, setAddMode] = useState<"meal" | "recipe" | "ingredient">("meal");
   const [mealSearch, setMealSearch] = useState("");
   const [recipeSearch, setRecipeSearch] = useState("");
@@ -167,7 +178,17 @@ export default function HomeScreen() {
   const [pendingQuantity, setPendingQuantity] = useState("1");
   const [pendingUnit, setPendingUnit] = useState("");
 
+  // Expanded info overlay for a meal/recipe/ingredient row
+  const [infoItem, setInfoItem] = useState<
+    | { type: "meal"; data: Meal }
+    | { type: "recipe"; data: Recipe }
+    | { type: "ingredient"; data: Ingredient }
+    | null
+  >(null);
+  const [infoLoading, setInfoLoading] = useState(false);
+
   const dateStripRef = useRef<FlatList<string>>(null);
+  const swipeableRefs = useRef(new Map<string, SwipeableMethods>()).current;
 
   // Load available meals/recipes/ingredients for the add overlay, once on mount
   useEffect(() => {
@@ -218,9 +239,20 @@ export default function HomeScreen() {
   const selectedD = parseLocalDate(selectedDate);
   const selectedMonthLabel = `${MONTH_NAMES[selectedD.getMonth()]} ${selectedD.getFullYear()}`;
   const isToday = selectedDate === today;
-  const nutrition = useMemo(() => computeDayNutrition(entries), [entries]);
-  const weeklyNutrition = useMemo(
-    () => computeDayNutrition(weekEntries.flat()),
+  const confirmedNutrition = useMemo(
+    () => computeDayNutrition(entries.filter(e => e.status === "confirmed")),
+    [entries],
+  );
+  const plannedNutrition = useMemo(
+    () => computeDayNutrition(entries.filter(e => e.status === "planned")),
+    [entries],
+  );
+  const weeklyConfirmedNutrition = useMemo(
+    () => computeDayNutrition(weekEntries.flat().filter(e => e.status === "confirmed")),
+    [weekEntries],
+  );
+  const weeklyPlannedNutrition = useMemo(
+    () => computeDayNutrition(weekEntries.flat().filter(e => e.status === "planned")),
     [weekEntries],
   );
 
@@ -253,6 +285,7 @@ export default function HomeScreen() {
 
   function openAdd(slot: MealSlot) {
     setAddSlot(slot);
+    setAddStatus("planned");
     setAddMode("meal");
     setMealSearch("");
     setRecipeSearch("");
@@ -267,11 +300,34 @@ export default function HomeScreen() {
     setPendingUnit(ingredient.defaultPortionUnit ?? "");
   }
 
+  function openMealInfo(meal: Meal) {
+    setInfoItem({ type: "meal", data: meal });
+  }
+
+  function openIngredientInfo(ingredient: Ingredient) {
+    setInfoItem({ type: "ingredient", data: ingredient });
+  }
+
+  async function openRecipeInfo(recipe: Recipe) {
+    setInfoItem({ type: "recipe", data: recipe });
+    try {
+      setInfoLoading(true);
+      // The list endpoint doesn't populate ingredientList — fetch the full
+      // recipe so the info overlay can show ingredient names.
+      const full = await getRecipeById(recipe._id);
+      setInfoItem({ type: "recipe", data: full });
+    } catch {
+      // keep showing the partial data already set above
+    } finally {
+      setInfoLoading(false);
+    }
+  }
+
   async function handleAddEntry(meal: Meal) {
     if (saving) return;
     try {
       setSaving(true);
-      const entry = await createMealPlanEntry({ date: selectedDate, slot: addSlot, meal: meal._id });
+      const entry = await createMealPlanEntry({ date: selectedDate, slot: addSlot, status: addStatus, meal: meal._id });
       setEntries(prev => [...prev, entry]);
       setShowAdd(false);
     } catch (err) {
@@ -288,6 +344,7 @@ export default function HomeScreen() {
       const entry = await createMealPlanEntry({
         date: selectedDate,
         slot: addSlot,
+        status: addStatus,
         recipe: recipe._id,
         recipeServings: 1,
       });
@@ -312,6 +369,7 @@ export default function HomeScreen() {
       const entry = await createMealPlanEntry({
         date: selectedDate,
         slot: addSlot,
+        status: addStatus,
         ingredient: pendingIngredient._id,
         ingredientQuantity: quantity,
         ingredientUnit: pendingUnit.trim(),
@@ -323,6 +381,17 @@ export default function HomeScreen() {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not add ingredient.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleToggleEntryStatus(entry: MealPlanEntry) {
+    const nextStatus: MealPlanEntryStatus = entry.status === "planned" ? "confirmed" : "planned";
+    swipeableRefs.get(entry._id)?.close();
+    try {
+      const updated = await updateMealPlanEntryStatus(entry._id, nextStatus);
+      setEntries(prev => prev.map(e => (e._id === entry._id ? updated : e)));
+    } catch (err) {
+      Alert.alert("Error", err instanceof Error ? err.message : "Could not update status.");
     }
   }
 
@@ -409,7 +478,12 @@ export default function HomeScreen() {
     return (
       <ReanimatedSwipeable
         key={entry._id}
+        ref={r => {
+          if (r) swipeableRefs.set(entry._id, r);
+          else swipeableRefs.delete(entry._id);
+        }}
         friction={2}
+        leftThreshold={40}
         rightThreshold={40}
         renderLeftActions={() => (
           <Pressable
@@ -419,11 +493,35 @@ export default function HomeScreen() {
             <Ionicons name="trash-outline" size={20} color="white" />
           </Pressable>
         )}
+        renderRightActions={() => (
+          <Pressable
+            className="mb-2 w-20 items-center justify-center rounded-2xl active:opacity-80"
+            style={{ backgroundColor: entry.status === "planned" ? "#10B981" : "#94A3B8" }}
+            onPress={() => void handleToggleEntryStatus(entry)}
+          >
+            <Ionicons
+              name={entry.status === "planned" ? "checkmark-circle-outline" : "time-outline"}
+              size={20}
+              color="white"
+            />
+            <Text className="mt-1 text-[10px] font-semibold text-white">
+              {entry.status === "planned" ? "Confirm" : "Unconfirm"}
+            </Text>
+          </Pressable>
+        )}
       >
-        <View className="mb-2 flex-row items-center rounded-2xl bg-white px-4 py-3 shadow-sm">
+        <View
+          className="mb-2 flex-row items-center rounded-2xl bg-white px-4 py-3 shadow-sm"
+          style={entry.status === "planned" ? styles.plannedEntry : undefined}
+        >
+          {entry.status === "planned" && (
+            <Ionicons name="time-outline" size={16} color="#94A3B8" style={{ marginRight: 8 }} />
+          )}
           <View className="flex-1">
             <Text className="font-semibold text-slate-900" numberOfLines={1}>{title}</Text>
-            <Text className="mt-0.5 text-xs text-slate-400">{subtitle}</Text>
+            <Text className="mt-0.5 text-xs text-slate-400">
+              {subtitle}{entry.status === "planned" ? " · Planned" : ""}
+            </Text>
           </View>
           {kcal != null && (
             <Text className="text-sm font-semibold text-slate-500">{kcal} kcal</Text>
@@ -434,10 +532,14 @@ export default function HomeScreen() {
   }
 
   // ── Render a nutrition summary card (shared by the daily & weekly pages) ──
+  // Shows confirmed totals as the solid/main figure and bar segment, with
+  // planned totals appended as a lighter "+N" figure and a lighter bar
+  // segment continuing on from the confirmed portion.
   function renderNutritionCard(opts: {
     title: string;
     subtitle?: string;
-    data: DayNutrition;
+    confirmed: DayNutrition;
+    planned: DayNutrition;
     limits: {
       calories: number | null;
       protein: number | null;
@@ -447,15 +549,21 @@ export default function HomeScreen() {
       sodium: number | null;
     };
   }) {
-    const { title, subtitle, data, limits } = opts;
-    const calPct = pct(data.calories, limits.calories);
+    const { title, subtitle, confirmed, planned, limits } = opts;
+
+    const confirmedCalPct = pct(confirmed.calories, limits.calories);
+    const totalCalPct = pct(confirmed.calories + planned.calories, limits.calories);
+    const plannedCalSegment = Math.max(totalCalPct - confirmedCalPct, 0);
+    const calOverLimit = confirmedCalPct >= 1;
+
     const macros = [
-      { label: "Protein", value: data.protein, unit: "g", limit: limits.protein, bar: "#3B82F6" },
-      { label: "Carbs",   value: data.carbs,   unit: "g", limit: limits.carbs,   bar: "#F59E0B" },
-      { label: "Fats",    value: data.fats,    unit: "g", limit: limits.fats,    bar: "#F43F5E" },
-      { label: "Fiber",   value: data.fiber,   unit: "g", limit: limits.fiber,   bar: "#10B981" },
+      { label: "Protein", confirmedValue: confirmed.protein, plannedValue: planned.protein, unit: "g", limit: limits.protein, bar: "#3B82F6" },
+      { label: "Carbs",   confirmedValue: confirmed.carbs,   plannedValue: planned.carbs,   unit: "g", limit: limits.carbs,   bar: "#F59E0B" },
+      { label: "Fats",    confirmedValue: confirmed.fats,    plannedValue: planned.fats,    unit: "g", limit: limits.fats,    bar: "#F43F5E" },
+      { label: "Fiber",   confirmedValue: confirmed.fiber,   plannedValue: planned.fiber,   unit: "g", limit: limits.fiber,   bar: "#10B981" },
     ] as const;
-    const hasSodiumData = data.sodium > 0 || limits.sodium != null;
+
+    const hasSodiumData = confirmed.sodium > 0 || planned.sodium > 0 || limits.sodium != null;
 
     return (
       <View className="overflow-hidden rounded-3xl bg-white shadow-sm">
@@ -472,8 +580,13 @@ export default function HomeScreen() {
           <View className="mt-2 flex-row items-end justify-between">
             <View className="flex-row items-end">
               <Text className="text-4xl font-bold text-slate-900">
-                {data.calories}
+                {confirmed.calories}
               </Text>
+              {planned.calories > 0 && (
+                <Text className="mb-1 ml-1 text-lg font-semibold text-slate-300">
+                  +{planned.calories}
+                </Text>
+              )}
               <Text className="mb-1 ml-1.5 text-base text-slate-400">kcal</Text>
             </View>
             {limits.calories != null && (
@@ -483,35 +596,33 @@ export default function HomeScreen() {
             )}
           </View>
           {limits.calories != null && (
-            <View className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-              <View
-                className={`h-2 rounded-full ${calPct >= 1 ? "bg-red-400" : "bg-blue-500"}`}
-                style={{ width: `${calPct * 100}%` }}
-              />
+            <View className="mt-2 h-2 w-full flex-row overflow-hidden rounded-full bg-slate-100">
+              <View style={{ width: `${confirmedCalPct * 100}%`, backgroundColor: calOverLimit ? "#F87171" : "#3B82F6" }} />
+              <View style={{ width: `${plannedCalSegment * 100}%`, backgroundColor: hexToRgba(calOverLimit ? "#F87171" : "#3B82F6", 0.35) }} />
             </View>
           )}
         </View>
 
         {/* Macro columns */}
         <View className={`flex-row px-4 pt-4 ${hasSodiumData ? "border-b border-slate-100 pb-4" : "pb-4"}`}>
-          {macros.map(({ label, value, unit, limit, bar }) => {
-            const f = pct(value, limit);
+          {macros.map(({ label, confirmedValue, plannedValue, unit, limit, bar }) => {
+            const confirmedF = pct(confirmedValue, limit);
+            const totalF = pct(confirmedValue + plannedValue, limit);
+            const plannedSegment = Math.max(totalF - confirmedF, 0);
+            const over = confirmedF >= 1;
             return (
               <View key={label} className="flex-1 items-center px-1">
                 <Text className="text-sm font-bold text-slate-800">
-                  {value}{unit}
+                  {confirmedValue}{unit}
+                  {plannedValue > 0 && (
+                    <Text className="text-slate-300"> +{plannedValue}{unit}</Text>
+                  )}
                 </Text>
                 <Text className="mt-0.5 text-xs text-slate-400">{label}</Text>
                 {limit != null && (
-                  <View className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                    <View
-                      style={{
-                        width: `${f * 100}%`,
-                        height: 6,
-                        borderRadius: 9999,
-                        backgroundColor: f >= 1 ? "#F87171" : bar,
-                      }}
-                    />
+                  <View className="mt-2 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100">
+                    <View style={{ height: 6, width: `${confirmedF * 100}%`, backgroundColor: over ? "#F87171" : bar }} />
+                    <View style={{ height: 6, width: `${plannedSegment * 100}%`, backgroundColor: hexToRgba(over ? "#F87171" : bar, 0.35) }} />
                   </View>
                 )}
                 {limit != null && (
@@ -528,26 +639,24 @@ export default function HomeScreen() {
         {hasSodiumData && (
           <View className="px-5 pb-4 pt-3">
             {(() => {
-              const f = pct(data.sodium, limits.sodium);
+              const confirmedF = pct(confirmed.sodium, limits.sodium);
+              const totalF = pct(confirmed.sodium + planned.sodium, limits.sodium);
+              const plannedSegment = Math.max(totalF - confirmedF, 0);
+              const over = confirmedF >= 1;
               return (
                 <>
                   <View className="flex-row items-center justify-between">
                     <Text className="text-xs font-semibold text-slate-500">Sodium</Text>
                     <Text className="text-xs text-slate-400">
-                      {data.sodium} mg
+                      {confirmed.sodium}
+                      {planned.sodium > 0 && ` +${planned.sodium}`} mg
                       {limits.sodium != null && ` / ${limits.sodium} mg`}
                     </Text>
                   </View>
                   {limits.sodium != null && (
-                    <View className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                      <View
-                        style={{
-                          width: `${f * 100}%`,
-                          height: 6,
-                          borderRadius: 9999,
-                          backgroundColor: f >= 1 ? "#F87171" : "#A855F7",
-                        }}
-                      />
+                    <View className="mt-1.5 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100">
+                      <View style={{ height: 6, width: `${confirmedF * 100}%`, backgroundColor: over ? "#F87171" : "#A855F7" }} />
+                      <View style={{ height: 6, width: `${plannedSegment * 100}%`, backgroundColor: hexToRgba(over ? "#F87171" : "#A855F7", 0.35) }} />
                     </View>
                   )}
                 </>
@@ -555,6 +664,213 @@ export default function HomeScreen() {
             })()}
           </View>
         )}
+      </View>
+    );
+  }
+
+  // ── Expanded info overlay (meal / recipe / ingredient) ──
+  function infoRow(label: string, value: string | number | null | undefined, unit = "") {
+    if (value == null || value === "") return null;
+    return (
+      <View className="flex-row items-center justify-between border-b border-slate-100 py-2.5">
+        <Text className="text-sm text-slate-500">{label}</Text>
+        <Text className="text-sm font-semibold text-slate-900">{value}{unit}</Text>
+      </View>
+    );
+  }
+
+  function renderMealInfo(meal: Meal) {
+    const kcal = getMealKcal(meal);
+    return (
+      <View>
+        <View className="mb-4 flex-row flex-wrap gap-1.5">
+          <View className="rounded-full bg-slate-100 px-2.5 py-1">
+            <Text className="text-xs font-semibold text-slate-600">
+              {meal.type === "bento" ? "Bento Box" : "Course-based"}
+            </Text>
+          </View>
+          {(meal.tags ?? []).map(tag => (
+            <View key={tag._id} className="rounded-full bg-blue-50 px-2.5 py-1">
+              <Text className="text-xs font-semibold text-blue-700">{tag.name}</Text>
+            </View>
+          ))}
+        </View>
+
+        {!!meal.notes && (
+          <Text className="mb-4 text-sm leading-5 text-slate-600">{meal.notes}</Text>
+        )}
+
+        {infoRow("Total calories", kcal, kcal != null ? " kcal" : "")}
+
+        <Text className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">
+          Courses ({meal.courses?.length ?? 0})
+        </Text>
+        {(meal.courses ?? []).map(course => {
+          const recipe = course.recipe;
+          const populated = recipe && typeof recipe !== "string" ? recipe : null;
+          const courseCal = populated?.nutrition?.calories;
+          return (
+            <View key={course._id} className="mb-2 rounded-2xl bg-slate-50 px-4 py-3">
+              <Text className="text-sm font-semibold text-slate-900">{course.label}</Text>
+              <Text className="mt-0.5 text-xs text-slate-500">
+                {populated?.name ?? "No recipe selected"} · {course.servings} {course.servings === 1 ? "serving" : "servings"}
+                {courseCal != null && ` · ${Math.round(courseCal * course.servings)} kcal`}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
+  function renderRecipeInfo(recipe: Recipe) {
+    const n = recipe.nutrition;
+    return (
+      <View>
+        <View className="mb-4 flex-row flex-wrap gap-1.5">
+          {(recipe.mealCategory ?? []).map(cat => (
+            <View key={cat} className="rounded-full bg-slate-100 px-2.5 py-1">
+              <Text className="text-xs font-semibold capitalize text-slate-600">{cat}</Text>
+            </View>
+          ))}
+        </View>
+
+        {!!recipe.description && (
+          <Text className="mb-4 text-sm leading-5 text-slate-600">{recipe.description}</Text>
+        )}
+
+        {infoRow("Servings", recipe.servings ?? 1)}
+        {n && (
+          <>
+            {infoRow("Calories", n.calories, " kcal")}
+            {infoRow("Protein", n.protein, " g")}
+            {infoRow("Carbs", n.carbs, " g")}
+            {infoRow("Fats", n.fats, " g")}
+            {infoRow("Fiber", n.fiber, " g")}
+            {infoRow("Sodium", n.sodium, " mg")}
+          </>
+        )}
+
+        {recipe.ingredientList.length > 0 && (
+          <>
+            <Text className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">
+              Ingredients
+            </Text>
+            {recipe.ingredientList.map((entry, i) => {
+              const ing = entry.ingredient;
+              const name = ing && typeof ing !== "string" ? ing.name : "…";
+              return (
+                <Text key={i} className="py-1 text-sm text-slate-700">
+                  • {entry.quantity}{entry.unit ? ` ${entry.unit}` : ""} {name}
+                </Text>
+              );
+            })}
+          </>
+        )}
+
+        {recipe.instructions.length > 0 && (
+          <>
+            <Text className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">
+              Instructions
+            </Text>
+            {recipe.instructions.map((step, i) => (
+              <Text key={i} className="mb-2 text-sm leading-5 text-slate-700">
+                {i + 1}. {step}
+              </Text>
+            ))}
+          </>
+        )}
+      </View>
+    );
+  }
+
+  function renderIngredientInfo(ingredient: Ingredient) {
+    const n = ingredient.nutrition;
+    const categoryName = ingredient.category && typeof ingredient.category !== "string" ? ingredient.category.name : null;
+    const brandName = ingredient.brand && typeof ingredient.brand !== "string" ? ingredient.brand.name : null;
+    return (
+      <View>
+        <View className="mb-4 flex-row flex-wrap gap-1.5">
+          {!!categoryName && (
+            <View className="rounded-full bg-slate-100 px-2.5 py-1">
+              <Text className="text-xs font-semibold text-slate-600">{categoryName}</Text>
+            </View>
+          )}
+          {!!brandName && (
+            <View className="rounded-full bg-slate-100 px-2.5 py-1">
+              <Text className="text-xs font-semibold text-slate-600">{brandName}</Text>
+            </View>
+          )}
+        </View>
+
+        {!!ingredient.description && (
+          <Text className="mb-4 text-sm leading-5 text-slate-600">{ingredient.description}</Text>
+        )}
+
+        {infoRow(
+          "Default portion",
+          ingredient.defaultPortionAmount ?? 1,
+          ingredient.defaultPortionUnit ? ` ${ingredient.defaultPortionUnit}` : "",
+        )}
+        {n && (
+          <>
+            {infoRow("Calories", n.calories, " kcal")}
+            {infoRow("Protein", n.protein, " g")}
+            {infoRow("Carbs", n.carbs, " g")}
+            {infoRow("Fats", n.fats, " g")}
+            {infoRow("Fiber", n.fiber, " g")}
+            {infoRow("Sodium", n.sodium, " mg")}
+          </>
+        )}
+        {infoRow("Barcode", ingredient.barcode)}
+      </View>
+    );
+  }
+
+  function renderInfoOverlay() {
+    if (!infoItem) return null;
+    const icon =
+      infoItem.type === "meal" ? "restaurant-outline"
+      : infoItem.type === "recipe" ? "book-outline"
+      : "nutrition-outline";
+
+    return (
+      <View className="absolute inset-0">
+        <Pressable className="absolute inset-0 bg-black/40" onPress={() => setInfoItem(null)} />
+        <View
+          className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl bg-white"
+          style={{ maxHeight: windowHeight * 0.75 }}
+        >
+          <View className="items-center pt-3">
+            <View className="h-1 w-10 rounded-full bg-slate-200" />
+          </View>
+          <View className="flex-row items-center border-b border-slate-100 px-5 pb-4 pt-3">
+            <View className="h-11 w-11 items-center justify-center rounded-xl bg-blue-50">
+              <Ionicons name={icon} size={20} color="#2563EB" />
+            </View>
+            <Text className="ml-3 flex-1 text-lg font-bold text-slate-950" numberOfLines={2}>
+              {infoItem.data.name}
+            </Text>
+            <Pressable
+              hitSlop={10}
+              onPress={() => setInfoItem(null)}
+              className="ml-2 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+            >
+              <Ionicons name="close" size={20} color="#64748B" />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 32 }}>
+            {infoItem.type === "meal" && renderMealInfo(infoItem.data)}
+            {infoItem.type === "recipe" && renderRecipeInfo(infoItem.data)}
+            {infoItem.type === "ingredient" && renderIngredientInfo(infoItem.data)}
+            {infoLoading && (
+              <View className="mt-3 flex-row items-center justify-center">
+                <ActivityIndicator size="small" color="#2563EB" />
+                <Text className="ml-2 text-xs text-slate-400">Loading full details…</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
       </View>
     );
   }
@@ -666,7 +982,8 @@ export default function HomeScreen() {
                 <View style={{ width: windowWidth - 32 }}>
                   {renderNutritionCard({
                     title: "Daily nutrition",
-                    data: nutrition,
+                    confirmed: confirmedNutrition,
+                    planned: plannedNutrition,
                     limits: {
                       calories: appSettings?.dailyCalorieLimit ?? null,
                       protein:  appSettings?.dailyProteinLimit ?? null,
@@ -681,7 +998,8 @@ export default function HomeScreen() {
                   {renderNutritionCard({
                     title: "Weekly nutrition",
                     subtitle: weekRangeLabel(weekDates),
-                    data: weeklyNutrition,
+                    confirmed: weeklyConfirmedNutrition,
+                    planned: weeklyPlannedNutrition,
                     limits: {
                       calories: appSettings?.dailyCalorieLimit != null ? appSettings.dailyCalorieLimit * 7 : null,
                       protein:  appSettings?.dailyProteinLimit != null ? appSettings.dailyProteinLimit * 7 : null,
@@ -852,6 +1170,37 @@ export default function HomeScreen() {
                 </ScrollView>
               </View>
 
+              {/* Planned / Confirmed status toggle */}
+              <View className="border-b border-slate-100 bg-white px-4 pb-3">
+                <View className="flex-row rounded-xl bg-slate-100 p-1">
+                  {(
+                    [
+                      ["planned", "Planned", "time-outline"],
+                      ["confirmed", "Confirmed", "checkmark-circle-outline"],
+                    ] as const
+                  ).map(([status, label, icon]) => (
+                    <Pressable
+                      key={status}
+                      onPress={() => setAddStatus(status)}
+                      className="flex-1 flex-row items-center justify-center rounded-lg py-2"
+                      style={addStatus === status ? styles.activePill : undefined}
+                    >
+                      <Ionicons
+                        name={icon}
+                        size={14}
+                        color={addStatus === status ? "#0f172a" : "#64748b"}
+                      />
+                      <Text
+                        className="ml-1.5 text-sm font-semibold"
+                        style={addStatus === status ? styles.activePillText : styles.inactivePillText}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
               {/* Meals / Recipes / Ingredients toggle */}
               <View className="border-b border-slate-100 bg-white px-4 pb-3">
                 <View className="flex-row rounded-xl bg-slate-100 p-1">
@@ -933,6 +1282,13 @@ export default function HomeScreen() {
                         {kcal != null && (
                           <Text className="mr-2 text-sm font-semibold text-slate-500">{kcal} kcal</Text>
                         )}
+                        <Pressable
+                          hitSlop={8}
+                          onPress={() => openMealInfo(meal)}
+                          className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+                        >
+                          <Ionicons name="information-circle-outline" size={20} color="#94A3B8" />
+                        </Pressable>
                         <Ionicons name="add-circle-outline" size={22} color="#2563EB" />
                       </Pressable>
                     );
@@ -977,6 +1333,13 @@ export default function HomeScreen() {
                         {kcal != null && (
                           <Text className="mr-2 text-sm font-semibold text-slate-500">{kcal} kcal</Text>
                         )}
+                        <Pressable
+                          hitSlop={8}
+                          onPress={() => void openRecipeInfo(recipe)}
+                          className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+                        >
+                          <Ionicons name="information-circle-outline" size={20} color="#94A3B8" />
+                        </Pressable>
                         <Ionicons name="add-circle-outline" size={22} color="#2563EB" />
                       </Pressable>
                     );
@@ -1021,6 +1384,13 @@ export default function HomeScreen() {
                         {kcal != null && (
                           <Text className="mr-2 text-sm font-semibold text-slate-500">{kcal} kcal</Text>
                         )}
+                        <Pressable
+                          hitSlop={8}
+                          onPress={() => openIngredientInfo(ingredient)}
+                          className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+                        >
+                          <Ionicons name="information-circle-outline" size={20} color="#94A3B8" />
+                        </Pressable>
                         <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
                       </Pressable>
                     );
@@ -1040,6 +1410,8 @@ export default function HomeScreen() {
           )}
         </SafeAreaView>
       )}
+
+      {renderInfoOverlay()}
     </SafeAreaView>
   );
 }
@@ -1058,6 +1430,9 @@ const styles = StyleSheet.create({
   },
   inactivePillText: {
     color: "#64748b",
+  },
+  plannedEntry: {
+    opacity: 0.55,
   },
 });
 

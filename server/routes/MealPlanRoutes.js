@@ -50,6 +50,28 @@ router.post("/", async (req, res) => {
 });
 
 /**
+ * PATCH /api/meal-plan/:id
+ */
+router.patch("/:id", async (req, res) => {
+  try {
+    const { _id, __v, createdAt, updatedAt, ...fields } = req.body;
+    const entry = await MealPlanEntry.findByIdAndUpdate(
+      req.params.id,
+      { $set: fields },
+      { new: true, runValidators: true },
+    );
+    if (!entry) {
+      return res.status(404).json({ success: false, message: "Entry not found" });
+    }
+    const populated = await populateEntry(MealPlanEntry.findById(entry._id));
+    return res.status(200).json({ success: true, data: populated });
+  } catch (error) {
+    console.error("Update meal plan entry error:", error);
+    return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * DELETE /api/meal-plan/:id — soft delete
  */
 router.delete("/:id", async (req, res) => {

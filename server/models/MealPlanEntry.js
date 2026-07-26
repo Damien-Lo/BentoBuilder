@@ -17,6 +17,13 @@ const mealPlanEntrySchema = new mongoose.Schema(
     ingredientQuantity: { type: Number, min: 0 },
     ingredientUnit:     { type: String, trim: true, default: "" },
 
+    // "planned" = tentative, not yet eaten; "confirmed" = logged as actually eaten
+    status: {
+      type: String,
+      enum: ["planned", "confirmed"],
+      default: "planned",
+    },
+
     notes:      { type: String, trim: true, default: "" },
     isArchived: { type: Boolean, default: false },
   },
