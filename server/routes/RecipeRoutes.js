@@ -1,5 +1,6 @@
 import express from "express";
 import Recipe from "../models/Recipe.js";
+import { isRecipeIngredientAvailable } from "../services/ingredientAvailability.js";
 
 const router = express.Router();
 
@@ -51,6 +52,47 @@ router.get("/:id", async (req, res) => {
     return res.status(200).json({
       success: true,
       data: recipe,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid recipe ID",
+    });
+  }
+});
+
+/**
+ * GET /api/recipes/:id/availability
+ * Per-ingredient pantry stock check — generic ingredients aggregate stock
+ * across all branded/specific variants — plus whether every ingredient in
+ * the recipe is currently covered.
+ */
+router.get("/:id/availability", async (req, res) => {
+  try {
+    const recipe = await Recipe.findById(req.params.id);
+
+    if (!recipe) {
+      return res.status(404).json({
+        success: false,
+        message: "Recipe not found",
+      });
+    }
+
+    const ingredients = await Promise.all(
+      recipe.ingredientList.map(async (entry) => ({
+        ingredient: entry.ingredient,
+        quantity: entry.quantity,
+        unit: entry.unit,
+        available: await isRecipeIngredientAvailable(entry),
+      })),
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        canMake: ingredients.every((entry) => entry.available),
+        ingredients,
+      },
     });
   } catch (error) {
     return res.status(400).json({

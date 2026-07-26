@@ -35,9 +35,11 @@ import {
 } from "@/src/services/optionsApi";
 
 import {
+  getIngredientAvailability,
   getIngredientById,
   updateIngredient,
   type Ingredient,
+  type IngredientAvailability,
 } from "@/src/services/ingredientApi";
 
 import {
@@ -176,6 +178,10 @@ export default function IngredientDetailScreen() {
   const [quickAddQuantity, setQuickAddQuantity] = useState("");
   const [savingEntry, setSavingEntry] = useState(false);
 
+  const [genericAvailability, setGenericAvailability] =
+    useState<IngredientAvailability | null>(null);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -204,6 +210,23 @@ export default function IngredientDetailScreen() {
 
         setCurrentIngredient(loadedIngredient);
         setForm(ingredientToForm(loadedIngredient));
+
+        if (loadedIngredient.isGeneric) {
+          setLoadingAvailability(true);
+          getIngredientAvailability(id)
+            .then((availability) => {
+              if (!cancelled) setGenericAvailability(availability);
+            })
+            .catch(() => {
+              if (!cancelled) setGenericAvailability(null);
+            })
+            .finally(() => {
+              if (!cancelled) setLoadingAvailability(false);
+            });
+        } else {
+          setGenericAvailability(null);
+        }
+
         setPantryItems(
           Array.isArray(loadedPantryItems) ? loadedPantryItems : [],
         );
@@ -290,7 +313,7 @@ export default function IngredientDetailScreen() {
         name: form.name.trim(),
         description: form.description.trim() || undefined,
         barcode: form.barcode.trim() || null,
-        brand: form.brandId || null,
+        brand: currentIngredient?.isGeneric ? null : form.brandId || null,
         category: form.categoryId || null,
         defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
         defaultPortionUnit: form.defaultPortionUnit.trim() || undefined,
@@ -463,15 +486,18 @@ export default function IngredientDetailScreen() {
   const brandName = getReferenceName(ingredient.brand);
   const categoryName = getReferenceName(ingredient.category);
   const nutrition = ingredient.nutrition;
-  const totalQuantity = ingredientPantryItems.reduce(
-    (sum, p) => sum + (p.quantityAvailable ?? 0),
-    0,
-  );
+
+  // Generic ingredients never hold pantry stock directly — their totals come
+  // from the aggregation across specific/branded variants instead.
+  const totalQuantity = ingredient.isGeneric
+    ? (genericAvailability?.totalInOwnUnit ?? 0)
+    : ingredientPantryItems.reduce((sum, p) => sum + (p.quantityAvailable ?? 0), 0);
   const isInStock = totalQuantity > 0;
-  const isLowStock =
-    ingredient.lowStockThreshold != null &&
-    totalQuantity <= ingredient.lowStockThreshold &&
-    isInStock;
+  const isLowStock = ingredient.isGeneric
+    ? (genericAvailability?.isLowStock ?? false)
+    : ingredient.lowStockThreshold != null &&
+      totalQuantity <= ingredient.lowStockThreshold &&
+      isInStock;
 
   return (
     <SafeAreaView
@@ -542,6 +568,22 @@ export default function IngredientDetailScreen() {
           {isEditing ? (
             /* ── Edit form ── */
             <>
+              {ingredient.isGeneric && (
+                <View className="mb-4 flex-row items-center rounded-2xl bg-violet-50 px-4 py-3">
+                  <Ionicons name="git-branch-outline" size={20} color="#7C3AED" />
+                  <View className="ml-3 flex-1">
+                    <Text className="text-sm font-bold text-violet-700">
+                      Generic ingredient
+                    </Text>
+                    <Text className="mt-0.5 text-xs leading-4 text-violet-600">
+                      It has no brand and can&apos;t be stocked in the pantry
+                      directly — availability comes from its specific/branded
+                      variants.
+                    </Text>
+                  </View>
+                </View>
+              )}
+
               <FieldLabel text="Ingredient name" required />
               <FormInput
                 value={form.name}
@@ -549,19 +591,23 @@ export default function IngredientDetailScreen() {
                 onChangeText={(v) => updateForm("name", v)}
               />
 
-              <FieldLabel text="Brand" />
-              <CreatableObjectDropdown
-                options={brands}
-                selectedId={form.brandId}
-                selectedName={form.brandName}
-                placeholder="Search or create a brand"
-                createLabel="Create brand"
-                onSelect={(option) => {
-                  updateForm("brandId", option._id);
-                  updateForm("brandName", option.name);
-                }}
-                onCreate={handleCreateBrand}
-              />
+              {!ingredient.isGeneric && (
+                <>
+                  <FieldLabel text="Brand" />
+                  <CreatableObjectDropdown
+                    options={brands}
+                    selectedId={form.brandId}
+                    selectedName={form.brandName}
+                    placeholder="Search or create a brand"
+                    createLabel="Create brand"
+                    onSelect={(option) => {
+                      updateForm("brandId", option._id);
+                      updateForm("brandName", option.name);
+                    }}
+                    onCreate={handleCreateBrand}
+                  />
+                </>
+              )}
 
               <FieldLabel text="Category" />
               <CreatableObjectDropdown
@@ -711,6 +757,13 @@ export default function IngredientDetailScreen() {
                 </Text>
 
                 <View className="mt-3 flex-row flex-wrap justify-center">
+                  {ingredient.isGeneric ? (
+                    <View className="mr-2 rounded-full bg-violet-50 px-3 py-1">
+                      <Text className="text-sm font-medium text-violet-600">
+                        Generic
+                      </Text>
+                    </View>
+                  ) : null}
                   {categoryName ? (
                     <View className="mr-2 rounded-full bg-blue-50 px-3 py-1">
                       <Text className="text-sm font-medium text-blue-700">
@@ -774,8 +827,15 @@ export default function IngredientDetailScreen() {
                     </Text>
                   </View>
                   <Text className="mt-1 text-xs text-slate-500">
-                    {ingredientPantryItems.length}{" "}
-                    {ingredientPantryItems.length === 1 ? "entry" : "entries"}
+                    {ingredient.isGeneric
+                      ? `across ${genericAvailability?.variantCount ?? 0} variant${
+                          genericAvailability?.variantCount === 1 ? "" : "s"
+                        }`
+                      : `${ingredientPantryItems.length} ${
+                          ingredientPantryItems.length === 1
+                            ? "entry"
+                            : "entries"
+                        }`}
                   </Text>
                 </View>
 
@@ -911,8 +971,53 @@ export default function IngredientDetailScreen() {
             </>
           )}
 
+          {/* Generic ingredients are a matching umbrella, not a physical
+              product — they never hold pantry stock directly. Availability
+              is aggregated from specific/branded variants instead. */}
+          {!isEditing && ingredient.isGeneric && (
+            <View className="mb-4 rounded-3xl bg-white px-6 py-6 shadow-sm">
+              <View className="flex-row items-center">
+                <Ionicons name="git-branch-outline" size={22} color="#7C3AED" />
+                <Text className="ml-2 flex-1 font-semibold text-slate-700">
+                  Generic ingredients aren&apos;t stocked directly
+                </Text>
+              </View>
+              <Text className="mt-2 text-sm leading-5 text-slate-500">
+                Availability comes from the specific/branded ingredients
+                linked to it, not from a pantry entry here.
+              </Text>
+
+              {loadingAvailability ? (
+                <ActivityIndicator className="mt-4" color="#7C3AED" />
+              ) : (
+                ingredient.lowStockThreshold != null && (
+                  <View
+                    className={`mt-4 flex-row items-center self-start rounded-full px-3 py-1.5 ${
+                      isLowStock ? "bg-amber-100" : "bg-slate-100"
+                    }`}
+                  >
+                    <Ionicons
+                      name="alert-circle-outline"
+                      size={14}
+                      color={isLowStock ? "#D97706" : "#94A3B8"}
+                    />
+                    <Text
+                      className={`ml-1 text-xs font-semibold ${
+                        isLowStock ? "text-amber-700" : "text-slate-500"
+                      }`}
+                    >
+                      Low: {ingredient.lowStockThreshold}{" "}
+                      {ingredient.defaultPortionUnit || "units"} total across
+                      variants
+                    </Text>
+                  </View>
+                )
+              )}
+            </View>
+          )}
+
           {/* Pantry entries — view mode only */}
-          {!isEditing && (
+          {!isEditing && !ingredient.isGeneric && (
             <>
               <View className="mb-3 mt-2 flex-row items-center">
                 <Text className="flex-1 text-base font-bold text-slate-900">

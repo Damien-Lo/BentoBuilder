@@ -64,6 +64,21 @@ const ingredientSchema = new mongoose.Schema(
       default: null,
     },
 
+    // Generic ingredients (e.g. "Soy Sauce") represent the abstract item a
+    // recipe asks for. Specific/branded ingredients (e.g. "Kikkoman Soy
+    // Sauce") point back at one via genericParent. Hierarchy is one level
+    // deep only: a generic can't itself have a genericParent.
+    isGeneric: {
+      type: Boolean,
+      default: false,
+    },
+
+    genericParent: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Ingredient",
+      default: null,
+    },
+
     barcode: {
       type: String,
       trim: true,
@@ -119,6 +134,17 @@ const ingredientSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+// Keep the generic/specific hierarchy one level deep.
+ingredientSchema.pre("validate", function () {
+  if (this.isGeneric && this.genericParent) {
+    throw new Error(
+      "A generic ingredient cannot itself have a genericParent (only one level of hierarchy is allowed)",
+    );
+  }
+});
+
+ingredientSchema.index({ genericParent: 1 });
 
 // Prevent multiple ingredient records from using the same barcode.
 // Sparse means ingredients without a barcode are still allowed.

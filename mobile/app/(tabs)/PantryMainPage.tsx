@@ -130,6 +130,37 @@ function getIngredientCategoryName(item: PantryItem): string {
   return getReferenceName(getIngredientField(item, "category"));
 }
 
+type IngredientTreeNode = {
+  parent: Ingredient;
+  children: Ingredient[];
+};
+
+// Nests specific/branded ingredients under their generic parent — but only
+// when that parent is present in the same list (e.g. same category group).
+// Otherwise the child renders as its own root, so nothing goes missing.
+function buildIngredientTree(items: Ingredient[]): IngredientTreeNode[] {
+  const idsInList = new Set(items.map((item) => item._id));
+  const childIds = new Set<string>();
+  const childrenByParentId = new Map<string, Ingredient[]>();
+
+  for (const item of items) {
+    const parentId = getReferenceId(item.genericParent as unknown);
+    if (!parentId || !idsInList.has(parentId)) continue;
+
+    childIds.add(item._id);
+    const siblings = childrenByParentId.get(parentId) ?? [];
+    siblings.push(item);
+    childrenByParentId.set(parentId, siblings);
+  }
+
+  return items
+    .filter((item) => !childIds.has(item._id))
+    .map((item) => ({
+      parent: item,
+      children: childrenByParentId.get(item._id) ?? [],
+    }));
+}
+
 export default function PantryMainPage() {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
@@ -243,6 +274,48 @@ export default function PantryMainPage() {
       storageLocations.map((location) => [String(location._id), location]),
     );
   }, [storageLocations]);
+
+  const ingredientById = useMemo(
+    () => new Map(ingredients.map((ingredient) => [ingredient._id, ingredient])),
+    [ingredients],
+  );
+
+  // Generic ingredients never hold pantry stock directly — their total is
+  // the sum of every specific/branded variant's stock that shares their
+  // unit (a generic's threshold in "tbsp" can't be checked against a
+  // variant's stock recorded in "ml").
+  const genericStockByIngredientId = useMemo(() => {
+    const stats = new Map<string, { total: number; variantCount: number }>();
+
+    for (const ingredient of ingredients) {
+      const parentId = getReferenceId(ingredient.genericParent as unknown);
+      if (!parentId) continue;
+
+      const entry = stats.get(parentId) ?? { total: 0, variantCount: 0 };
+      entry.variantCount += 1;
+      stats.set(parentId, entry);
+    }
+
+    for (const pantryItem of pantryItems) {
+      const childId = getReferenceId(pantryItem.ingredient as unknown);
+      const child = ingredientById.get(childId);
+      if (!child) continue;
+
+      const parentId = getReferenceId(child.genericParent as unknown);
+      if (!parentId) continue;
+
+      const parent = ingredientById.get(parentId);
+      if (!parent || pantryItem.quantityUnit !== parent.defaultPortionUnit) {
+        continue;
+      }
+
+      const entry = stats.get(parentId) ?? { total: 0, variantCount: 0 };
+      entry.total += Number(pantryItem.quantityAvailable ?? 0);
+      stats.set(parentId, entry);
+    }
+
+    return stats;
+  }, [ingredients, pantryItems, ingredientById]);
 
   const getStorageLocationName = (item: PantryItem): string => {
     const rawLocation = item.storageLocation as unknown;
@@ -390,6 +463,129 @@ export default function PantryMainPage() {
       ],
     );
   };
+
+  function renderIngredientCard(ingredientItem: Ingredient) {
+    const ingredientPantryItems = pantryItems.filter(
+      (p) => getReferenceId(p.ingredient as unknown) === ingredientItem._id,
+    );
+
+    // Generic ingredients never hold pantry stock directly — use the
+    // aggregated variant total instead.
+    const totalQuantity = ingredientItem.isGeneric
+      ? (genericStockByIngredientId.get(ingredientItem._id)?.total ?? 0)
+      : ingredientPantryItems.reduce(
+          (sum, p) => sum + Number(p.quantityAvailable ?? 0),
+          0,
+        );
+    const isInStock = totalQuantity > 0;
+    const isLowStock =
+      isInStock &&
+      ingredientItem.lowStockThreshold != null &&
+      totalQuantity <= ingredientItem.lowStockThreshold;
+    const displayUnit = ingredientItem.isGeneric
+      ? ingredientItem.defaultPortionUnit
+      : ingredientPantryItems[0]?.quantityUnit;
+    const locationNames = [
+      ...new Set(ingredientPantryItems.map((p) => getStorageLocationName(p))),
+    ].join(", ");
+
+    return (
+      <ReanimatedSwipeable
+        key={ingredientItem._id}
+        friction={2}
+        rightThreshold={40}
+        renderLeftActions={() => (
+          <Pressable
+            className="mb-3 w-20 items-center justify-center rounded-3xl bg-red-500 active:bg-red-600"
+            onPress={() =>
+              handleDeleteIngredient(ingredientItem._id, ingredientItem.name)
+            }
+          >
+            <Ionicons name="trash-outline" size={22} color="white" />
+          </Pressable>
+        )}
+      >
+        <Pressable
+          className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm"
+          onPress={() => {
+            router.push({
+              pathname: "/ingredients/edit/[id]",
+              params: { id: ingredientItem._id },
+            });
+          }}
+        >
+          <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
+            <Ionicons name="nutrition-outline" size={23} color="#2563EB" />
+          </View>
+
+          <View className="ml-4 flex-1">
+            <View className="flex-row items-center">
+              <Text
+                className="mr-2 flex-shrink text-base font-bold text-slate-900"
+                numberOfLines={1}
+              >
+                {ingredientItem.name}
+              </Text>
+
+              {ingredientItem.isGeneric && (
+                <View className="rounded-full bg-violet-50 px-2 py-0.5">
+                  <Text className="text-xs font-semibold text-violet-600">
+                    Generic
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {(() => {
+              const brandName = getReferenceName(ingredientItem.brand);
+              const subtitle = [brandName, locationNames]
+                .filter(Boolean)
+                .join(" · ");
+              return subtitle ? (
+                <Text
+                  className="mt-1 text-sm text-slate-500"
+                  numberOfLines={1}
+                >
+                  {subtitle}
+                </Text>
+              ) : null;
+            })()}
+          </View>
+
+          <View className="items-end">
+            <Text
+              className={`text-sm font-semibold ${
+                isLowStock
+                  ? "text-amber-600"
+                  : isInStock
+                    ? "text-emerald-600"
+                    : "text-slate-400"
+              }`}
+            >
+              {isLowStock
+                ? "Low stock"
+                : isInStock
+                  ? "In stock"
+                  : "Out of stock"}
+            </Text>
+
+            {isInStock ? (
+              <Text className="mt-1 text-sm text-slate-500">
+                {totalQuantity} {displayUnit}
+              </Text>
+            ) : null}
+          </View>
+
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color="#94A3B8"
+            style={{ marginLeft: 10 }}
+          />
+        </Pressable>
+      </ReanimatedSwipeable>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -657,111 +853,28 @@ export default function PantryMainPage() {
                       />
                     </Pressable>
 
-                    {!isCollapsed && group.items.map((ingredientItem) => {
-                      const ingredientPantryItems = pantryItems.filter(
-                        (p) =>
-                          getReferenceId(p.ingredient as unknown) ===
-                          ingredientItem._id,
-                      );
+                    {!isCollapsed &&
+                      buildIngredientTree(group.items).map(
+                        ({ parent, children }) => (
+                          <View key={parent._id}>
+                            {renderIngredientCard(parent)}
 
-                      const totalQuantity = ingredientPantryItems.reduce(
-                        (sum, p) => sum + Number(p.quantityAvailable ?? 0),
-                        0,
-                      );
-                      const isInStock = totalQuantity > 0;
-                      const locationNames = [
-                        ...new Set(
-                          ingredientPantryItems.map((p) =>
-                            getStorageLocationName(p),
-                          ),
+                            {children.length > 0 && (
+                              <View className="ml-6 border-l-2 border-slate-200 pl-4">
+                                {children.map((child) => (
+                                  <View key={child._id} className="relative">
+                                    <View
+                                      className="absolute -left-4 h-px w-4 bg-slate-200"
+                                      style={{ top: 30 }}
+                                    />
+                                    {renderIngredientCard(child)}
+                                  </View>
+                                ))}
+                              </View>
+                            )}
+                          </View>
                         ),
-                      ].join(", ");
-
-                      return (
-                        <ReanimatedSwipeable
-                          key={ingredientItem._id}
-                          friction={2}
-                          rightThreshold={40}
-                          renderLeftActions={() => (
-                            <Pressable
-                              className="mb-3 w-20 items-center justify-center rounded-3xl bg-red-500 active:bg-red-600"
-                              onPress={() =>
-                                handleDeleteIngredient(
-                                  ingredientItem._id,
-                                  ingredientItem.name,
-                                )
-                              }
-                            >
-                              <Ionicons
-                                name="trash-outline"
-                                size={22}
-                                color="white"
-                              />
-                            </Pressable>
-                          )}
-                        >
-                          <Pressable
-                            className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm"
-                            onPress={() => {
-                              router.push({
-                                pathname: "/ingredients/edit/[id]",
-                                params: { id: ingredientItem._id },
-                              });
-                            }}
-                          >
-                            <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
-                              <Ionicons
-                                name="nutrition-outline"
-                                size={23}
-                                color="#2563EB"
-                              />
-                            </View>
-
-                            <View className="ml-4 flex-1">
-                              <Text className="text-base font-bold text-slate-900">
-                                {ingredientItem.name}
-                              </Text>
-
-                              {(() => {
-                                const brandName = getReferenceName(ingredientItem.brand);
-                                const subtitle = [brandName, locationNames].filter(Boolean).join(" · ");
-                                return subtitle ? (
-                                  <Text className="mt-1 text-sm text-slate-500" numberOfLines={1}>
-                                    {subtitle}
-                                  </Text>
-                                ) : null;
-                              })()}
-                            </View>
-
-                            <View className="items-end">
-                              <Text
-                                className={`text-sm font-semibold ${
-                                  isInStock
-                                    ? "text-emerald-600"
-                                    : "text-slate-400"
-                                }`}
-                              >
-                                {isInStock ? "In stock" : "Out of stock"}
-                              </Text>
-
-                              {isInStock ? (
-                                <Text className="mt-1 text-sm text-slate-500">
-                                  {totalQuantity}{" "}
-                                  {ingredientPantryItems[0]?.quantityUnit}
-                                </Text>
-                              ) : null}
-                            </View>
-
-                            <Ionicons
-                              name="chevron-forward"
-                              size={20}
-                              color="#94A3B8"
-                              style={{ marginLeft: 10 }}
-                            />
-                          </Pressable>
-                        </ReanimatedSwipeable>
-                      );
-                    })}
+                      )}
                   </View>
                   );
                 })
@@ -1102,9 +1215,22 @@ export default function PantryMainPage() {
                         </View>
 
                         <View className="ml-3 flex-1">
-                          <Text className="font-semibold text-slate-900">
-                            {ingredient.name}
-                          </Text>
+                          <View className="flex-row items-center">
+                            <Text
+                              className="mr-2 flex-shrink font-semibold text-slate-900"
+                              numberOfLines={1}
+                            >
+                              {ingredient.name}
+                            </Text>
+
+                            {ingredient.isGeneric && (
+                              <View className="rounded-full bg-violet-50 px-2 py-0.5">
+                                <Text className="text-xs font-semibold text-violet-600">
+                                  Generic
+                                </Text>
+                              </View>
+                            )}
+                          </View>
                           <Text className="mt-0.5 text-sm text-slate-500">
                             {[brandName, categoryName].filter(Boolean).join(" · ")}
                           </Text>

@@ -21,6 +21,12 @@ export interface Ingredient {
   brand?: string | SelectOption | null;
   category?: string | SelectOption | null;
 
+  // Generic ingredients (e.g. "Soy Sauce") represent the abstract item a
+  // recipe asks for. Specific/branded ingredients point back at one via
+  // genericParent.
+  isGeneric?: boolean;
+  genericParent?: string | Ingredient | null;
+
   defaultPortionAmount?: number;
   defaultPortionUnit?: string;
 
@@ -45,6 +51,14 @@ export interface CreateIngredientInput {
   brand?: string | null;
   category?: string | null;
 
+  // Either pass genericParent directly (existing generic picked in the UI),
+  // or genericName as free text — the server will find-or-create a generic
+  // ingredient with that name in the same category. Leave both unset for a
+  // standalone ingredient with no generic parent.
+  isGeneric?: boolean;
+  genericParent?: string | null;
+  genericName?: string;
+
   defaultPortionAmount?: number;
   defaultPortionUnit?: string;
 
@@ -58,6 +72,18 @@ export interface CreateIngredientInput {
 
 export type UpdateIngredientInput = Partial<CreateIngredientInput>;
 
+export interface IngredientAvailability {
+  ingredientId: string;
+  isGeneric: boolean;
+  variantCount: number;
+  unit?: string;
+  totalInOwnUnit: number;
+  lowStockThreshold?: number | null;
+  isOutOfStock: boolean;
+  isLowStock: boolean;
+  byUnit: Record<string, number>;
+}
+
 interface IngredientListResponse {
   success: boolean;
   data: Ingredient[];
@@ -67,6 +93,12 @@ interface IngredientListResponse {
 interface IngredientResponse {
   success: boolean;
   data: Ingredient;
+  message?: string;
+}
+
+interface IngredientAvailabilityResponse {
+  success: boolean;
+  data: IngredientAvailability;
   message?: string;
 }
 
@@ -112,6 +144,24 @@ export async function getIngredientById(
   const response = await fetch(`${API_BASE_URL}/api/ingredients/${trimmedId}`);
 
   const result = await parseResponse<IngredientResponse>(response);
+
+  return result.data;
+}
+
+export async function getIngredientAvailability(
+  ingredientId: string,
+): Promise<IngredientAvailability> {
+  const trimmedId = ingredientId.trim();
+
+  if (!trimmedId) {
+    throw new Error("Ingredient ID is required");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/ingredients/${trimmedId}/availability`,
+  );
+
+  const result = await parseResponse<IngredientAvailabilityResponse>(response);
 
   return result.data;
 }

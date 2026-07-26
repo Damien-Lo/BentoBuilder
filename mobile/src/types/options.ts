@@ -9,6 +9,11 @@ export interface IngredientOption
   unit?: string;
   defaultPortionAmount?: number;
 
+  isGeneric?: boolean;
+
+  genericParentId?: string;
+  genericParentName?: string;
+
   lowStockThreshold?: number;
 
   calories?: number;

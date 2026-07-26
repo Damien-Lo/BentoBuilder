@@ -24,6 +24,7 @@ import {
   FormInput,
   SearchableObjectDropdown,
   SectionTitle,
+  SegmentedToggle,
 } from "@/src/components/forms";
 
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
@@ -51,8 +52,13 @@ interface FormState {
 
   description: string;
 
+  isGeneric: boolean;
+
   brandId: string;
   brandName: string;
+
+  genericParentId: string;
+  genericParentName: string;
 
   categoryId: string;
   categoryName: string;
@@ -82,8 +88,13 @@ const initialForm: FormState = {
 
   description: "",
 
+  isGeneric: false,
+
   brandId: "",
   brandName: "",
+
+  genericParentId: "",
+  genericParentName: "",
 
   categoryId: "",
   categoryName: "",
@@ -141,11 +152,27 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
       ? ingredient.category
       : undefined;
 
+  const genericParent =
+    typeof ingredient.genericParent === "object" &&
+    ingredient.genericParent !== null
+      ? ingredient.genericParent
+      : undefined;
+
   return {
     _id: ingredient._id,
     name: ingredient.name,
 
     description: ingredient.description ?? "",
+
+    isGeneric: ingredient.isGeneric ?? false,
+
+    genericParentId:
+      genericParent?._id ??
+      (typeof ingredient.genericParent === "string"
+        ? ingredient.genericParent
+        : ""),
+
+    genericParentName: genericParent?.name ?? "",
 
     unit: ingredient.defaultPortionUnit ?? "",
     defaultPortionAmount: ingredient.defaultPortionAmount,
@@ -221,6 +248,10 @@ export default function AddManualPantryItemScreen() {
 
   const [saving, setSaving] = useState(false);
 
+  // Collapsed by default — adding an ingredient shouldn't force stocking it
+  // in the pantry right away.
+  const [pantryInventoryExpanded, setPantryInventoryExpanded] = useState(false);
+
   const [loadingOptions, setLoadingOptions] = useState(true);
 
   const [ingredients, setIngredients] = useState<IngredientOption[]>([]);
@@ -233,7 +264,13 @@ export default function AddManualPantryItemScreen() {
 
   const [brandDraft, setBrandDraft] = useState(() => params.scannedBrand ?? "");
 
+  const [genericParentDraft, setGenericParentDraft] = useState("");
+
   const [units, setUnits] = useState<string[]>([]);
+
+  const genericIngredientOptions = ingredients.filter(
+    (option) => option.isGeneric,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -335,6 +372,11 @@ export default function AddManualPantryItemScreen() {
       ingredientName: option.name,
 
       description: option.description ?? "",
+
+      isGeneric: option.isGeneric ?? false,
+
+      genericParentId: option.genericParentId ?? "",
+      genericParentName: option.genericParentName ?? "",
 
       quantityUnit: option.unit ?? "",
       defaultPortionAmount: numberToFormValue(option.defaultPortionAmount),
@@ -439,51 +481,10 @@ export default function AddManualPantryItemScreen() {
    * Save the current form data as a new pantry item, add new ingredient if ingreident does not exist.
    */
   async function handleSave() {
-    const quantityAvailable = form.quantityAvailable.trim()
-      ? Number(form.quantityAvailable)
-      : 0;
-
-    const lowStockThreshold = form.lowStockThreshold.trim()
-      ? Number(form.lowStockThreshold)
-      : 0;
-
     if (!form.ingredientName.trim()) {
       Alert.alert(
         "Ingredient name is required",
         "Enter a name or select an existing ingredient.",
-      );
-
-      return;
-    }
-
-    if (!Number.isFinite(quantityAvailable) || quantityAvailable < 0) {
-      Alert.alert("Invalid quantity", "Enter a quantity of zero or greater.");
-
-      return;
-    }
-
-    if (!Number.isFinite(lowStockThreshold) || lowStockThreshold < 0) {
-      Alert.alert(
-        "Invalid low-stock threshold",
-        "Enter a threshold of zero or greater.",
-      );
-
-      return;
-    }
-
-    if (!isValidDateString(form.purchaseDate)) {
-      Alert.alert(
-        "Invalid purchase date",
-        "Enter the date in YYYY-MM-DD format.",
-      );
-
-      return;
-    }
-
-    if (!isValidDateString(form.expiryDate)) {
-      Alert.alert(
-        "Invalid expiry date",
-        "Enter the date in YYYY-MM-DD format.",
       );
 
       return;
@@ -494,11 +495,129 @@ export default function AddManualPantryItemScreen() {
       return;
     }
 
-    if (!form.storageLocationId) {
+    // Low-stock threshold is a property of the ingredient itself (generic or
+    // specific) — not of any one pantry entry — so it's parsed once here and
+    // sent to createIngredient regardless of whether pantry stock is added.
+    const ingredientLowStockThreshold = form.lowStockThreshold.trim()
+      ? Number(form.lowStockThreshold)
+      : undefined;
+
+    if (
+      ingredientLowStockThreshold !== undefined &&
+      (!Number.isFinite(ingredientLowStockThreshold) ||
+        ingredientLowStockThreshold < 0)
+    ) {
       Alert.alert(
-        "Storage location is required",
-        "Select or create a storage location.",
+        "Invalid low-stock threshold",
+        "Enter a threshold of zero or greater.",
       );
+
+      return;
+    }
+
+    // Generic ingredients (e.g. "Soy Sauce") are a matching umbrella for a
+    // recipe, not a physical thing you can own — whatever is actually in the
+    // pantry is always some specific product. So a generic ingredient is
+    // only ever a catalog definition, never a pantry item.
+    if (form.isGeneric) {
+      if (form.ingredientId) {
+        Alert.alert(
+          "Nothing to save",
+          "This is already a generic ingredient — it can't be stocked in the pantry. Select or create a specific/branded ingredient instead.",
+        );
+
+        return;
+      }
+
+      try {
+        setSaving(true);
+
+        const nutrition = {
+          calories: optionalNumber(form.calories),
+          protein: optionalNumber(form.protein),
+          carbs: optionalNumber(form.carbs),
+          fats: optionalNumber(form.fats),
+          fiber: optionalNumber(form.fiber),
+          sodium: optionalNumber(form.sodium),
+        };
+
+        await createIngredient({
+          name: form.ingredientName.trim(),
+          barcode: form.barcode.trim() || null,
+          description: form.description.trim() || undefined,
+          isGeneric: true,
+          brand: null,
+          category: form.categoryId || null,
+          defaultPortionUnit: form.quantityUnit.trim() || undefined,
+          defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
+          lowStockThreshold: ingredientLowStockThreshold,
+          nutrition,
+        });
+
+        router.back();
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "The ingredient could not be saved.";
+
+        Alert.alert("Unable to save ingredient", message);
+      } finally {
+        setSaving(false);
+      }
+
+      return;
+    }
+
+    let quantityAvailable = 0;
+
+    if (pantryInventoryExpanded) {
+      quantityAvailable = form.quantityAvailable.trim()
+        ? Number(form.quantityAvailable)
+        : 0;
+
+      if (!Number.isFinite(quantityAvailable) || quantityAvailable < 0) {
+        Alert.alert(
+          "Invalid quantity",
+          "Enter a quantity of zero or greater.",
+        );
+
+        return;
+      }
+
+      if (!isValidDateString(form.purchaseDate)) {
+        Alert.alert(
+          "Invalid purchase date",
+          "Enter the date in YYYY-MM-DD format.",
+        );
+
+        return;
+      }
+
+      if (!isValidDateString(form.expiryDate)) {
+        Alert.alert(
+          "Invalid expiry date",
+          "Enter the date in YYYY-MM-DD format.",
+        );
+
+        return;
+      }
+
+      if (!form.storageLocationId) {
+        Alert.alert(
+          "Storage location is required",
+          "Select or create a storage location.",
+        );
+        return;
+      }
+    } else if (form.ingredientId) {
+      // An existing ingredient was selected (nothing new to create) and the
+      // pantry section is collapsed — there's nothing for Save to do.
+      Alert.alert(
+        "Nothing to save",
+        "Expand Pantry inventory to add stock for this ingredient.",
+      );
+
       return;
     }
 
@@ -532,38 +651,58 @@ export default function AddManualPantryItemScreen() {
             : (await handleCreateBrand(trimmedBrandName))._id;
         }
 
+        // If an existing generic was picked, its id is sent as-is. If the
+        // user just typed a name that didn't match one, no genericParent is
+        // set — genericName goes instead, and the server finds-or-creates a
+        // generic ingredient with that name, seeded from this ingredient's
+        // own portion/nutrition below.
+        const trimmedGenericName = genericParentDraft.trim();
+
         const newIngredient = await createIngredient({
           name: form.ingredientName.trim(),
           barcode: form.barcode.trim() || null,
           description: form.description.trim() || undefined,
+          isGeneric: false,
           brand: brandId || null,
+          genericParent: form.genericParentId || undefined,
+          genericName: !form.genericParentId && trimmedGenericName
+            ? trimmedGenericName
+            : undefined,
           category: form.categoryId || null,
           defaultPortionUnit: form.quantityUnit.trim() || undefined,
           defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
-          lowStockThreshold,
+          lowStockThreshold: ingredientLowStockThreshold,
           nutrition,
         });
         ingredientId = newIngredient._id;
       }
 
-      await addIngredientToPantry({
-        ingredient: ingredientId,
-        storageLocation: form.storageLocationId,
-        quantityAvailable,
-        quantityUnit: form.quantityUnit.trim(),
-        purchaseDate: form.purchaseDate.trim() || undefined,
-        expiryDate: form.expiryDate.trim() || undefined,
-        lowStockThreshold,
-      });
+      if (pantryInventoryExpanded) {
+        await addIngredientToPantry({
+          ingredient: ingredientId,
+          storageLocation: form.storageLocationId,
+          quantityAvailable,
+          quantityUnit: form.quantityUnit.trim(),
+          purchaseDate: form.purchaseDate.trim() || undefined,
+          expiryDate: form.expiryDate.trim() || undefined,
+        });
+      }
 
       router.back();
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "The pantry item could not be saved.";
+          : pantryInventoryExpanded
+            ? "The pantry item could not be saved."
+            : "The ingredient could not be saved.";
 
-      Alert.alert("Unable to save pantry item", message);
+      Alert.alert(
+        pantryInventoryExpanded
+          ? "Unable to save pantry item"
+          : "Unable to save ingredient",
+        message,
+      );
     } finally {
       setSaving(false);
     }
@@ -639,6 +778,34 @@ export default function AddManualPantryItemScreen() {
             description="Choose an existing ingredient from your ingredient catalog."
           /> */}
 
+          <FieldLabel text="Ingredient type" required />
+
+          <SegmentedToggle<boolean>
+            value={form.isGeneric}
+            disabled={!!form.ingredientId}
+            options={[
+              { value: false, label: "Specific / Branded" },
+              { value: true, label: "Generic" },
+            ] as const}
+            onChange={(isGeneric) => {
+              updateForm("isGeneric", isGeneric);
+
+              if (isGeneric) {
+                updateForm("brandId", "");
+                updateForm("brandName", "");
+                setBrandDraft("");
+              }
+            }}
+          />
+
+          <Text className="mt-2 text-sm leading-5 text-slate-500">
+            {form.ingredientId
+              ? "This ingredient already exists, so its type can't be changed here."
+              : form.isGeneric
+                ? "A generic ingredient (e.g. \"Soy Sauce\") has no single brand — it stands in for any specific product a recipe could use."
+                : "A specific ingredient (e.g. \"Kikkoman Soy Sauce\") is a particular product, usually with a brand."}
+          </Text>
+
           <FieldLabel text="Ingredient name" required />
 
           <SearchableObjectDropdown<IngredientOption>
@@ -663,30 +830,91 @@ export default function AddManualPantryItemScreen() {
             onSelect={applySelectedIngredient}
           />
 
-          <FieldLabel text="Brand" />
+          {!form.isGeneric && (
+            <>
+              <FieldLabel text="Generic ingredient" />
 
-          <CreatableObjectDropdown
-            options={brands}
-            selectedId={form.brandId}
-            selectedName={form.brandName}
-            placeholder="Search or create a brand"
-            createLabel="Create brand"
-            onTextChange={(value: string) => {
-              if (value !== form.brandName) {
-                updateForm("brandId", "");
-              }
+              <CreatableObjectDropdown
+                options={genericIngredientOptions}
+                selectedId={form.genericParentId}
+                selectedName={form.genericParentName}
+                placeholder="Search or name a generic ingredient"
+                createLabel="Use generic name"
+                onTextChange={(value: string) => {
+                  if (value !== form.genericParentName) {
+                    updateForm("genericParentId", "");
+                  }
 
-              setBrandDraft(value);
-            }}
-            onSelect={(option) => {
-              updateForm("brandId", option._id);
+                  setGenericParentDraft(value);
+                }}
+                onSelect={(option) => {
+                  updateForm("genericParentId", option._id);
+                  updateForm("genericParentName", option.name);
+                  setGenericParentDraft(option.name);
 
-              updateForm("brandName", option.name);
+                  if (option._id) {
+                    const matchedGeneric = genericIngredientOptions.find(
+                      (generic) => generic._id === option._id,
+                    );
 
-              setBrandDraft(option.name);
-            }}
-            onCreate={handleCreateBrand}
-          />
+                    if (matchedGeneric) {
+                      updateForm(
+                        "categoryId",
+                        matchedGeneric.categoryId ??
+                          matchedGeneric.category?._id ??
+                          "",
+                      );
+                      updateForm(
+                        "categoryName",
+                        matchedGeneric.categoryName ??
+                          matchedGeneric.category?.name ??
+                          "",
+                      );
+
+                      if (matchedGeneric.unit) {
+                        updateForm("quantityUnit", matchedGeneric.unit);
+                      }
+                    }
+                  }
+                }}
+                onCreate={async (name) => ({ _id: "", name })}
+              />
+
+              <Text className="mt-2 text-sm leading-5 text-slate-500">
+                Optional. Links this to a generic ingredient (e.g. &quot;Soy
+                Sauce&quot;) so recipes calling for the generic can use this
+                product. Selecting one fills in its category and unit below;
+                typing a new name creates that generic ingredient when you
+                save, using this item&apos;s portion and nutrition as its
+                starting values.
+              </Text>
+
+              <FieldLabel text="Brand" />
+
+              <CreatableObjectDropdown
+                options={brands}
+                selectedId={form.brandId}
+                selectedName={form.brandName}
+                placeholder="Search or create a brand"
+                createLabel="Create brand"
+                onTextChange={(value: string) => {
+                  if (value !== form.brandName) {
+                    updateForm("brandId", "");
+                  }
+
+                  setBrandDraft(value);
+                }}
+                onSelect={(option) => {
+                  updateForm("brandId", option._id);
+
+                  updateForm("brandName", option.name);
+
+                  setBrandDraft(option.name);
+                }}
+                onCreate={handleCreateBrand}
+              />
+            </>
+          )}
 
           <FieldLabel text="Description" />
 
@@ -714,35 +942,19 @@ export default function AddManualPantryItemScreen() {
           />
 
           <SectionTitle
-            title="Pantry inventory"
-            description="Where the item is stored and how much you currently have."
-          />
-
-          <FieldLabel text="Storage location" required />
-
-          <CreatableObjectDropdown
-            options={storageLocations}
-            selectedId={form.storageLocationId}
-            selectedName={form.storageLocationName}
-            placeholder="Search or create a storage location"
-            createLabel="Create location"
-            onSelect={(option) => {
-              updateForm("storageLocationId", option._id);
-
-              updateForm("storageLocationName", option.name);
-            }}
-            onCreate={handleCreateStorageLocation}
+            title="Nutrition per serving"
+            description="Define what one serving is, then enter nutrition for that amount."
           />
 
           <View className="flex-row">
             <View className="mr-3 flex-1">
-              <FieldLabel text="Quantity" required />
+              <FieldLabel text="Serving size" />
 
               <FormInput
-                value={form.quantityAvailable}
-                placeholder="0"
+                value={form.defaultPortionAmount}
+                placeholder="1"
                 keyboardType="decimal-pad"
-                onChangeText={(value) => updateForm("quantityAvailable", value)}
+                onChangeText={(value) => updateForm("defaultPortionAmount", value)}
               />
             </View>
 
@@ -760,25 +972,11 @@ export default function AddManualPantryItemScreen() {
             </View>
           </View>
 
-          <FieldLabel text="Purchase date" />
-
-          <FormInput
-            value={form.purchaseDate}
-            placeholder="YYYY-MM-DD"
-            keyboardType="numbers-and-punctuation"
-            autoCapitalize="none"
-            onChangeText={(value) => updateForm("purchaseDate", value)}
-          />
-
-          <FieldLabel text="Expiry date" />
-
-          <FormInput
-            value={form.expiryDate}
-            placeholder="YYYY-MM-DD"
-            keyboardType="numbers-and-punctuation"
-            autoCapitalize="none"
-            onChangeText={(value) => updateForm("expiryDate", value)}
-          />
+          <Text className="mt-2 text-sm leading-5 text-slate-500">
+            How much of the unit above is one serving. For example, a spice
+            might have a 120 g bottle but a 5 g serving — enter 5 here, and
+            the nutrition values below should be for that 5 g.
+          </Text>
 
           <FieldLabel text="Low-stock threshold" />
 
@@ -790,36 +988,9 @@ export default function AddManualPantryItemScreen() {
           />
 
           <Text className="mt-2 text-sm leading-5 text-slate-500">
-            The item is considered low stock when its quantity reaches this
-            value.
-          </Text>
-
-          <SectionTitle
-            title="Nutrition per serving"
-            description="Define what one serving is, then enter nutrition for that amount."
-          />
-
-          <FieldLabel text="Serving size" />
-
-          <View className="flex-row items-center">
-            <View className="flex-1">
-              <FormInput
-                value={form.defaultPortionAmount}
-                placeholder="1"
-                keyboardType="decimal-pad"
-                onChangeText={(value) => updateForm("defaultPortionAmount", value)}
-              />
-            </View>
-
-            <Text className="ml-3 text-base font-medium text-slate-600">
-              {form.quantityUnit.trim() || "unit"}
-            </Text>
-          </View>
-
-          <Text className="mt-2 text-sm leading-5 text-slate-500">
-            How much of the unit above is one serving. For example, a spice
-            might have a 120 g bottle but a 5 g serving — enter 5 here, and
-            the nutrition values below should be for that 5 g.
+            Warn when total stock across all pantry entries falls to this many{" "}
+            {form.quantityUnit.trim() || "units"}. This belongs to the
+            ingredient itself, not any one pantry entry.
           </Text>
 
           <View className="flex-row">
@@ -893,6 +1064,92 @@ export default function AddManualPantryItemScreen() {
               />
             </View>
           </View>
+
+          {!form.isGeneric && (
+            <>
+              <Pressable
+                className="mt-8 flex-row items-center justify-between"
+                onPress={() =>
+                  setPantryInventoryExpanded((current) => !current)
+                }
+              >
+                <View className="mr-3 flex-1">
+                  <Text className="text-xl font-bold text-slate-950">
+                    Pantry inventory
+                  </Text>
+                  <Text className="mt-1 text-sm leading-5 text-slate-500">
+                    Optional — add stock now, or just save the ingredient and
+                    stock it later.
+                  </Text>
+                </View>
+
+                <Ionicons
+                  name={pantryInventoryExpanded ? "chevron-up" : "chevron-down"}
+                  size={22}
+                  color="#64748B"
+                />
+              </Pressable>
+
+              {pantryInventoryExpanded && (
+                <>
+                  <FieldLabel text="Storage location" required />
+
+                  <CreatableObjectDropdown
+                    options={storageLocations}
+                    selectedId={form.storageLocationId}
+                    selectedName={form.storageLocationName}
+                    placeholder="Search or create a storage location"
+                    createLabel="Create location"
+                    onSelect={(option) => {
+                      updateForm("storageLocationId", option._id);
+
+                      updateForm("storageLocationName", option.name);
+                    }}
+                    onCreate={handleCreateStorageLocation}
+                  />
+
+                  <FieldLabel text="Quantity" required />
+
+                  <View className="flex-row items-center">
+                    <View className="flex-1">
+                      <FormInput
+                        value={form.quantityAvailable}
+                        placeholder="0"
+                        keyboardType="decimal-pad"
+                        onChangeText={(value) =>
+                          updateForm("quantityAvailable", value)
+                        }
+                      />
+                    </View>
+
+                    <Text className="ml-3 text-base font-medium text-slate-600">
+                      {form.quantityUnit.trim() || "unit"}
+                    </Text>
+                  </View>
+
+                  <FieldLabel text="Purchase date" />
+
+                  <FormInput
+                    value={form.purchaseDate}
+                    placeholder="YYYY-MM-DD"
+                    keyboardType="numbers-and-punctuation"
+                    autoCapitalize="none"
+                    onChangeText={(value) => updateForm("purchaseDate", value)}
+                  />
+
+                  <FieldLabel text="Expiry date" />
+
+                  <FormInput
+                    value={form.expiryDate}
+                    placeholder="YYYY-MM-DD"
+                    keyboardType="numbers-and-punctuation"
+                    autoCapitalize="none"
+                    onChangeText={(value) => updateForm("expiryDate", value)}
+                  />
+                </>
+              )}
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
 

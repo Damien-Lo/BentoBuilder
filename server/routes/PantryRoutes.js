@@ -74,15 +74,26 @@ router.get("/:id", async (req, res) => {
  */
 router.post("/", async (req, res) => {
   try {
-    const ingredientExists = await Ingredient.exists({
+    const ingredient = await Ingredient.findOne({
       _id: req.body.ingredient,
       isArchived: false,
-    });
+    }).select("isGeneric");
 
-    if (!ingredientExists) {
+    if (!ingredient) {
       return res.status(404).json({
         success: false,
         message: "Referenced ingredient does not exist",
+      });
+    }
+
+    // Generic ingredients (e.g. "Soy Sauce") are a matching umbrella, not a
+    // physical product — whatever's actually in the pantry is always some
+    // specific/branded item, so generics can never hold pantry stock.
+    if (ingredient.isGeneric) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Generic ingredients can't be stocked directly — add a specific/branded ingredient instead",
       });
     }
 
@@ -120,6 +131,7 @@ router.post("/create", async (req, res) => {
       category,
       brand,
       barcode,
+      isGeneric,
       storageLocation,
       quantityAvailable,
       quantityUnit,
@@ -136,6 +148,16 @@ router.post("/create", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Ingredient name is required",
+      });
+    }
+
+    // A generic ingredient can't be stocked — creating one and adding it to
+    // the pantry in the same step is a contradiction.
+    if (isGeneric) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Generic ingredients can't be stocked directly — create it as a catalog entry without pantry details",
       });
     }
 

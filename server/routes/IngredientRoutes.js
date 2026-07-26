@@ -1,7 +1,63 @@
 import express from "express";
 import Ingredient from "../models/Ingredient.js";
+import { getAvailableStock } from "../services/ingredientAvailability.js";
 
 const router = express.Router();
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Resolves which generic ingredient a new specific/branded ingredient
+ * belongs to.
+ *
+ * - If `genericParent` is given, it must reference an existing generic.
+ * - Else if `genericName` is given, find an existing generic with that name
+ *   in the same category, or auto-create one if none exists yet — seeded
+ *   with this specific ingredient's own portion/nutrition as a starting
+ *   point, since there's nothing else to draw defaults from.
+ * - Else (neither given), the ingredient is standalone — no generic parent.
+ */
+async function resolveGenericParent({
+  genericParent,
+  genericName,
+  category,
+  defaultPortionAmount,
+  defaultPortionUnit,
+  nutrition,
+  nutritionBasis,
+}) {
+  if (genericParent) {
+    const parent = await Ingredient.findById(genericParent);
+    if (!parent || !parent.isGeneric) {
+      throw new Error("genericParent must reference an existing generic ingredient");
+    }
+    return parent._id;
+  }
+
+  const trimmedName = genericName?.trim();
+  if (!trimmedName) return null;
+
+  const existing = await Ingredient.findOne({
+    isGeneric: true,
+    category,
+    isArchived: false,
+    name: new RegExp(`^${escapeRegex(trimmedName)}$`, "i"),
+  });
+  if (existing) return existing._id;
+
+  const created = await Ingredient.create({
+    name: trimmedName,
+    category,
+    isGeneric: true,
+    defaultPortionAmount,
+    defaultPortionUnit,
+    nutrition,
+    nutritionBasis,
+  });
+  return created._id;
+}
 
 /**
  * GET /api/ingredients
@@ -14,6 +70,7 @@ router.get("/", async (req, res) => {
     })
       .populate("category")
       .populate("brand")
+      .populate("genericParent")
       .sort({ name: 1 });
 
     return res.status(200).json({
@@ -39,7 +96,8 @@ router.get("/:id", async (req, res) => {
   try {
     const ingredient = await Ingredient.findById(req.params.id)
       .populate("category")
-      .populate("brand");
+      .populate("brand")
+      .populate("genericParent");
 
     if (!ingredient) {
       return res.status(404).json({
@@ -61,22 +119,65 @@ router.get("/:id", async (req, res) => {
 });
 
 /**
+ * GET /api/ingredients/:id/availability
+ * Pantry stock for this ingredient. For a generic ingredient, aggregates
+ * stock across itself and every branded/specific variant beneath it.
+ */
+router.get("/:id/availability", async (req, res) => {
+  try {
+    const stock = await getAvailableStock(req.params.id);
+
+    if (!stock) {
+      return res.status(404).json({
+        success: false,
+        message: "Ingredient not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: stock,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid ingredient ID",
+    });
+  }
+});
+
+/**
  * POST /api/ingredients
  * Create an ingredient definition.
  */
 router.post("/", async (req, res) => {
   try {
+    const { genericName, ...body } = req.body;
+
     const ingredientData = {
-      ...req.body,
+      ...body,
       barcode:
-        typeof req.body.barcode === "string" && req.body.barcode.trim()
-          ? req.body.barcode.trim()
+        typeof body.barcode === "string" && body.barcode.trim()
+          ? body.barcode.trim()
           : undefined,
     };
+
+    if (!ingredientData.isGeneric) {
+      ingredientData.genericParent = await resolveGenericParent({
+        genericParent: ingredientData.genericParent,
+        genericName,
+        category: ingredientData.category,
+        defaultPortionAmount: ingredientData.defaultPortionAmount,
+        defaultPortionUnit: ingredientData.defaultPortionUnit,
+        nutrition: ingredientData.nutrition,
+        nutritionBasis: ingredientData.nutritionBasis,
+      });
+    }
 
     const ingredient = await Ingredient.create(ingredientData);
     await ingredient.populate("category");
     await ingredient.populate("brand");
+    await ingredient.populate("genericParent");
 
     return res.status(201).json({
       success: true,
@@ -114,7 +215,8 @@ router.patch("/:id", async (req, res) => {
       }
     )
       .populate("category")
-      .populate("brand");
+      .populate("brand")
+      .populate("genericParent");
 
     if (!ingredient) {
       return res.status(404).json({
