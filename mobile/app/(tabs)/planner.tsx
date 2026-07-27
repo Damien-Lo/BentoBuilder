@@ -514,7 +514,7 @@ export default function HomeScreen() {
         )}
       >
         <View
-          className="mb-2 flex-row items-center rounded-2xl bg-white px-4 py-3 shadow-sm"
+          className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 py-3"
           style={entry.status === "planned" ? styles.plannedEntry : undefined}
         >
           {entry.status === "planned" && (
@@ -569,7 +569,7 @@ export default function HomeScreen() {
     const hasSodiumData = confirmed.sodium > 0 || planned.sodium > 0 || limits.sodium != null;
 
     return (
-      <View className="overflow-hidden rounded-3xl bg-white shadow-sm">
+      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         {/* Calories row */}
         <View className="border-b border-slate-100 px-5 pb-4 pt-4">
           <View className="flex-row items-center justify-between">
@@ -1066,9 +1066,9 @@ export default function HomeScreen() {
               contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
               keyboardShouldPersistTaps="handled"
             >
-              <View className="mb-5 flex-row items-center rounded-2xl bg-white p-4 shadow-sm">
-                <View className={`h-11 w-11 items-center justify-center rounded-xl ${SLOT_MAP[addSlot].chipBg}`}>
-                  <Ionicons name="nutrition-outline" size={20} color={SLOT_MAP[addSlot].iconColor} />
+              <View className="mb-5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4">
+                <View className={`h-11 w-11 items-center justify-center rounded-full ${SLOT_MAP[addSlot].chipBg}`}>
+                  <Ionicons name="nutrition-outline" size={18} color={SLOT_MAP[addSlot].iconColor} />
                 </View>
                 <View className="ml-3 flex-1">
                   <Text className="font-semibold text-slate-900">{pendingIngredient.name}</Text>
@@ -1112,7 +1112,7 @@ export default function HomeScreen() {
                   ["Sodium",   n?.sodium,   "mg"],
                 ];
                 return (
-                  <View className="mb-6 overflow-hidden rounded-3xl bg-white shadow-sm">
+                  <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                     {rows.map(([label, value, unit], i) => (
                       <View
                         key={label}
@@ -1268,12 +1268,12 @@ export default function HomeScreen() {
                     const slotCfg = SLOT_MAP[addSlot];
                     return (
                       <Pressable
-                        className="mb-2 flex-row items-center rounded-2xl bg-white p-4 shadow-sm active:bg-slate-50"
+                        className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
                         disabled={saving}
                         onPress={() => void handleAddEntry(meal)}
                       >
-                        <View className={`h-11 w-11 items-center justify-center rounded-xl ${slotCfg.chipBg}`}>
-                          <Ionicons name={slotCfg.icon} size={20} color={slotCfg.iconColor} />
+                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
+                          <Ionicons name={slotCfg.icon} size={18} color={slotCfg.iconColor} />
                         </View>
                         <View className="ml-3 flex-1">
                           <Text className="font-semibold text-slate-900">{meal.name}</Text>
@@ -1319,12 +1319,12 @@ export default function HomeScreen() {
                     const slotCfg = SLOT_MAP[addSlot];
                     return (
                       <Pressable
-                        className="mb-2 flex-row items-center rounded-2xl bg-white p-4 shadow-sm active:bg-slate-50"
+                        className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
                         disabled={saving}
                         onPress={() => void handleAddRecipeEntry(recipe)}
                       >
-                        <View className={`h-11 w-11 items-center justify-center rounded-xl ${slotCfg.chipBg}`}>
-                          <Ionicons name="book-outline" size={20} color={slotCfg.iconColor} />
+                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
+                          <Ionicons name="book-outline" size={18} color={slotCfg.iconColor} />
                         </View>
                         <View className="ml-3 flex-1">
                           <Text className="font-semibold text-slate-900">{recipe.name}</Text>
@@ -1371,12 +1371,12 @@ export default function HomeScreen() {
                     const slotCfg = SLOT_MAP[addSlot];
                     return (
                       <Pressable
-                        className="mb-2 flex-row items-center rounded-2xl bg-white p-4 shadow-sm active:bg-slate-50"
+                        className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
                         disabled={saving}
                         onPress={() => openIngredientQuantityStep(ingredient)}
                       >
-                        <View className={`h-11 w-11 items-center justify-center rounded-xl ${slotCfg.chipBg}`}>
-                          <Ionicons name="nutrition-outline" size={20} color={slotCfg.iconColor} />
+                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
+                          <Ionicons name="nutrition-outline" size={18} color={slotCfg.iconColor} />
                         </View>
                         <View className="ml-3 flex-1">
                           <Text className="font-semibold text-slate-900">{ingredient.name}</Text>

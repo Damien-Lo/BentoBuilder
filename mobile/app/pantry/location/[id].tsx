@@ -163,7 +163,7 @@ export default function LocationDetailScreen() {
             paddingBottom: 60,
           }}
           ListEmptyComponent={
-            <View className="items-center rounded-3xl bg-white px-6 py-16 shadow-sm">
+            <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
               <Ionicons
                 name="file-tray-stacked-outline"
                 size={42}
@@ -201,7 +201,7 @@ export default function LocationDetailScreen() {
                 rightThreshold={40}
                 renderLeftActions={() => (
                   <Pressable
-                    className="mb-3 w-20 items-center justify-center rounded-3xl bg-red-500 active:bg-red-600"
+                    className="mb-2.5 w-20 items-center justify-center rounded-2xl bg-red-500 active:bg-red-600"
                     onPress={() => handleDelete(item._id, ingredientName)}
                   >
                     <Ionicons name="trash-outline" size={22} color="white" />
@@ -209,7 +209,7 @@ export default function LocationDetailScreen() {
                 )}
               >
                 <Pressable
-                  className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm active:bg-slate-50"
+                  className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
                   onPress={() =>
                     router.push({
                       pathname: "/pantry/edit/[id]",
@@ -217,15 +217,15 @@ export default function LocationDetailScreen() {
                     })
                   }
                 >
-                  <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
+                  <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
                     <Ionicons
                       name="nutrition-outline"
-                      size={23}
+                      size={18}
                       color="#2563EB"
                     />
                   </View>
 
-                  <View className="ml-4 flex-1">
+                  <View className="ml-3 flex-1">
                     <Text className="text-base font-bold text-slate-900">
                       {ingredientName}
                     </Text>

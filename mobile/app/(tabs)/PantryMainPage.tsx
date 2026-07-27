@@ -517,13 +517,25 @@ export default function PantryMainPage() {
 
     const deleteAction = (
       <Pressable
-        className={`items-center justify-center bg-red-500 active:bg-red-600 ${
-          isChild ? "mb-2 w-16 rounded-2xl" : "mb-3 w-20 rounded-3xl"
+        className={`items-center justify-center rounded-2xl bg-red-500 active:bg-red-600 ${
+          isChild ? "mb-2 w-16" : "mb-2.5 w-20"
         }`}
         onPress={() => handleDeleteIngredient(ingredientItem._id, ingredientItem.name)}
       >
         <Ionicons name="trash-outline" size={isChild ? 18 : 22} color="white" />
       </Pressable>
+    );
+
+    // Both levels use the same compact "dot + quantity" status treatment —
+    // hierarchy comes from the icon, indent, and Generic badge instead of
+    // repeating "In stock" text at every level.
+    const stockValue = (
+      <View className="flex-row items-center">
+        <View className={`mr-2 h-2 w-2 rounded-full ${statusDotColor}`} />
+        <Text className="text-sm font-medium text-slate-600">
+          {isInStock ? `${totalQuantity} ${displayUnit ?? ""}`.trim() : "—"}
+        </Text>
+      </View>
     );
 
     if (isChild) {
@@ -538,7 +550,7 @@ export default function PantryMainPage() {
           renderLeftActions={() => deleteAction}
         >
           <Pressable
-            className="mb-2 flex-row items-center rounded-2xl bg-white px-3.5 py-2.5 shadow-sm active:bg-slate-50"
+            className="mb-2 flex-row items-center rounded-2xl border border-slate-100 bg-white px-3.5 py-2.5 active:bg-slate-50"
             onPress={() => {
               router.push({
                 pathname: "/ingredients/edit/[id]",
@@ -557,12 +569,7 @@ export default function PantryMainPage() {
               ) : null}
             </View>
 
-            <View className="flex-row items-center">
-              <View className={`mr-2 h-2 w-2 rounded-full ${statusDotColor}`} />
-              <Text className="text-sm text-slate-500">
-                {isInStock ? `${totalQuantity} ${displayUnit ?? ""}`.trim() : "—"}
-              </Text>
-            </View>
+            {stockValue}
 
             <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 8 }} />
           </Pressable>
@@ -578,7 +585,7 @@ export default function PantryMainPage() {
         renderLeftActions={() => deleteAction}
       >
         <Pressable
-          className="mb-3 flex-row items-center rounded-3xl bg-white px-4 py-2.5 shadow-sm"
+          className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 py-3"
           onPress={() => {
             router.push({
               pathname: "/ingredients/edit/[id]",
@@ -586,11 +593,11 @@ export default function PantryMainPage() {
             });
           }}
         >
-          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-blue-100">
-            <Ionicons name="nutrition-outline" size={20} color="#2563EB" />
+          <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
+            <Ionicons name="nutrition-outline" size={18} color="#2563EB" />
           </View>
 
-          <View className="ml-4 flex-1">
+          <View className="ml-3 flex-1">
             <View className="flex-row flex-wrap items-center">
               <Text
                 className="text-base font-bold text-slate-900"
@@ -625,33 +632,7 @@ export default function PantryMainPage() {
               })()}
           </View>
 
-          <View className="items-end">
-            <Text
-              className={`text-sm font-semibold ${
-                isAlwaysAvailable
-                  ? "text-blue-600"
-                  : isLowStock
-                    ? "text-amber-600"
-                    : isInStock
-                      ? "text-emerald-600"
-                      : "text-slate-400"
-              }`}
-            >
-              {isAlwaysAvailable
-                ? "Always available"
-                : isLowStock
-                  ? "Low stock"
-                  : isInStock
-                    ? "In stock"
-                    : "Out of stock"}
-            </Text>
-
-            {isInStock && !isAlwaysAvailable ? (
-              <Text className="mt-1 text-sm text-slate-500">
-                {totalQuantity} {displayUnit}
-              </Text>
-            ) : null}
-          </View>
+          {stockValue}
 
           <Ionicons
             name="chevron-forward"
@@ -753,13 +734,13 @@ export default function PantryMainPage() {
                     return (
                       <Pressable
                         key={locationId}
-                        className="mb-4 h-44 w-[48%] justify-between rounded-3xl bg-white p-5 shadow-sm"
+                        className="mb-4 h-44 w-[48%] justify-between rounded-2xl border border-slate-200 bg-white p-5"
                         onPress={() =>
                           router.push({ pathname: "/pantry/location/[id]", params: { id: locationId, name: location.name } })
                         }
                       >
-                        <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
-                          <Ionicons name="file-tray-stacked-outline" size={25} color="#2563EB" />
+                        <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
+                          <Ionicons name="file-tray-stacked-outline" size={20} color="#2563EB" />
                         </View>
                         <View>
                           <Text className="text-lg font-bold text-slate-900">{location.name}</Text>
@@ -779,7 +760,7 @@ export default function PantryMainPage() {
                 showsVerticalScrollIndicator={false}
               >
                 {groupedItems.length === 0 ? (
-                  <View className="items-center rounded-3xl bg-white px-6 py-16 shadow-sm">
+                  <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
                     <Ionicons name="file-tray-outline" size={42} color="#94A3B8" />
                     <Text className="mt-4 text-lg font-bold text-slate-900">Pantry is empty</Text>
                     <Text className="mt-2 text-center text-slate-500">Add items to get started.</Text>
@@ -790,17 +771,17 @@ export default function PantryMainPage() {
                     return (
                       <View key={group.id} className="mb-2">
                         <Pressable
-                          className="mb-2 flex-row items-center justify-between py-1"
+                          className="mb-2.5 flex-row items-center justify-between py-1.5"
                           onPress={() => toggleLocation(group.id)}
                         >
-                          <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+                          <Text className="text-xs font-bold uppercase tracking-widest text-slate-400">
                             {group.name}
-                            <Text className="font-normal"> ({group.items.length})</Text>
+                            <Text className="font-semibold text-slate-300"> · {group.items.length}</Text>
                           </Text>
                           <Ionicons
                             name={isCollapsed ? "chevron-forward" : "chevron-down"}
                             size={16}
-                            color="#94A3B8"
+                            color="#CBD5E1"
                           />
                         </Pressable>
 
@@ -815,13 +796,13 @@ export default function PantryMainPage() {
                           return (
                             <Pressable
                               key={pantryItem._id}
-                              className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm active:bg-slate-50"
+                              className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
                               onPress={() =>
                                 router.push({ pathname: "/pantry/edit/[id]", params: { id: pantryItem._id } })
                               }
                             >
-                              <View className="h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
-                                <Ionicons name="nutrition-outline" size={19} color="#2563EB" />
+                              <View className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                                <Ionicons name="nutrition-outline" size={16} color="#2563EB" />
                               </View>
 
                               <View className="ml-3 flex-1">
@@ -891,7 +872,7 @@ export default function PantryMainPage() {
               showsVerticalScrollIndicator={false}
             >
               {filteredIngredients.length === 0 ? (
-                <View className="items-center rounded-3xl bg-white px-6 py-16 shadow-sm">
+                <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
                   <Ionicons
                     name="nutrition-outline"
                     size={42}
@@ -910,19 +891,19 @@ export default function PantryMainPage() {
                 groupedIngredients.map((group) => {
                   const isCollapsed = !expandedCategories.has(group.category);
                   return (
-                  <View key={group.category} className="mb-2">
+                  <View key={group.category} className="mb-3">
                     <Pressable
-                      className="mb-2 flex-row items-center justify-between py-1"
+                      className="mb-2.5 flex-row items-center justify-between py-1.5"
                       onPress={() => toggleCategory(group.category)}
                     >
-                      <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+                      <Text className="text-xs font-bold uppercase tracking-widest text-slate-400">
                         {group.category}
-                        <Text className="font-normal"> ({group.items.length})</Text>
+                        <Text className="font-semibold text-slate-300"> · {group.items.length}</Text>
                       </Text>
                       <Ionicons
                         name={isCollapsed ? "chevron-forward" : "chevron-down"}
                         size={16}
-                        color="#94A3B8"
+                        color="#CBD5E1"
                       />
                     </Pressable>
 
@@ -1010,7 +991,7 @@ export default function PantryMainPage() {
                         idx > 0 ? "border-t border-slate-100" : ""
                       }`}
                     >
-                      <View className="h-8 w-8 items-center justify-center rounded-xl bg-blue-100">
+                      <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
                         <Ionicons name="nutrition-outline" size={16} color="#2563EB" />
                       </View>
                       <View className="ml-3 flex-1">
@@ -1031,7 +1012,7 @@ export default function PantryMainPage() {
                     onPress={addGroceryItem}
                     className="flex-row items-center border-t border-slate-100 px-4 py-3 active:bg-slate-50"
                   >
-                    <View className="h-8 w-8 items-center justify-center rounded-xl bg-slate-100">
+                    <View className="h-8 w-8 items-center justify-center rounded-full bg-slate-100">
                       <Ionicons name="add" size={16} color="#475569" />
                     </View>
                     <Text className="ml-3 flex-1 font-medium text-slate-700">
@@ -1049,7 +1030,7 @@ export default function PantryMainPage() {
               keyboardShouldPersistTaps="handled"
             >
               {groceryItems.length === 0 ? (
-                <View className="mt-8 items-center rounded-3xl bg-white px-6 py-16 shadow-sm">
+                <View className="mt-8 items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
                   <Ionicons name="cart-outline" size={42} color="#94A3B8" />
                   <Text className="mt-4 text-lg font-bold text-slate-900">List is empty</Text>
                   <Text className="mt-2 text-center text-slate-500">
@@ -1065,7 +1046,7 @@ export default function PantryMainPage() {
                       rightThreshold={40}
                       renderLeftActions={() => (
                         <Pressable
-                          className="mb-3 w-20 items-center justify-center rounded-3xl bg-red-500 active:bg-red-600"
+                          className="mb-2.5 w-20 items-center justify-center rounded-2xl bg-red-500 active:bg-red-600"
                           onPress={() => deleteGroceryItem(item.id)}
                         >
                           <Ionicons name="trash-outline" size={22} color="white" />
@@ -1074,7 +1055,7 @@ export default function PantryMainPage() {
                     >
                       <Pressable
                         onPress={() => toggleGroceryItem(item.id)}
-                        className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm active:bg-slate-50"
+                        className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
                       >
                         <View
                           className={`h-6 w-6 items-center justify-center rounded-full border-2 ${
@@ -1201,7 +1182,7 @@ export default function PantryMainPage() {
                             closeSearch();
                           }}
                         >
-                          <View className="h-11 w-11 items-center justify-center rounded-xl bg-blue-100">
+                          <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
                             <Ionicons
                               name="nutrition-outline"
                               size={21}
@@ -1271,7 +1252,7 @@ export default function PantryMainPage() {
                           });
                         }}
                       >
-                        <View className="h-11 w-11 items-center justify-center rounded-xl bg-blue-100">
+                        <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
                           <Ionicons
                             name="nutrition-outline"
                             size={21}
@@ -1354,7 +1335,7 @@ export default function PantryMainPage() {
                 router.push("/ingredients/add_manual");
               }}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
                 <Ionicons name="create-outline" size={27} color="#2563EB" />
               </View>
 
@@ -1380,7 +1361,7 @@ export default function PantryMainPage() {
                 setScannerVisible(true);
               }}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
                 <Ionicons name="barcode-outline" size={29} color="#2563EB" />
               </View>
 
@@ -1437,7 +1418,7 @@ export default function PantryMainPage() {
                 router.push("/pantry/add_by_ingredient");
               }}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
                 <Ionicons name="create-outline" size={27} color="#2563EB" />
               </View>
               <View className="ml-4 flex-1">
@@ -1457,7 +1438,7 @@ export default function PantryMainPage() {
                 setScannerVisible(true);
               }}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
                 <Ionicons name="barcode-outline" size={29} color="#2563EB" />
               </View>
               <View className="ml-4 flex-1">

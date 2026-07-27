@@ -491,7 +491,7 @@ export default function EditRecipePage() {
           />
 
           {/* Picker card */}
-          <View className="mb-4 rounded-3xl bg-white p-4 shadow-sm">
+          <View className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
             <FieldLabel text="Search ingredient" />
             <SearchableObjectDropdown<IngredientOption>
               options={ingredientOptions}
@@ -569,7 +569,7 @@ export default function EditRecipePage() {
 
           {/* Ingredient rows */}
           {ingredientRows.length > 0 && (
-            <View className="mb-4 rounded-3xl bg-white shadow-sm overflow-hidden">
+            <View className="mb-4 rounded-2xl border border-slate-200 bg-white overflow-hidden">
               {ingredientRows.map((row, index) => (
                 <View
                   key={row.key}
@@ -577,7 +577,7 @@ export default function EditRecipePage() {
                     index < ingredientRows.length - 1 ? "border-b border-slate-100" : ""
                   }`}
                 >
-                  <View className="h-8 w-8 items-center justify-center rounded-xl bg-blue-100">
+                  <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
                     <Text className="text-xs font-bold text-blue-700">{index + 1}</Text>
                   </View>
 
@@ -605,7 +605,7 @@ export default function EditRecipePage() {
                 {Number(servings) > 1 ? ` · per serving (${servings})` : ""}
               </Text>
 
-              <View className="mb-4 rounded-3xl bg-white shadow-sm overflow-hidden">
+              <View className="mb-4 rounded-2xl border border-slate-200 bg-white overflow-hidden">
                 {(
                   [
                     ["Calories", perServingNutrition.calories, "kcal"],

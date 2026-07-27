@@ -236,7 +236,7 @@ export default function EditPantryItemScreen() {
           {/* Ingredient info link */}
           {ingredientId ? (
             <Pressable
-              className="mb-6 flex-row items-center rounded-2xl bg-white p-4 shadow-sm active:bg-slate-50"
+              className="mb-6 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
               onPress={() =>
                 router.push({
                   pathname: "/ingredients/edit/[id]",
@@ -244,8 +244,8 @@ export default function EditPantryItemScreen() {
                 })
               }
             >
-              <View className="h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
-                <Ionicons name="nutrition-outline" size={20} color="#2563EB" />
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
+                <Ionicons name="nutrition-outline" size={18} color="#2563EB" />
               </View>
               <View className="ml-3 flex-1">
                 <Text className="text-sm font-semibold text-slate-900">

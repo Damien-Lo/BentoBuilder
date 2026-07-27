@@ -54,10 +54,10 @@ function SelectedIngredientCard({
   const categoryName = getReferenceName(ingredient.category);
 
   return (
-    <View className="rounded-3xl border border-blue-200 bg-blue-50 p-4">
+    <View className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
       <View className="flex-row items-center">
-        <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
-          <Ionicons name="nutrition-outline" size={27} color="#2563EB" />
+        <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-100">
+          <Ionicons name="nutrition-outline" size={24} color="#2563EB" />
         </View>
 
         <View className="ml-4 flex-1">
@@ -346,7 +346,7 @@ export default function AddPantryItemByIngredientScreen() {
 
                 return (
                   <Pressable
-                    className="mb-3 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+                    className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
                     onPress={() => {
                       setSelectedIngredient(ingredient);
 
@@ -359,15 +359,15 @@ export default function AddPantryItemByIngredientScreen() {
                       }
                     }}
                   >
-                    <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
+                    <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
                       <Ionicons
                         name="nutrition-outline"
-                        size={23}
+                        size={18}
                         color="#2563EB"
                       />
                     </View>
 
-                    <View className="ml-4 flex-1">
+                    <View className="ml-3 flex-1">
                       <Text className="text-base font-bold text-slate-950">
                         {ingredient.name}
                       </Text>

@@ -219,7 +219,7 @@ export default function SettingsScreen() {
         >
           {/* ── Profile ── */}
           <SectionHeader title="Profile" />
-          <View className="overflow-hidden rounded-3xl bg-white shadow-sm">
+          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <View className="border-b border-slate-100 px-4 py-3.5">
               <Text className="mb-1.5 text-xs font-semibold text-slate-400">Display name</Text>
               <TextInput
@@ -246,7 +246,7 @@ export default function SettingsScreen() {
 
           {/* ── Planner ── */}
           <SectionHeader title="Planner" />
-          <View className="overflow-hidden rounded-3xl bg-white shadow-sm">
+          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <View className="border-b border-slate-100 px-4 pt-3.5">
               <Text className="text-xs font-semibold text-slate-400">Week starts on</Text>
             </View>
@@ -262,7 +262,7 @@ export default function SettingsScreen() {
             Built-in conversions (g/kg, mL/L, cup/tbsp/tsp, oz/lb, etc.) apply
             automatically. Add your own for anything else, e.g. 1 packet = 340 g.
           </Text>
-          <View className="overflow-hidden rounded-3xl bg-white shadow-sm">
+          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             {settings.unitConversions.length === 0 ? (
               <View className="px-4 py-4">
                 <Text className="text-sm text-slate-400">No custom conversions yet.</Text>
@@ -320,7 +320,7 @@ export default function SettingsScreen() {
 
           {/* ── Daily nutrition goals ── */}
           <SectionHeader title="Daily Nutrition Goals" />
-          <View className="overflow-hidden rounded-3xl bg-white shadow-sm">
+          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <SettingRow label="Calories">
               <NumericInput
                 value={settings.dailyCalorieLimit}
@@ -382,7 +382,7 @@ export default function SettingsScreen() {
 
           {/* ── About ── */}
           <SectionHeader title="About" />
-          <View className="overflow-hidden rounded-3xl bg-white shadow-sm">
+          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <View className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3.5">
               <Text className="text-base text-slate-700">App</Text>
               <Text className="text-base text-slate-400">BentoBuilder</Text>

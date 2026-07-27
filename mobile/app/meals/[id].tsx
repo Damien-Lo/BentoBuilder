@@ -141,9 +141,9 @@ export default function MealDetailScreen() {
         }}
       >
         {/* Header card */}
-        <View className="mb-6 rounded-3xl bg-white p-5 shadow-sm">
-          <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
-            <Ionicons name="restaurant-outline" size={28} color="#2563EB" />
+        <View className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
+          <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
+            <Ionicons name="restaurant-outline" size={26} color="#2563EB" />
           </View>
           <Text className="mt-4 text-2xl font-bold text-slate-900">{meal.name}</Text>
           <View className="mt-3 flex-row flex-wrap gap-2">
@@ -173,7 +173,7 @@ export default function MealDetailScreen() {
             <Text className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
               Courses
             </Text>
-            <View className="mb-6 overflow-hidden rounded-3xl bg-white shadow-sm">
+            <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
               {meal.courses!.map((course, index) => {
                 const recipeId = getRecipeId(course.recipe);
                 const recipeName = getRecipeName(course.recipe);
@@ -199,7 +199,7 @@ export default function MealDetailScreen() {
                         });
                     }}
                   >
-                    <View className="h-9 w-9 items-center justify-center rounded-xl bg-blue-100">
+                    <View className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
                       <Text className="text-xs font-bold text-blue-700">
                         {index + 1}
                       </Text>
@@ -234,7 +234,7 @@ export default function MealDetailScreen() {
         <Text className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
           Meal nutrition
         </Text>
-        <View className="overflow-hidden rounded-3xl bg-white shadow-sm">
+        <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           {(
             [
               ["Calories", totalNutrition.calories, "kcal"],
@@ -265,7 +265,7 @@ export default function MealDetailScreen() {
             <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500">
               Notes
             </Text>
-            <View className="rounded-3xl bg-white p-5 shadow-sm">
+            <View className="rounded-2xl border border-slate-200 bg-white p-5">
               <Text className="text-base leading-6 text-slate-600">{meal.notes}</Text>
             </View>
           </>

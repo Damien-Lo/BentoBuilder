@@ -99,17 +99,17 @@ export default function HomeScreen() {
                   }
                 }}
                 disabled={!section.active}
-                className={`flex-1 overflow-hidden rounded-3xl bg-white shadow-sm ${
+                className={`flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white ${
                   section.active ? "active:bg-slate-50" : "opacity-55"
                 }`}
               >
                 <View className="p-5">
                   {/* Icon */}
                   <View
-                    className="mb-4 h-12 w-12 items-center justify-center rounded-2xl"
+                    className="mb-4 h-11 w-11 items-center justify-center rounded-full"
                     style={{ backgroundColor: section.iconBg }}
                   >
-                    <Ionicons name={section.icon} size={24} color={section.iconColor} />
+                    <Ionicons name={section.icon} size={20} color={section.iconColor} />
                   </View>
 
                   {/* Name */}

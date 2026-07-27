@@ -839,11 +839,11 @@ export default function IngredientDetailScreen() {
             /* ── Detail view ── */
             <>
               {/* Hero card */}
-              <View className="mb-4 items-center rounded-3xl bg-white px-6 py-8 shadow-sm">
-                <View className="h-20 w-20 items-center justify-center rounded-3xl bg-blue-100">
+              <View className="mb-4 items-center rounded-2xl border border-slate-200 bg-white px-6 py-8">
+                <View className="h-20 w-20 items-center justify-center rounded-full bg-blue-50">
                   <Ionicons
                     name="nutrition-outline"
-                    size={40}
+                    size={36}
                     color="#2563EB"
                   />
                 </View>
@@ -884,7 +884,7 @@ export default function IngredientDetailScreen() {
               </View>
 
               {/* Stock summary */}
-              <View className="mb-4 flex-row rounded-3xl bg-white px-5 py-4 shadow-sm">
+              <View className="mb-4 flex-row rounded-2xl border border-slate-200 bg-white px-5 py-4">
                 <View className="flex-1 items-center">
                   <Text className="text-2xl font-bold text-slate-950">
                     {totalQuantity}
@@ -963,7 +963,7 @@ export default function IngredientDetailScreen() {
               categoryName ||
               ingredient.barcode ||
               ingredient.defaultPortionAmount != null ? (
-                <View className="mb-4 rounded-3xl bg-white px-5 py-4 shadow-sm">
+                <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
                   <Text className="mb-3 text-base font-bold text-slate-900">
                     Details
                   </Text>
@@ -1013,7 +1013,7 @@ export default function IngredientDetailScreen() {
 
               {/* Nutrition */}
               {nutrition ? (
-                <View className="mb-4 rounded-3xl bg-white px-5 py-4 shadow-sm">
+                <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
                   <Text className="mb-1 text-base font-bold text-slate-900">
                     Nutrition
                   </Text>
@@ -1077,7 +1077,7 @@ export default function IngredientDetailScreen() {
               product — they never hold pantry stock directly. Availability
               is aggregated from specific/branded variants instead. */}
           {!isEditing && ingredient.isGeneric && (
-            <View className="mb-4 rounded-3xl bg-white px-6 py-6 shadow-sm">
+            <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-6 py-6">
               <View className="flex-row items-center">
                 <Ionicons name="git-branch-outline" size={22} color="#7C3AED" />
                 <Text className="ml-2 flex-1 font-semibold text-slate-700">
@@ -1149,7 +1149,7 @@ export default function IngredientDetailScreen() {
               </View>
 
               {ingredientPantryItems.length === 0 ? (
-                <View className="items-center rounded-3xl bg-white px-6 py-10 shadow-sm">
+                <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-10">
                   <Ionicons
                     name="file-tray-outline"
                     size={36}
@@ -1174,7 +1174,7 @@ export default function IngredientDetailScreen() {
                       <ReanimatedSwipeable
                         renderLeftActions={() => (
                           <Pressable
-                            className="w-24 items-center justify-center rounded-l-3xl bg-red-500 active:bg-red-600"
+                            className="w-24 items-center justify-center rounded-l-2xl bg-red-500 active:bg-red-600"
                             onPress={() => void handleDeleteEntry(entry._id)}
                           >
                             <Ionicons
@@ -1188,13 +1188,13 @@ export default function IngredientDetailScreen() {
                           </Pressable>
                         )}
                       >
-                        <View className="rounded-3xl bg-white px-5 py-4 shadow-sm">
+                        <View className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
                           <View className="flex-row items-center justify-between">
                             <View className="flex-row items-center">
-                              <View className="h-9 w-9 items-center justify-center rounded-xl bg-blue-100">
+                              <View className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
                                 <Ionicons
                                   name="file-tray-stacked-outline"
-                                  size={18}
+                                  size={16}
                                   color="#2563EB"
                                 />
                               </View>
@@ -1269,7 +1269,7 @@ export default function IngredientDetailScreen() {
               )}
 
               {/* Quick-add new entry */}
-              <View className="mt-1 rounded-3xl bg-white px-5 py-4 shadow-sm">
+              <View className="mt-1 rounded-2xl border border-slate-200 bg-white px-5 py-4">
                 <FieldLabel text="Storage location" />
                 <SearchableObjectDropdown<SelectOption>
                   options={storageLocations}

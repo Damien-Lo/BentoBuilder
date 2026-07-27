@@ -397,7 +397,7 @@ export default function EditMealScreen() {
             <Text className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
               Meal nutrition
             </Text>
-            <View className="overflow-hidden rounded-3xl bg-white shadow-sm">
+            <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
               {(
                 [
                   ["Calories", totalNutrition.calories, "kcal"],
@@ -431,7 +431,7 @@ export default function EditMealScreen() {
           {courses.map((course, index) => (
             <View
               key={course.id}
-              className="mb-3 rounded-3xl bg-white p-4 shadow-sm"
+              className="mb-3 rounded-2xl border border-slate-200 bg-white p-4"
             >
               <View className="mb-3 flex-row items-center justify-between">
                 <Text className="text-sm font-bold text-slate-700">
@@ -553,7 +553,7 @@ export default function EditMealScreen() {
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
             renderItem={({ item: recipe }) => (
               <Pressable
-                className="mb-2 flex-row items-center rounded-2xl bg-white p-4 shadow-sm active:bg-slate-50"
+                className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
                 onPress={() => {
                   if (pickerCourseId) {
                     updateCourse(pickerCourseId, {
@@ -564,8 +564,8 @@ export default function EditMealScreen() {
                   setPickerCourseId(null);
                 }}
               >
-                <View className="h-11 w-11 items-center justify-center rounded-xl bg-blue-100">
-                  <Ionicons name="book-outline" size={20} color="#2563EB" />
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
+                  <Ionicons name="book-outline" size={18} color="#2563EB" />
                 </View>
                 <View className="ml-3 flex-1">
                   <Text className="font-semibold text-slate-900">

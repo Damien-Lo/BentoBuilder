@@ -207,9 +207,9 @@ export default function RecipeDetailPage() {
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 60, paddingTop: 20 }}
       >
         {/* Header card */}
-        <View className="rounded-3xl bg-white p-5 shadow-sm">
-          <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
-            <Ionicons name="book-outline" size={28} color="#2563EB" />
+        <View className="rounded-2xl border border-slate-200 bg-white p-5">
+          <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
+            <Ionicons name="book-outline" size={26} color="#2563EB" />
           </View>
 
           <Text className="mt-4 text-2xl font-bold text-slate-900">{recipe.name}</Text>
@@ -277,7 +277,7 @@ export default function RecipeDetailPage() {
               </View>
             </View>
 
-            <View className="rounded-3xl bg-white shadow-sm overflow-hidden">
+            <View className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
               {recipe.ingredientList.map((entry, index) => {
                 const displayQty = showPerServing
                   ? round1(entry.quantity / Math.max(1, servings))
@@ -304,8 +304,8 @@ export default function RecipeDetailPage() {
                     className={index < recipe.ingredientList.length - 1 ? "border-b border-slate-100" : ""}
                   >
                     <View className="flex-row items-center px-4 py-3">
-                      <View className="h-8 w-8 items-center justify-center rounded-xl bg-blue-100">
-                        <Ionicons name="nutrition-outline" size={16} color="#2563EB" />
+                      <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
+                        <Ionicons name="nutrition-outline" size={15} color="#2563EB" />
                       </View>
 
                       <Text className="ml-3 flex-1 text-base text-slate-800">
@@ -351,7 +351,7 @@ export default function RecipeDetailPage() {
               Nutrition
             </Text>
 
-            <View className="rounded-3xl bg-white shadow-sm overflow-hidden">
+            <View className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
               {nutritionRows.map(([label, value, unit], index) => (
                 <View
                   key={label}
@@ -396,7 +396,7 @@ export default function RecipeDetailPage() {
             <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500">
               Notes
             </Text>
-            <View className="rounded-3xl bg-white p-5 shadow-sm">
+            <View className="rounded-2xl border border-slate-200 bg-white p-5">
               <Text className="text-base leading-6 text-slate-600">{recipe.notes}</Text>
             </View>
           </>
