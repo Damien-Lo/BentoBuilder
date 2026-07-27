@@ -113,6 +113,13 @@ const ingredientSchema = new mongoose.Schema(
       default: null,
     },
 
+    // When true, this ingredient (e.g. tap water) never shows as low/out of
+    // stock regardless of pantry quantity — stock tracking is skipped for it.
+    isAlwaysAvailable: {
+      type: Boolean,
+      default: false,
+    },
+
     imageUrl: {
       type: String,
       trim: true,

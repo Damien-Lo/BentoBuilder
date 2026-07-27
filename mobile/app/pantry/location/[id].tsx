@@ -14,6 +14,7 @@ import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeabl
 
 import { deletePantryItem, getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
+import { daysUntil, formatDateDisplay } from "@/src/utils/date";
 
 function getIngredientName(item: PantryItem): string {
   const ing = item.ingredient as unknown;
@@ -33,23 +34,17 @@ function itemMatchesLocation(item: PantryItem, locationId: string): boolean {
 }
 
 function formatExpiryDate(date: string | null): string | null {
-  if (!date) return null;
-  return new Date(date).toLocaleDateString("en-AU", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatDateDisplay(date, { day: "numeric", month: "short", year: "numeric" }, "en-AU");
 }
 
 function isExpired(date: string | null): boolean {
-  if (!date) return false;
-  return new Date(date).getTime() < Date.now();
+  const days = daysUntil(date);
+  return days != null && days < 0;
 }
 
 function isExpiringSoon(date: string | null): boolean {
-  if (!date) return false;
-  const diff = new Date(date).getTime() - Date.now();
-  return diff > 0 && diff < 7 * 24 * 60 * 60 * 1000;
+  const days = daysUntil(date);
+  return days != null && days >= 0 && days < 7;
 }
 
 export default function LocationDetailScreen() {

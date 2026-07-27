@@ -17,6 +17,10 @@ import {
 } from "@/src/services/recipeApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
+import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import { loadSettings } from "@/src/services/settingsService";
+import { convertUnits, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import { getIngredientStockInUnit } from "@/src/utils/ingredientStock";
 
 const MEAL_CATEGORY_LABEL: Record<string, string> = {
   breakfast: "Breakfast",
@@ -40,6 +44,8 @@ export default function RecipeDetailPage() {
 
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+  const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
+  const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPerServing, setShowPerServing] = useState(true);
@@ -51,13 +57,17 @@ export default function RecipeDetailPage() {
     async function load() {
       setIsLoading(true);
       try {
-        const [loaded, loadedPantry] = await Promise.all([
+        const [loaded, loadedPantry, loadedIngredients, loadedSettings] = await Promise.all([
           getRecipeById(id),
           getPantryItems(),
+          getIngredients(),
+          loadSettings(),
         ]);
         if (!cancelled) {
           setRecipe(loaded);
           setPantryItems(Array.isArray(loadedPantry) ? loadedPantry : []);
+          setAllIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
+          setCustomUnitConversions(loadedSettings.unitConversions ?? []);
         }
       } catch (err) {
         if (!cancelled) {
@@ -83,7 +93,15 @@ export default function RecipeDetailPage() {
       const ing = entry.ingredient;
       if (typeof ing === "string" || !ing.nutrition) continue;
 
-      const multiplier = entry.quantity / (ing.defaultPortionAmount ?? 1);
+      const qtyInNativeUnit = convertUnits(
+        entry.quantity,
+        entry.unit,
+        ing.defaultPortionUnit ?? "",
+        customUnitConversions,
+      );
+      if (qtyInNativeUnit == null) continue;
+
+      const multiplier = qtyInNativeUnit / (ing.defaultPortionAmount ?? 1);
       calories += (ing.nutrition.calories ?? 0) * multiplier;
       protein  += (ing.nutrition.protein  ?? 0) * multiplier;
       carbs    += (ing.nutrition.carbs    ?? 0) * multiplier;
@@ -95,7 +113,7 @@ export default function RecipeDetailPage() {
 
     if (!hasData) return null;
     return { calories, protein, carbs, fats, fiber, sodium };
-  }, [recipe]);
+  }, [recipe, customUnitConversions]);
 
   const displayedNutrition = useMemo(() => {
     if (!totalNutrition || !recipe) return null;
@@ -109,22 +127,6 @@ export default function RecipeDetailPage() {
       sodium:   round1(totalNutrition.sodium   / s),
     };
   }, [totalNutrition, showPerServing, recipe]);
-
-  const pantryStockMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const item of pantryItems) {
-      const raw = item.ingredient as unknown;
-      const ingId =
-        typeof raw === "string"
-          ? raw
-          : typeof raw === "object" && raw !== null && "_id" in raw
-            ? String((raw as Record<string, unknown>)._id)
-            : "";
-      if (!ingId) continue;
-      map.set(ingId, (map.get(ingId) ?? 0) + (item.quantityAvailable ?? 0));
-    }
-    return map;
-  }, [pantryItems]);
 
   if (isLoading) {
     return (
@@ -282,10 +284,15 @@ export default function RecipeDetailPage() {
                   : entry.quantity;
 
                 const ing = typeof entry.ingredient === "string" ? null : entry.ingredient;
-                const ingId = ing?._id ?? (typeof entry.ingredient === "string" ? entry.ingredient : "");
-                const inStock = pantryStockMap.get(ingId) ?? 0;
+                const inStock = ing
+                  ? getIngredientStockInUnit(ing, entry.unit, allIngredients, pantryItems, customUnitConversions)
+                  : 0;
                 const remaining = inStock - displayQty;
-                const threshold = ing?.lowStockThreshold ?? 0;
+                const rawThreshold = ing?.lowStockThreshold ?? 0;
+                const threshold = ing?.defaultPortionUnit
+                  ? (convertUnits(rawThreshold, ing.defaultPortionUnit, entry.unit, customUnitConversions) ??
+                    rawThreshold)
+                  : rawThreshold;
                 const barState: "green" | "yellow" | "red" =
                   remaining > threshold ? "green" :
                   remaining >= 0 ? "yellow" :

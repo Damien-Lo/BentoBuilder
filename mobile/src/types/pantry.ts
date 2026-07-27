@@ -18,6 +18,8 @@ export interface Ingredient {
   defaultPortionUnit: string;
   nutrition: Nutrition;
   nutritionBasis: "per-serving" | "per-100g";
+  lowStockThreshold?: number | null;
+  isAlwaysAvailable?: boolean;
   imageUrl: string;
   notes: string;
   createdAt: string;

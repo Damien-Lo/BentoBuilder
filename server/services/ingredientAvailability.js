@@ -1,5 +1,12 @@
 import Ingredient from "../models/Ingredient.js";
 import PantryItem from "../models/PantryItem.js";
+import UserProfile from "../models/UserProfile.js";
+import { convertibleTotal } from "./unitConversion.js";
+
+async function getCustomUnitConversions() {
+  const profile = await UserProfile.findOne().select("unitConversions").lean();
+  return profile?.unitConversions ?? [];
+}
 
 /**
  * Pantry stock for one ingredient, grouped by unit.
@@ -40,13 +47,15 @@ export async function getAvailableStock(ingredientId) {
       (byUnit[item.quantityUnit] || 0) + item.quantityAvailable;
   }
 
-  // The ingredient's own lowStockThreshold is only comparable to stock
-  // recorded in its own unit — a threshold of "5 tbsp" can't be checked
-  // against stock recorded in ml. For a generic, this is the total across
-  // all variants that happen to share its unit.
-  const totalInOwnUnit = byUnit[ingredient.defaultPortionUnit] || 0;
-  const isOutOfStock = totalInOwnUnit <= 0;
+  // Convert whatever's convertible into the ingredient's own unit — a 750ml
+  // bottle and 0.75L both count toward the same total — and skip anything
+  // that isn't convertible.
+  const customConversions = await getCustomUnitConversions();
+  const totalInOwnUnit = convertibleTotal(byUnit, ingredient.defaultPortionUnit, customConversions);
+
+  const isOutOfStock = !ingredient.isAlwaysAvailable && totalInOwnUnit <= 0;
   const isLowStock =
+    !ingredient.isAlwaysAvailable &&
     !isOutOfStock &&
     ingredient.lowStockThreshold != null &&
     totalInOwnUnit <= ingredient.lowStockThreshold;
@@ -54,6 +63,7 @@ export async function getAvailableStock(ingredientId) {
   return {
     ingredientId: ingredient._id,
     isGeneric: ingredient.isGeneric,
+    isAlwaysAvailable: ingredient.isAlwaysAvailable,
     variantCount: ingredient.isGeneric ? ingredientIds.length : 0,
     unit: ingredient.defaultPortionUnit,
     totalInOwnUnit,
@@ -66,12 +76,17 @@ export async function getAvailableStock(ingredientId) {
 
 /**
  * Whether a recipe ingredient line (quantity + unit) is covered by current
- * pantry stock, including generic variant aggregation.
+ * pantry stock, including generic variant aggregation. The recipe line's
+ * unit doesn't have to match how the stock is recorded (e.g. a recipe
+ * calling for "2 cups" soy sauce checked against pantry stock in mL) —
+ * whatever's convertible into the recipe's unit counts toward the total.
  */
 export async function isRecipeIngredientAvailable({ ingredient, quantity, unit }) {
   const stock = await getAvailableStock(ingredient);
   if (!stock) return false;
+  if (stock.isAlwaysAvailable) return true;
 
-  const available = stock.byUnit[unit] || 0;
+  const customConversions = await getCustomUnitConversions();
+  const available = convertibleTotal(stock.byUnit, unit, customConversions);
   return available >= quantity;
 }

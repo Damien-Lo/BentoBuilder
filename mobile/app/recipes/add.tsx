@@ -19,6 +19,7 @@ import {
   FormInput,
   SearchableObjectDropdown,
   SectionTitle,
+  UnitFamilyDropdown,
 } from "@/src/components/forms";
 
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
@@ -31,6 +32,12 @@ import {
   type RecipeNutrition,
 } from "@/src/services/recipeApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
+import { loadSettings } from "@/src/services/settingsService";
+import {
+  convertUnits,
+  getRelatedUnits,
+  type CustomUnitConversion,
+} from "@/src/utils/unitConversion";
 
 const MEAL_CATEGORIES: { value: MealCategory; label: string }[] = [
   { value: "breakfast", label: "Breakfast" },
@@ -45,6 +52,10 @@ type IngredientRow = {
   ingredientName: string;
   quantity: string;
   unit: string;
+  // The ingredient's own unit — quantity/unit above may be in a different
+  // (but convertible) unit chosen for this recipe, e.g. cups for an
+  // ingredient whose native unit is mL. Nutrition math needs this.
+  nativeUnit: string;
   portionAmount: number;
   calories?: number | null;
   protein?: number | null;
@@ -95,8 +106,12 @@ export default function AddRecipePage() {
   const [pickerIngredientId, setPickerIngredientId] = useState("");
   const [pickerIngredientName, setPickerIngredientName] = useState("");
   const [pickerQuantity, setPickerQuantity] = useState("1");
+  const [pickerUnit, setPickerUnit] = useState("");
   const [pickerSelected, setPickerSelected] =
     useState<IngredientOption | null>(null);
+  const [customUnitConversions, setCustomUnitConversions] = useState<
+    CustomUnitConversion[]
+  >([]);
 
   // Instructions
   const [steps, setSteps] = useState<string[]>([]);
@@ -115,9 +130,10 @@ export default function AddRecipePage() {
 
     async function load() {
       try {
-        const [loadedIngredients, loadedCategories] = await Promise.all([
+        const [loadedIngredients, loadedCategories, loadedSettings] = await Promise.all([
           getIngredients(),
           getRecipeCategories(),
+          loadSettings(),
         ]);
         if (!cancelled) {
           setIngredientOptions(
@@ -128,6 +144,7 @@ export default function AddRecipePage() {
           setRecipeCategories(
             Array.isArray(loadedCategories) ? loadedCategories : [],
           );
+          setCustomUnitConversions(loadedSettings.unitConversions ?? []);
         }
       } catch {
         // non-fatal — user can still type
@@ -146,7 +163,9 @@ export default function AddRecipePage() {
     return ingredientRows.reduce(
       (acc, row) => {
         const qty = Number(row.quantity) || 0;
-        const multiplier = qty / (row.portionAmount || 1);
+        const qtyInNativeUnit = convertUnits(qty, row.unit, row.nativeUnit, customUnitConversions);
+        const multiplier =
+          qtyInNativeUnit != null ? qtyInNativeUnit / (row.portionAmount || 1) : 0;
         return {
           calories: (acc.calories ?? 0) + (row.calories ?? 0) * multiplier,
           protein: (acc.protein ?? 0) + (row.protein ?? 0) * multiplier,
@@ -165,7 +184,7 @@ export default function AddRecipePage() {
         sodium: 0,
       } as RecipeNutrition,
     );
-  }, [ingredientRows]);
+  }, [ingredientRows, customUnitConversions]);
 
   const perServingNutrition = useMemo<RecipeNutrition>(() => {
     const s = Math.max(1, Number(servings) || 1);
@@ -178,6 +197,14 @@ export default function AddRecipePage() {
       sodium: round1((totalNutrition.sodium ?? 0) / s),
     };
   }, [totalNutrition, servings]);
+
+  const pickerRelatedUnits = useMemo(
+    () =>
+      pickerSelected?.unit
+        ? getRelatedUnits(pickerSelected.unit, customUnitConversions)
+        : [],
+    [pickerSelected, customUnitConversions],
+  );
 
   const hasNutritionData = ingredientRows.some(
     (row) =>
@@ -202,6 +229,9 @@ export default function AddRecipePage() {
       return;
     }
 
+    const nativeUnit = pickerSelected?.unit ?? "serving";
+    const unit = pickerUnit || nativeUnit;
+
     setIngredientRows((prev) => [
       ...prev,
       {
@@ -209,7 +239,8 @@ export default function AddRecipePage() {
         ingredientId: pickerIngredientId,
         ingredientName: pickerIngredientName,
         quantity: pickerQuantity,
-        unit: pickerSelected?.unit ?? "serving",
+        unit,
+        nativeUnit,
         portionAmount: pickerSelected?.portionAmount ?? 1,
         calories: pickerSelected?.calories ?? null,
         protein: pickerSelected?.protein ?? null,
@@ -223,6 +254,7 @@ export default function AddRecipePage() {
     setPickerIngredientId("");
     setPickerIngredientName("");
     setPickerQuantity("1");
+    setPickerUnit("");
     setPickerSelected(null);
   }
 
@@ -455,6 +487,7 @@ export default function AddRecipePage() {
                 if (value !== pickerIngredientName) {
                   setPickerIngredientId("");
                   setPickerSelected(null);
+                  setPickerUnit("");
                 }
                 setPickerIngredientName(value);
               }}
@@ -462,12 +495,13 @@ export default function AddRecipePage() {
                 setPickerIngredientId(option._id);
                 setPickerIngredientName(option.name);
                 setPickerSelected(option);
+                setPickerUnit(option.unit);
               }}
             />
 
             <View className="mt-3 flex-row items-end">
               <View className="mr-3 flex-1">
-                <FieldLabel text="Servings" />
+                <FieldLabel text="Amount" />
                 <FormInput
                   value={pickerQuantity}
                   placeholder="1"
@@ -477,11 +511,21 @@ export default function AddRecipePage() {
               </View>
 
               {pickerSelected?.unit ? (
-                <View className="mr-3 mb-1 rounded-2xl bg-slate-100 px-3 py-3">
-                  <Text className="text-sm text-slate-500">
-                    × {pickerSelected.unit}
-                  </Text>
-                </View>
+                pickerRelatedUnits.length > 1 ? (
+                  <View className="mr-3 mb-1">
+                    <UnitFamilyDropdown
+                      unit={pickerUnit || pickerSelected.unit}
+                      options={pickerRelatedUnits}
+                      onSelect={setPickerUnit}
+                    />
+                  </View>
+                ) : (
+                  <View className="mr-3 mb-1 rounded-2xl bg-slate-100 px-3 py-3">
+                    <Text className="text-sm text-slate-500">
+                      × {pickerSelected.unit}
+                    </Text>
+                  </View>
+                )
               ) : null}
 
               <Pressable
@@ -491,6 +535,22 @@ export default function AddRecipePage() {
                 <Text className="font-semibold text-white">Add</Text>
               </Pressable>
             </View>
+
+            {pickerSelected?.unit && pickerUnit && pickerUnit !== pickerSelected.unit ? (
+              <Text className="mt-2 text-xs text-slate-400">
+                {(() => {
+                  const converted = convertUnits(
+                    Number(pickerQuantity) || 0,
+                    pickerUnit,
+                    pickerSelected.unit,
+                    customUnitConversions,
+                  );
+                  return converted != null
+                    ? `≈ ${Math.round(converted * 1000) / 1000} ${pickerSelected.unit} — used for nutrition & stock checks`
+                    : "Can't convert to this ingredient's unit — nutrition and stock checks won't include this line";
+                })()}
+              </Text>
+            ) : null}
           </View>
 
           {/* Added ingredient rows */}

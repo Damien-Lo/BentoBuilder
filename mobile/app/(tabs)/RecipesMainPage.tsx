@@ -30,6 +30,9 @@ import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { deleteMeal, getMeals, type Meal } from "@/src/services/mealApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
+import { loadSettings } from "@/src/services/settingsService";
+import { convertUnits, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import { getIngredientStockInUnit } from "@/src/utils/ingredientStock";
 
 type SortMode = "category" | "meal";
 
@@ -58,11 +61,20 @@ function getMealLabel(mealCategory: MealCategory | MealCategory[]): string {
   return cats.map((c) => MEAL_CATEGORY_LABEL[c] ?? c).join(", ");
 }
 
+// Generic ingredients (e.g. "Soy Sauce") never hold pantry stock directly —
+// availability comes from aggregating their specific/branded variants (see
+// getIngredientStockInUnit) — and an ingredient marked "always available"
+// (e.g. tap water) always reads as sufficient regardless of pantry quantity.
+// A recipe line's unit also doesn't have to match how it's stocked (e.g. "2
+// cups" soy sauce checked against pantry stock recorded in mL), so both the
+// stock total and the low-stock threshold are converted at comparison time.
 function getMealAvailability(
   meal: Meal,
   recipeMap: Map<string, Recipe>,
   ingredientMap: Map<string, Ingredient>,
-  pantryStockMap: Map<string, number>,
+  allIngredients: Ingredient[],
+  pantryItems: PantryItem[],
+  customConversions: CustomUnitConversion[],
 ): "green" | "yellow" | "red" | null {
   if (!meal.courses?.length) return null;
   let overall: "green" | "yellow" | "red" | null = null;
@@ -78,9 +90,12 @@ function getMealAvailability(
         : (entry.ingredient as { _id: string })._id;
       const ing = ingredientMap.get(ingId);
       if (!ing) continue;
-      const inStock = pantryStockMap.get(ingId) ?? 0;
+      const inStock = getIngredientStockInUnit(ing, entry.unit, allIngredients, pantryItems, customConversions);
       const remaining = inStock - entry.quantity;
-      const threshold = ing.lowStockThreshold ?? 0;
+      const rawThreshold = ing.lowStockThreshold ?? 0;
+      const threshold = ing.defaultPortionUnit
+        ? (convertUnits(rawThreshold, ing.defaultPortionUnit, entry.unit, customConversions) ?? rawThreshold)
+        : rawThreshold;
       const state: "green" | "yellow" | "red" =
         remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
       if (overall === null) overall = state;
@@ -113,6 +128,7 @@ export default function RecipesMainPage() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+  const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchText, setSearchText] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
@@ -136,15 +152,17 @@ export default function RecipesMainPage() {
 
       async function load() {
         try {
-          const [loaded, loadedIngredients, loadedPantry] = await Promise.all([
+          const [loaded, loadedIngredients, loadedPantry, loadedSettings] = await Promise.all([
             getRecipes(),
             getIngredients(),
             getPantryItems(),
+            loadSettings(),
           ]);
           if (!cancelled) {
             setRecipes(Array.isArray(loaded) ? loaded : []);
             setIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
             setPantryItems(Array.isArray(loadedPantry) ? loadedPantry : []);
+            setCustomUnitConversions(loadedSettings.unitConversions ?? []);
           }
         } catch (error) {
           console.error("Error loading recipes:", error);
@@ -172,22 +190,6 @@ export default function RecipesMainPage() {
     () => new Map(recipes.map((r) => [r._id, r])),
     [recipes],
   );
-
-  const pantryStockMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const item of pantryItems) {
-      const raw = item.ingredient as unknown;
-      const ingId =
-        typeof raw === "string"
-          ? raw
-          : typeof raw === "object" && raw !== null && "_id" in raw
-            ? String((raw as Record<string, unknown>)._id)
-            : "";
-      if (!ingId) continue;
-      map.set(ingId, (map.get(ingId) ?? 0) + (item.quantityAvailable ?? 0));
-    }
-    return map;
-  }, [pantryItems]);
 
   // Reset to all collapsed when switching sort mode
   const handleSortMode = (mode: SortMode) => {
@@ -348,9 +350,12 @@ export default function RecipesMainPage() {
         : (entry.ingredient as { _id: string })._id;
       const ing = ingredientMap.get(ingId);
       if (!ing) continue;
-      const inStock = pantryStockMap.get(ingId) ?? 0;
+      const inStock = getIngredientStockInUnit(ing, entry.unit, ingredients, pantryItems, customUnitConversions);
       const remaining = inStock - entry.quantity;
-      const threshold = ing.lowStockThreshold ?? 0;
+      const rawThreshold = ing.lowStockThreshold ?? 0;
+      const threshold = ing.defaultPortionUnit
+        ? (convertUnits(rawThreshold, ing.defaultPortionUnit, entry.unit, customUnitConversions) ?? rawThreshold)
+        : rawThreshold;
       const state: "green" | "yellow" | "red" =
         remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
       if (availability === null) availability = state;
@@ -529,7 +534,7 @@ export default function RecipesMainPage() {
                     })()}
 
                     {(() => {
-                      const av = getMealAvailability(meal, recipeMap, ingredientMap, pantryStockMap);
+                      const av = getMealAvailability(meal, recipeMap, ingredientMap, ingredients, pantryItems, customUnitConversions);
                       const color = av === "green" ? "#34D399" : av === "yellow" ? "#FBBF24" : av === "red" ? "#F87171" : null;
                       return color ? <View className="ml-2 h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} /> : null;
                     })()}
@@ -811,7 +816,7 @@ export default function RecipesMainPage() {
                         </Text>
                       </View>
                       {(() => {
-                        const av = getMealAvailability(meal, recipeMap, ingredientMap, pantryStockMap);
+                        const av = getMealAvailability(meal, recipeMap, ingredientMap, ingredients, pantryItems, customUnitConversions);
                         const color = av === "green" ? "#34D399" : av === "yellow" ? "#FBBF24" : av === "red" ? "#F87171" : null;
                         return color ? <View className="mr-2 h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} /> : null;
                       })()}

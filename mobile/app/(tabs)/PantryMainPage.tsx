@@ -38,6 +38,10 @@ import {
 
 import { getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
+import { barcodesMatch } from "@/src/utils/barcode";
+import { loadSettings } from "@/src/services/settingsService";
+import { convertUnits, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import { daysUntil } from "@/src/utils/date";
 
 type ReferenceObject = {
   _id?: string;
@@ -181,6 +185,7 @@ export default function PantryMainPage() {
   const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
   const [groceryItems, setGroceryItems] = useState<GroceryItem[]>([]);
   const [newGroceryText, setNewGroceryText] = useState("");
+  const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
 
   const toggleLocation = (id: string) => {
     setExpandedLocations((prev) => {
@@ -236,11 +241,12 @@ export default function PantryMainPage() {
 
       async function loadPantryPage() {
         try {
-          const [loadedLocations, loadedPantryItems, loadedIngredients] =
+          const [loadedLocations, loadedPantryItems, loadedIngredients, loadedSettings] =
             await Promise.all([
               getStorageLocations(),
               getPantryItems(),
               getIngredients(),
+              loadSettings(),
             ]);
 
           if (cancelled) return;
@@ -248,6 +254,7 @@ export default function PantryMainPage() {
           setStorageLocations(Array.isArray(loadedLocations) ? loadedLocations : []);
           setPantryItems(Array.isArray(loadedPantryItems) ? loadedPantryItems : []);
           setIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
+          setCustomUnitConversions(loadedSettings.unitConversions ?? []);
         } catch (error) {
           console.error("Error loading pantry page:", error);
           if (!cancelled && showSpinner) {
@@ -305,17 +312,23 @@ export default function PantryMainPage() {
       if (!parentId) continue;
 
       const parent = ingredientById.get(parentId);
-      if (!parent || pantryItem.quantityUnit !== parent.defaultPortionUnit) {
-        continue;
-      }
+      if (!parent || !parent.defaultPortionUnit) continue;
+
+      const converted = convertUnits(
+        Number(pantryItem.quantityAvailable ?? 0),
+        pantryItem.quantityUnit,
+        parent.defaultPortionUnit,
+        customUnitConversions,
+      );
+      if (converted == null) continue;
 
       const entry = stats.get(parentId) ?? { total: 0, variantCount: 0 };
-      entry.total += Number(pantryItem.quantityAvailable ?? 0);
+      entry.total += converted;
       stats.set(parentId, entry);
     }
 
     return stats;
-  }, [ingredients, pantryItems, ingredientById]);
+  }, [ingredients, pantryItems, ingredientById, customUnitConversions]);
 
   const getStorageLocationName = (item: PantryItem): string => {
     const rawLocation = item.storageLocation as unknown;
@@ -477,8 +490,10 @@ export default function PantryMainPage() {
           (sum, p) => sum + Number(p.quantityAvailable ?? 0),
           0,
         );
-    const isInStock = totalQuantity > 0;
+    const isAlwaysAvailable = ingredientItem.isAlwaysAvailable ?? false;
+    const isInStock = isAlwaysAvailable || totalQuantity > 0;
     const isLowStock =
+      !isAlwaysAvailable &&
       isInStock &&
       ingredientItem.lowStockThreshold != null &&
       totalQuantity <= ingredientItem.lowStockThreshold;
@@ -551,21 +566,25 @@ export default function PantryMainPage() {
           <View className="items-end">
             <Text
               className={`text-sm font-semibold ${
-                isLowStock
-                  ? "text-amber-600"
-                  : isInStock
-                    ? "text-emerald-600"
-                    : "text-slate-400"
+                isAlwaysAvailable
+                  ? "text-blue-600"
+                  : isLowStock
+                    ? "text-amber-600"
+                    : isInStock
+                      ? "text-emerald-600"
+                      : "text-slate-400"
               }`}
             >
-              {isLowStock
-                ? "Low stock"
-                : isInStock
-                  ? "In stock"
-                  : "Out of stock"}
+              {isAlwaysAvailable
+                ? "Always available"
+                : isLowStock
+                  ? "Low stock"
+                  : isInStock
+                    ? "In stock"
+                    : "Out of stock"}
             </Text>
 
-            {isInStock ? (
+            {isInStock && !isAlwaysAvailable ? (
               <Text className="mt-1 text-sm text-slate-500">
                 {totalQuantity} {displayUnit}
               </Text>
@@ -725,11 +744,7 @@ export default function PantryMainPage() {
 
                         {!isCollapsed && group.items.map((pantryItem) => {
                           const ingName = getIngredientName(pantryItem);
-                          const expiryDate = pantryItem.expiryDate ? new Date(pantryItem.expiryDate) : null;
-                          const now = new Date();
-                          const daysUntilExpiry = expiryDate
-                            ? Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-                            : null;
+                          const daysUntilExpiry = daysUntil(pantryItem.expiryDate);
                           const expiryState =
                             daysUntilExpiry == null ? null :
                             daysUntilExpiry < 0 ? "expired" :
@@ -1433,7 +1448,7 @@ export default function PantryMainPage() {
           };
 
           if (scanContext === "pantry") {
-            const match = ingredients.find((i) => i.barcode === product.barcode);
+            const match = ingredients.find((i) => barcodesMatch(i.barcode, product.barcode));
             if (match) {
               router.push({
                 pathname: "/pantry/add_by_ingredient",

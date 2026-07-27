@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -23,6 +24,8 @@ import {
 } from "@/src/services/optionsApi";
 
 import { addIngredientToPantry } from "@/src/services/pantryApi";
+import { DurationExpiryInput, QuantityServingInput } from "@/src/components/forms";
+import { todayDateInputString } from "@/src/utils/date";
 
 type SelectedIngredientCardProps = {
   ingredient: Ingredient;
@@ -99,8 +102,9 @@ export default function AddPantryItemByIngredientScreen() {
   const [quantity, setQuantity] = useState("1");
   const [quantityUnit, setQuantityUnit] = useState("item");
   const [storageLocationId, setStorageLocationId] = useState(locationId ?? "");
+  const [purchaseDate, setPurchaseDate] = useState(todayDateInputString());
+  const [expiryDate, setExpiryDate] = useState("");
 
-  const [showUnitOptions, setShowUnitOptions] = useState(false);
   const [showLocationOptions, setShowLocationOptions] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -234,6 +238,8 @@ export default function AddPantryItemByIngredientScreen() {
         storageLocation: storageLocationId,
         quantityAvailable: parsedQuantity,
         quantityUnit: quantityUnit.trim(),
+        purchaseDate: purchaseDate.trim() || undefined,
+        expiryDate: expiryDate.trim() || undefined,
       });
 
       Alert.alert(
@@ -401,12 +407,12 @@ export default function AddPantryItemByIngredientScreen() {
           </View>
         ) : (
           <View className="flex-1 px-5 pt-5">
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <SelectedIngredientCard
               ingredient={selectedIngredient}
               onClear={() => {
                 setSelectedIngredient(null);
                 setShowLocationOptions(false);
-                setShowUnitOptions(false);
               }}
             />
 
@@ -415,66 +421,24 @@ export default function AddPantryItemByIngredientScreen() {
               Quantity
             </Text>
 
-            <View className="flex-row">
-              <TextInput
-                value={quantity}
-                onChangeText={setQuantity}
-                keyboardType="decimal-pad"
-                placeholder="1"
-                placeholderTextColor="#94A3B8"
-                className="mr-3 h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
-              />
-
-              <View className="relative flex-1">
-                <Pressable
-                  className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
-                  onPress={() => {
-                    setShowUnitOptions((current) => !current);
-                    setShowLocationOptions(false);
-                  }}
-                >
-                  <Text
-                    className={`flex-1 text-base ${
-                      quantityUnit ? "text-slate-950" : "text-slate-400"
-                    }`}
-                  >
-                    {quantityUnit || "Unit"}
-                  </Text>
-
-                  <Ionicons
-                    name={showUnitOptions ? "chevron-up" : "chevron-down"}
-                    size={18}
-                    color="#64748B"
-                  />
-                </Pressable>
-
-                {showUnitOptions && (
-                  <View
-                    className="absolute left-0 right-0 top-16 z-50 max-h-52 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
-                    style={{ elevation: 20 }}
-                  >
-                    <FlatList
-                      data={unitOptions}
-                      keyExtractor={(unit) => unit}
-                      keyboardShouldPersistTaps="handled"
-                      renderItem={({ item: unit }) => (
-                        <Pressable
-                          className="border-b border-slate-100 px-4 py-3"
-                          onPress={() => {
-                            setQuantityUnit(unit);
-                            setShowUnitOptions(false);
-                          }}
-                        >
-                          <Text className="text-base text-slate-800">
-                            {unit}
-                          </Text>
-                        </Pressable>
-                      )}
-                    />
-                  </View>
-                )}
-              </View>
-            </View>
+            <QuantityServingInput
+              quantityAvailable={quantity}
+              quantityUnit={quantityUnit}
+              onChangeQuantity={setQuantity}
+              onChangeUnit={setQuantityUnit}
+              unitOptions={unitOptions}
+              onAddUnit={(unit) => {
+                const trimmed = unit.trim();
+                if (!trimmed) return;
+                setUnitOptions((current) =>
+                  current.some((u) => u.toLowerCase() === trimmed.toLowerCase())
+                    ? current
+                    : [...current, trimmed].sort((a, b) => a.localeCompare(b)),
+                );
+              }}
+              defaultPortionAmount={selectedIngredient.defaultPortionAmount}
+              defaultPortionUnit={selectedIngredient.defaultPortionUnit}
+            />
 
             {/* Storage location */}
             <Text className="mb-2 mt-6 text-sm font-semibold text-slate-700">
@@ -486,7 +450,6 @@ export default function AddPantryItemByIngredientScreen() {
                 className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
                 onPress={() => {
                   setShowLocationOptions((current) => !current);
-                  setShowUnitOptions(false);
                 }}
               >
                 <Ionicons
@@ -539,7 +502,43 @@ export default function AddPantryItemByIngredientScreen() {
               )}
             </View>
 
-            <View className="mt-auto pb-6 pt-8">
+            {/* Dates */}
+            <View className="mt-6 flex-row">
+              <View className="mr-3 flex-1">
+                <Text className="mb-2 text-sm font-semibold text-slate-700">
+                  Purchase date
+                </Text>
+                <TextInput
+                  value={purchaseDate}
+                  onChangeText={setPurchaseDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+                />
+              </View>
+              <View className="flex-1">
+                <Text className="mb-2 text-sm font-semibold text-slate-700">
+                  Expiry date
+                </Text>
+                <TextInput
+                  value={expiryDate}
+                  onChangeText={setExpiryDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+                />
+              </View>
+            </View>
+
+            <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
+              Or set expiry from purchase date
+            </Text>
+            <DurationExpiryInput purchaseDate={purchaseDate} onApply={setExpiryDate} />
+          </ScrollView>
+
+            <View className="pb-6 pt-4">
               <Pressable
                 disabled={saving}
                 className={`h-14 items-center justify-center rounded-2xl ${

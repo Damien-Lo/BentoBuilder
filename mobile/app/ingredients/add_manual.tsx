@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   CreatableStringDropdown,
+  DurationExpiryInput,
   FieldLabel,
   FormInput,
   SearchableObjectDropdown,
@@ -43,6 +44,7 @@ import { createIngredient } from "@/src/services/ingredientApi";
 
 import type { IngredientOption, SelectOption } from "@/src/types/options";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
+import { todayDateInputString } from "@/src/utils/date";
 
 interface FormState {
   ingredientId: string;
@@ -104,7 +106,7 @@ const initialForm: FormState = {
 
   quantityAvailable: "",
   quantityUnit: "",
-  purchaseDate: new Date().toISOString().split("T")[0],
+  purchaseDate: todayDateInputString(),
   expiryDate: "",
   lowStockThreshold: "0",
 
@@ -1141,6 +1143,12 @@ export default function AddManualPantryItemScreen() {
                     keyboardType="numbers-and-punctuation"
                     autoCapitalize="none"
                     onChangeText={(value) => updateForm("expiryDate", value)}
+                  />
+
+                  <FieldLabel text="Or set expiry from purchase date" />
+                  <DurationExpiryInput
+                    purchaseDate={form.purchaseDate}
+                    onApply={(expiryDate) => updateForm("expiryDate", expiryDate)}
                   />
                 </>
               )}

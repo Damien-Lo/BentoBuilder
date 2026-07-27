@@ -17,8 +17,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   CreatableStringDropdown,
+  DurationExpiryInput,
   FieldLabel,
   FormInput,
+  QuantityServingInput,
   SearchableObjectDropdown,
   SectionTitle,
 } from "@/src/components/forms";
@@ -52,6 +54,7 @@ import type { PantryItem } from "@/src/types/pantry";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
+import { daysUntil, formatDateDisplay, todayDateInputString } from "@/src/utils/date";
 
 type ReferenceObject = { _id?: string; id?: string; name?: string };
 
@@ -73,14 +76,9 @@ function getReferenceId(value: unknown): string {
 }
 
 function formatDate(dateString: string | null | undefined): string {
-  if (!dateString) return "—";
-  const d = new Date(dateString);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return (
+    formatDateDisplay(dateString, { month: "short", day: "numeric", year: "numeric" }) ?? "—"
+  );
 }
 
 function optionalNumber(value: string): number | undefined {
@@ -100,6 +98,7 @@ interface FormState {
   defaultPortionUnit: string;
   barcode: string;
   lowStockThreshold: string;
+  alwaysAvailable: boolean;
   calories: string;
   protein: string;
   carbs: string;
@@ -126,6 +125,7 @@ function ingredientToForm(ingredient: Ingredient): FormState {
       ingredient.lowStockThreshold != null
         ? String(ingredient.lowStockThreshold)
         : "",
+    alwaysAvailable: ingredient.isAlwaysAvailable ?? false,
     calories:
       ingredient.nutrition?.calories != null
         ? String(ingredient.nutrition.calories)
@@ -174,13 +174,14 @@ export default function IngredientDetailScreen() {
   const [brandDraft, setBrandDraft] = useState("");
   const [categoryDraft, setCategoryDraft] = useState("");
   const [quickAddPurchaseDate, setQuickAddPurchaseDate] = useState(
-    new Date().toISOString().split("T")[0],
+    todayDateInputString(),
   );
   const [quickAddExpiryDate, setQuickAddExpiryDate] = useState("");
   const [quickAddLocationId, setQuickAddLocationId] = useState("");
   const [quickAddLocationName, setQuickAddLocationName] = useState("");
   const [quickAddLocationDraft, setQuickAddLocationDraft] = useState("");
   const [quickAddQuantity, setQuickAddQuantity] = useState("");
+  const [quickAddQuantityUnit, setQuickAddQuantityUnit] = useState("");
   const [savingEntry, setSavingEntry] = useState(false);
 
   const [genericAvailability, setGenericAvailability] =
@@ -283,6 +284,7 @@ export default function IngredientDetailScreen() {
     setQuickAddLocationId(locId);
     setQuickAddLocationName(locName);
     setQuickAddLocationDraft(locName);
+    setQuickAddQuantityUnit((current) => current || lastEntry.quantityUnit);
   }, [ingredientPantryItems, storageLocationById]);
 
   function getLocationName(item: PantryItem): string {
@@ -343,6 +345,7 @@ export default function IngredientDetailScreen() {
         defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
         defaultPortionUnit: form.defaultPortionUnit.trim() || undefined,
         lowStockThreshold: optionalNumber(form.lowStockThreshold),
+        isAlwaysAvailable: form.alwaysAvailable,
         nutrition: {
           calories: optionalNumber(form.calories),
           protein: optionalNumber(form.protein),
@@ -402,7 +405,7 @@ export default function IngredientDetailScreen() {
     return category;
   }
 
-  function handleAddUnit(unit: string) {
+  function registerUnit(unit: string) {
     const trimmed = unit.trim();
     if (!trimmed) return;
     setUnits((current) =>
@@ -410,7 +413,11 @@ export default function IngredientDetailScreen() {
         ? current
         : [...current, trimmed].sort((a, b) => a.localeCompare(b)),
     );
-    updateForm("defaultPortionUnit", trimmed);
+  }
+
+  function handleAddUnit(unit: string) {
+    registerUnit(unit);
+    updateForm("defaultPortionUnit", unit.trim());
   }
 
   async function handleDeleteEntry(entryId: string) {
@@ -473,14 +480,14 @@ export default function IngredientDetailScreen() {
         ingredient: id,
         storageLocation: storageLocation._id,
         quantityAvailable: quickAddQuantity ? Number(quickAddQuantity) : 0,
-        quantityUnit: lastEntry.quantityUnit,
+        quantityUnit: quickAddQuantityUnit.trim() || lastEntry.quantityUnit,
         purchaseDate: quickAddPurchaseDate || undefined,
         expiryDate: quickAddExpiryDate || undefined,
         lowStockThreshold: lastEntry.lowStockThreshold,
       });
 
       setPantryItems((current) => [...current, newEntry]);
-      setQuickAddPurchaseDate(new Date().toISOString().split("T")[0]);
+      setQuickAddPurchaseDate(todayDateInputString());
       setQuickAddExpiryDate("");
       setQuickAddQuantity("");
     } catch (err) {
@@ -541,12 +548,15 @@ export default function IngredientDetailScreen() {
   const totalQuantity = ingredient.isGeneric
     ? (genericAvailability?.totalInOwnUnit ?? 0)
     : ingredientPantryItems.reduce((sum, p) => sum + (p.quantityAvailable ?? 0), 0);
-  const isInStock = totalQuantity > 0;
-  const isLowStock = ingredient.isGeneric
-    ? (genericAvailability?.isLowStock ?? false)
-    : ingredient.lowStockThreshold != null &&
-      totalQuantity <= ingredient.lowStockThreshold &&
-      isInStock;
+  const isAlwaysAvailable = ingredient.isAlwaysAvailable ?? false;
+  const isInStock = isAlwaysAvailable || totalQuantity > 0;
+  const isLowStock =
+    !isAlwaysAvailable &&
+    (ingredient.isGeneric
+      ? (genericAvailability?.isLowStock ?? false)
+      : ingredient.lowStockThreshold != null &&
+        totalQuantity <= ingredient.lowStockThreshold &&
+        isInStock);
 
   return (
     <SafeAreaView
@@ -720,13 +730,42 @@ export default function IngredientDetailScreen() {
                 </View>
               </View>
 
-              <FieldLabel text="Low stock threshold" />
-              <FormInput
-                value={form.lowStockThreshold}
-                placeholder={`Alert when total falls below this (${form.defaultPortionUnit || "units"})`}
-                keyboardType="decimal-pad"
-                onChangeText={(v) => updateForm("lowStockThreshold", v)}
-              />
+              <Pressable
+                className="mt-5 flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4"
+                onPress={() => updateForm("alwaysAvailable", !form.alwaysAvailable)}
+              >
+                <View className="mr-3 flex-1">
+                  <Text className="font-semibold text-slate-900">Always available</Text>
+                  <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                    Never shows as low or out of stock (e.g. tap water) — skips stock
+                    tracking entirely.
+                  </Text>
+                </View>
+                <View
+                  className={`h-7 w-12 justify-center rounded-full px-1 ${
+                    form.alwaysAvailable ? "bg-blue-600" : "bg-slate-200"
+                  }`}
+                >
+                  <View
+                    className="h-5 w-5 rounded-full bg-white shadow"
+                    style={{
+                      transform: [{ translateX: form.alwaysAvailable ? 20 : 0 }],
+                    }}
+                  />
+                </View>
+              </Pressable>
+
+              {!form.alwaysAvailable && (
+                <>
+                  <FieldLabel text="Low stock threshold" />
+                  <FormInput
+                    value={form.lowStockThreshold}
+                    placeholder={`Alert when total falls below this (${form.defaultPortionUnit || "units"})`}
+                    keyboardType="decimal-pad"
+                    onChangeText={(v) => updateForm("lowStockThreshold", v)}
+                  />
+                </>
+              )}
 
               <SectionTitle
                 title="Nutrition per serving"
@@ -860,27 +899,33 @@ export default function IngredientDetailScreen() {
                 <View className="flex-1 items-center justify-center">
                   <View
                     className={`rounded-full px-3 py-1 ${
-                      isLowStock
-                        ? "bg-amber-50"
-                        : isInStock
-                          ? "bg-emerald-50"
-                          : "bg-slate-100"
+                      isAlwaysAvailable
+                        ? "bg-blue-50"
+                        : isLowStock
+                          ? "bg-amber-50"
+                          : isInStock
+                            ? "bg-emerald-50"
+                            : "bg-slate-100"
                     }`}
                   >
                     <Text
                       className={`text-sm font-semibold ${
-                        isLowStock
-                          ? "text-amber-600"
-                          : isInStock
-                            ? "text-emerald-600"
-                            : "text-slate-500"
+                        isAlwaysAvailable
+                          ? "text-blue-600"
+                          : isLowStock
+                            ? "text-amber-600"
+                            : isInStock
+                              ? "text-emerald-600"
+                              : "text-slate-500"
                       }`}
                     >
-                      {isLowStock
-                        ? "Low stock"
-                        : isInStock
-                          ? "In stock"
-                          : "Out of stock"}
+                      {isAlwaysAvailable
+                        ? "Always available"
+                        : isLowStock
+                          ? "Low stock"
+                          : isInStock
+                            ? "In stock"
+                            : "Out of stock"}
                     </Text>
                   </View>
                   <Text className="mt-1 text-xs text-slate-500">
@@ -1047,7 +1092,7 @@ export default function IngredientDetailScreen() {
               {loadingAvailability ? (
                 <ActivityIndicator className="mt-4" color="#7C3AED" />
               ) : (
-                ingredient.lowStockThreshold != null && (
+                !isAlwaysAvailable && ingredient.lowStockThreshold != null && (
                   <View
                     className={`mt-4 flex-row items-center self-start rounded-full px-3 py-1.5 ${
                       isLowStock ? "bg-amber-100" : "bg-slate-100"
@@ -1080,7 +1125,7 @@ export default function IngredientDetailScreen() {
                 <Text className="flex-1 text-base font-bold text-slate-900">
                   Pantry entries
                 </Text>
-                {ingredient.lowStockThreshold != null && (
+                {!isAlwaysAvailable && ingredient.lowStockThreshold != null && (
                   <View
                     className={`flex-row items-center rounded-full px-2.5 py-1 ${
                       isLowStock ? "bg-amber-100" : "bg-slate-100"
@@ -1119,14 +1164,10 @@ export default function IngredientDetailScreen() {
                 </View>
               ) : (
                 ingredientPantryItems.map((entry) => {
-                  const expiry = entry.expiryDate
-                    ? new Date(entry.expiryDate)
-                    : null;
-                  const isExpired = expiry != null && expiry < new Date();
+                  const daysToExpiry = daysUntil(entry.expiryDate);
+                  const isExpired = daysToExpiry != null && daysToExpiry < 0;
                   const isExpiringSoon =
-                    expiry != null &&
-                    !isExpired &&
-                    expiry.getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000;
+                    daysToExpiry != null && !isExpired && daysToExpiry < 7;
 
                   return (
                     <View key={entry._id} className="mb-3">
@@ -1229,41 +1270,40 @@ export default function IngredientDetailScreen() {
 
               {/* Quick-add new entry */}
               <View className="mt-1 rounded-3xl bg-white px-5 py-4 shadow-sm">
-                <View className="flex-row">
-                  <View className="mr-3 flex-[2]">
-                    <FieldLabel text="Storage location" />
-                    <SearchableObjectDropdown<SelectOption>
-                      options={storageLocations}
-                      selectedId={quickAddLocationId}
-                      selectedName={quickAddLocationName}
-                      placeholder="Search or type a new location"
-                      onTextChange={(value) => {
-                        if (value !== quickAddLocationName) {
-                          setQuickAddLocationId("");
-                        }
-                        setQuickAddLocationDraft(value);
-                      }}
-                      onSelect={(option) => {
-                        setQuickAddLocationId(option._id);
-                        setQuickAddLocationName(option.name);
-                        setQuickAddLocationDraft(option.name);
-                      }}
-                    />
-                  </View>
-                  <View className="flex-1">
-                    <FieldLabel text={`Qty (${ingredientPantryItems[0]?.quantityUnit ?? ""})`} />
-                    <TextInput
-                      className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900"
-                      placeholder="0"
-                      placeholderTextColor="#94a3b8"
-                      value={quickAddQuantity}
-                      onChangeText={setQuickAddQuantity}
-                      keyboardType="decimal-pad"
-                    />
-                  </View>
+                <FieldLabel text="Storage location" />
+                <SearchableObjectDropdown<SelectOption>
+                  options={storageLocations}
+                  selectedId={quickAddLocationId}
+                  selectedName={quickAddLocationName}
+                  placeholder="Search or type a new location"
+                  onTextChange={(value) => {
+                    if (value !== quickAddLocationName) {
+                      setQuickAddLocationId("");
+                    }
+                    setQuickAddLocationDraft(value);
+                  }}
+                  onSelect={(option) => {
+                    setQuickAddLocationId(option._id);
+                    setQuickAddLocationName(option.name);
+                    setQuickAddLocationDraft(option.name);
+                  }}
+                />
+
+                <View className="mt-3">
+                  <FieldLabel text="Quantity" />
+                  <QuantityServingInput
+                    quantityAvailable={quickAddQuantity}
+                    quantityUnit={quickAddQuantityUnit}
+                    onChangeQuantity={setQuickAddQuantity}
+                    onChangeUnit={setQuickAddQuantityUnit}
+                    unitOptions={units}
+                    onAddUnit={registerUnit}
+                    defaultPortionAmount={ingredient.defaultPortionAmount}
+                    defaultPortionUnit={ingredient.defaultPortionUnit}
+                  />
                 </View>
 
-                <View className="flex-row">
+                <View className="mt-3 flex-row">
                   <View className="mr-3 flex-1">
                     <FieldLabel text="Purchase date" />
                     <TextInput
@@ -1286,6 +1326,14 @@ export default function IngredientDetailScreen() {
                       keyboardType="numeric"
                     />
                   </View>
+                </View>
+
+                <View className="mt-2">
+                  <FieldLabel text="Or set expiry from purchase date" />
+                  <DurationExpiryInput
+                    purchaseDate={quickAddPurchaseDate}
+                    onApply={setQuickAddExpiryDate}
+                  />
                 </View>
 
                 <Pressable

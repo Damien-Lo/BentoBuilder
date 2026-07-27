@@ -1,6 +1,8 @@
 import express from "express";
 import Recipe from "../models/Recipe.js";
+import UserProfile from "../models/UserProfile.js";
 import { isRecipeIngredientAvailable } from "../services/ingredientAvailability.js";
+import { convertUnits } from "../services/unitConversion.js";
 
 const router = express.Router();
 
@@ -111,9 +113,15 @@ function normalizeMealCategory(body) {
   return body;
 }
 
-// Calculate per-serving nutrition from a populated recipe document.
+// Calculate per-serving nutrition from a populated recipe document. A
+// recipe line's unit doesn't have to match the ingredient's own unit (e.g.
+// "2 cups" soy sauce where the ingredient's serving is defined in mL) — it's
+// converted before applying the per-serving nutrition multiplier.
 // Returns null if no ingredient has nutrition data.
-function calcNutrition(recipe) {
+async function calcNutrition(recipe) {
+  const profile = await UserProfile.findOne().select("unitConversions").lean();
+  const customConversions = profile?.unitConversions ?? [];
+
   const servings = Math.max(1, recipe.servings || 1);
   let calories = 0, protein = 0, carbs = 0, fats = 0, fiber = 0, sodium = 0;
   let hasData = false;
@@ -121,7 +129,16 @@ function calcNutrition(recipe) {
   for (const entry of recipe.ingredientList) {
     const ing = entry.ingredient;
     if (!ing || typeof ing !== "object" || !ing.nutrition) continue;
-    const multiplier = entry.quantity / (ing.defaultPortionAmount || 1);
+
+    const quantityInNativeUnit = convertUnits(
+      entry.quantity,
+      entry.unit,
+      ing.defaultPortionUnit,
+      customConversions,
+    );
+    if (quantityInNativeUnit == null) continue;
+
+    const multiplier = quantityInNativeUnit / (ing.defaultPortionAmount || 1);
     calories += (ing.nutrition.calories || 0) * multiplier;
     protein  += (ing.nutrition.protein  || 0) * multiplier;
     carbs    += (ing.nutrition.carbs    || 0) * multiplier;
@@ -149,7 +166,7 @@ router.post("/", async (req, res) => {
       populate: [{ path: "category" }, { path: "brand" }],
     });
 
-    const nutrition = calcNutrition(recipe);
+    const nutrition = await calcNutrition(recipe);
     if (nutrition) {
       recipe.nutrition = nutrition;
       await recipe.save();
@@ -191,7 +208,7 @@ router.patch("/:id", async (req, res) => {
       });
     }
 
-    const nutrition = calcNutrition(recipe);
+    const nutrition = await calcNutrition(recipe);
     if (nutrition) {
       recipe.nutrition = nutrition;
       await recipe.save();

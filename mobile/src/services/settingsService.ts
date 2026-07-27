@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/src/config/api";
+import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 export interface AppSettings {
   displayName: string;
@@ -10,6 +11,8 @@ export interface AppSettings {
   dailySodiumLimit: number | null;
   // 0 = Sunday … 6 = Saturday, matching JS Date#getDay()
   weekStartDay: number;
+  // Custom conversions on top of the app's built-in mass/volume table.
+  unitConversions: CustomUnitConversion[];
 }
 
 const DEFAULTS: AppSettings = {
@@ -21,6 +24,7 @@ const DEFAULTS: AppSettings = {
   dailyFiberLimit: null,
   dailySodiumLimit: null,
   weekStartDay: 1,
+  unitConversions: [],
 };
 
 async function parseResponse<T>(res: Response): Promise<T> {
@@ -44,6 +48,7 @@ export async function loadSettings(): Promise<AppSettings> {
       dailyFiberLimit:   typeof d.dailyFiberLimit   === "number" ? d.dailyFiberLimit   : DEFAULTS.dailyFiberLimit,
       dailySodiumLimit:  typeof d.dailySodiumLimit  === "number" ? d.dailySodiumLimit  : DEFAULTS.dailySodiumLimit,
       weekStartDay:      typeof d.weekStartDay      === "number" ? d.weekStartDay      : DEFAULTS.weekStartDay,
+      unitConversions:   Array.isArray(d.unitConversions)        ? (d.unitConversions as CustomUnitConversion[]) : DEFAULTS.unitConversions,
     };
   } catch {
     return { ...DEFAULTS };

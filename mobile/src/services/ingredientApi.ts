@@ -35,6 +35,10 @@ export interface Ingredient {
 
   lowStockThreshold?: number;
 
+  // When true, this ingredient never shows as low/out of stock (e.g. tap
+  // water) — stock tracking is skipped for it entirely.
+  isAlwaysAvailable?: boolean;
+
   isArchived?: boolean;
 
   createdAt?: string;
@@ -67,6 +71,8 @@ export interface CreateIngredientInput {
 
   lowStockThreshold?: number;
 
+  isAlwaysAvailable?: boolean;
+
   isArchived?: boolean;
 }
 
@@ -75,6 +81,7 @@ export type UpdateIngredientInput = Partial<CreateIngredientInput>;
 export interface IngredientAvailability {
   ingredientId: string;
   isGeneric: boolean;
+  isAlwaysAvailable?: boolean;
   variantCount: number;
   unit?: string;
   totalInOwnUnit: number;

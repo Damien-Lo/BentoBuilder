@@ -19,11 +19,10 @@ import {
   getUnitSuggestions,
   type SelectOption,
 } from "@/src/services/optionsApi";
-import {
-  getPantryItemById,
-  updatePantryItem,
-} from "@/src/services/pantryApi";
+import { getPantryItemById, updatePantryItem } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
+import { DurationExpiryInput, QuantityServingInput } from "@/src/components/forms";
+import { toDateOnly } from "@/src/utils/date";
 
 type ReferenceObject = { _id?: string; id?: string; name?: string };
 
@@ -46,7 +45,10 @@ function getReferenceName(v: unknown): string {
 
 function getIngredientName(item: PantryItem): string {
   const ing = item.ingredient as unknown;
-  if (isReferenceObject(ing) && typeof (ing as ReferenceObject).name === "string") {
+  if (
+    isReferenceObject(ing) &&
+    typeof (ing as ReferenceObject).name === "string"
+  ) {
     return (ing as ReferenceObject).name!;
   }
   return "Unknown ingredient";
@@ -54,11 +56,6 @@ function getIngredientName(item: PantryItem): string {
 
 function getIngredientId(item: PantryItem): string {
   return getReferenceId(item.ingredient as unknown);
-}
-
-function toDateInput(dateStr: string | null | undefined): string {
-  if (!dateStr) return "";
-  return dateStr.slice(0, 10);
 }
 
 interface FormState {
@@ -77,8 +74,8 @@ function itemToForm(item: PantryItem): FormState {
     quantityUnit: item.quantityUnit ?? "",
     storageLocationId: getReferenceId(item.storageLocation as unknown),
     storageLocationName: getReferenceName(item.storageLocation as unknown),
-    purchaseDate: toDateInput(item.purchaseDate),
-    expiryDate: toDateInput(item.expiryDate),
+    purchaseDate: toDateOnly(item.purchaseDate),
+    expiryDate: toDateOnly(item.expiryDate),
     notes: item.notes ?? "",
   };
 }
@@ -95,7 +92,6 @@ export default function EditPantryItemScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [showUnitPicker, setShowUnitPicker] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
 
   useEffect(() => {
@@ -114,7 +110,9 @@ export default function EditPantryItemScreen() {
 
         setItem(loadedItem);
         setForm(itemToForm(loadedItem));
-        setStorageLocations(Array.isArray(loadedLocations) ? loadedLocations : []);
+        setStorageLocations(
+          Array.isArray(loadedLocations) ? loadedLocations : [],
+        );
         setUnitOptions(Array.isArray(loadedUnits) ? loadedUnits : []);
       } catch (err) {
         if (!cancelled) {
@@ -130,7 +128,9 @@ export default function EditPantryItemScreen() {
     }
 
     void load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   function update<K extends keyof FormState>(field: K, value: FormState[K]) {
@@ -225,7 +225,11 @@ export default function EditPantryItemScreen() {
 
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 60 }}
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingTop: 20,
+            paddingBottom: 60,
+          }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -259,57 +263,26 @@ export default function EditPantryItemScreen() {
           <Text className="mb-1.5 text-sm font-semibold text-slate-700">
             Quantity
           </Text>
-          <View className="mb-5 flex-row">
-            <TextInput
-              value={form.quantityAvailable}
-              onChangeText={(v) => update("quantityAvailable", v)}
-              keyboardType="decimal-pad"
-              placeholder="0"
-              placeholderTextColor="#94A3B8"
-              className="mr-3 h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+          <View className="mb-5">
+            <QuantityServingInput
+              quantityAvailable={form.quantityAvailable}
+              quantityUnit={form.quantityUnit}
+              onChangeQuantity={(v) => update("quantityAvailable", v)}
+              onChangeUnit={(v) => update("quantityUnit", v)}
+              unitOptions={unitOptions}
+              onAddUnit={(unit) => {
+                const trimmed = unit.trim();
+                if (!trimmed) return;
+                setUnitOptions((current) =>
+                  current.some((u) => u.toLowerCase() === trimmed.toLowerCase())
+                    ? current
+                    : [...current, trimmed].sort((a, b) => a.localeCompare(b)),
+                );
+              }}
+              defaultPortionAmount={item.ingredient?.defaultPortionAmount}
+              defaultPortionUnit={item.ingredient?.defaultPortionUnit}
+              initialMode="total"
             />
-
-            {/* Unit picker */}
-            <View className="relative flex-1">
-              <Pressable
-                className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
-                onPress={() => {
-                  setShowUnitPicker((v) => !v);
-                  setShowLocationPicker(false);
-                }}
-              >
-                <Text
-                  className={`flex-1 text-base ${form.quantityUnit ? "text-slate-950" : "text-slate-400"}`}
-                >
-                  {form.quantityUnit || "Unit"}
-                </Text>
-                <Ionicons
-                  name={showUnitPicker ? "chevron-up" : "chevron-down"}
-                  size={18}
-                  color="#64748B"
-                />
-              </Pressable>
-
-              {showUnitPicker && (
-                <View
-                  className="absolute left-0 right-0 top-16 z-50 max-h-52 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
-                  style={{ elevation: 20 }}
-                >
-                  {unitOptions.map((unit) => (
-                    <Pressable
-                      key={unit}
-                      className="border-b border-slate-100 px-4 py-3"
-                      onPress={() => {
-                        update("quantityUnit", unit);
-                        setShowUnitPicker(false);
-                      }}
-                    >
-                      <Text className="text-base text-slate-800">{unit}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
           </View>
 
           {/* Storage location */}
@@ -321,10 +294,13 @@ export default function EditPantryItemScreen() {
               className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
               onPress={() => {
                 setShowLocationPicker((v) => !v);
-                setShowUnitPicker(false);
               }}
             >
-              <Ionicons name="file-tray-stacked-outline" size={20} color="#64748B" />
+              <Ionicons
+                name="file-tray-stacked-outline"
+                size={20}
+                color="#64748B"
+              />
               <Text
                 className={`ml-3 flex-1 text-base ${form.storageLocationId ? "text-slate-950" : "text-slate-400"}`}
               >
@@ -387,6 +363,16 @@ export default function EditPantryItemScreen() {
                 className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
               />
             </View>
+          </View>
+
+          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
+            Set expiry from purchase date
+          </Text>
+          <View className="mb-5">
+            <DurationExpiryInput
+              purchaseDate={form.purchaseDate}
+              onApply={(expiryDate) => update("expiryDate", expiryDate)}
+            />
           </View>
 
           {/* Notes */}

@@ -23,6 +23,9 @@ export interface PopulatedIngredient {
   defaultPortionAmount?: number;
   defaultPortionUnit?: string;
   lowStockThreshold?: number | null;
+  isGeneric?: boolean;
+  isAlwaysAvailable?: boolean;
+  genericParent?: string | { _id: string; name?: string } | null;
 }
 
 export interface RecipeIngredientEntry {
