@@ -477,7 +477,10 @@ export default function PantryMainPage() {
     );
   };
 
-  function renderIngredientCard(ingredientItem: Ingredient) {
+  // `isChild` renders a variant nested under a generic's header row — no
+  // icon or card chrome, just a slim line, so a generic with its branded
+  // variants reads as one grouped unit instead of N duplicate-looking cards.
+  function renderIngredientCard(ingredientItem: Ingredient, isChild = false) {
     const ingredientPantryItems = pantryItems.filter(
       (p) => getReferenceId(p.ingredient as unknown) === ingredientItem._id,
     );
@@ -504,24 +507,78 @@ export default function PantryMainPage() {
       ...new Set(ingredientPantryItems.map((p) => getStorageLocationName(p))),
     ].join(", ");
 
+    const statusDotColor = isAlwaysAvailable
+      ? "bg-blue-500"
+      : isLowStock
+        ? "bg-amber-500"
+        : isInStock
+          ? "bg-emerald-500"
+          : "bg-slate-300";
+
+    const deleteAction = (
+      <Pressable
+        className={`items-center justify-center bg-red-500 active:bg-red-600 ${
+          isChild ? "mb-2 w-16 rounded-2xl" : "mb-3 w-20 rounded-3xl"
+        }`}
+        onPress={() => handleDeleteIngredient(ingredientItem._id, ingredientItem.name)}
+      >
+        <Ionicons name="trash-outline" size={isChild ? 18 : 22} color="white" />
+      </Pressable>
+    );
+
+    if (isChild) {
+      const brandName = getReferenceName(ingredientItem.brand);
+      const subtitle = [brandName, locationNames].filter(Boolean).join(" · ");
+
+      return (
+        <ReanimatedSwipeable
+          key={ingredientItem._id}
+          friction={2}
+          rightThreshold={40}
+          renderLeftActions={() => deleteAction}
+        >
+          <Pressable
+            className="mb-2 flex-row items-center rounded-2xl bg-white px-3.5 py-2.5 shadow-sm active:bg-slate-50"
+            onPress={() => {
+              router.push({
+                pathname: "/ingredients/edit/[id]",
+                params: { id: ingredientItem._id },
+              });
+            }}
+          >
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-slate-800" numberOfLines={1}>
+                {ingredientItem.name}
+              </Text>
+              {subtitle ? (
+                <Text className="mt-0.5 text-xs text-slate-400" numberOfLines={1}>
+                  {subtitle}
+                </Text>
+              ) : null}
+            </View>
+
+            <View className="flex-row items-center">
+              <View className={`mr-2 h-2 w-2 rounded-full ${statusDotColor}`} />
+              <Text className="text-sm text-slate-500">
+                {isInStock ? `${totalQuantity} ${displayUnit ?? ""}`.trim() : "—"}
+              </Text>
+            </View>
+
+            <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 8 }} />
+          </Pressable>
+        </ReanimatedSwipeable>
+      );
+    }
+
     return (
       <ReanimatedSwipeable
         key={ingredientItem._id}
         friction={2}
         rightThreshold={40}
-        renderLeftActions={() => (
-          <Pressable
-            className="mb-3 w-20 items-center justify-center rounded-3xl bg-red-500 active:bg-red-600"
-            onPress={() =>
-              handleDeleteIngredient(ingredientItem._id, ingredientItem.name)
-            }
-          >
-            <Ionicons name="trash-outline" size={22} color="white" />
-          </Pressable>
-        )}
+        renderLeftActions={() => deleteAction}
       >
         <Pressable
-          className="mb-3 flex-row items-center rounded-3xl bg-white p-4 shadow-sm"
+          className="mb-3 flex-row items-center rounded-3xl bg-white px-4 py-2.5 shadow-sm"
           onPress={() => {
             router.push({
               pathname: "/ingredients/edit/[id]",
@@ -529,23 +586,29 @@ export default function PantryMainPage() {
             });
           }}
         >
-          <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
-            <Ionicons name="nutrition-outline" size={23} color="#2563EB" />
+          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-blue-100">
+            <Ionicons name="nutrition-outline" size={20} color="#2563EB" />
           </View>
 
           <View className="ml-4 flex-1">
-            <Text
-              className="text-base font-bold text-slate-900"
-              numberOfLines={1}
-            >
-              {ingredientItem.name}
-            </Text>
-
-            {ingredientItem.isGeneric ? (
-              <Text className="mt-1 text-sm font-medium text-violet-600">
-                Generic
+            <View className="flex-row flex-wrap items-center">
+              <Text
+                className="text-base font-bold text-slate-900"
+                numberOfLines={1}
+              >
+                {ingredientItem.name}
               </Text>
-            ) : (
+
+              {ingredientItem.isGeneric && (
+                <View className="ml-2 rounded-full bg-violet-50 px-2 py-0.5">
+                  <Text className="text-[10px] font-bold uppercase tracking-wide text-violet-600">
+                    Generic
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {!ingredientItem.isGeneric &&
               (() => {
                 const brandName = getReferenceName(ingredientItem.brand);
                 const subtitle = [brandName, locationNames]
@@ -559,8 +622,7 @@ export default function PantryMainPage() {
                     {subtitle}
                   </Text>
                 ) : null;
-              })()
-            )}
+              })()}
           </View>
 
           <View className="items-end">
@@ -871,16 +933,8 @@ export default function PantryMainPage() {
                             {renderIngredientCard(parent)}
 
                             {children.length > 0 && (
-                              <View className="ml-6 border-l-2 border-slate-200 pl-4">
-                                {children.map((child) => (
-                                  <View key={child._id} className="relative">
-                                    <View
-                                      className="absolute -left-4 h-px w-4 bg-slate-200"
-                                      style={{ top: 30 }}
-                                    />
-                                    {renderIngredientCard(child)}
-                                  </View>
-                                ))}
+                              <View className="mb-1 ml-6 border-l-2 border-slate-100 pl-4">
+                                {children.map((child) => renderIngredientCard(child, true))}
                               </View>
                             )}
                           </View>
