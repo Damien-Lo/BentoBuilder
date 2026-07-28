@@ -70,7 +70,7 @@ router.get("/", async (req, res) => {
     })
       .populate("category")
       .populate("brand")
-      .populate("genericParent")
+      .populate("genericParent").populate("defaultStorageLocation")
       .sort({ name: 1 });
 
     return res.status(200).json({
@@ -97,7 +97,7 @@ router.get("/:id", async (req, res) => {
     const ingredient = await Ingredient.findById(req.params.id)
       .populate("category")
       .populate("brand")
-      .populate("genericParent");
+      .populate("genericParent").populate("defaultStorageLocation");
 
     if (!ingredient) {
       return res.status(404).json({
@@ -177,7 +177,7 @@ router.post("/", async (req, res) => {
     const ingredient = await Ingredient.create(ingredientData);
     await ingredient.populate("category");
     await ingredient.populate("brand");
-    await ingredient.populate("genericParent");
+    await ingredient.populate("genericParent").populate("defaultStorageLocation");
 
     return res.status(201).json({
       success: true,
@@ -216,7 +216,7 @@ router.patch("/:id", async (req, res) => {
     )
       .populate("category")
       .populate("brand")
-      .populate("genericParent");
+      .populate("genericParent").populate("defaultStorageLocation");
 
     if (!ingredient) {
       return res.status(404).json({

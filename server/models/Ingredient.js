@@ -120,6 +120,29 @@ const ingredientSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Where a new pantry entry for this ingredient usually goes — prefills
+    // (doesn't force) the storage location when logging a purchase.
+    defaultStorageLocation: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "StorageLocation",
+      default: null,
+    },
+
+    // How long a pantry entry of this ingredient usually lasts, e.g. "2
+    // weeks" — prefills the expiry date (purchaseDate + this duration) when
+    // logging a purchase. Both fields are set together or not at all.
+    defaultExpiryDurationAmount: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+
+    defaultExpiryDurationUnit: {
+      type: String,
+      enum: ["day", "week", "month", "year", null],
+      default: null,
+    },
+
     imageUrl: {
       type: String,
       trim: true,

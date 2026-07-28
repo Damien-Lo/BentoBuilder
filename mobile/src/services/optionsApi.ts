@@ -118,6 +118,14 @@ export async function createStorageLocation(
   return result.data;
 }
 
+export async function deleteStorageLocation(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/storage-locations/${id}`, {
+    method: "DELETE",
+  });
+
+  await parseResponse<{ success: boolean; message: string }>(response);
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                   Brands                                   */
 /* -------------------------------------------------------------------------- */

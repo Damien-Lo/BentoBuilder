@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,11 +18,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   CreatableStringDropdown,
   DurationExpiryInput,
+  DurationValueInput,
   FieldLabel,
   FormInput,
   QuantityServingInput,
   SearchableObjectDropdown,
   SectionTitle,
+  ToggleRow,
 } from "@/src/components/forms";
 
 import {
@@ -54,7 +56,22 @@ import type { PantryItem } from "@/src/types/pantry";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
-import { daysUntil, formatDateDisplay, todayDateInputString } from "@/src/utils/date";
+import {
+  addDurationToDate,
+  daysUntil,
+  formatDateDisplay,
+  todayDateInputString,
+  type DurationUnit,
+} from "@/src/utils/date";
+import {
+  recentPantryEntries,
+  suggestExpiryDuration,
+  suggestStorageLocation,
+} from "@/src/utils/pantryDefaults";
+
+// How many of the ingredient's most recent pantry entries to consider when
+// suggesting a default storage location / expiry duration.
+const HISTORY_WINDOW = 20;
 
 type ReferenceObject = { _id?: string; id?: string; name?: string };
 
@@ -87,6 +104,12 @@ function optionalNumber(value: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function hasNutritionData(form: FormState): boolean {
+  return [form.calories, form.protein, form.carbs, form.fats, form.fiber, form.sodium].some(
+    (value) => value.trim() !== "",
+  );
+}
+
 interface FormState {
   name: string;
   description: string;
@@ -99,6 +122,10 @@ interface FormState {
   barcode: string;
   lowStockThreshold: string;
   alwaysAvailable: boolean;
+  defaultStorageLocationId: string;
+  defaultStorageLocationName: string;
+  defaultExpiryDurationAmount: string;
+  defaultExpiryDurationUnit: DurationUnit;
   calories: string;
   protein: string;
   carbs: string;
@@ -126,6 +153,13 @@ function ingredientToForm(ingredient: Ingredient): FormState {
         ? String(ingredient.lowStockThreshold)
         : "",
     alwaysAvailable: ingredient.isAlwaysAvailable ?? false,
+    defaultStorageLocationId: getReferenceId(ingredient.defaultStorageLocation),
+    defaultStorageLocationName: getReferenceName(ingredient.defaultStorageLocation),
+    defaultExpiryDurationAmount:
+      ingredient.defaultExpiryDurationAmount != null
+        ? String(ingredient.defaultExpiryDurationAmount)
+        : "",
+    defaultExpiryDurationUnit: ingredient.defaultExpiryDurationUnit ?? "week",
     calories:
       ingredient.nutrition?.calories != null
         ? String(ingredient.nutrition.calories)
@@ -173,13 +207,20 @@ export default function IngredientDetailScreen() {
   const [form, setForm] = useState<FormState | null>(null);
   const [brandDraft, setBrandDraft] = useState("");
   const [categoryDraft, setCategoryDraft] = useState("");
+  const [defaultLocationDraft, setDefaultLocationDraft] = useState("");
+  const [wantsDefaultLocation, setWantsDefaultLocation] = useState(false);
+  const [wantsDefaultExpiry, setWantsDefaultExpiry] = useState(false);
+  const [nutritionExpanded, setNutritionExpanded] = useState(false);
+  const [smartDefaultsExpanded, setSmartDefaultsExpanded] = useState(false);
   const [quickAddPurchaseDate, setQuickAddPurchaseDate] = useState(
     todayDateInputString(),
   );
   const [quickAddExpiryDate, setQuickAddExpiryDate] = useState("");
+  const [quickAddExpiryTouched, setQuickAddExpiryTouched] = useState(false);
   const [quickAddLocationId, setQuickAddLocationId] = useState("");
   const [quickAddLocationName, setQuickAddLocationName] = useState("");
   const [quickAddLocationDraft, setQuickAddLocationDraft] = useState("");
+  const [quickAddLocationTouched, setQuickAddLocationTouched] = useState(false);
   const [quickAddQuantity, setQuickAddQuantity] = useState("");
   const [quickAddQuantityUnit, setQuickAddQuantityUnit] = useState("");
   const [savingEntry, setSavingEntry] = useState(false);
@@ -219,6 +260,13 @@ export default function IngredientDetailScreen() {
         setForm(loadedForm);
         setBrandDraft(loadedForm.brandName);
         setCategoryDraft(loadedForm.categoryName);
+        setDefaultLocationDraft(loadedForm.defaultStorageLocationName);
+        setWantsDefaultLocation(!!loadedForm.defaultStorageLocationId);
+        setWantsDefaultExpiry(!!loadedForm.defaultExpiryDurationAmount);
+        setNutritionExpanded(hasNutritionData(loadedForm));
+        setSmartDefaultsExpanded(
+          !!loadedForm.defaultStorageLocationId || !!loadedForm.defaultExpiryDurationAmount,
+        );
 
         if (loadedIngredient.isGeneric) {
           setLoadingAvailability(true);
@@ -276,23 +324,112 @@ export default function IngredientDetailScreen() {
   useEffect(() => {
     const lastEntry = ingredientPantryItems[0];
     if (!lastEntry) return;
-    const locId = getReferenceId(lastEntry.storageLocation as unknown);
-    const locName =
-      getReferenceName(lastEntry.storageLocation as unknown) ||
-      storageLocationById.get(locId)?.name ||
-      "";
-    setQuickAddLocationId(locId);
-    setQuickAddLocationName(locName);
-    setQuickAddLocationDraft(locName);
     setQuickAddQuantityUnit((current) => current || lastEntry.quantityUnit);
-  }, [ingredientPantryItems, storageLocationById]);
+  }, [ingredientPantryItems]);
 
-  function getLocationName(item: PantryItem): string {
-    const raw = item.storageLocation as unknown;
-    const populated = getReferenceName(raw);
-    if (populated) return populated;
-    const locId = getReferenceId(raw);
-    return storageLocationById.get(locId)?.name ?? "Unknown location";
+  const getLocationName = useCallback(
+    (item: PantryItem): string => {
+      const raw = item.storageLocation as unknown;
+      const populated = getReferenceName(raw);
+      if (populated) return populated;
+      const locId = getReferenceId(raw);
+      return storageLocationById.get(locId)?.name ?? "Unknown location";
+    },
+    [storageLocationById],
+  );
+
+  // Most recently logged pantry entries for this ingredient — the basis for
+  // both "smart default" suggestions below.
+  const recentPantryHistory = useMemo(
+    () => recentPantryEntries(ingredientPantryItems, HISTORY_WINDOW),
+    [ingredientPantryItems],
+  );
+
+  // The most frequently used storage location across recent entries, or
+  // null if there's no history yet to suggest from.
+  const suggestedLocation = useMemo(
+    () => suggestStorageLocation(recentPantryHistory),
+    [recentPantryHistory],
+  );
+
+  // The average expiry duration across recent entries that have both a
+  // purchase and expiry date, rounded to the nearest whole unit.
+  const suggestedExpiryDuration = useMemo(
+    () => suggestExpiryDuration(recentPantryHistory),
+    [recentPantryHistory],
+  );
+
+  // What actually drives quick-add's location auto-fill: the ingredient's
+  // own saved default location if one has been set (typed or accepted via
+  // Autofill), otherwise the live suggestion computed from history.
+  const effectiveLocation = useMemo(() => {
+    const savedDefault = currentIngredient?.defaultStorageLocation as unknown;
+    const savedDefaultId = getReferenceId(savedDefault);
+    if (savedDefaultId) {
+      const name =
+        getReferenceName(savedDefault) ||
+        storageLocationById.get(savedDefaultId)?.name ||
+        "";
+      return { id: savedDefaultId, name };
+    }
+    return suggestedLocation;
+  }, [currentIngredient, suggestedLocation, storageLocationById]);
+
+  // Keeps quick-add's storage location in sync with whichever location is
+  // effective — but only until the user picks/types one themselves, at
+  // which point their input always wins.
+  useEffect(() => {
+    if (quickAddLocationTouched || !effectiveLocation) return;
+
+    setQuickAddLocationId(effectiveLocation.id);
+    setQuickAddLocationName(effectiveLocation.name);
+    setQuickAddLocationDraft(effectiveLocation.name);
+  }, [effectiveLocation, quickAddLocationTouched]);
+
+  // What actually drives quick-add's expiry auto-fill: the ingredient's own
+  // saved default duration if one has been set (typed or accepted via
+  // Autofill), otherwise the live suggestion computed from history.
+  const effectiveExpiryDuration = useMemo(() => {
+    if (
+      currentIngredient?.defaultExpiryDurationAmount != null &&
+      currentIngredient.defaultExpiryDurationUnit
+    ) {
+      return {
+        amount: currentIngredient.defaultExpiryDurationAmount,
+        unit: currentIngredient.defaultExpiryDurationUnit,
+      };
+    }
+    return suggestedExpiryDuration;
+  }, [currentIngredient, suggestedExpiryDuration]);
+
+  // Keeps quick-add's expiry date in sync with the purchase date using
+  // whichever duration is effective — but only until the user edits the
+  // expiry field themselves, at which point their input always wins.
+  useEffect(() => {
+    if (quickAddExpiryTouched || !effectiveExpiryDuration) return;
+
+    setQuickAddExpiryDate(
+      addDurationToDate(
+        quickAddPurchaseDate,
+        effectiveExpiryDuration.amount,
+        effectiveExpiryDuration.unit,
+      ),
+    );
+  }, [quickAddPurchaseDate, effectiveExpiryDuration, quickAddExpiryTouched]);
+
+  function handleAutofillLocation() {
+    if (!suggestedLocation) return;
+    updateForm("defaultStorageLocationId", suggestedLocation.id);
+    updateForm("defaultStorageLocationName", suggestedLocation.name);
+    setDefaultLocationDraft(suggestedLocation.name);
+    setWantsDefaultLocation(true);
+  }
+
+  function handleAutofillExpiryDuration() {
+    if (!suggestedExpiryDuration) return;
+    updateForm("defaultExpiryDurationAmount", String(suggestedExpiryDuration.amount));
+    updateForm("defaultExpiryDurationUnit", suggestedExpiryDuration.unit);
+    setWantsDefaultExpiry(true);
   }
 
   function updateForm<K extends keyof FormState>(
@@ -308,6 +445,13 @@ export default function IngredientDetailScreen() {
       setForm(revertedForm);
       setBrandDraft(revertedForm.brandName);
       setCategoryDraft(revertedForm.categoryName);
+      setDefaultLocationDraft(revertedForm.defaultStorageLocationName);
+      setWantsDefaultLocation(!!revertedForm.defaultStorageLocationId);
+      setWantsDefaultExpiry(!!revertedForm.defaultExpiryDurationAmount);
+      setNutritionExpanded(hasNutritionData(revertedForm));
+      setSmartDefaultsExpanded(
+        !!revertedForm.defaultStorageLocationId || !!revertedForm.defaultExpiryDurationAmount,
+      );
     }
     setIsEditing(false);
   }
@@ -336,6 +480,22 @@ export default function IngredientDetailScreen() {
         handleCreateCategory,
       );
 
+      // Only resolved when the user opted in — leaving the toggle off always
+      // clears the value, even if a field still has leftover typed text.
+      const defaultStorageLocation =
+        wantsDefaultLocation && !currentIngredient?.isGeneric
+          ? await resolveOrCreateOption(
+              storageLocations,
+              form.defaultStorageLocationId,
+              defaultLocationDraft,
+              handleCreateStorageLocation,
+            )
+          : null;
+
+      const defaultExpiryDurationAmount = wantsDefaultExpiry
+        ? optionalNumber(form.defaultExpiryDurationAmount)
+        : undefined;
+
       const updated = await updateIngredient(id, {
         name: form.name.trim(),
         description: form.description.trim() || undefined,
@@ -346,6 +506,10 @@ export default function IngredientDetailScreen() {
         defaultPortionUnit: form.defaultPortionUnit.trim() || undefined,
         lowStockThreshold: optionalNumber(form.lowStockThreshold),
         isAlwaysAvailable: form.alwaysAvailable,
+        defaultStorageLocation: defaultStorageLocation?._id || null,
+        defaultExpiryDurationAmount: defaultExpiryDurationAmount ?? null,
+        defaultExpiryDurationUnit:
+          defaultExpiryDurationAmount != null ? form.defaultExpiryDurationUnit : null,
         nutrition: {
           calories: optionalNumber(form.calories),
           protein: optionalNumber(form.protein),
@@ -361,6 +525,13 @@ export default function IngredientDetailScreen() {
       setForm(updatedForm);
       setBrandDraft(updatedForm.brandName);
       setCategoryDraft(updatedForm.categoryName);
+      setDefaultLocationDraft(updatedForm.defaultStorageLocationName);
+      setWantsDefaultLocation(!!updatedForm.defaultStorageLocationId);
+      setWantsDefaultExpiry(!!updatedForm.defaultExpiryDurationAmount);
+      setNutritionExpanded(hasNutritionData(updatedForm));
+      setSmartDefaultsExpanded(
+        !!updatedForm.defaultStorageLocationId || !!updatedForm.defaultExpiryDurationAmount,
+      );
       setIsEditing(false);
     } catch (err) {
       const message =
@@ -489,6 +660,8 @@ export default function IngredientDetailScreen() {
       setPantryItems((current) => [...current, newEntry]);
       setQuickAddPurchaseDate(todayDateInputString());
       setQuickAddExpiryDate("");
+      setQuickAddExpiryTouched(false);
+      setQuickAddLocationTouched(false);
       setQuickAddQuantity("");
     } catch (err) {
       const message =
@@ -643,7 +816,14 @@ export default function IngredientDetailScreen() {
                 </View>
               )}
 
-              <FieldLabel text="Ingredient name" required />
+              <SectionTitle
+                first
+                icon="pricetag-outline"
+                title="Ingredient"
+                description="What it is, and how it's categorized."
+              />
+
+              <FieldLabel text="Name" required />
               <FormInput
                 value={form.name}
                 placeholder="e.g. Rolled oats"
@@ -709,6 +889,12 @@ export default function IngredientDetailScreen() {
                 onChangeText={(v) => updateForm("barcode", v)}
               />
 
+              <SectionTitle
+                icon="scale-outline"
+                title="Serving & stock"
+                description="Define a serving size and when to flag low stock."
+              />
+
               <View className="flex-row">
                 <View className="mr-3 flex-1">
                   <FieldLabel text="Default portion" />
@@ -730,30 +916,12 @@ export default function IngredientDetailScreen() {
                 </View>
               </View>
 
-              <Pressable
-                className="mt-5 flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4"
-                onPress={() => updateForm("alwaysAvailable", !form.alwaysAvailable)}
-              >
-                <View className="mr-3 flex-1">
-                  <Text className="font-semibold text-slate-900">Always available</Text>
-                  <Text className="mt-0.5 text-xs leading-4 text-slate-500">
-                    Never shows as low or out of stock (e.g. tap water) — skips stock
-                    tracking entirely.
-                  </Text>
-                </View>
-                <View
-                  className={`h-7 w-12 justify-center rounded-full px-1 ${
-                    form.alwaysAvailable ? "bg-blue-600" : "bg-slate-200"
-                  }`}
-                >
-                  <View
-                    className="h-5 w-5 rounded-full bg-white shadow"
-                    style={{
-                      transform: [{ translateX: form.alwaysAvailable ? 20 : 0 }],
-                    }}
-                  />
-                </View>
-              </Pressable>
+              <ToggleRow
+                label="Always available"
+                description="Never shows as low or out of stock (e.g. tap water) — skips stock tracking entirely."
+                value={form.alwaysAvailable}
+                onChange={(v) => updateForm("alwaysAvailable", v)}
+              />
 
               {!form.alwaysAvailable && (
                 <>
@@ -767,73 +935,203 @@ export default function IngredientDetailScreen() {
                 </>
               )}
 
-              <SectionTitle
-                title="Nutrition per serving"
-                description="Optional nutrition values for one serving."
-              />
+              <Pressable
+                className="mt-8 flex-row items-center justify-between"
+                onPress={() => setNutritionExpanded((current) => !current)}
+              >
+                <View className="mr-3 flex-1 flex-row items-center">
+                  <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                    <Ionicons name="nutrition-outline" size={18} color="#2563EB" />
+                  </View>
 
-              <View className="flex-row">
-                <View className="mr-3 flex-1">
-                  <FieldLabel text="Calories" />
-                  <FormInput
-                    value={form.calories}
-                    placeholder="N/A"
-                    keyboardType="decimal-pad"
-                    onChangeText={(v) => updateForm("calories", v)}
-                  />
+                  <View className="flex-1">
+                    <Text className="text-base font-bold text-slate-950">
+                      Nutrition per serving
+                    </Text>
+                    <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                      Optional — add now, or fill in later.
+                    </Text>
+                  </View>
                 </View>
-                <View className="flex-1">
-                  <FieldLabel text="Protein (g)" />
-                  <FormInput
-                    value={form.protein}
-                    placeholder="N/A"
-                    keyboardType="decimal-pad"
-                    onChangeText={(v) => updateForm("protein", v)}
-                  />
-                </View>
-              </View>
 
-              <View className="flex-row">
-                <View className="mr-3 flex-1">
-                  <FieldLabel text="Carbs (g)" />
-                  <FormInput
-                    value={form.carbs}
-                    placeholder="N/A"
-                    keyboardType="decimal-pad"
-                    onChangeText={(v) => updateForm("carbs", v)}
-                  />
-                </View>
-                <View className="flex-1">
-                  <FieldLabel text="Fats (g)" />
-                  <FormInput
-                    value={form.fats}
-                    placeholder="N/A"
-                    keyboardType="decimal-pad"
-                    onChangeText={(v) => updateForm("fats", v)}
-                  />
-                </View>
-              </View>
+                <Ionicons
+                  name={nutritionExpanded ? "chevron-up" : "chevron-down"}
+                  size={22}
+                  color="#64748B"
+                />
+              </Pressable>
 
-              <View className="flex-row">
-                <View className="mr-3 flex-1">
-                  <FieldLabel text="Fiber (g)" />
-                  <FormInput
-                    value={form.fiber}
-                    placeholder="N/A"
-                    keyboardType="decimal-pad"
-                    onChangeText={(v) => updateForm("fiber", v)}
-                  />
+              {nutritionExpanded && (
+                <>
+                  <View className="mt-4 flex-row">
+                    <View className="mr-3 flex-1">
+                      <FieldLabel text="Calories" />
+                      <FormInput
+                        value={form.calories}
+                        placeholder="N/A"
+                        keyboardType="decimal-pad"
+                        onChangeText={(v) => updateForm("calories", v)}
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <FieldLabel text="Protein (g)" />
+                      <FormInput
+                        value={form.protein}
+                        placeholder="N/A"
+                        keyboardType="decimal-pad"
+                        onChangeText={(v) => updateForm("protein", v)}
+                      />
+                    </View>
+                  </View>
+
+                  <View className="flex-row">
+                    <View className="mr-3 flex-1">
+                      <FieldLabel text="Carbs (g)" />
+                      <FormInput
+                        value={form.carbs}
+                        placeholder="N/A"
+                        keyboardType="decimal-pad"
+                        onChangeText={(v) => updateForm("carbs", v)}
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <FieldLabel text="Fats (g)" />
+                      <FormInput
+                        value={form.fats}
+                        placeholder="N/A"
+                        keyboardType="decimal-pad"
+                        onChangeText={(v) => updateForm("fats", v)}
+                      />
+                    </View>
+                  </View>
+
+                  <View className="flex-row">
+                    <View className="mr-3 flex-1">
+                      <FieldLabel text="Fiber (g)" />
+                      <FormInput
+                        value={form.fiber}
+                        placeholder="N/A"
+                        keyboardType="decimal-pad"
+                        onChangeText={(v) => updateForm("fiber", v)}
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <FieldLabel text="Sodium (mg)" />
+                      <FormInput
+                        value={form.sodium}
+                        placeholder="N/A"
+                        keyboardType="decimal-pad"
+                        onChangeText={(v) => updateForm("sodium", v)}
+                      />
+                    </View>
+                  </View>
+                </>
+              )}
+
+              <Pressable
+                className="mt-8 flex-row items-center justify-between"
+                onPress={() => setSmartDefaultsExpanded((current) => !current)}
+              >
+                <View className="mr-3 flex-1 flex-row items-center">
+                  <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                    <Ionicons name="options-outline" size={18} color="#2563EB" />
+                  </View>
+
+                  <View className="flex-1">
+                    <Text className="text-base font-bold text-slate-950">
+                      Smart defaults
+                    </Text>
+                    <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                      Optional — speeds up logging future purchases.
+                    </Text>
+                  </View>
                 </View>
-                <View className="flex-1">
-                  <FieldLabel text="Sodium (mg)" />
-                  <FormInput
-                    value={form.sodium}
-                    placeholder="N/A"
-                    keyboardType="decimal-pad"
-                    onChangeText={(v) => updateForm("sodium", v)}
+
+                <Ionicons
+                  name={smartDefaultsExpanded ? "chevron-up" : "chevron-down"}
+                  size={22}
+                  color="#64748B"
+                />
+              </Pressable>
+
+              {smartDefaultsExpanded && (
+                <>
+                  {!currentIngredient?.isGeneric && (
+                    <>
+                      <ToggleRow
+                        label="Set a default storage location"
+                        description="Prefills the location when logging a purchase of this ingredient."
+                        value={wantsDefaultLocation}
+                        onChange={setWantsDefaultLocation}
+                      />
+                      {suggestedLocation && (
+                        <Pressable
+                          className="mt-2 flex-row items-center self-start rounded-full bg-blue-50 px-3 py-1.5 active:bg-blue-100"
+                          onPress={handleAutofillLocation}
+                        >
+                          <Ionicons name="sparkles-outline" size={14} color="#2563EB" />
+                          <Text className="ml-1.5 text-xs font-semibold text-blue-600">
+                            Autofill: {suggestedLocation.name}
+                          </Text>
+                        </Pressable>
+                      )}
+                      {wantsDefaultLocation && (
+                        <>
+                          <FieldLabel text="Default storage location" />
+                          <SearchableObjectDropdown<SelectOption>
+                            options={storageLocations}
+                            selectedId={form.defaultStorageLocationId}
+                            selectedName={form.defaultStorageLocationName}
+                            placeholder="Search or type a location"
+                            onTextChange={(value) => {
+                              if (value !== form.defaultStorageLocationName) {
+                                updateForm("defaultStorageLocationId", "");
+                              }
+                              setDefaultLocationDraft(value);
+                            }}
+                            onSelect={(option) => {
+                              updateForm("defaultStorageLocationId", option._id);
+                              updateForm("defaultStorageLocationName", option.name);
+                              setDefaultLocationDraft(option.name);
+                            }}
+                          />
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  <ToggleRow
+                    label="Set a default expiry duration"
+                    description="Prefills the expiry date when logging a purchase of this ingredient."
+                    value={wantsDefaultExpiry}
+                    onChange={setWantsDefaultExpiry}
                   />
-                </View>
-              </View>
+                  {suggestedExpiryDuration && (
+                    <Pressable
+                      className="mt-2 flex-row items-center self-start rounded-full bg-blue-50 px-3 py-1.5 active:bg-blue-100"
+                      onPress={handleAutofillExpiryDuration}
+                    >
+                      <Ionicons name="sparkles-outline" size={14} color="#2563EB" />
+                      <Text className="ml-1.5 text-xs font-semibold text-blue-600">
+                        Autofill: {suggestedExpiryDuration.amount}{" "}
+                        {suggestedExpiryDuration.unit}
+                        {suggestedExpiryDuration.amount > 1 ? "s" : ""}
+                      </Text>
+                    </Pressable>
+                  )}
+                  {wantsDefaultExpiry && (
+                    <>
+                      <FieldLabel text="Default expiry duration" />
+                      <DurationValueInput
+                        amount={form.defaultExpiryDurationAmount}
+                        unit={form.defaultExpiryDurationUnit}
+                        onChangeAmount={(v) => updateForm("defaultExpiryDurationAmount", v)}
+                        onChangeUnit={(v) => updateForm("defaultExpiryDurationUnit", v)}
+                      />
+                    </>
+                  )}
+                </>
+              )}
             </>
           ) : (
             /* ── Detail view ── */
@@ -962,7 +1260,9 @@ export default function IngredientDetailScreen() {
               {brandName ||
               categoryName ||
               ingredient.barcode ||
-              ingredient.defaultPortionAmount != null ? (
+              ingredient.defaultPortionAmount != null ||
+              ingredient.defaultStorageLocation ||
+              ingredient.defaultExpiryDurationAmount != null ? (
                 <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
                   <Text className="mb-3 text-base font-bold text-slate-900">
                     Details
@@ -1001,10 +1301,30 @@ export default function IngredientDetailScreen() {
                   ) : null}
 
                   {ingredient.barcode ? (
-                    <View className="flex-row items-center justify-between">
+                    <View className="mb-2 flex-row items-center justify-between">
                       <Text className="text-sm text-slate-500">Barcode</Text>
                       <Text className="text-sm font-medium text-slate-900">
                         {ingredient.barcode}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {ingredient.defaultStorageLocation ? (
+                    <View className="mb-2 flex-row items-center justify-between">
+                      <Text className="text-sm text-slate-500">Default location</Text>
+                      <Text className="text-sm font-medium text-slate-900">
+                        {getReferenceName(ingredient.defaultStorageLocation)}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {ingredient.defaultExpiryDurationAmount != null ? (
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-sm text-slate-500">Usually lasts</Text>
+                      <Text className="text-sm font-medium text-slate-900">
+                        {ingredient.defaultExpiryDurationAmount}{" "}
+                        {ingredient.defaultExpiryDurationUnit}
+                        {ingredient.defaultExpiryDurationAmount > 1 ? "s" : ""}
                       </Text>
                     </View>
                   ) : null}
@@ -1281,13 +1601,25 @@ export default function IngredientDetailScreen() {
                       setQuickAddLocationId("");
                     }
                     setQuickAddLocationDraft(value);
+                    setQuickAddLocationTouched(true);
                   }}
                   onSelect={(option) => {
                     setQuickAddLocationId(option._id);
                     setQuickAddLocationName(option.name);
                     setQuickAddLocationDraft(option.name);
+                    setQuickAddLocationTouched(true);
                   }}
                 />
+
+                {effectiveLocation && !quickAddLocationTouched ? (
+                  <Text className="mt-2 text-xs leading-4 text-slate-500">
+                    Location auto-filled from{" "}
+                    {currentIngredient?.defaultStorageLocation
+                      ? "this ingredient's default"
+                      : "recent purchase history"}
+                    .
+                  </Text>
+                ) : null}
 
                 <View className="mt-3">
                   <FieldLabel text="Quantity" />
@@ -1322,17 +1654,38 @@ export default function IngredientDetailScreen() {
                       placeholder="YYYY-MM-DD"
                       placeholderTextColor="#94a3b8"
                       value={quickAddExpiryDate}
-                      onChangeText={setQuickAddExpiryDate}
+                      onChangeText={(value) => {
+                        setQuickAddExpiryDate(value);
+                        setQuickAddExpiryTouched(true);
+                      }}
                       keyboardType="numeric"
                     />
                   </View>
                 </View>
 
+                {effectiveExpiryDuration && !quickAddExpiryTouched ? (
+                  <Text className="mt-2 text-xs leading-4 text-slate-500">
+                    Expiry auto-filled from{" "}
+                    {currentIngredient?.defaultExpiryDurationAmount != null
+                      ? "this ingredient's default"
+                      : "recent purchase history"}{" "}
+                    ({effectiveExpiryDuration.amount} {effectiveExpiryDuration.unit}
+                    {effectiveExpiryDuration.amount > 1 ? "s" : ""}).
+                  </Text>
+                ) : null}
+
                 <View className="mt-2">
                   <FieldLabel text="Or set expiry from purchase date" />
                   <DurationExpiryInput
                     purchaseDate={quickAddPurchaseDate}
-                    onApply={setQuickAddExpiryDate}
+                    initialAmount={
+                      effectiveExpiryDuration ? String(effectiveExpiryDuration.amount) : undefined
+                    }
+                    initialUnit={effectiveExpiryDuration?.unit}
+                    onApply={(value) => {
+                      setQuickAddExpiryDate(value);
+                      setQuickAddExpiryTouched(true);
+                    }}
                   />
                 </View>
 

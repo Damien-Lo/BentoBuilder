@@ -1,3 +1,5 @@
+import type { DurationUnit } from "@/src/utils/date";
+
 export interface SelectOption {
   _id: string;
   name: string;
@@ -15,6 +17,11 @@ export interface IngredientOption
   genericParentName?: string;
 
   lowStockThreshold?: number;
+
+  defaultStorageLocationId?: string;
+  defaultStorageLocationName?: string;
+  defaultExpiryDurationAmount?: number;
+  defaultExpiryDurationUnit?: DurationUnit;
 
   calories?: number;
   protein?: number;

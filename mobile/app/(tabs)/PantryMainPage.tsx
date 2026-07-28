@@ -26,6 +26,8 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  createStorageLocation,
+  deleteStorageLocation,
   getStorageLocations,
   type SelectOption,
 } from "@/src/services/optionsApi";
@@ -60,13 +62,7 @@ type GroupedIngredients = {
   items: Ingredient[];
 };
 
-type ActivePage = "pantry" | "ingredients" | "grocery";
-
-type GroceryItem = {
-  id: string;
-  name: string;
-  checked: boolean;
-};
+type ActivePage = "pantry" | "ingredients";
 
 function isReferenceObject(value: unknown): value is ReferenceObject {
   return typeof value === "object" && value !== null;
@@ -183,9 +179,11 @@ export default function PantryMainPage() {
   const [pantryViewMode, setPantryViewMode] = useState<"locations" | "list">("locations");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
-  const [groceryItems, setGroceryItems] = useState<GroceryItem[]>([]);
-  const [newGroceryText, setNewGroceryText] = useState("");
   const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
+  const [locationEditMode, setLocationEditMode] = useState(false);
+  const [isAddingLocation, setIsAddingLocation] = useState(false);
+  const [newLocationName, setNewLocationName] = useState("");
+  const [savingLocation, setSavingLocation] = useState(false);
 
   const toggleLocation = (id: string) => {
     setExpandedLocations((prev) => {
@@ -205,75 +203,50 @@ export default function PantryMainPage() {
     });
   };
 
-  const addGroceryItem = () => {
-    const name = newGroceryText.trim();
-    if (!name) return;
-    setGroceryItems(prev => [...prev, { id: Date.now().toString(), name, checked: false }]);
-    setNewGroceryText("");
-  };
-
-  const toggleGroceryItem = (id: string) => {
-    setGroceryItems(prev => prev.map(i => i.id === id ? { ...i, checked: !i.checked } : i));
-  };
-
-  const deleteGroceryItem = (id: string) => {
-    setGroceryItems(prev => prev.filter(i => i.id !== id));
-  };
-
-  const clearCheckedGroceryItems = () => {
-    setGroceryItems(prev => prev.filter(i => !i.checked));
-  };
-
-  const grocerySuggestions = useMemo(() => {
-    const q = newGroceryText.trim().toLowerCase();
-    if (!q) return [];
-    return ingredients.filter(i => i.name.toLowerCase().includes(q)).slice(0, 5);
-  }, [ingredients, newGroceryText]);
-
   const isFirstLoad = useRef(true);
+
+  const loadPantryPage = useCallback(async (cancelledRef?: { current: boolean }) => {
+    const showSpinner = isFirstLoad.current;
+    if (showSpinner) setIsLoading(true);
+
+    try {
+      const [loadedLocations, loadedPantryItems, loadedIngredients, loadedSettings] =
+        await Promise.all([
+          getStorageLocations(),
+          getPantryItems(),
+          getIngredients(),
+          loadSettings(),
+        ]);
+
+      if (cancelledRef?.current) return;
+
+      setStorageLocations(Array.isArray(loadedLocations) ? loadedLocations : []);
+      setPantryItems(Array.isArray(loadedPantryItems) ? loadedPantryItems : []);
+      setIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
+      setCustomUnitConversions(loadedSettings.unitConversions ?? []);
+    } catch (error) {
+      console.error("Error loading pantry page:", error);
+      if (!cancelledRef?.current && showSpinner) {
+        setStorageLocations([]);
+        setPantryItems([]);
+        setIngredients([]);
+      }
+    } finally {
+      if (!cancelledRef?.current) {
+        isFirstLoad.current = false;
+        setIsLoading(false);
+      }
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-
-      const showSpinner = isFirstLoad.current;
-      if (showSpinner) setIsLoading(true);
-
-      async function loadPantryPage() {
-        try {
-          const [loadedLocations, loadedPantryItems, loadedIngredients, loadedSettings] =
-            await Promise.all([
-              getStorageLocations(),
-              getPantryItems(),
-              getIngredients(),
-              loadSettings(),
-            ]);
-
-          if (cancelled) return;
-
-          setStorageLocations(Array.isArray(loadedLocations) ? loadedLocations : []);
-          setPantryItems(Array.isArray(loadedPantryItems) ? loadedPantryItems : []);
-          setIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
-          setCustomUnitConversions(loadedSettings.unitConversions ?? []);
-        } catch (error) {
-          console.error("Error loading pantry page:", error);
-          if (!cancelled && showSpinner) {
-            setStorageLocations([]);
-            setPantryItems([]);
-            setIngredients([]);
-          }
-        } finally {
-          if (!cancelled) {
-            isFirstLoad.current = false;
-            setIsLoading(false);
-          }
-        }
-      }
-
-      void loadPantryPage();
-
-      return () => { cancelled = true; };
-    }, []),
+      const cancelledRef = { current: false };
+      void loadPantryPage(cancelledRef);
+      return () => {
+        cancelledRef.current = true;
+      };
+    }, [loadPantryPage]),
   );
 
   const storageLocationById = useMemo(() => {
@@ -477,6 +450,56 @@ export default function PantryMainPage() {
     );
   };
 
+  function handleDeleteLocation(location: SelectOption) {
+    const itemCount = pantryItems.filter(
+      (item) => getReferenceId(item.storageLocation as unknown) === location._id,
+    ).length;
+
+    Alert.alert(
+      "Delete location",
+      itemCount > 0
+        ? `Delete "${location.name}"? ${itemCount} ${itemCount === 1 ? "item" : "items"} stored here will move to "Other".`
+        : `Delete "${location.name}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void deleteStorageLocation(location._id)
+              .then(() => loadPantryPage())
+              .catch((err: unknown) => {
+                Alert.alert(
+                  "Error",
+                  err instanceof Error ? err.message : "Could not delete location.",
+                );
+              });
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleCreateLocation() {
+    const name = newLocationName.trim();
+    if (!name || savingLocation) return;
+
+    try {
+      setSavingLocation(true);
+      await createStorageLocation(name);
+      await loadPantryPage();
+      setNewLocationName("");
+      setIsAddingLocation(false);
+    } catch (err) {
+      Alert.alert(
+        "Could not add location",
+        err instanceof Error ? err.message : "Failed to add the location.",
+      );
+    } finally {
+      setSavingLocation(false);
+    }
+  }
+
   // `isChild` renders a variant nested under a generic's header row — no
   // icon or card chrome, just a slim line, so a generic with its branded
   // variants reads as one grouped unit instead of N duplicate-looking cards.
@@ -661,9 +684,7 @@ export default function PantryMainPage() {
       event.nativeEvent.contentOffset.x / screenWidth,
     );
 
-    if (pageIndex === 0) setActivePage("pantry");
-    else if (pageIndex === 1) setActivePage("ingredients");
-    else setActivePage("grocery");
+    setActivePage(pageIndex === 0 ? "pantry" : "ingredients");
 
     Keyboard.dismiss();
     setIsSearchActive(false);
@@ -690,9 +711,39 @@ export default function PantryMainPage() {
                 <Text className="flex-1 text-3xl font-bold text-slate-950">
                   Your Pantry
                 </Text>
+                {pantryViewMode === "locations" && (
+                  <Pressable
+                    className={`mr-2 h-10 items-center justify-center rounded-full px-3 ${
+                      locationEditMode ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"
+                    }`}
+                    onPress={() => {
+                      setLocationEditMode((v) => !v);
+                      setIsAddingLocation(false);
+                      setNewLocationName("");
+                    }}
+                  >
+                    <Text
+                      className={`text-sm font-semibold ${
+                        locationEditMode ? "text-white" : "text-slate-600"
+                      }`}
+                    >
+                      {locationEditMode ? "Done" : "Edit"}
+                    </Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  className="mr-2 h-10 w-10 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                  onPress={() => router.push("/grocery-list")}
+                >
+                  <Ionicons name="cart-outline" size={19} color="#475569" />
+                </Pressable>
                 <Pressable
                   className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
-                  onPress={() => setPantryViewMode((m) => m === "locations" ? "list" : "locations")}
+                  onPress={() => {
+                    setPantryViewMode((m) => m === "locations" ? "list" : "locations");
+                    setLocationEditMode(false);
+                    setIsAddingLocation(false);
+                  }}
                 >
                   <Ionicons
                     name={pantryViewMode === "locations" ? "list-outline" : "apps-outline"}
@@ -710,7 +761,6 @@ export default function PantryMainPage() {
 
               <View className="mt-3 flex-row items-center">
                 <View className="h-2 w-6 rounded-full bg-blue-600" />
-                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
                 <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
                 <Text className="ml-3 text-xs font-medium text-slate-400">
                   Swipe left for ingredients
@@ -730,27 +780,89 @@ export default function PantryMainPage() {
                     const itemCount = pantryItems.filter((item) =>
                       getReferenceId(item.storageLocation as unknown) === locationId
                     ).length;
+                    const canDelete = locationEditMode && !location.isDefault;
 
                     return (
-                      <Pressable
-                        key={locationId}
-                        className="mb-4 h-44 w-[48%] justify-between rounded-2xl border border-slate-200 bg-white p-5"
-                        onPress={() =>
-                          router.push({ pathname: "/pantry/location/[id]", params: { id: locationId, name: location.name } })
-                        }
-                      >
-                        <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
+                      <View key={locationId} className="relative mb-4 w-[48%]">
+                        <Pressable
+                          disabled={locationEditMode}
+                          className="h-44 justify-between rounded-2xl border border-slate-200 bg-white p-5"
+                          onPress={() =>
+                            router.push({ pathname: "/pantry/location/[id]", params: { id: locationId, name: location.name } })
+                          }
+                        >
+                          <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
+                            <Ionicons name="file-tray-stacked-outline" size={20} color="#2563EB" />
+                          </View>
+                          <View>
+                            <Text className="text-lg font-bold text-slate-900">{location.name}</Text>
+                            <Text className="mt-1 text-sm text-slate-500">
+                              {itemCount} {itemCount === 1 ? "item" : "items"}
+                            </Text>
+                          </View>
+                        </Pressable>
+
+                        {canDelete && (
+                          <Pressable
+                            className="absolute -left-2 -top-2 h-7 w-7 items-center justify-center rounded-full bg-red-500 active:bg-red-600"
+                            onPress={() => handleDeleteLocation(location)}
+                            hitSlop={8}
+                          >
+                            <Ionicons name="remove" size={18} color="white" />
+                          </Pressable>
+                        )}
+                      </View>
+                    );
+                  })}
+
+                  {locationEditMode &&
+                    (isAddingLocation ? (
+                      <View className="mb-4 h-44 w-[48%] justify-between rounded-2xl border-2 border-dashed border-blue-300 bg-blue-50 p-5">
+                        <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-100">
                           <Ionicons name="file-tray-stacked-outline" size={20} color="#2563EB" />
                         </View>
                         <View>
-                          <Text className="text-lg font-bold text-slate-900">{location.name}</Text>
-                          <Text className="mt-1 text-sm text-slate-500">
-                            {itemCount} {itemCount === 1 ? "item" : "items"}
-                          </Text>
+                          <TextInput
+                            value={newLocationName}
+                            onChangeText={setNewLocationName}
+                            onSubmitEditing={() => void handleCreateLocation()}
+                            autoFocus
+                            placeholder="Location name"
+                            placeholderTextColor="#94A3B8"
+                            returnKeyType="done"
+                            className="text-base font-bold text-slate-900"
+                          />
+                          <View className="mt-2 flex-row gap-2">
+                            <Pressable
+                              disabled={savingLocation}
+                              className="h-8 w-8 items-center justify-center rounded-full bg-blue-600 active:bg-blue-700"
+                              onPress={() => void handleCreateLocation()}
+                            >
+                              <Ionicons name="checkmark" size={18} color="white" />
+                            </Pressable>
+                            <Pressable
+                              className="h-8 w-8 items-center justify-center rounded-full bg-white"
+                              onPress={() => {
+                                setIsAddingLocation(false);
+                                setNewLocationName("");
+                              }}
+                            >
+                              <Ionicons name="close" size={18} color="#475569" />
+                            </Pressable>
+                          </View>
                         </View>
+                      </View>
+                    ) : (
+                      <Pressable
+                        className="mb-4 h-44 w-[48%] items-center justify-center rounded-2xl border-2 border-dashed border-slate-300"
+                        onPress={() => setIsAddingLocation(true)}
+                      >
+                        <Ionicons name="add-circle-outline" size={28} color="#94A3B8" />
+                        <Text className="mt-2 text-sm font-semibold text-slate-400">
+                          Add location
+                        </Text>
                       </Pressable>
-                    );
-                  })}
+                    ))}
                 </View>
               </ScrollView>
             ) : (
@@ -855,9 +967,8 @@ export default function PantryMainPage() {
               <View className="mt-3 flex-row items-center">
                 <View className="h-2 w-2 rounded-full bg-slate-300" />
                 <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
-                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
                 <Text className="ml-3 text-xs font-medium text-slate-400">
-                  Swipe left for grocery list
+                  Swipe right for pantry
                 </Text>
               </View>
             </View>
@@ -928,171 +1039,6 @@ export default function PantryMainPage() {
             </ScrollView>
           </View>
 
-          {/* Page 3: Grocery list */}
-          <View style={{ width: screenWidth }} className="flex-1">
-            <View className="px-5 pt-24">
-              <Text className="text-3xl font-bold text-slate-950">Grocery List</Text>
-              <Text className="mt-1 text-base text-slate-500">Items to pick up</Text>
-              <View className="mt-3 flex-row items-center">
-                <View className="h-2 w-2 rounded-full bg-slate-300" />
-                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
-                <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
-                <Text className="ml-3 text-xs font-medium text-slate-400">
-                  Swipe right to return to ingredients
-                </Text>
-              </View>
-            </View>
-
-            {/* Add item row */}
-            <View className="mx-5 mt-5 flex-row items-center gap-3">
-              <View className="h-12 flex-1 flex-row items-center rounded-2xl bg-white px-4 shadow-sm">
-                <TextInput
-                  value={newGroceryText}
-                  onChangeText={setNewGroceryText}
-                  onSubmitEditing={addGroceryItem}
-                  returnKeyType="done"
-                  placeholder="Search ingredients or add any item…"
-                  placeholderTextColor="#94A3B8"
-                  className="flex-1 text-base text-slate-900"
-                />
-                {newGroceryText.length > 0 && (
-                  <Pressable onPress={() => setNewGroceryText("")}>
-                    <Ionicons name="close-circle" size={18} color="#94A3B8" />
-                  </Pressable>
-                )}
-              </View>
-              <Pressable
-                onPress={addGroceryItem}
-                className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
-              >
-                <Ionicons name="add" size={26} color="white" />
-              </Pressable>
-            </View>
-
-            {/* Ingredient suggestions */}
-            {grocerySuggestions.length > 0 && (
-              <View className="mx-5 mt-2 overflow-hidden rounded-2xl bg-white shadow-sm">
-                {grocerySuggestions.map((ing, idx) => {
-                  const categoryName =
-                    typeof ing.category === "object" && ing.category !== null
-                      ? ((ing.category as { name?: string }).name ?? "")
-                      : "";
-                  return (
-                    <Pressable
-                      key={ing._id}
-                      onPress={() => {
-                        setGroceryItems(prev => [
-                          ...prev,
-                          { id: Date.now().toString(), name: ing.name, checked: false },
-                        ]);
-                        setNewGroceryText("");
-                      }}
-                      className={`flex-row items-center px-4 py-3 active:bg-slate-50 ${
-                        idx > 0 ? "border-t border-slate-100" : ""
-                      }`}
-                    >
-                      <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
-                        <Ionicons name="nutrition-outline" size={16} color="#2563EB" />
-                      </View>
-                      <View className="ml-3 flex-1">
-                        <Text className="font-medium text-slate-900">{ing.name}</Text>
-                        {categoryName ? (
-                          <Text className="text-xs text-slate-400">{categoryName}</Text>
-                        ) : null}
-                      </View>
-                      <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
-                    </Pressable>
-                  );
-                })}
-                {/* Option to add exactly what was typed if it doesn't exactly match */}
-                {!grocerySuggestions.some(
-                  i => i.name.toLowerCase() === newGroceryText.trim().toLowerCase(),
-                ) && (
-                  <Pressable
-                    onPress={addGroceryItem}
-                    className="flex-row items-center border-t border-slate-100 px-4 py-3 active:bg-slate-50"
-                  >
-                    <View className="h-8 w-8 items-center justify-center rounded-full bg-slate-100">
-                      <Ionicons name="add" size={16} color="#475569" />
-                    </View>
-                    <Text className="ml-3 flex-1 font-medium text-slate-700">
-                      Add &quot;{newGroceryText.trim()}&quot;
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            )}
-
-            <ScrollView
-              className="flex-1"
-              contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 120 }}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {groceryItems.length === 0 ? (
-                <View className="mt-8 items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
-                  <Ionicons name="cart-outline" size={42} color="#94A3B8" />
-                  <Text className="mt-4 text-lg font-bold text-slate-900">List is empty</Text>
-                  <Text className="mt-2 text-center text-slate-500">
-                    Add items above to start your grocery list.
-                  </Text>
-                </View>
-              ) : (
-                <>
-                  {groceryItems.map((item) => (
-                    <ReanimatedSwipeable
-                      key={item.id}
-                      friction={2}
-                      rightThreshold={40}
-                      renderLeftActions={() => (
-                        <Pressable
-                          className="mb-2.5 w-20 items-center justify-center rounded-2xl bg-red-500 active:bg-red-600"
-                          onPress={() => deleteGroceryItem(item.id)}
-                        >
-                          <Ionicons name="trash-outline" size={22} color="white" />
-                        </Pressable>
-                      )}
-                    >
-                      <Pressable
-                        onPress={() => toggleGroceryItem(item.id)}
-                        className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-                      >
-                        <View
-                          className={`h-6 w-6 items-center justify-center rounded-full border-2 ${
-                            item.checked ? "border-emerald-500 bg-emerald-500" : "border-slate-300"
-                          }`}
-                        >
-                          {item.checked && (
-                            <Ionicons name="checkmark" size={14} color="white" />
-                          )}
-                        </View>
-                        <Text
-                          className={`ml-4 flex-1 text-base ${
-                            item.checked
-                              ? "text-slate-400 line-through"
-                              : "font-medium text-slate-900"
-                          }`}
-                        >
-                          {item.name}
-                        </Text>
-                      </Pressable>
-                    </ReanimatedSwipeable>
-                  ))}
-
-                  {groceryItems.some(i => i.checked) && (
-                    <Pressable
-                      onPress={clearCheckedGroceryItems}
-                      className="mt-2 items-center rounded-2xl bg-slate-100 py-3 active:bg-slate-200"
-                    >
-                      <Text className="text-sm font-semibold text-slate-500">
-                        Clear checked items
-                      </Text>
-                    </Pressable>
-                  )}
-                </>
-              )}
-            </ScrollView>
-          </View>
         </ScrollView>
 
         {isSearchActive && (
@@ -1119,9 +1065,7 @@ export default function PantryMainPage() {
                 placeholder={
                   activePage === "pantry"
                     ? "Search entire pantry"
-                    : activePage === "ingredients"
-                    ? "Search all ingredients"
-                    : "Grocery list"
+                    : "Search all ingredients"
                 }
                 placeholderTextColor="#94a3b8"
                 className="ml-3 flex-1 text-base text-slate-900"
@@ -1134,20 +1078,18 @@ export default function PantryMainPage() {
               )}
             </View>
 
-            {activePage !== "grocery" && (
-              <Pressable
-                className="ml-3 h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
-                onPress={() => {
-                  if (activePage === "pantry") {
-                    setPantryAddMenuVisible(true);
-                    return;
-                  }
-                  setAddMenuVisible(true);
-                }}
-              >
-                <Ionicons name="add" size={28} color="white" />
-              </Pressable>
-            )}
+            <Pressable
+              className="ml-3 h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
+              onPress={() => {
+                if (activePage === "pantry") {
+                  setPantryAddMenuVisible(true);
+                  return;
+                }
+                setAddMenuVisible(true);
+              }}
+            >
+              <Ionicons name="add" size={28} color="white" />
+            </Pressable>
           </View>
 
           {isSearchActive && (

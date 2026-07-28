@@ -15,6 +15,11 @@ interface DurationExpiryInputProps {
   purchaseDate: string;
   onApply: (expiryDate: string) => void;
   disabled?: boolean;
+  // Seeds the amount/unit shown here (e.g. from an auto-filled expiry
+  // elsewhere on the same form) so the two don't visually disagree. Purely
+  // an initial value — editing here doesn't report back until Apply.
+  initialAmount?: string;
+  initialUnit?: DurationUnit;
 }
 
 // Lets the user say "expires 3 weeks after purchase" instead of typing a
@@ -24,9 +29,11 @@ export function DurationExpiryInput({
   purchaseDate,
   onApply,
   disabled = false,
+  initialAmount,
+  initialUnit,
 }: DurationExpiryInputProps) {
-  const [amount, setAmount] = useState("");
-  const [unit, setUnit] = useState<DurationUnit>("week");
+  const [amount, setAmount] = useState(initialAmount ?? "");
+  const [unit, setUnit] = useState<DurationUnit>(initialUnit ?? "week");
 
   const parsedAmount = Number(amount);
   const canApply =

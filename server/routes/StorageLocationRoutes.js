@@ -1,5 +1,6 @@
 import express from "express";
 import StorageLocation from "../models/StorageLocation.js";
+import PantryItem from "../models/PantryItem.js";
 
 const router = express.Router();
 
@@ -60,6 +61,61 @@ router.post("/", async (req, res) => {
     return res.status(400).json({
       success: false,
       message: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/storage-locations/:id
+ * Default locations (the ones that existed before user-created ones) can't
+ * be deleted. Any pantry items still stored here are moved to "Other"
+ * (auto-created if it's somehow missing) rather than left dangling.
+ */
+router.delete("/:id", async (req, res) => {
+  try {
+    const location = await StorageLocation.findById(req.params.id);
+
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: "Storage location not found",
+      });
+    }
+
+    if (location.isDefault) {
+      return res.status(400).json({
+        success: false,
+        message: "Default storage locations can't be deleted",
+      });
+    }
+
+    let fallback = await StorageLocation.findOne({ normalizedName: "other" });
+    if (!fallback) {
+      fallback = await StorageLocation.create({
+        name: "Other",
+        normalizedName: "other",
+        isDefault: true,
+      });
+    }
+
+    if (String(fallback._id) !== String(location._id)) {
+      await PantryItem.updateMany(
+        { storageLocation: location._id },
+        { storageLocation: fallback._id },
+      );
+    }
+
+    await StorageLocation.findByIdAndDelete(req.params.id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Storage location deleted",
+      data: { reassignedTo: fallback },
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid storage location ID",
     });
   }
 });

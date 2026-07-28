@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "@/src/config/api";
 import type { SelectOption } from "@/src/services/optionsApi";
+import type { DurationUnit } from "@/src/utils/date";
 
 export interface IngredientNutrition {
   calories?: number;
@@ -39,6 +40,13 @@ export interface Ingredient {
   // water) — stock tracking is skipped for it entirely.
   isAlwaysAvailable?: boolean;
 
+  // Where a new pantry entry usually goes, and how long one usually lasts —
+  // both prefill (don't force) the log-to-pantry form. Duration fields are
+  // set together or not at all.
+  defaultStorageLocation?: string | SelectOption | null;
+  defaultExpiryDurationAmount?: number | null;
+  defaultExpiryDurationUnit?: DurationUnit | null;
+
   isArchived?: boolean;
 
   createdAt?: string;
@@ -72,6 +80,10 @@ export interface CreateIngredientInput {
   lowStockThreshold?: number;
 
   isAlwaysAvailable?: boolean;
+
+  defaultStorageLocation?: string | null;
+  defaultExpiryDurationAmount?: number | null;
+  defaultExpiryDurationUnit?: DurationUnit | null;
 
   isArchived?: boolean;
 }

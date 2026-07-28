@@ -20,14 +20,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   CreatableStringDropdown,
   DurationExpiryInput,
+  DurationValueInput,
   FieldLabel,
   FormInput,
   SearchableObjectDropdown,
   SectionTitle,
   SegmentedToggle,
+  ToggleRow,
 } from "@/src/components/forms";
 
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import type { DurationUnit } from "@/src/utils/date";
 
 import {
   createBrand,
@@ -74,6 +77,11 @@ interface FormState {
   expiryDate: string;
   lowStockThreshold: string;
 
+  defaultStorageLocationId: string;
+  defaultStorageLocationName: string;
+  defaultExpiryDurationAmount: string;
+  defaultExpiryDurationUnit: DurationUnit;
+
   calories: string;
   protein: string;
   carbs: string;
@@ -109,6 +117,11 @@ const initialForm: FormState = {
   purchaseDate: todayDateInputString(),
   expiryDate: "",
   lowStockThreshold: "0",
+
+  defaultStorageLocationId: "",
+  defaultStorageLocationName: "",
+  defaultExpiryDurationAmount: "",
+  defaultExpiryDurationUnit: "week",
 
   calories: "",
   protein: "",
@@ -160,6 +173,12 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
       ? ingredient.genericParent
       : undefined;
 
+  const defaultStorageLocation =
+    typeof ingredient.defaultStorageLocation === "object" &&
+    ingredient.defaultStorageLocation !== null
+      ? ingredient.defaultStorageLocation
+      : undefined;
+
   return {
     _id: ingredient._id,
     name: ingredient.name,
@@ -180,6 +199,15 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
     defaultPortionAmount: ingredient.defaultPortionAmount,
 
     lowStockThreshold: ingredient.lowStockThreshold,
+
+    defaultStorageLocationId:
+      defaultStorageLocation?._id ??
+      (typeof ingredient.defaultStorageLocation === "string"
+        ? ingredient.defaultStorageLocation
+        : ""),
+    defaultStorageLocationName: defaultStorageLocation?.name ?? "",
+    defaultExpiryDurationAmount: ingredient.defaultExpiryDurationAmount ?? undefined,
+    defaultExpiryDurationUnit: ingredient.defaultExpiryDurationUnit ?? undefined,
 
     calories: ingredient.nutrition?.calories,
 
@@ -254,6 +282,12 @@ export default function AddManualPantryItemScreen() {
   // in the pantry right away.
   const [pantryInventoryExpanded, setPantryInventoryExpanded] = useState(false);
 
+  // Collapsed by default — nutrition is optional and often filled in later.
+  const [nutritionExpanded, setNutritionExpanded] = useState(false);
+
+  // Collapsed by default — smart defaults are optional.
+  const [smartDefaultsExpanded, setSmartDefaultsExpanded] = useState(false);
+
   const [loadingOptions, setLoadingOptions] = useState(true);
 
   const [ingredients, setIngredients] = useState<IngredientOption[]>([]);
@@ -271,6 +305,11 @@ export default function AddManualPantryItemScreen() {
   const [categoryDraft, setCategoryDraft] = useState("");
 
   const [storageLocationDraft, setStorageLocationDraft] = useState("");
+
+  const [defaultLocationDraft, setDefaultLocationDraft] = useState("");
+
+  const [wantsDefaultLocation, setWantsDefaultLocation] = useState(false);
+  const [wantsDefaultExpiry, setWantsDefaultExpiry] = useState(false);
 
   const [units, setUnits] = useState<string[]>([]);
 
@@ -407,10 +446,18 @@ export default function AddManualPantryItemScreen() {
       categoryId: option.categoryId ?? option.category?._id ?? "",
 
       categoryName: option.categoryName ?? option.category?.name ?? "",
+
+      defaultStorageLocationId: option.defaultStorageLocationId ?? "",
+      defaultStorageLocationName: option.defaultStorageLocationName ?? "",
+      defaultExpiryDurationAmount: numberToFormValue(option.defaultExpiryDurationAmount),
+      defaultExpiryDurationUnit: option.defaultExpiryDurationUnit ?? "week",
     }));
 
     setGenericParentDraft(option.genericParentName ?? "");
     setCategoryDraft(option.categoryName ?? option.category?.name ?? "");
+    setDefaultLocationDraft(option.defaultStorageLocationName ?? "");
+    setWantsDefaultLocation(!!option.defaultStorageLocationId);
+    setWantsDefaultExpiry(option.defaultExpiryDurationAmount != null);
   }
 
   async function handleCreateCategory(name: string): Promise<SelectOption> {
@@ -608,6 +655,23 @@ export default function AddManualPantryItemScreen() {
         throw new Error("Enter a category name.");
       }
 
+      // Optional — resolveOrCreateOption returns null when both the id and
+      // draft text are empty, which is fine here (unlike category). Gated by
+      // the toggle rather than just presence of text, so leaving it off
+      // never saves a leftover draft value.
+      const defaultStorageLocation = wantsDefaultLocation
+        ? await resolveOrCreateOption(
+            storageLocations,
+            form.defaultStorageLocationId,
+            defaultLocationDraft,
+            handleCreateStorageLocation,
+          )
+        : null;
+
+      const defaultExpiryDurationAmount = wantsDefaultExpiry
+        ? optionalNumber(form.defaultExpiryDurationAmount)
+        : undefined;
+
       const nutrition = {
         calories: optionalNumber(form.calories),
         protein: optionalNumber(form.protein),
@@ -628,6 +692,10 @@ export default function AddManualPantryItemScreen() {
           defaultPortionUnit: form.quantityUnit.trim() || undefined,
           defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
           lowStockThreshold: ingredientLowStockThreshold,
+          defaultStorageLocation: defaultStorageLocation?._id || null,
+          defaultExpiryDurationAmount: defaultExpiryDurationAmount ?? null,
+          defaultExpiryDurationUnit:
+            defaultExpiryDurationAmount != null ? form.defaultExpiryDurationUnit : null,
           nutrition,
         });
 
@@ -666,6 +734,10 @@ export default function AddManualPantryItemScreen() {
           defaultPortionUnit: form.quantityUnit.trim() || undefined,
           defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
           lowStockThreshold: ingredientLowStockThreshold,
+          defaultStorageLocation: defaultStorageLocation?._id || null,
+          defaultExpiryDurationAmount: defaultExpiryDurationAmount ?? null,
+          defaultExpiryDurationUnit:
+            defaultExpiryDurationAmount != null ? form.defaultExpiryDurationUnit : null,
           nutrition,
         });
         ingredientId = newIngredient._id;
@@ -777,13 +849,14 @@ export default function AddManualPantryItemScreen() {
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}
         >
-          {/* <SectionTitle
+          <SectionTitle
             first
+            icon="pricetag-outline"
             title="Ingredient"
-            description="Choose an existing ingredient from your ingredient catalog."
-          /> */}
+            description="What it is, and how it's categorized."
+          />
 
-          <FieldLabel text="Ingredient type" required />
+          <FieldLabel text="Type" required />
 
           <SegmentedToggle<boolean>
             value={form.isGeneric}
@@ -803,15 +876,15 @@ export default function AddManualPantryItemScreen() {
             }}
           />
 
-          <Text className="mt-2 text-sm leading-5 text-slate-500">
+          <Text className="mt-2 text-xs leading-4 text-slate-500">
             {form.ingredientId
               ? "This ingredient already exists, so its type can't be changed here."
               : form.isGeneric
-                ? "A generic ingredient (e.g. \"Soy Sauce\") has no single brand — it stands in for any specific product a recipe could use."
+                ? "A generic ingredient (e.g. \"Soy Sauce\") stands in for any specific product a recipe could use."
                 : "A specific ingredient (e.g. \"Kikkoman Soy Sauce\") is a particular product, usually with a brand."}
           </Text>
 
-          <FieldLabel text="Ingredient name" required />
+          <FieldLabel text="Name" required />
 
           <SearchableObjectDropdown<IngredientOption>
             options={ingredients}
@@ -837,72 +910,75 @@ export default function AddManualPantryItemScreen() {
 
           {!form.isGeneric && (
             <>
-              <FieldLabel text="Generic ingredient" />
+              <View className="flex-row">
+                <View className="mr-3 flex-1">
+                  <FieldLabel text="Generic ingredient" />
 
-              <SearchableObjectDropdown<IngredientOption>
-                options={genericIngredientOptions}
-                selectedId={form.genericParentId}
-                selectedName={form.genericParentName}
-                placeholder="Search or type a new generic ingredient"
-                onTextChange={(value: string) => {
-                  if (value !== form.genericParentName) {
-                    updateForm("genericParentId", "");
-                  }
+                  <SearchableObjectDropdown<IngredientOption>
+                    options={genericIngredientOptions}
+                    selectedId={form.genericParentId}
+                    selectedName={form.genericParentName}
+                    placeholder="Search or new"
+                    onTextChange={(value: string) => {
+                      if (value !== form.genericParentName) {
+                        updateForm("genericParentId", "");
+                      }
 
-                  setGenericParentDraft(value);
-                }}
-                onSelect={(option) => {
-                  updateForm("genericParentId", option._id);
-                  updateForm("genericParentName", option.name);
-                  setGenericParentDraft(option.name);
+                      setGenericParentDraft(value);
+                    }}
+                    onSelect={(option) => {
+                      updateForm("genericParentId", option._id);
+                      updateForm("genericParentName", option.name);
+                      setGenericParentDraft(option.name);
 
-                  const categoryId = option.categoryId ?? option.category?._id;
-                  const categoryName =
-                    option.categoryName ?? option.category?.name;
+                      const categoryId = option.categoryId ?? option.category?._id;
+                      const categoryName =
+                        option.categoryName ?? option.category?.name;
 
-                  if (categoryId) {
-                    updateForm("categoryId", categoryId);
-                    updateForm("categoryName", categoryName ?? "");
-                    setCategoryDraft(categoryName ?? "");
-                  }
+                      if (categoryId) {
+                        updateForm("categoryId", categoryId);
+                        updateForm("categoryName", categoryName ?? "");
+                        setCategoryDraft(categoryName ?? "");
+                      }
 
-                  if (option.unit) {
-                    updateForm("quantityUnit", option.unit);
-                  }
-                }}
-              />
+                      if (option.unit) {
+                        updateForm("quantityUnit", option.unit);
+                      }
+                    }}
+                  />
+                </View>
 
-              <Text className="mt-2 text-sm leading-5 text-slate-500">
-                Optional. Links this to a generic ingredient (e.g. &quot;Soy
-                Sauce&quot;) so recipes calling for the generic can use this
-                product. Selecting one fills in its category and unit below;
-                typing a new name creates that generic ingredient when you
-                save, using this item&apos;s portion and nutrition as its
-                starting values.
+                <View className="flex-1">
+                  <FieldLabel text="Brand" />
+
+                  <SearchableObjectDropdown<SelectOption>
+                    options={brands}
+                    selectedId={form.brandId}
+                    selectedName={form.brandName}
+                    placeholder="Search or new"
+                    onTextChange={(value: string) => {
+                      if (value !== form.brandName) {
+                        updateForm("brandId", "");
+                      }
+
+                      setBrandDraft(value);
+                    }}
+                    onSelect={(option) => {
+                      updateForm("brandId", option._id);
+
+                      updateForm("brandName", option.name);
+
+                      setBrandDraft(option.name);
+                    }}
+                  />
+                </View>
+              </View>
+
+              <Text className="mt-2 text-xs leading-4 text-slate-500">
+                Generic ingredient optionally links this to a catalog item
+                (e.g. &quot;Soy Sauce&quot;) so recipes calling for it can use
+                this product; typing a new name creates one on save.
               </Text>
-
-              <FieldLabel text="Brand" />
-
-              <SearchableObjectDropdown<SelectOption>
-                options={brands}
-                selectedId={form.brandId}
-                selectedName={form.brandName}
-                placeholder="Search or type a new brand"
-                onTextChange={(value: string) => {
-                  if (value !== form.brandName) {
-                    updateForm("brandId", "");
-                  }
-
-                  setBrandDraft(value);
-                }}
-                onSelect={(option) => {
-                  updateForm("brandId", option._id);
-
-                  updateForm("brandName", option.name);
-
-                  setBrandDraft(option.name);
-                }}
-              />
             </>
           )}
 
@@ -937,8 +1013,9 @@ export default function AddManualPantryItemScreen() {
           />
 
           <SectionTitle
-            title="Nutrition per serving"
-            description="Define what one serving is, then enter nutrition for that amount."
+            icon="scale-outline"
+            title="Serving & stock"
+            description="Define a serving size and when to flag low stock."
           />
 
           <View className="flex-row">
@@ -965,10 +1042,9 @@ export default function AddManualPantryItemScreen() {
             </View>
           </View>
 
-          <Text className="mt-2 text-sm leading-5 text-slate-500">
-            How much of the unit above is one serving. For example, a spice
-            might have a 120 g bottle but a 5 g serving — enter 5 here, and
-            the nutrition values below should be for that 5 g.
+          <Text className="mt-2 text-xs leading-4 text-slate-500">
+            How much of the unit above counts as one serving (e.g. 5 g of a
+            120 g spice bottle) — nutrition below should match that amount.
           </Text>
 
           <FieldLabel text="Low-stock threshold" />
@@ -980,83 +1056,193 @@ export default function AddManualPantryItemScreen() {
             onChangeText={(value) => updateForm("lowStockThreshold", value)}
           />
 
-          <Text className="mt-2 text-sm leading-5 text-slate-500">
-            Warn when total stock across all pantry entries falls to this many{" "}
-            {form.quantityUnit.trim() || "units"}. This belongs to the
-            ingredient itself, not any one pantry entry.
+          <Text className="mt-2 text-xs leading-4 text-slate-500">
+            Warn when total stock falls below this many{" "}
+            {form.quantityUnit.trim() || "units"}.
           </Text>
 
-          <View className="flex-row">
-            <View className="mr-3 flex-1">
-              <FieldLabel text="Calories" />
+          <Pressable
+            className="mt-8 flex-row items-center justify-between"
+            onPress={() => setNutritionExpanded((current) => !current)}
+          >
+            <View className="mr-3 flex-1 flex-row items-center">
+              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                <Ionicons name="nutrition-outline" size={18} color="#2563EB" />
+              </View>
 
-              <FormInput
-                value={form.calories}
-                keyboardType="decimal-pad"
-                placeholder="N/A"
-                onChangeText={(value) => updateForm("calories", value)}
-              />
+              <View className="flex-1">
+                <Text className="text-base font-bold text-slate-950">
+                  Nutrition per serving
+                </Text>
+                <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                  Optional — add now, or fill in later.
+                </Text>
+              </View>
             </View>
 
-            <View className="flex-1">
-              <FieldLabel text="Protein (g)" />
+            <Ionicons
+              name={nutritionExpanded ? "chevron-up" : "chevron-down"}
+              size={22}
+              color="#64748B"
+            />
+          </Pressable>
 
-              <FormInput
-                value={form.protein}
-                keyboardType="decimal-pad"
-                placeholder="N/A"
-                onChangeText={(value) => updateForm("protein", value)}
-              />
+          {nutritionExpanded && (
+            <>
+              <View className="mt-4 flex-row">
+                <View className="mr-3 flex-1">
+                  <FieldLabel text="Calories" />
+
+                  <FormInput
+                    value={form.calories}
+                    keyboardType="decimal-pad"
+                    placeholder="N/A"
+                    onChangeText={(value) => updateForm("calories", value)}
+                  />
+                </View>
+
+                <View className="flex-1">
+                  <FieldLabel text="Protein (g)" />
+
+                  <FormInput
+                    value={form.protein}
+                    keyboardType="decimal-pad"
+                    placeholder="N/A"
+                    onChangeText={(value) => updateForm("protein", value)}
+                  />
+                </View>
+              </View>
+
+              <View className="flex-row">
+                <View className="mr-3 flex-1">
+                  <FieldLabel text="Carbs (g)" />
+
+                  <FormInput
+                    value={form.carbs}
+                    keyboardType="decimal-pad"
+                    placeholder="N/A"
+                    onChangeText={(value) => updateForm("carbs", value)}
+                  />
+                </View>
+
+                <View className="flex-1">
+                  <FieldLabel text="Fats (g)" />
+
+                  <FormInput
+                    value={form.fats}
+                    keyboardType="decimal-pad"
+                    placeholder="N/A"
+                    onChangeText={(value) => updateForm("fats", value)}
+                  />
+                </View>
+              </View>
+
+              <View className="flex-row">
+                <View className="mr-3 flex-1">
+                  <FieldLabel text="Fiber (g)" />
+
+                  <FormInput
+                    value={form.fiber}
+                    keyboardType="decimal-pad"
+                    placeholder="N/A"
+                    onChangeText={(value) => updateForm("fiber", value)}
+                  />
+                </View>
+
+                <View className="flex-1">
+                  <FieldLabel text="Sodium (mg)" />
+
+                  <FormInput
+                    value={form.sodium}
+                    keyboardType="decimal-pad"
+                    placeholder="N/A"
+                    onChangeText={(value) => updateForm("sodium", value)}
+                  />
+                </View>
+              </View>
+            </>
+          )}
+
+          <Pressable
+            className="mt-8 flex-row items-center justify-between"
+            onPress={() => setSmartDefaultsExpanded((current) => !current)}
+          >
+            <View className="mr-3 flex-1 flex-row items-center">
+              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                <Ionicons name="options-outline" size={18} color="#2563EB" />
+              </View>
+
+              <View className="flex-1">
+                <Text className="text-base font-bold text-slate-950">
+                  Smart defaults
+                </Text>
+                <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                  Optional — speeds up logging future purchases.
+                </Text>
+              </View>
             </View>
-          </View>
 
-          <View className="flex-row">
-            <View className="mr-3 flex-1">
-              <FieldLabel text="Carbs (g)" />
+            <Ionicons
+              name={smartDefaultsExpanded ? "chevron-up" : "chevron-down"}
+              size={22}
+              color="#64748B"
+            />
+          </Pressable>
 
-              <FormInput
-                value={form.carbs}
-                keyboardType="decimal-pad"
-                placeholder="N/A"
-                onChangeText={(value) => updateForm("carbs", value)}
+          {smartDefaultsExpanded && (
+            <>
+              {!form.isGeneric && (
+                <>
+                  <ToggleRow
+                    label="Set a default storage location"
+                    description="Prefills the location when logging a purchase of this ingredient."
+                    value={wantsDefaultLocation}
+                    onChange={setWantsDefaultLocation}
+                  />
+                  {wantsDefaultLocation && (
+                    <>
+                      <FieldLabel text="Default storage location" />
+                      <SearchableObjectDropdown<SelectOption>
+                        options={storageLocations}
+                        selectedId={form.defaultStorageLocationId}
+                        selectedName={form.defaultStorageLocationName}
+                        placeholder="Search or type a location"
+                        onTextChange={(value) => {
+                          if (value !== form.defaultStorageLocationName) {
+                            updateForm("defaultStorageLocationId", "");
+                          }
+                          setDefaultLocationDraft(value);
+                        }}
+                        onSelect={(option) => {
+                          updateForm("defaultStorageLocationId", option._id);
+                          updateForm("defaultStorageLocationName", option.name);
+                          setDefaultLocationDraft(option.name);
+                        }}
+                      />
+                    </>
+                  )}
+                </>
+              )}
+
+              <ToggleRow
+                label="Set a default expiry duration"
+                description="Prefills the expiry date when logging a purchase of this ingredient."
+                value={wantsDefaultExpiry}
+                onChange={setWantsDefaultExpiry}
               />
-            </View>
-
-            <View className="flex-1">
-              <FieldLabel text="Fats (g)" />
-
-              <FormInput
-                value={form.fats}
-                keyboardType="decimal-pad"
-                placeholder="N/A"
-                onChangeText={(value) => updateForm("fats", value)}
-              />
-            </View>
-          </View>
-
-          <View className="flex-row">
-            <View className="mr-3 flex-1">
-              <FieldLabel text="Fiber (g)" />
-
-              <FormInput
-                value={form.fiber}
-                keyboardType="decimal-pad"
-                placeholder="N/A"
-                onChangeText={(value) => updateForm("fiber", value)}
-              />
-            </View>
-
-            <View className="flex-1">
-              <FieldLabel text="Sodium (mg)" />
-
-              <FormInput
-                value={form.sodium}
-                keyboardType="decimal-pad"
-                placeholder="N/A"
-                onChangeText={(value) => updateForm("sodium", value)}
-              />
-            </View>
-          </View>
+              {wantsDefaultExpiry && (
+                <>
+                  <FieldLabel text="Default expiry duration" />
+                  <DurationValueInput
+                    amount={form.defaultExpiryDurationAmount}
+                    unit={form.defaultExpiryDurationUnit}
+                    onChangeAmount={(value) => updateForm("defaultExpiryDurationAmount", value)}
+                    onChangeUnit={(value) => updateForm("defaultExpiryDurationUnit", value)}
+                  />
+                </>
+              )}
+            </>
+          )}
 
           {!form.isGeneric && (
             <>
@@ -1066,14 +1252,19 @@ export default function AddManualPantryItemScreen() {
                   setPantryInventoryExpanded((current) => !current)
                 }
               >
-                <View className="mr-3 flex-1">
-                  <Text className="text-xl font-bold text-slate-950">
-                    Pantry inventory
-                  </Text>
-                  <Text className="mt-1 text-sm leading-5 text-slate-500">
-                    Optional — add stock now, or just save the ingredient and
-                    stock it later.
-                  </Text>
+                <View className="mr-3 flex-1 flex-row items-center">
+                  <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                    <Ionicons name="archive-outline" size={18} color="#2563EB" />
+                  </View>
+
+                  <View className="flex-1">
+                    <Text className="text-base font-bold text-slate-950">
+                      Pantry inventory
+                    </Text>
+                    <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                      Optional — add stock now, or later.
+                    </Text>
+                  </View>
                 </View>
 
                 <Ionicons

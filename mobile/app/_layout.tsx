@@ -99,6 +99,14 @@ export default function RootLayout() {
           }}
         />
 
+        {/* Grocery list — reached from the Pantry/Kitchen tabs, not its own tab */}
+        <Stack.Screen
+          name="grocery-list"
+          options={{
+            headerShown: false,
+          }}
+        />
+
         <Stack.Screen
           name="modal"
           options={{

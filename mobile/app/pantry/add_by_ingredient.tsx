@@ -23,9 +23,17 @@ import {
   type SelectOption,
 } from "@/src/services/optionsApi";
 
-import { addIngredientToPantry } from "@/src/services/pantryApi";
+import { addIngredientToPantry, getPantryItems } from "@/src/services/pantryApi";
+import type { PantryItem } from "@/src/types/pantry";
 import { DurationExpiryInput, QuantityServingInput } from "@/src/components/forms";
-import { todayDateInputString } from "@/src/utils/date";
+import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
+import {
+  recentPantryEntries,
+  referenceId,
+  referenceName,
+  suggestExpiryDuration,
+  suggestStorageLocation,
+} from "@/src/utils/pantryDefaults";
 
 type SelectedIngredientCardProps = {
   ingredient: Ingredient;
@@ -94,6 +102,7 @@ export default function AddPantryItemByIngredientScreen() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
+  const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
 
   const [selectedIngredient, setSelectedIngredient] =
     useState<Ingredient | null>(null);
@@ -102,8 +111,13 @@ export default function AddPantryItemByIngredientScreen() {
   const [quantity, setQuantity] = useState("1");
   const [quantityUnit, setQuantityUnit] = useState("item");
   const [storageLocationId, setStorageLocationId] = useState(locationId ?? "");
+  // A location passed in via route params (e.g. "add here" from a specific
+  // storage location page) is itself a deliberate choice — don't let the
+  // suggestion effect below override it.
+  const [storageLocationTouched, setStorageLocationTouched] = useState(!!locationId);
   const [purchaseDate, setPurchaseDate] = useState(todayDateInputString());
   const [expiryDate, setExpiryDate] = useState("");
+  const [expiryTouched, setExpiryTouched] = useState(false);
 
   const [showLocationOptions, setShowLocationOptions] = useState(false);
 
@@ -115,11 +129,12 @@ export default function AddPantryItemByIngredientScreen() {
 
     async function loadPageData() {
       try {
-        const [loadedIngredients, loadedStorageLocations, loadedUnits] =
+        const [loadedIngredients, loadedStorageLocations, loadedUnits, loadedPantryItems] =
           await Promise.all([
             getIngredients(),
             getStorageLocations(),
             getUnitSuggestions(),
+            getPantryItems(),
           ]);
 
         if (cancelled) {
@@ -134,6 +149,7 @@ export default function AddPantryItemByIngredientScreen() {
         );
 
         setUnitOptions(Array.isArray(loadedUnits) ? loadedUnits : []);
+        setPantryItems(Array.isArray(loadedPantryItems) ? loadedPantryItems : []);
 
         if (ingredientId) {
           const match = ingredientList.find((i) => i._id === ingredientId);
@@ -197,6 +213,64 @@ export default function AddPantryItemByIngredientScreen() {
       storageLocations.find((location) => location._id === storageLocationId),
     [storageLocationId, storageLocations],
   );
+
+  // Recent pantry history for whichever ingredient is selected — the basis
+  // for both "smart default" suggestions below.
+  const recentIngredientHistory = useMemo(() => {
+    if (!selectedIngredient) return [];
+    return recentPantryEntries(
+      pantryItems.filter((item) => referenceId(item.ingredient) === selectedIngredient._id),
+    );
+  }, [pantryItems, selectedIngredient]);
+
+  const suggestedLocation = useMemo(
+    () => suggestStorageLocation(recentIngredientHistory),
+    [recentIngredientHistory],
+  );
+
+  const suggestedExpiryDuration = useMemo(
+    () => suggestExpiryDuration(recentIngredientHistory),
+    [recentIngredientHistory],
+  );
+
+  // What actually drives the auto-fills below: the ingredient's own saved
+  // default if it has one, otherwise the live suggestion from history.
+  const effectiveLocation = useMemo(() => {
+    const savedId = referenceId(selectedIngredient?.defaultStorageLocation);
+    if (savedId) {
+      const name =
+        referenceName(selectedIngredient?.defaultStorageLocation) ||
+        storageLocations.find((location) => location._id === savedId)?.name ||
+        "";
+      return { id: savedId, name };
+    }
+    return suggestedLocation;
+  }, [selectedIngredient, suggestedLocation, storageLocations]);
+
+  const effectiveExpiryDuration = useMemo(() => {
+    if (
+      selectedIngredient?.defaultExpiryDurationAmount != null &&
+      selectedIngredient.defaultExpiryDurationUnit
+    ) {
+      return {
+        amount: selectedIngredient.defaultExpiryDurationAmount,
+        unit: selectedIngredient.defaultExpiryDurationUnit,
+      };
+    }
+    return suggestedExpiryDuration;
+  }, [selectedIngredient, suggestedExpiryDuration]);
+
+  useEffect(() => {
+    if (storageLocationTouched || !effectiveLocation) return;
+    setStorageLocationId(effectiveLocation.id);
+  }, [effectiveLocation, storageLocationTouched]);
+
+  useEffect(() => {
+    if (expiryTouched || !effectiveExpiryDuration) return;
+    setExpiryDate(
+      addDurationToDate(purchaseDate, effectiveExpiryDuration.amount, effectiveExpiryDuration.unit),
+    );
+  }, [purchaseDate, effectiveExpiryDuration, expiryTouched]);
 
   async function handleSave() {
     if (!selectedIngredient) {
@@ -357,6 +431,16 @@ export default function AddPantryItemByIngredientScreen() {
                       if (ingredient.defaultPortionAmount !== undefined) {
                         setQuantity(String(ingredient.defaultPortionAmount));
                       }
+
+                      // A location passed in via route params stays pinned
+                      // regardless of which ingredient gets picked; otherwise
+                      // let this ingredient's own suggestion apply fresh.
+                      if (!locationId) {
+                        setStorageLocationId("");
+                        setStorageLocationTouched(false);
+                      }
+                      setExpiryDate("");
+                      setExpiryTouched(false);
                     }}
                   >
                     <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
@@ -445,6 +529,16 @@ export default function AddPantryItemByIngredientScreen() {
               Storage location
             </Text>
 
+            {effectiveLocation && !storageLocationTouched ? (
+              <Text className="mb-2 text-xs leading-4 text-slate-500">
+                Auto-filled from{" "}
+                {selectedIngredient.defaultStorageLocation
+                  ? "this ingredient's default"
+                  : "recent purchase history"}
+                .
+              </Text>
+            ) : null}
+
             <View className="relative">
               <Pressable
                 className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
@@ -489,6 +583,7 @@ export default function AddPantryItemByIngredientScreen() {
                         className="border-b border-slate-100 px-4 py-4"
                         onPress={() => {
                           setStorageLocationId(location._id);
+                          setStorageLocationTouched(true);
                           setShowLocationOptions(false);
                         }}
                       >
@@ -523,7 +618,10 @@ export default function AddPantryItemByIngredientScreen() {
                 </Text>
                 <TextInput
                   value={expiryDate}
-                  onChangeText={setExpiryDate}
+                  onChangeText={(value) => {
+                    setExpiryDate(value);
+                    setExpiryTouched(true);
+                  }}
                   placeholder="YYYY-MM-DD"
                   placeholderTextColor="#94A3B8"
                   keyboardType="numeric"
@@ -532,10 +630,31 @@ export default function AddPantryItemByIngredientScreen() {
               </View>
             </View>
 
+            {effectiveExpiryDuration && !expiryTouched ? (
+              <Text className="mt-2 text-xs leading-4 text-slate-500">
+                Expiry auto-filled from{" "}
+                {selectedIngredient.defaultExpiryDurationAmount != null
+                  ? "this ingredient's default"
+                  : "recent purchase history"}{" "}
+                ({effectiveExpiryDuration.amount} {effectiveExpiryDuration.unit}
+                {effectiveExpiryDuration.amount > 1 ? "s" : ""}).
+              </Text>
+            ) : null}
+
             <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
               Or set expiry from purchase date
             </Text>
-            <DurationExpiryInput purchaseDate={purchaseDate} onApply={setExpiryDate} />
+            <DurationExpiryInput
+              purchaseDate={purchaseDate}
+              initialAmount={
+                effectiveExpiryDuration ? String(effectiveExpiryDuration.amount) : undefined
+              }
+              initialUnit={effectiveExpiryDuration?.unit}
+              onApply={(value) => {
+                setExpiryDate(value);
+                setExpiryTouched(true);
+              }}
+            />
           </ScrollView>
 
             <View className="pb-6 pt-4">

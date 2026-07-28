@@ -64,6 +64,36 @@ export function daysUntil(value: string | null | undefined): number | null {
   return Math.round((date.getTime() - startOfToday.getTime()) / msPerDay);
 }
 
+/** Whole calendar days from date-only `from` to date-only `to` (negative if `to` is earlier). */
+export function daysBetweenDateOnly(
+  from: string | null | undefined,
+  to: string | null | undefined,
+): number | null {
+  const fromDate = parseDateOnly(from);
+  const toDate = parseDateOnly(to);
+  if (!fromDate || !toDate) return null;
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.round((toDate.getTime() - fromDate.getTime()) / msPerDay);
+}
+
+/** Converts an average day-count into the "nicest" whole duration unit. */
+export function daysToNiceDuration(avgDays: number): {
+  amount: number;
+  unit: DurationUnit;
+} {
+  if (avgDays < 10) {
+    return { amount: Math.max(1, Math.round(avgDays)), unit: "day" };
+  }
+  if (avgDays < 60) {
+    return { amount: Math.max(1, Math.round(avgDays / 7)), unit: "week" };
+  }
+  if (avgDays < 400) {
+    return { amount: Math.max(1, Math.round(avgDays / 30)), unit: "month" };
+  }
+  return { amount: Math.max(1, Math.round(avgDays / 365)), unit: "year" };
+}
+
 /** Adds a numeric duration (in the given unit) to a date-only value. */
 export function addDurationToDate(
   value: string | null | undefined,

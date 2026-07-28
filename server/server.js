@@ -14,6 +14,7 @@ import mealRoutes from "./routes/MealRoutes.js";
 import mealTagRoutes from "./routes/MealTagRoutes.js";
 import mealPlanRoutes from "./routes/MealPlanRoutes.js";
 import userProfileRoutes from "./routes/UserProfileRoutes.js";
+import groceryListRoutes from "./routes/GroceryListRoutes.js";
 
 
 
@@ -54,6 +55,7 @@ app.use("/api/meals", mealRoutes);
 app.use("/api/meal-tags", mealTagRoutes);
 app.use("/api/meal-plan", mealPlanRoutes);
 app.use("/api/profile", userProfileRoutes);
+app.use("/api/grocery-list", groceryListRoutes);
 
 
 app.use((req, res) => {
