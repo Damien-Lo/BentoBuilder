@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   CreatableStringDropdown,
+  DateTextInput,
   DurationExpiryInput,
   DurationValueInput,
   FieldLabel,
@@ -302,10 +303,10 @@ export default function AddManualPantryItemScreen() {
         genericParentName: params.genericParentName ?? "",
       };
     }
-    if (params.scannedName) {
+    if (params.scannedName || params.scannedBarcode) {
       return {
         ...initialForm,
-        ingredientName: params.scannedName,
+        ingredientName: params.scannedName ?? "",
         barcode: params.scannedBarcode ?? "",
         brandName: params.scannedBrand ?? "",
         quantityAvailable: params.scannedQuantity ?? "",
@@ -1185,6 +1186,20 @@ export default function AddManualPantryItemScreen() {
             onChangeText={(value) => updateForm("description", value)}
           />
 
+          <FieldLabel text="Barcode" />
+
+          <FormInput
+            value={form.barcode}
+            placeholder="Optional barcode"
+            autoCapitalize="none"
+            keyboardType="numbers-and-punctuation"
+            onChangeText={(value) => updateForm("barcode", value)}
+          />
+          <Text className="mt-2 text-xs leading-4 text-slate-500">
+            Scanning a barcode fills this in automatically — type one here if
+            a scan came back empty, so it&apos;s recognized next time.
+          </Text>
+
           <FieldLabel text="Category" required />
 
           <SearchableObjectDropdown<SelectOption>
@@ -1519,21 +1534,19 @@ export default function AddManualPantryItemScreen() {
 
               <FieldLabel text="Purchase date" />
 
-              <FormInput
+              <DateTextInput
                 value={form.purchaseDate}
-                placeholder="YYYY-MM-DD"
-                keyboardType="numbers-and-punctuation"
-                autoCapitalize="none"
+                style={{ height: 56 }}
+                className="rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 onChangeText={(value) => updateForm("purchaseDate", value)}
               />
 
               <FieldLabel text="Expiry date" />
 
-              <FormInput
+              <DateTextInput
                 value={form.expiryDate}
-                placeholder="YYYY-MM-DD"
-                keyboardType="numbers-and-punctuation"
-                autoCapitalize="none"
+                style={{ height: 56 }}
+                className="rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 onChangeText={(value) => updateForm("expiryDate", value)}
               />
 

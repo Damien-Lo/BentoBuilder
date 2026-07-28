@@ -31,6 +31,7 @@ import {
 import type { PantryItem } from "@/src/types/pantry";
 import {
   CreatableStringDropdown,
+  DateTextInput,
   DurationExpiryInput,
   FieldLabel,
   SearchableObjectDropdown,
@@ -840,26 +841,20 @@ export default function GroceryListScreen() {
               <View className="mt-3 flex-row">
                 <View className="mr-3 flex-1">
                   <FieldLabel text="Purchase date" />
-                  <TextInput
+                  <DateTextInput
                     value={logPurchaseDate}
                     onChangeText={setLogPurchaseDate}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#94A3B8"
-                    keyboardType="numbers-and-punctuation"
                     className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                   />
                 </View>
                 <View className="flex-1">
                   <FieldLabel text="Expiry date" />
-                  <TextInput
+                  <DateTextInput
                     value={logExpiryDate}
                     onChangeText={(value) => {
                       setLogExpiryDate(value);
                       setLogExpiryTouched(true);
                     }}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor="#94A3B8"
-                    keyboardType="numbers-and-punctuation"
                     className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                   />
                 </View>

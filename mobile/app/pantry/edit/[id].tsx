@@ -21,7 +21,7 @@ import {
 } from "@/src/services/optionsApi";
 import { getPantryItemById, updatePantryItem } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
-import { DurationExpiryInput, QuantityServingInput } from "@/src/components/forms";
+import { DateTextInput, DurationExpiryInput, QuantityServingInput } from "@/src/components/forms";
 import { toDateOnly } from "@/src/utils/date";
 
 type ReferenceObject = { _id?: string; id?: string; name?: string };
@@ -341,12 +341,9 @@ export default function EditPantryItemScreen() {
               <Text className="mb-1.5 text-sm font-semibold text-slate-700">
                 Purchase date
               </Text>
-              <TextInput
+              <DateTextInput
                 value={form.purchaseDate}
                 onChangeText={(v) => update("purchaseDate", v)}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#94A3B8"
-                keyboardType="numeric"
                 className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
               />
             </View>
@@ -354,12 +351,9 @@ export default function EditPantryItemScreen() {
               <Text className="mb-1.5 text-sm font-semibold text-slate-700">
                 Expiry date
               </Text>
-              <TextInput
+              <DateTextInput
                 value={form.expiryDate}
                 onChangeText={(v) => update("expiryDate", v)}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#94A3B8"
-                keyboardType="numeric"
                 className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
               />
             </View>

@@ -1,5 +1,6 @@
 export { CreatableMultiTagDropdown } from "./CreatableMultiTagDropdown";
 export { CreatableStringDropdown } from "./CreatableStringDropdown";
+export { DateTextInput } from "./DateTextInput";
 export { DurationExpiryInput } from "./DurationExpiryInput";
 export { DurationValueInput } from "./DurationValueInput";
 export { FieldLabel } from "./FieldLabel";

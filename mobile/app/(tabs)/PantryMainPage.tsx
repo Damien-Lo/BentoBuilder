@@ -38,7 +38,9 @@ import {
   type Ingredient,
 } from "@/src/services/ingredientApi";
 
-import { getPantryItems } from "@/src/services/pantryApi";
+import { deletePantryItem, getPantryItems, updatePantryItem } from "@/src/services/pantryApi";
+import { PantryItemCard } from "@/src/components/pantry/PantryItemCard";
+import { SplitPantryItemModal } from "@/src/components/pantry/SplitPantryItemModal";
 import type { PantryItem } from "@/src/types/pantry";
 import { barcodesMatch } from "@/src/utils/barcode";
 import { loadSettings } from "@/src/services/settingsService";
@@ -184,6 +186,8 @@ export default function PantryMainPage() {
   const [isAddingLocation, setIsAddingLocation] = useState(false);
   const [newLocationName, setNewLocationName] = useState("");
   const [savingLocation, setSavingLocation] = useState(false);
+  const [splittingItem, setSplittingItem] = useState<PantryItem | null>(null);
+  const [busyPantryItemId, setBusyPantryItemId] = useState<string | null>(null);
 
   const toggleLocation = (id: string) => {
     setExpandedLocations((prev) => {
@@ -453,6 +457,52 @@ export default function PantryMainPage() {
       ],
     );
   };
+
+  function handleDeletePantryEntry(id: string) {
+    Alert.alert("Delete entry", "Remove this pantry entry?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          void deletePantryItem(id)
+            .then(() => {
+              setPantryItems((prev) => prev.filter((p) => p._id !== id));
+            })
+            .catch((err: unknown) => {
+              const message =
+                err instanceof Error ? err.message : "Could not delete pantry entry.";
+              Alert.alert("Error", message);
+            });
+        },
+      },
+    ]);
+  }
+
+  async function handleQuantityDelta(item: PantryItem, delta: number) {
+    const nextQuantity = Math.max(0, Number(item.quantityAvailable ?? 0) + delta);
+    if (nextQuantity === item.quantityAvailable) return;
+
+    setBusyPantryItemId(item._id);
+    try {
+      const updated = await updatePantryItem(item._id, { quantityAvailable: nextQuantity });
+      setPantryItems((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
+    } catch (err) {
+      Alert.alert(
+        "Error",
+        err instanceof Error ? err.message : "Could not update the pantry entry.",
+      );
+    } finally {
+      setBusyPantryItemId(null);
+    }
+  }
+
+  function handleSplitComplete(updatedOriginal: PantryItem, newEntry: PantryItem | null) {
+    setPantryItems((prev) => {
+      const next = prev.map((p) => (p._id === updatedOriginal._id ? updatedOriginal : p));
+      return newEntry ? [...next, newEntry] : next;
+    });
+  }
 
   function handleDeleteLocation(location: SelectOption) {
     const itemCount = pantryItems.filter(
@@ -926,41 +976,33 @@ export default function PantryMainPage() {
                             daysUntilExpiry <= 7 ? "soon" : "ok";
 
                           return (
-                            <Pressable
+                            <PantryItemCard
                               key={pantryItem._id}
-                              className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+                              ingredientName={ingName}
+                              quantityAvailable={pantryItem.quantityAvailable}
+                              quantityUnit={pantryItem.quantityUnit}
+                              busy={busyPantryItemId === pantryItem._id}
+                              rightBadge={
+                                expiryState === "expired" ? (
+                                  <View className="mr-3 rounded-full bg-red-100 px-2.5 py-1">
+                                    <Text className="text-xs font-semibold text-red-600">Expired</Text>
+                                  </View>
+                                ) : expiryState === "soon" ? (
+                                  <View className="mr-3 rounded-full bg-amber-100 px-2.5 py-1">
+                                    <Text className="text-xs font-semibold text-amber-600">
+                                      {daysUntilExpiry === 0 ? "Today" : `${daysUntilExpiry}d`}
+                                    </Text>
+                                  </View>
+                                ) : undefined
+                              }
                               onPress={() =>
                                 router.push({ pathname: "/pantry/edit/[id]", params: { id: pantryItem._id } })
                               }
-                            >
-                              <View className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                                <Ionicons name="nutrition-outline" size={16} color="#2563EB" />
-                              </View>
-
-                              <View className="ml-3 flex-1">
-                                <Text className="font-semibold text-slate-900" numberOfLines={1}>
-                                  {ingName}
-                                </Text>
-                                <Text className="mt-0.5 text-sm text-slate-500">
-                                  {pantryItem.quantityAvailable} {pantryItem.quantityUnit}
-                                </Text>
-                              </View>
-
-                              {expiryState === "expired" && (
-                                <View className="mr-3 rounded-full bg-red-100 px-2.5 py-1">
-                                  <Text className="text-xs font-semibold text-red-600">Expired</Text>
-                                </View>
-                              )}
-                              {expiryState === "soon" && (
-                                <View className="mr-3 rounded-full bg-amber-100 px-2.5 py-1">
-                                  <Text className="text-xs font-semibold text-amber-600">
-                                    {daysUntilExpiry === 0 ? "Today" : `${daysUntilExpiry}d`}
-                                  </Text>
-                                </View>
-                              )}
-
-                              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-                            </Pressable>
+                              onDelete={() => handleDeletePantryEntry(pantryItem._id)}
+                              onSubtract={() => void handleQuantityDelta(pantryItem, -1)}
+                              onAdd={() => void handleQuantityDelta(pantryItem, 1)}
+                              onSplit={() => setSplittingItem(pantryItem)}
+                            />
                           );
                         })}
                       </View>
@@ -1501,6 +1543,15 @@ export default function PantryMainPage() {
 
           router.push({ pathname: "/ingredients/add_manual", params: scannedParams });
         }}
+      />
+
+      <SplitPantryItemModal
+        visible={!!splittingItem}
+        item={splittingItem}
+        ingredientName={splittingItem ? getIngredientName(splittingItem) : ""}
+        storageLocations={storageLocations}
+        onClose={() => setSplittingItem(null)}
+        onSplit={handleSplitComplete}
       />
     </SafeAreaView>
   );

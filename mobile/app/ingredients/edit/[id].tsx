@@ -7,7 +7,6 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from "react-native";
 
@@ -17,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   CreatableStringDropdown,
+  DateTextInput,
   DurationExpiryInput,
   DurationValueInput,
   FieldLabel,
@@ -1511,7 +1511,15 @@ export default function IngredientDetailScreen() {
                           </Pressable>
                         )}
                       >
-                        <View className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+                        <Pressable
+                          className="rounded-2xl border border-slate-200 bg-white px-5 py-4 active:bg-slate-50"
+                          onPress={() =>
+                            router.push({
+                              pathname: "/pantry/edit/[id]",
+                              params: { id: entry._id },
+                            })
+                          }
+                        >
                           <View className="flex-row items-center justify-between">
                             <View className="flex-row items-center">
                               <View className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
@@ -1525,9 +1533,17 @@ export default function IngredientDetailScreen() {
                                 {getLocationName(entry)}
                               </Text>
                             </View>
-                            <Text className="font-bold text-slate-900">
-                              {entry.quantityAvailable} {entry.quantityUnit}
-                            </Text>
+                            <View className="flex-row items-center">
+                              <Text className="font-bold text-slate-900">
+                                {entry.quantityAvailable} {entry.quantityUnit}
+                              </Text>
+                              <Ionicons
+                                name="chevron-forward"
+                                size={16}
+                                color="#CBD5E1"
+                                style={{ marginLeft: 6 }}
+                              />
+                            </View>
                           </View>
 
                           <View className="mt-3 flex-row">
@@ -1584,7 +1600,7 @@ export default function IngredientDetailScreen() {
                               </View>
                             ) : null}
                           </View>
-                        </View>
+                        </Pressable>
                       </ReanimatedSwipeable>
                     </View>
                   );
@@ -1641,27 +1657,21 @@ export default function IngredientDetailScreen() {
                 <View className="mt-3 flex-row">
                   <View className="mr-3 flex-1">
                     <FieldLabel text="Purchase date" />
-                    <TextInput
+                    <DateTextInput
                       className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900"
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor="#94a3b8"
                       value={quickAddPurchaseDate}
                       onChangeText={setQuickAddPurchaseDate}
-                      keyboardType="numbers-and-punctuation"
                     />
                   </View>
                   <View className="flex-1">
                     <FieldLabel text="Expiry date" />
-                    <TextInput
+                    <DateTextInput
                       className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900"
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor="#94a3b8"
                       value={quickAddExpiryDate}
                       onChangeText={(value) => {
                         setQuickAddExpiryDate(value);
                         setQuickAddExpiryTouched(true);
                       }}
-                      keyboardType="numbers-and-punctuation"
                     />
                   </View>
                 </View>

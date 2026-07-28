@@ -211,7 +211,9 @@ router.patch("/:id", async (req, res) => {
         new: true,
         runValidators: true,
       }
-    ).populate(INGREDIENT_POPULATE);
+    )
+      .populate(INGREDIENT_POPULATE)
+      .populate("storageLocation");
 
     if (!pantryItem) {
       return res.status(404).json({

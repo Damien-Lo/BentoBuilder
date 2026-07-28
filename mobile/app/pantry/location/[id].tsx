@@ -10,9 +10,15 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
-import { deletePantryItem, getPantryItems } from "@/src/services/pantryApi";
+import {
+  deletePantryItem,
+  getPantryItems,
+  updatePantryItem,
+} from "@/src/services/pantryApi";
+import { getStorageLocations, type SelectOption } from "@/src/services/optionsApi";
+import { PantryItemCard } from "@/src/components/pantry/PantryItemCard";
+import { SplitPantryItemModal } from "@/src/components/pantry/SplitPantryItemModal";
 import type { PantryItem } from "@/src/types/pantry";
 import { daysUntil, formatDateDisplay } from "@/src/utils/date";
 
@@ -52,7 +58,10 @@ export default function LocationDetailScreen() {
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
 
   const [items, setItems] = useState<PantryItem[]>([]);
+  const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [splittingItem, setSplittingItem] = useState<PantryItem | null>(null);
+  const [busyItemId, setBusyItemId] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -61,13 +70,17 @@ export default function LocationDetailScreen() {
       async function load() {
         setIsLoading(true);
         try {
-          const all = await getPantryItems();
+          const [all, loadedLocations] = await Promise.all([
+            getPantryItems(),
+            getStorageLocations(),
+          ]);
           if (!cancelled) {
             setItems(
               (Array.isArray(all) ? all : []).filter((item) =>
                 itemMatchesLocation(item, id),
               ),
             );
+            setStorageLocations(Array.isArray(loadedLocations) ? loadedLocations : []);
           }
         } catch (err) {
           if (!cancelled) {
@@ -113,6 +126,36 @@ export default function LocationDetailScreen() {
       ],
     );
   };
+
+  async function handleQuantityDelta(item: PantryItem, delta: number) {
+    const nextQuantity = Math.max(0, Number(item.quantityAvailable ?? 0) + delta);
+    if (nextQuantity === item.quantityAvailable) return;
+
+    setBusyItemId(item._id);
+    try {
+      const updated = await updatePantryItem(item._id, { quantityAvailable: nextQuantity });
+      setItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
+    } catch (err) {
+      Alert.alert(
+        "Error",
+        err instanceof Error ? err.message : "Could not update the pantry entry.",
+      );
+    } finally {
+      setBusyItemId(null);
+    }
+  }
+
+  function handleSplitComplete(updatedOriginal: PantryItem, newEntry: PantryItem | null) {
+    setItems((prev) => {
+      const withoutOriginal = prev.filter((i) => i._id !== updatedOriginal._id);
+      const withOriginal = itemMatchesLocation(updatedOriginal, id)
+        ? [...withoutOriginal, updatedOriginal]
+        : withoutOriginal;
+      return newEntry && itemMatchesLocation(newEntry, id)
+        ? [...withOriginal, newEntry]
+        : withOriginal;
+    });
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
@@ -196,45 +239,13 @@ export default function LocationDetailScreen() {
             const expiringSoon = !expired && isExpiringSoon(item.expiryDate);
 
             return (
-              <ReanimatedSwipeable
-                friction={2}
-                rightThreshold={40}
-                renderLeftActions={() => (
-                  <Pressable
-                    className="mb-2.5 w-20 items-center justify-center rounded-2xl bg-red-500 active:bg-red-600"
-                    onPress={() => handleDelete(item._id, ingredientName)}
-                  >
-                    <Ionicons name="trash-outline" size={22} color="white" />
-                  </Pressable>
-                )}
-              >
-                <Pressable
-                  className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/pantry/edit/[id]",
-                      params: { id: item._id },
-                    })
-                  }
-                >
-                  <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-                    <Ionicons
-                      name="nutrition-outline"
-                      size={18}
-                      color="#2563EB"
-                    />
-                  </View>
-
-                  <View className="ml-3 flex-1">
-                    <Text className="text-base font-bold text-slate-900">
-                      {ingredientName}
-                    </Text>
-                    <Text className="mt-0.5 text-sm text-slate-500">
-                      {item.quantityAvailable} {item.quantityUnit}
-                    </Text>
-                  </View>
-
-                  {expiryStr ? (
+              <PantryItemCard
+                ingredientName={ingredientName}
+                quantityAvailable={item.quantityAvailable}
+                quantityUnit={item.quantityUnit}
+                busy={busyItemId === item._id}
+                rightBadge={
+                  expiryStr ? (
                     <View
                       className={`mr-2 rounded-full px-3 py-1 ${
                         expired
@@ -257,15 +268,32 @@ export default function LocationDetailScreen() {
                         {expiryStr}
                       </Text>
                     </View>
-                  ) : null}
-
-                  <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-                </Pressable>
-              </ReanimatedSwipeable>
+                  ) : undefined
+                }
+                onPress={() =>
+                  router.push({
+                    pathname: "/pantry/edit/[id]",
+                    params: { id: item._id },
+                  })
+                }
+                onDelete={() => handleDelete(item._id, ingredientName)}
+                onSubtract={() => void handleQuantityDelta(item, -1)}
+                onAdd={() => void handleQuantityDelta(item, 1)}
+                onSplit={() => setSplittingItem(item)}
+              />
             );
           }}
         />
       )}
+
+      <SplitPantryItemModal
+        visible={!!splittingItem}
+        item={splittingItem}
+        ingredientName={splittingItem ? getIngredientName(splittingItem) : ""}
+        storageLocations={storageLocations}
+        onClose={() => setSplittingItem(null)}
+        onSplit={handleSplitComplete}
+      />
     </SafeAreaView>
   );
 }

@@ -13,7 +13,9 @@ export interface CreatePantryItemInput {
   quantityUnit: string;
 
   purchaseDate?: string;
-  expiryDate?: string;
+  // Update calls send null to explicitly clear an existing expiry date
+  // (e.g. a split side with no expiry) — undefined just omits the field.
+  expiryDate?: string | null;
   purchasePrice?: number;
   lowStockThreshold?: number;
   notes?: string;

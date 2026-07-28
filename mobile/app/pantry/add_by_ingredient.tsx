@@ -25,7 +25,7 @@ import {
 
 import { addIngredientToPantry, getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
-import { DurationExpiryInput, QuantityServingInput } from "@/src/components/forms";
+import { DateTextInput, DurationExpiryInput, QuantityServingInput } from "@/src/components/forms";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
   recentPantryEntries,
@@ -603,12 +603,9 @@ export default function AddPantryItemByIngredientScreen() {
                 <Text className="mb-2 text-sm font-semibold text-slate-700">
                   Purchase date
                 </Text>
-                <TextInput
+                <DateTextInput
                   value={purchaseDate}
                   onChangeText={setPurchaseDate}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="numbers-and-punctuation"
                   className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 />
               </View>
@@ -616,15 +613,12 @@ export default function AddPantryItemByIngredientScreen() {
                 <Text className="mb-2 text-sm font-semibold text-slate-700">
                   Expiry date
                 </Text>
-                <TextInput
+                <DateTextInput
                   value={expiryDate}
                   onChangeText={(value) => {
                     setExpiryDate(value);
                     setExpiryTouched(true);
                   }}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="numbers-and-punctuation"
                   className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 />
               </View>

@@ -63,8 +63,17 @@ export function BarcodeScannerModal({
       if (json.status !== 1 || !json.product) {
         Alert.alert(
           "Product not found",
-          "This barcode wasn't in the database. Fill in the details manually.",
-          [{ text: "OK", onPress: onClose }],
+          "This barcode wasn't in the database. You can still add it manually — the barcode will be saved so it's recognized next time.",
+          [
+            { text: "Cancel", style: "cancel", onPress: onClose },
+            {
+              text: "Continue",
+              onPress: () => {
+                onProductFound({ name: "", barcode: data, servingSize: 1, servingUnit: "" });
+                onClose();
+              },
+            },
+          ],
         );
         return;
       }
@@ -116,8 +125,23 @@ export function BarcodeScannerModal({
       if (!name) {
         Alert.alert(
           "No product name",
-          "Barcode found but the product has no name. Fill it in manually.",
-          [{ text: "OK", onPress: onClose }],
+          "Barcode found, but it has no name on file. You can still add it manually — the barcode will be saved so it's recognized next time.",
+          [
+            { text: "Cancel", style: "cancel", onPress: onClose },
+            {
+              text: "Continue",
+              onPress: () => {
+                onProductFound({
+                  name: "",
+                  barcode: data,
+                  brand: brand || undefined,
+                  servingSize: 1,
+                  servingUnit: "",
+                });
+                onClose();
+              },
+            },
+          ],
         );
         return;
       }
@@ -145,8 +169,17 @@ export function BarcodeScannerModal({
     } catch {
       Alert.alert(
         "Lookup failed",
-        "Could not reach the product database. Check your connection.",
-        [{ text: "OK", onPress: onClose }],
+        "Could not reach the product database. You can still add it manually — the barcode will be saved so it's recognized next time.",
+        [
+          { text: "Cancel", style: "cancel", onPress: onClose },
+          {
+            text: "Continue",
+            onPress: () => {
+              onProductFound({ name: "", barcode: data, servingSize: 1, servingUnit: "" });
+              onClose();
+            },
+          },
+        ],
       );
     } finally {
       setLooking(false);
