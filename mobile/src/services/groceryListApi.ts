@@ -19,6 +19,9 @@ export interface GroceryItem {
   quantity: number | null;
   unit: string;
   status: GroceryItemStatus;
+  // The pantry entry that logging this item created, once completed — see
+  // GroceryItem.js for the undo/delete semantics around this field.
+  pantryItem?: string | null;
   createdAt?: string;
 }
 
@@ -32,6 +35,7 @@ export interface CreateGroceryItemInput {
 export type UpdateGroceryItemInput = Partial<
   Pick<CreateGroceryItemInput, "name" | "quantity" | "unit" | "ingredient"> & {
     status: GroceryItemStatus;
+    pantryItem: string | null;
   }
 >;
 

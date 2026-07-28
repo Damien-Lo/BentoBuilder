@@ -23,7 +23,11 @@ import {
   getUnitSuggestions,
   type SelectOption,
 } from "@/src/services/optionsApi";
-import { addIngredientToPantry, getPantryItems } from "@/src/services/pantryApi";
+import {
+  addIngredientToPantry,
+  deletePantryItem,
+  getPantryItems,
+} from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import {
   CreatableStringDropdown,
@@ -228,7 +232,34 @@ export default function GroceryListScreen() {
     }
   }
 
+  // Undoing a completed item deletes the pantry entry it created — unlike
+  // every other status change, this one isn't a plain toggle. The pantry
+  // delete happens before the grocery item is updated, so a failure here
+  // never leaves the grocery item "completed" while pointing at a pantry
+  // entry that's already gone.
+  async function handleUncheckItem(item: GroceryItem) {
+    try {
+      if (item.pantryItem) {
+        await deletePantryItem(item.pantryItem);
+      }
+      const updated = await updateGroceryItem(item._id, {
+        status: "pendingLog",
+        pantryItem: null,
+      });
+      setGroceryItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
+    } catch (err) {
+      Alert.alert(
+        "Could not undo",
+        err instanceof Error ? err.message : "Failed to remove the pantry entry.",
+      );
+    }
+  }
+
   async function handleAdvanceItem(item: GroceryItem) {
+    if (item.status === "completed") {
+      return handleUncheckItem(item);
+    }
+
     const previousStatus = item.status;
     const status = nextStatus(previousStatus);
     setGroceryItems((prev) =>
@@ -420,7 +451,7 @@ export default function GroceryListScreen() {
         setStorageLocations((prev) => [...prev, storageLocation]);
       }
 
-      await addIngredientToPantry({
+      const newPantryItem = await addIngredientToPantry({
         ingredient: ingredientId,
         storageLocation: storageLocation._id,
         quantityAvailable: qty,
@@ -429,7 +460,10 @@ export default function GroceryListScreen() {
         expiryDate: logExpiryDate || undefined,
       });
 
-      const updated = await updateGroceryItem(loggingItem._id, { status: "completed" });
+      const updated = await updateGroceryItem(loggingItem._id, {
+        status: "completed",
+        pantryItem: newPantryItem._id,
+      });
       setGroceryItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
       setLoggingItem(null);
     } catch (err) {

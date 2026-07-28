@@ -39,6 +39,17 @@ const groceryItemSchema = new mongoose.Schema(
       enum: ["toBuy", "pendingLog", "completed"],
       default: "toBuy",
     },
+
+    // Set when `status` becomes "completed" via the log-to-pantry flow — the
+    // pantry entry that logging this item actually created. Undoing back to
+    // pendingLog deletes that pantry entry and clears this back to null.
+    // Deleting the grocery item itself (swipe, or "clear completed") never
+    // touches the pantry entry — only this undo path does.
+    pantryItem: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PantryItem",
+      default: null,
+    },
   },
   {
     timestamps: true,
