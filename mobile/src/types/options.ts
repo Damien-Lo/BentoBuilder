@@ -8,15 +8,20 @@ export interface SelectOption {
 export interface IngredientOption
   extends SelectOption {
   description?: string;
+  barcode?: string | null;
   unit?: string;
   defaultPortionAmount?: number;
 
   isGeneric?: boolean;
 
+  brandId?: string;
+  brandName?: string;
+
   genericParentId?: string;
   genericParentName?: string;
 
   lowStockThreshold?: number;
+  isAlwaysAvailable?: boolean;
 
   defaultStorageLocationId?: string;
   defaultStorageLocationName?: string;

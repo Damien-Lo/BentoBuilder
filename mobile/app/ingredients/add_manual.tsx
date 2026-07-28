@@ -23,6 +23,7 @@ import {
   DurationValueInput,
   FieldLabel,
   FormInput,
+  QuantityServingInput,
   SearchableObjectDropdown,
   SectionTitle,
   SegmentedToggle,
@@ -48,6 +49,7 @@ import { updateGroceryItem } from "@/src/services/groceryListApi";
 
 import type { IngredientOption, SelectOption } from "@/src/types/options";
 import type { PantryItem } from "@/src/types/pantry";
+import { barcodesMatch } from "@/src/utils/barcode";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { todayDateInputString } from "@/src/utils/date";
 
@@ -78,6 +80,7 @@ interface FormState {
   purchaseDate: string;
   expiryDate: string;
   lowStockThreshold: string;
+  alwaysAvailable: boolean;
 
   defaultStorageLocationId: string;
   defaultStorageLocationName: string;
@@ -119,6 +122,7 @@ const initialForm: FormState = {
   purchaseDate: todayDateInputString(),
   expiryDate: "",
   lowStockThreshold: "0",
+  alwaysAvailable: false,
 
   defaultStorageLocationId: "",
   defaultStorageLocationName: "",
@@ -169,6 +173,11 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
       ? ingredient.category
       : undefined;
 
+  const brand =
+    typeof ingredient.brand === "object" && ingredient.brand !== null
+      ? ingredient.brand
+      : undefined;
+
   const genericParent =
     typeof ingredient.genericParent === "object" &&
     ingredient.genericParent !== null
@@ -186,8 +195,14 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
     name: ingredient.name,
 
     description: ingredient.description ?? "",
+    barcode: ingredient.barcode ?? null,
 
     isGeneric: ingredient.isGeneric ?? false,
+
+    brandId:
+      brand?._id ??
+      (typeof ingredient.brand === "string" ? ingredient.brand : ""),
+    brandName: brand?.name ?? "",
 
     genericParentId:
       genericParent?._id ??
@@ -201,6 +216,7 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
     defaultPortionAmount: ingredient.defaultPortionAmount,
 
     lowStockThreshold: ingredient.lowStockThreshold,
+    isAlwaysAvailable: ingredient.isAlwaysAvailable ?? false,
 
     defaultStorageLocationId:
       defaultStorageLocation?._id ??
@@ -261,6 +277,10 @@ export default function AddManualPantryItemScreen() {
     prefillName?: string;
     genericParentId?: string;
     genericParentName?: string;
+    // Present instead of prefillName/genericParent* when the grocery item's
+    // generic already has an existing specific ingredient fulfilling it —
+    // skips creation entirely and goes straight to logging a purchase.
+    existingIngredientId?: string;
   }>();
 
   // Only a specific/branded ingredient can hold pantry stock, and this
@@ -374,11 +394,28 @@ export default function AddManualPantryItemScreen() {
           return;
         }
 
-        setIngredients(
-          Array.isArray(loadedIngredients)
-            ? loadedIngredients.map(ingredientToOption)
-            : [],
-        );
+        const mappedIngredients = Array.isArray(loadedIngredients)
+          ? loadedIngredients.map(ingredientToOption)
+          : [];
+
+        setIngredients(mappedIngredients);
+
+        // Barcode-scan duplicates are already caught before navigating here
+        // (see PantryMainPage's scanner handler, and applyScannedProduct
+        // below for the in-page scanner) — only the "chosen from the
+        // grocery list" hand-off still needs resolving on load.
+        if (params.existingIngredientId) {
+          // Chosen from the grocery list's "you already have this" prompt —
+          // already confirmed there, so no need to alert about it again.
+          const existingIngredient = mappedIngredients.find(
+            (option) => option._id === params.existingIngredientId,
+          );
+
+          if (existingIngredient) {
+            applySelectedIngredient(existingIngredient);
+            setPantryInventoryExpanded(true);
+          }
+        }
 
         setCategories(Array.isArray(loadedCategories) ? loadedCategories : []);
 
@@ -421,6 +458,34 @@ export default function AddManualPantryItemScreen() {
   }
 
   function applyScannedProduct(product: ScannedProduct) {
+    // Scanning a barcode that's already in the catalog should log a pantry
+    // entry for that ingredient, not offer to create a duplicate.
+    const existingMatch = ingredients.find((option) =>
+      barcodesMatch(option.barcode, product.barcode),
+    );
+
+    if (existingMatch) {
+      if (isResolvingGroceryItem) {
+        goToExistingIngredient(existingMatch);
+        Alert.alert(
+          "Already in your catalog",
+          `"${existingMatch.name}" is already an ingredient — add a pantry entry below to log this purchase.`,
+        );
+      } else {
+        Alert.alert(
+          "Already in your catalog",
+          `"${existingMatch.name}" is already an ingredient.`,
+          [
+            {
+              text: "View ingredient",
+              onPress: () => goToExistingIngredient(existingMatch),
+            },
+          ],
+        );
+      }
+      return;
+    }
+
     setForm((current) => ({
       ...current,
       ingredientId: "",
@@ -464,6 +529,7 @@ export default function AddManualPantryItemScreen() {
         option.lowStockThreshold != null
           ? String(option.lowStockThreshold)
           : "0",
+      alwaysAvailable: option.isAlwaysAvailable ?? false,
 
       calories: numberToFormValue(option.calories),
 
@@ -492,6 +558,26 @@ export default function AddManualPantryItemScreen() {
     setDefaultLocationDraft(option.defaultStorageLocationName ?? "");
     setWantsDefaultLocation(!!option.defaultStorageLocationId);
     setWantsDefaultExpiry(option.defaultExpiryDurationAmount != null);
+  }
+
+  // What "pick the existing ingredient instead" does when a duplicate is
+  // found (via barcode scan or typed name+brand match). Resolving a grocery
+  // item still needs to finish on *this* screen — completing it requires
+  // creating the pantry entry here so it can link back via groceryItemId —
+  // so that case stays and just loads the existing ingredient into the
+  // form. Otherwise there's nothing left to do here, so hand off to the
+  // ingredient's own page instead of leaving a pantry-only shell behind.
+  function goToExistingIngredient(existingIngredient: IngredientOption) {
+    if (isResolvingGroceryItem) {
+      applySelectedIngredient(existingIngredient);
+      setPantryInventoryExpanded(true);
+      return;
+    }
+
+    router.replace({
+      pathname: "/ingredients/edit/[id]",
+      params: { id: existingIngredient._id },
+    });
   }
 
   async function handleCreateCategory(name: string): Promise<SelectOption> {
@@ -715,7 +801,40 @@ export default function AddManualPantryItemScreen() {
         sodium: optionalNumber(form.sodium),
       };
 
+      const normalizedName = form.ingredientName.trim().toLowerCase();
+
       if (form.isGeneric) {
+        // Generics are unique by name within a category (mirrors the same
+        // rule the server already enforces when resolving a typed
+        // genericName on a specific ingredient) — catch it client-side too
+        // so typing a name without selecting the suggestion doesn't quietly
+        // create a second "Soy Sauce" in the same category.
+        const duplicateGeneric = ingredients.find(
+          (option) =>
+            option.isGeneric &&
+            option.name.trim().toLowerCase() === normalizedName &&
+            (option.categoryId ?? option.category?._id) === category._id,
+        );
+
+        if (duplicateGeneric) {
+          Alert.alert(
+            "Ingredient already exists",
+            `"${duplicateGeneric.name}" already exists as a generic ingredient in this category. Change the name to create a different one.`,
+            [
+              { text: "Change name", style: "cancel" },
+              {
+                text: "View ingredient",
+                onPress: () =>
+                  router.replace({
+                    pathname: "/ingredients/edit/[id]",
+                    params: { id: duplicateGeneric._id },
+                  }),
+              },
+            ],
+          );
+          return;
+        }
+
         await createIngredient({
           name: form.ingredientName.trim(),
           barcode: form.barcode.trim() || null,
@@ -726,6 +845,7 @@ export default function AddManualPantryItemScreen() {
           defaultPortionUnit: form.quantityUnit.trim() || undefined,
           defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
           lowStockThreshold: ingredientLowStockThreshold,
+          isAlwaysAvailable: form.alwaysAvailable,
           defaultStorageLocation: defaultStorageLocation?._id || null,
           defaultExpiryDurationAmount: defaultExpiryDurationAmount ?? null,
           defaultExpiryDurationUnit:
@@ -746,6 +866,36 @@ export default function AddManualPantryItemScreen() {
           brandDraft,
           handleCreateBrand,
         );
+
+        // Same name AND same brand (including "no brand" matching "no
+        // brand") is what actually identifies "the same product" — two
+        // different brands can legitimately share a product name (e.g. two
+        // brands both called "Soy Sauce"), so brand alone or name alone
+        // isn't enough to call it a duplicate.
+        const resolvedBrandId = brand?._id ?? null;
+        const duplicateIngredient = ingredients.find(
+          (option) =>
+            !option.isGeneric &&
+            option.name.trim().toLowerCase() === normalizedName &&
+            (option.brandId || null) === resolvedBrandId,
+        );
+
+        if (duplicateIngredient) {
+          Alert.alert(
+            "Ingredient already exists",
+            `"${duplicateIngredient.name}"${
+              brand ? ` (${brand.name})` : ""
+            } is already in your catalog. Change the name to create a different product, or use the existing ingredient to add a pantry entry.`,
+            [
+              { text: "Change name", style: "cancel" },
+              {
+                text: "Use existing ingredient",
+                onPress: () => goToExistingIngredient(duplicateIngredient),
+              },
+            ],
+          );
+          return;
+        }
 
         // If an existing generic was picked, its id is sent as-is. If the
         // user just typed a name that didn't match one, no genericParent is
@@ -768,6 +918,7 @@ export default function AddManualPantryItemScreen() {
           defaultPortionUnit: form.quantityUnit.trim() || undefined,
           defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
           lowStockThreshold: ingredientLowStockThreshold,
+          isAlwaysAvailable: form.alwaysAvailable,
           defaultStorageLocation: defaultStorageLocation?._id || null,
           defaultExpiryDurationAmount: defaultExpiryDurationAmount ?? null,
           defaultExpiryDurationUnit:
@@ -1107,19 +1258,30 @@ export default function AddManualPantryItemScreen() {
             120 g spice bottle) — nutrition below should match that amount.
           </Text>
 
-          <FieldLabel text="Low-stock threshold" />
-
-          <FormInput
-            value={form.lowStockThreshold}
-            placeholder="0"
-            keyboardType="decimal-pad"
-            onChangeText={(value) => updateForm("lowStockThreshold", value)}
+          <ToggleRow
+            label="Always available"
+            description="Never shows as low or out of stock (e.g. tap water) — skips stock tracking entirely."
+            value={form.alwaysAvailable}
+            onChange={(value) => updateForm("alwaysAvailable", value)}
           />
 
-          <Text className="mt-2 text-xs leading-4 text-slate-500">
-            Warn when total stock falls below this many{" "}
-            {form.quantityUnit.trim() || "units"}.
-          </Text>
+          {!form.alwaysAvailable && (
+            <>
+              <FieldLabel text="Low-stock threshold" />
+
+              <FormInput
+                value={form.lowStockThreshold}
+                placeholder="0"
+                keyboardType="decimal-pad"
+                onChangeText={(value) => updateForm("lowStockThreshold", value)}
+              />
+
+              <Text className="mt-2 text-xs leading-4 text-slate-500">
+                Warn when total stock falls below this many{" "}
+                {form.quantityUnit.trim() || "units"}.
+              </Text>
+            </>
+          )}
 
           <Pressable
             className="mt-8 flex-row items-center justify-between"
@@ -1367,22 +1529,16 @@ export default function AddManualPantryItemScreen() {
 
                   <FieldLabel text="Quantity" required />
 
-                  <View className="flex-row items-center">
-                    <View className="flex-1">
-                      <FormInput
-                        value={form.quantityAvailable}
-                        placeholder="0"
-                        keyboardType="decimal-pad"
-                        onChangeText={(value) =>
-                          updateForm("quantityAvailable", value)
-                        }
-                      />
-                    </View>
-
-                    <Text className="ml-3 text-base font-medium text-slate-600">
-                      {form.quantityUnit.trim() || "unit"}
-                    </Text>
-                  </View>
+                  <QuantityServingInput
+                    quantityAvailable={form.quantityAvailable}
+                    quantityUnit={form.quantityUnit}
+                    onChangeQuantity={(value) => updateForm("quantityAvailable", value)}
+                    onChangeUnit={(value) => updateForm("quantityUnit", value)}
+                    unitOptions={units}
+                    onAddUnit={handleAddUnit}
+                    defaultPortionAmount={optionalNumber(form.defaultPortionAmount)}
+                    defaultPortionUnit={form.quantityUnit.trim() || undefined}
+                  />
 
                   <FieldLabel text="Purchase date" />
 

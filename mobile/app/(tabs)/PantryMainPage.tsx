@@ -555,8 +555,14 @@ export default function PantryMainPage() {
     const stockValue = (
       <View className="flex-row items-center">
         <View className={`mr-2 h-2 w-2 rounded-full ${statusDotColor}`} />
-        <Text className="text-sm font-medium text-slate-600">
-          {isInStock ? `${totalQuantity} ${displayUnit ?? ""}`.trim() : "—"}
+        <Text
+          className={`text-sm font-medium ${isAlwaysAvailable ? "text-blue-600" : "text-slate-600"}`}
+        >
+          {isAlwaysAvailable
+            ? "Always available"
+            : isInStock
+              ? `${totalQuantity} ${displayUnit ?? ""}`.trim()
+              : "—"}
         </Text>
       </View>
     );
@@ -728,6 +734,16 @@ export default function PantryMainPage() {
                       }`}
                     >
                       {locationEditMode ? "Done" : "Edit"}
+                    </Text>
+                  </Pressable>
+                )}
+                {pantryViewMode === "list" && expandedLocations.size > 0 && (
+                  <Pressable
+                    className="mr-2 h-10 items-center justify-center rounded-full bg-slate-100 px-3 active:bg-slate-200"
+                    onPress={() => setExpandedLocations(new Set())}
+                  >
+                    <Text className="text-sm font-semibold text-slate-600">
+                      Collapse all
                     </Text>
                   </Pressable>
                 )}
@@ -956,9 +972,21 @@ export default function PantryMainPage() {
           */}
           <View style={{ width: screenWidth }} className="flex-1">
             <View className="px-5 pt-24">
-              <Text className="text-3xl font-bold text-slate-950">
-                All Your Ingredients
-              </Text>
+              <View className="flex-row items-center">
+                <Text className="flex-1 text-3xl font-bold text-slate-950">
+                  All Your Ingredients
+                </Text>
+                {expandedCategories.size > 0 && (
+                  <Pressable
+                    className="h-10 items-center justify-center rounded-full bg-slate-100 px-3 active:bg-slate-200"
+                    onPress={() => setExpandedCategories(new Set())}
+                  >
+                    <Text className="text-sm font-semibold text-slate-600">
+                      Collapse all
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
 
               <Text className="mt-1 text-base text-slate-500">
                 View every ingredient in one list
@@ -1424,8 +1452,9 @@ export default function PantryMainPage() {
             scannedSodium: product.sodium != null ? String(product.sodium) : "",
           };
 
+          const match = ingredients.find((i) => barcodesMatch(i.barcode, product.barcode));
+
           if (scanContext === "pantry") {
-            const match = ingredients.find((i) => barcodesMatch(i.barcode, product.barcode));
             if (match) {
               router.push({
                 pathname: "/pantry/add_by_ingredient",
@@ -1441,6 +1470,28 @@ export default function PantryMainPage() {
                 }],
               );
             }
+            return;
+          }
+
+          // Scanning while adding a new ingredient — check for an existing
+          // match *before* navigating anywhere, so a duplicate never briefly
+          // flashes the "create new" screen behind the alert.
+          if (match) {
+            Alert.alert(
+              "Already in your catalog",
+              `"${match.name}" is already an ingredient.`,
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "View ingredient",
+                  onPress: () =>
+                    router.push({
+                      pathname: "/ingredients/edit/[id]",
+                      params: { id: match._id },
+                    }),
+                },
+              ],
+            );
             return;
           }
 

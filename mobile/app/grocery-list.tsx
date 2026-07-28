@@ -325,29 +325,77 @@ export default function GroceryListScreen() {
           ? item.ingredient
           : null;
 
+      const addNewParams = {
+        groceryItemId: item._id,
+        prefillName: item.name,
+        ...(genericIngredient
+          ? {
+              genericParentId: genericIngredient._id,
+              genericParentName: genericIngredient.name,
+            }
+          : {}),
+      };
+
+      if (!genericIngredient) {
+        Alert.alert(
+          "Add as a new ingredient?",
+          `"${item.name}" isn't linked to a catalog ingredient yet. Add it so you can log it to your pantry.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Add ingredient",
+              onPress: () =>
+                router.push({ pathname: "/ingredients/add_manual", params: addNewParams }),
+            },
+          ],
+        );
+        return;
+      }
+
+      // A generic (e.g. "Oat Milk") is a matching umbrella — if a specific
+      // product already fulfills it, log a pantry entry for that one
+      // instead of always steering toward creating a duplicate.
+      const existingVariants = ingredients.filter(
+        (candidate) => !candidate.isGeneric && referenceId(candidate.genericParent) === genericIngredient._id,
+      );
+
+      if (existingVariants.length === 1) {
+        const existing = existingVariants[0];
+
+        Alert.alert(
+          "Log this purchase",
+          `"${item.name}" is linked to the generic ingredient "${genericIngredient.name}" — you already have "${existing.name}" cataloged for it. Log this purchase for that product, or add a different one.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Add a different product",
+              onPress: () =>
+                router.push({ pathname: "/ingredients/add_manual", params: addNewParams }),
+            },
+            {
+              text: `Log "${existing.name}"`,
+              onPress: () =>
+                router.push({
+                  pathname: "/ingredients/add_manual",
+                  params: { groceryItemId: item._id, existingIngredientId: existing._id },
+                }),
+            },
+          ],
+        );
+        return;
+      }
+
       Alert.alert(
         "Add as a new ingredient?",
-        genericIngredient
-          ? `"${item.name}" is linked to the generic ingredient "${genericIngredient.name}". Add the specific product you bought to log it to your pantry.`
-          : `"${item.name}" isn't linked to a catalog ingredient yet. Add it so you can log it to your pantry.`,
+        existingVariants.length > 1
+          ? `"${item.name}" is linked to the generic ingredient "${genericIngredient.name}", which already has ${existingVariants.length} products cataloged. Search for one on the next screen, or add a new one.`
+          : `"${item.name}" is linked to the generic ingredient "${genericIngredient.name}". Add the specific product you bought to log it to your pantry.`,
         [
           { text: "Cancel", style: "cancel" },
           {
             text: "Add ingredient",
             onPress: () =>
-              router.push({
-                pathname: "/ingredients/add_manual",
-                params: {
-                  groceryItemId: item._id,
-                  prefillName: item.name,
-                  ...(genericIngredient
-                    ? {
-                        genericParentId: genericIngredient._id,
-                        genericParentName: genericIngredient.name,
-                      }
-                    : {}),
-                },
-              }),
+              router.push({ pathname: "/ingredients/add_manual", params: addNewParams }),
           },
         ],
       );
