@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
@@ -106,51 +106,63 @@ export default function GroceryListScreen() {
   const [logLocationTouched, setLogLocationTouched] = useState(false);
   const [logExpiryTouched, setLogExpiryTouched] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Refetches every time this screen regains focus — e.g. coming back from
+  // resolving a grocery item via the add-ingredient screen, which updates
+  // this list's data from a separate screen instance. Only the very first
+  // load shows the full-screen spinner; later refetches happen quietly.
+  const hasLoadedOnceRef = useRef(false);
 
-    async function load() {
-      try {
-        const [
-          loadedIngredients,
-          loadedUnits,
-          loadedGroceryItems,
-          loadedSettings,
-          loadedLocations,
-          loadedPantryItems,
-        ] = await Promise.all([
-          getIngredients(),
-          getUnitSuggestions(),
-          getGroceryItems(),
-          loadSettings(),
-          getStorageLocations(),
-          getPantryItems(),
-        ]);
-        if (!cancelled) {
-          setIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
-          setUnitOptions(Array.isArray(loadedUnits) ? loadedUnits : []);
-          setGroceryItems(loadedGroceryItems);
-          setCustomUnitConversions(loadedSettings.unitConversions ?? []);
-          setStorageLocations(Array.isArray(loadedLocations) ? loadedLocations : []);
-          setPantryItems(Array.isArray(loadedPantryItems) ? loadedPantryItems : []);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const isFirstLoad = !hasLoadedOnceRef.current;
+
+      async function load() {
+        if (isFirstLoad) setIsLoading(true);
+
+        try {
+          const [
+            loadedIngredients,
+            loadedUnits,
+            loadedGroceryItems,
+            loadedSettings,
+            loadedLocations,
+            loadedPantryItems,
+          ] = await Promise.all([
+            getIngredients(),
+            getUnitSuggestions(),
+            getGroceryItems(),
+            loadSettings(),
+            getStorageLocations(),
+            getPantryItems(),
+          ]);
+          if (!cancelled) {
+            setIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
+            setUnitOptions(Array.isArray(loadedUnits) ? loadedUnits : []);
+            setGroceryItems(loadedGroceryItems);
+            setCustomUnitConversions(loadedSettings.unitConversions ?? []);
+            setStorageLocations(Array.isArray(loadedLocations) ? loadedLocations : []);
+            setPantryItems(Array.isArray(loadedPantryItems) ? loadedPantryItems : []);
+            hasLoadedOnceRef.current = true;
+          }
+        } catch (err) {
+          if (!cancelled) {
+            Alert.alert(
+              "Could not load",
+              err instanceof Error ? err.message : "Failed to load the grocery list.",
+            );
+          }
+        } finally {
+          if (!cancelled && isFirstLoad) setIsLoading(false);
         }
-      } catch (err) {
-        if (!cancelled) {
-          Alert.alert(
-            "Could not load",
-            err instanceof Error ? err.message : "Failed to load the grocery list.",
-          );
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
       }
-    }
 
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      void load();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   const grocerySuggestions = useMemo(() => {
     const q = nameInput.trim().toLowerCase();
@@ -308,11 +320,36 @@ export default function GroceryListScreen() {
 
   function handleTapPendingItem(item: GroceryItem) {
     if (!isDirectlyLoggable(item)) {
-      Alert.alert(
-        "Not supported yet",
+      const genericIngredient =
         typeof item.ingredient === "object" && item.ingredient?.isGeneric
-          ? "Logging a generic ingredient to the pantry means picking which specific/branded product you bought — that flow isn't built yet."
-          : "This item isn't linked to a catalog ingredient, so it can't be logged to the pantry yet.",
+          ? item.ingredient
+          : null;
+
+      Alert.alert(
+        "Add as a new ingredient?",
+        genericIngredient
+          ? `"${item.name}" is linked to the generic ingredient "${genericIngredient.name}". Add the specific product you bought to log it to your pantry.`
+          : `"${item.name}" isn't linked to a catalog ingredient yet. Add it so you can log it to your pantry.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Add ingredient",
+            onPress: () =>
+              router.push({
+                pathname: "/ingredients/add_manual",
+                params: {
+                  groceryItemId: item._id,
+                  prefillName: item.name,
+                  ...(genericIngredient
+                    ? {
+                        genericParentId: genericIngredient._id,
+                        genericParentName: genericIngredient.name,
+                      }
+                    : {}),
+                },
+              }),
+          },
+        ],
       );
       return;
     }

@@ -175,9 +175,10 @@ router.post("/", async (req, res) => {
     }
 
     const ingredient = await Ingredient.create(ingredientData);
-    await ingredient.populate("category");
-    await ingredient.populate("brand");
-    await ingredient.populate("genericParent").populate("defaultStorageLocation");
+    // Document#populate() (unlike a Query's) resolves to a Promise per call,
+    // so it can't be chained without awaiting each one — pass all paths in
+    // a single call instead.
+    await ingredient.populate(["category", "brand", "genericParent", "defaultStorageLocation"]);
 
     return res.status(201).json({
       success: true,

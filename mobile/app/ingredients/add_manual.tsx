@@ -44,8 +44,10 @@ import {
 
 import { addIngredientToPantry } from "@/src/services/pantryApi";
 import { createIngredient } from "@/src/services/ingredientApi";
+import { updateGroceryItem } from "@/src/services/groceryListApi";
 
 import type { IngredientOption, SelectOption } from "@/src/types/options";
+import type { PantryItem } from "@/src/types/pantry";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { todayDateInputString } from "@/src/utils/date";
 
@@ -252,9 +254,29 @@ export default function AddManualPantryItemScreen() {
     scannedFats?: string;
     scannedFiber?: string;
     scannedSodium?: string;
+    // Present when arriving from "add as a new ingredient" on a grocery
+    // list item that isn't directly loggable — completes that item once
+    // this ingredient + a mandatory pantry entry are saved.
+    groceryItemId?: string;
+    prefillName?: string;
+    genericParentId?: string;
+    genericParentName?: string;
   }>();
 
+  // Only a specific/branded ingredient can hold pantry stock, and this
+  // screen exists specifically to log a purchase — so ingredient type is
+  // locked and Pantry inventory can't be collapsed away.
+  const isResolvingGroceryItem = !!params.groceryItemId;
+
   const [form, setForm] = useState<FormState>(() => {
+    if (isResolvingGroceryItem) {
+      return {
+        ...initialForm,
+        ingredientName: params.prefillName ?? "",
+        genericParentId: params.genericParentId ?? "",
+        genericParentName: params.genericParentName ?? "",
+      };
+    }
     if (params.scannedName) {
       return {
         ...initialForm,
@@ -279,8 +301,11 @@ export default function AddManualPantryItemScreen() {
   const [saving, setSaving] = useState(false);
 
   // Collapsed by default — adding an ingredient shouldn't force stocking it
-  // in the pantry right away.
-  const [pantryInventoryExpanded, setPantryInventoryExpanded] = useState(false);
+  // in the pantry right away. Forced open (and kept open — no toggle is
+  // rendered) when completing a grocery item, since that's the whole point.
+  const [pantryInventoryExpanded, setPantryInventoryExpanded] = useState(
+    () => isResolvingGroceryItem,
+  );
 
   // Collapsed by default — nutrition is optional and often filled in later.
   const [nutritionExpanded, setNutritionExpanded] = useState(false);
@@ -300,7 +325,9 @@ export default function AddManualPantryItemScreen() {
 
   const [brandDraft, setBrandDraft] = useState(() => params.scannedBrand ?? "");
 
-  const [genericParentDraft, setGenericParentDraft] = useState("");
+  const [genericParentDraft, setGenericParentDraft] = useState(
+    () => params.genericParentName ?? "",
+  );
 
   const [categoryDraft, setCategoryDraft] = useState("");
 
@@ -316,6 +343,13 @@ export default function AddManualPantryItemScreen() {
   const genericIngredientOptions = ingredients.filter(
     (option) => option.isGeneric,
   );
+
+  // Completing a grocery item requires a specific/branded ingredient, so
+  // generics are excluded from the Name search here — otherwise selecting
+  // one would silently flip form.isGeneric back on despite the locked toggle.
+  const nameSearchOptions = isResolvingGroceryItem
+    ? ingredients.filter((option) => !option.isGeneric)
+    : ingredients;
 
   useEffect(() => {
     let cancelled = false;
@@ -743,6 +777,8 @@ export default function AddManualPantryItemScreen() {
         ingredientId = newIngredient._id;
       }
 
+      let newPantryItem: PantryItem | undefined;
+
       if (pantryInventoryExpanded) {
         const storageLocation = await resolveOrCreateOption(
           storageLocations,
@@ -755,7 +791,7 @@ export default function AddManualPantryItemScreen() {
           throw new Error("Enter a storage location.");
         }
 
-        await addIngredientToPantry({
+        newPantryItem = await addIngredientToPantry({
           ingredient: ingredientId,
           storageLocation: storageLocation._id,
           quantityAvailable,
@@ -763,6 +799,21 @@ export default function AddManualPantryItemScreen() {
           purchaseDate: form.purchaseDate.trim() || undefined,
           expiryDate: form.expiryDate.trim() || undefined,
         });
+      }
+
+      if (params.groceryItemId) {
+        try {
+          await updateGroceryItem(params.groceryItemId, {
+            ingredient: ingredientId,
+            status: "completed",
+            pantryItem: newPantryItem?._id ?? null,
+          });
+        } catch {
+          Alert.alert(
+            "Ingredient added",
+            "The ingredient and pantry entry were saved, but the grocery list item couldn't be updated automatically — check it off manually.",
+          );
+        }
       }
 
       router.back();
@@ -813,9 +864,16 @@ export default function AddManualPantryItemScreen() {
             <Ionicons name="chevron-back" size={26} color="#0F172A" />
           </Pressable>
 
-          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">
-            Add Ingredient
-          </Text>
+          <View className="ml-2 flex-1">
+            <Text className="text-xl font-bold text-slate-950" numberOfLines={1}>
+              {isResolvingGroceryItem ? "Log purchase" : "Add Ingredient"}
+            </Text>
+            {isResolvingGroceryItem && (
+              <Text className="text-sm text-slate-500" numberOfLines={1}>
+                Completing &quot;{params.prefillName}&quot; from your grocery list
+              </Text>
+            )}
+          </View>
 
           <Pressable
             disabled={saving}
@@ -860,7 +918,7 @@ export default function AddManualPantryItemScreen() {
 
           <SegmentedToggle<boolean>
             value={form.isGeneric}
-            disabled={!!form.ingredientId}
+            disabled={!!form.ingredientId || isResolvingGroceryItem}
             options={[
               { value: false, label: "Specific / Branded" },
               { value: true, label: "Generic" },
@@ -879,15 +937,17 @@ export default function AddManualPantryItemScreen() {
           <Text className="mt-2 text-xs leading-4 text-slate-500">
             {form.ingredientId
               ? "This ingredient already exists, so its type can't be changed here."
-              : form.isGeneric
-                ? "A generic ingredient (e.g. \"Soy Sauce\") stands in for any specific product a recipe could use."
-                : "A specific ingredient (e.g. \"Kikkoman Soy Sauce\") is a particular product, usually with a brand."}
+              : isResolvingGroceryItem
+                ? "Logging a grocery item to your pantry requires a specific/branded product."
+                : form.isGeneric
+                  ? "A generic ingredient (e.g. \"Soy Sauce\") stands in for any specific product a recipe could use."
+                  : "A specific ingredient (e.g. \"Kikkoman Soy Sauce\") is a particular product, usually with a brand."}
           </Text>
 
           <FieldLabel text="Name" required />
 
           <SearchableObjectDropdown<IngredientOption>
-            options={ingredients}
+            options={nameSearchOptions}
             selectedId={form.ingredientId}
             selectedName={form.ingredientName}
             placeholder="Search for an ingredient"
@@ -1246,33 +1306,41 @@ export default function AddManualPantryItemScreen() {
 
           {!form.isGeneric && (
             <>
-              <Pressable
-                className="mt-8 flex-row items-center justify-between"
-                onPress={() =>
-                  setPantryInventoryExpanded((current) => !current)
-                }
-              >
-                <View className="mr-3 flex-1 flex-row items-center">
-                  <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                    <Ionicons name="archive-outline" size={18} color="#2563EB" />
-                  </View>
-
-                  <View className="flex-1">
-                    <Text className="text-base font-bold text-slate-950">
-                      Pantry inventory
-                    </Text>
-                    <Text className="mt-0.5 text-xs leading-4 text-slate-500">
-                      Optional — add stock now, or later.
-                    </Text>
-                  </View>
-                </View>
-
-                <Ionicons
-                  name={pantryInventoryExpanded ? "chevron-up" : "chevron-down"}
-                  size={22}
-                  color="#64748B"
+              {isResolvingGroceryItem ? (
+                <SectionTitle
+                  icon="archive-outline"
+                  title="Pantry inventory"
+                  description="Required — completes the grocery item you're logging."
                 />
-              </Pressable>
+              ) : (
+                <Pressable
+                  className="mt-8 flex-row items-center justify-between"
+                  onPress={() =>
+                    setPantryInventoryExpanded((current) => !current)
+                  }
+                >
+                  <View className="mr-3 flex-1 flex-row items-center">
+                    <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                      <Ionicons name="archive-outline" size={18} color="#2563EB" />
+                    </View>
+
+                    <View className="flex-1">
+                      <Text className="text-base font-bold text-slate-950">
+                        Pantry inventory
+                      </Text>
+                      <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                        Optional — add stock now, or later.
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Ionicons
+                    name={pantryInventoryExpanded ? "chevron-up" : "chevron-down"}
+                    size={22}
+                    color="#64748B"
+                  />
+                </Pressable>
+              )}
 
               {pantryInventoryExpanded && (
                 <>
