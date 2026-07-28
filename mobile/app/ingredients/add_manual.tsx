@@ -283,10 +283,15 @@ export default function AddManualPantryItemScreen() {
     existingIngredientId?: string;
   }>();
 
-  // Only a specific/branded ingredient can hold pantry stock, and this
-  // screen exists specifically to log a purchase — so ingredient type is
-  // locked and Pantry inventory can't be collapsed away.
+  // This screen exists specifically to log a purchase when resolving a
+  // grocery item, so Pantry inventory can't be collapsed away in that mode.
   const isResolvingGroceryItem = !!params.groceryItemId;
+
+  // Generics can hold pantry stock directly now, so ingredient type is only
+  // locked when arriving here to add a *specific* product under an already-
+  // known generic (the grocery list's "add a different product" choice) —
+  // genericParentId only makes sense for a specific/branded ingredient.
+  const lockTypeToSpecific = isResolvingGroceryItem && !!params.genericParentId;
 
   const [form, setForm] = useState<FormState>(() => {
     if (isResolvingGroceryItem) {
@@ -364,10 +369,11 @@ export default function AddManualPantryItemScreen() {
     (option) => option.isGeneric,
   );
 
-  // Completing a grocery item requires a specific/branded ingredient, so
-  // generics are excluded from the Name search here — otherwise selecting
-  // one would silently flip form.isGeneric back on despite the locked toggle.
-  const nameSearchOptions = isResolvingGroceryItem
+  // Adding a specific product under a known generic requires a
+  // specific/branded ingredient, so generics are excluded from the Name
+  // search here — otherwise selecting one would silently flip
+  // form.isGeneric back on despite the locked toggle.
+  const nameSearchOptions = lockTypeToSpecific
     ? ingredients.filter((option) => !option.isGeneric)
     : ingredients;
 
@@ -691,71 +697,56 @@ export default function AddManualPantryItemScreen() {
       return;
     }
 
-    // Generic ingredients (e.g. "Soy Sauce") are a matching umbrella for a
-    // recipe, not a physical thing you can own — whatever is actually in the
-    // pantry is always some specific product. So a generic ingredient is
-    // only ever a catalog definition, never a pantry item.
-    if (form.isGeneric && form.ingredientId) {
-      Alert.alert(
-        "Nothing to save",
-        "This is already a generic ingredient — it can't be stocked in the pantry. Select or create a specific/branded ingredient instead.",
-      );
-
-      return;
-    }
-
     let quantityAvailable = 0;
 
-    if (!form.isGeneric) {
-      if (pantryInventoryExpanded) {
-        quantityAvailable = form.quantityAvailable.trim()
-          ? Number(form.quantityAvailable)
-          : 0;
+    if (pantryInventoryExpanded) {
+      quantityAvailable = form.quantityAvailable.trim()
+        ? Number(form.quantityAvailable)
+        : 0;
 
-        if (!Number.isFinite(quantityAvailable) || quantityAvailable < 0) {
-          Alert.alert(
-            "Invalid quantity",
-            "Enter a quantity of zero or greater.",
-          );
-
-          return;
-        }
-
-        if (!isValidDateString(form.purchaseDate)) {
-          Alert.alert(
-            "Invalid purchase date",
-            "Enter the date in YYYY-MM-DD format.",
-          );
-
-          return;
-        }
-
-        if (!isValidDateString(form.expiryDate)) {
-          Alert.alert(
-            "Invalid expiry date",
-            "Enter the date in YYYY-MM-DD format.",
-          );
-
-          return;
-        }
-
-        if (!form.storageLocationId && !storageLocationDraft.trim()) {
-          Alert.alert(
-            "Storage location is required",
-            "Search or type a storage location.",
-          );
-          return;
-        }
-      } else if (form.ingredientId) {
-        // An existing ingredient was selected (nothing new to create) and
-        // the pantry section is collapsed — there's nothing for Save to do.
+      if (!Number.isFinite(quantityAvailable) || quantityAvailable < 0) {
         Alert.alert(
-          "Nothing to save",
-          "Expand Pantry inventory to add stock for this ingredient.",
+          "Invalid quantity",
+          "Enter a quantity of zero or greater.",
         );
 
         return;
       }
+
+      if (!isValidDateString(form.purchaseDate)) {
+        Alert.alert(
+          "Invalid purchase date",
+          "Enter the date in YYYY-MM-DD format.",
+        );
+
+        return;
+      }
+
+      if (!isValidDateString(form.expiryDate)) {
+        Alert.alert(
+          "Invalid expiry date",
+          "Enter the date in YYYY-MM-DD format.",
+        );
+
+        return;
+      }
+
+      if (!form.storageLocationId && !storageLocationDraft.trim()) {
+        Alert.alert(
+          "Storage location is required",
+          "Search or type a storage location.",
+        );
+        return;
+      }
+    } else if (form.ingredientId) {
+      // An existing ingredient was selected (nothing new to create) and
+      // the pantry section is collapsed — there's nothing for Save to do.
+      Alert.alert(
+        "Nothing to save",
+        "Expand Pantry inventory to add stock for this ingredient.",
+      );
+
+      return;
     }
 
     try {
@@ -803,7 +794,9 @@ export default function AddManualPantryItemScreen() {
 
       const normalizedName = form.ingredientName.trim().toLowerCase();
 
-      if (form.isGeneric) {
+      let ingredientId = form.ingredientId;
+
+      if (!ingredientId && form.isGeneric) {
         // Generics are unique by name within a category (mirrors the same
         // rule the server already enforces when resolving a typed
         // genericName on a specific ingredient) — catch it client-side too
@@ -819,23 +812,19 @@ export default function AddManualPantryItemScreen() {
         if (duplicateGeneric) {
           Alert.alert(
             "Ingredient already exists",
-            `"${duplicateGeneric.name}" already exists as a generic ingredient in this category. Change the name to create a different one.`,
+            `"${duplicateGeneric.name}" already exists as a generic ingredient in this category. Change the name to create a different one, or use it to add a pantry entry.`,
             [
               { text: "Change name", style: "cancel" },
               {
-                text: "View ingredient",
-                onPress: () =>
-                  router.replace({
-                    pathname: "/ingredients/edit/[id]",
-                    params: { id: duplicateGeneric._id },
-                  }),
+                text: "Use existing ingredient",
+                onPress: () => goToExistingIngredient(duplicateGeneric),
               },
             ],
           );
           return;
         }
 
-        await createIngredient({
+        const newGeneric = await createIngredient({
           name: form.ingredientName.trim(),
           barcode: form.barcode.trim() || null,
           description: form.description.trim() || undefined,
@@ -852,14 +841,8 @@ export default function AddManualPantryItemScreen() {
             defaultExpiryDurationAmount != null ? form.defaultExpiryDurationUnit : null,
           nutrition,
         });
-
-        router.back();
-        return;
-      }
-
-      let ingredientId = form.ingredientId;
-
-      if (!ingredientId) {
+        ingredientId = newGeneric._id;
+      } else if (!ingredientId) {
         const brand = await resolveOrCreateOption(
           brands,
           form.brandId,
@@ -1069,7 +1052,7 @@ export default function AddManualPantryItemScreen() {
 
           <SegmentedToggle<boolean>
             value={form.isGeneric}
-            disabled={!!form.ingredientId || isResolvingGroceryItem}
+            disabled={!!form.ingredientId || lockTypeToSpecific}
             options={[
               { value: false, label: "Specific / Branded" },
               { value: true, label: "Generic" },
@@ -1088,10 +1071,10 @@ export default function AddManualPantryItemScreen() {
           <Text className="mt-2 text-xs leading-4 text-slate-500">
             {form.ingredientId
               ? "This ingredient already exists, so its type can't be changed here."
-              : isResolvingGroceryItem
-                ? "Logging a grocery item to your pantry requires a specific/branded product."
+              : lockTypeToSpecific
+                ? "Adding a specific product under an existing generic requires a specific/branded ingredient."
                 : form.isGeneric
-                  ? "A generic ingredient (e.g. \"Soy Sauce\") stands in for any specific product a recipe could use."
+                  ? "A generic ingredient (e.g. \"Soy Sauce\") stands in for any specific product a recipe could use — and can hold its own pantry stock too."
                   : "A specific ingredient (e.g. \"Kikkoman Soy Sauce\") is a particular product, usually with a brand."}
           </Text>
 
@@ -1413,36 +1396,32 @@ export default function AddManualPantryItemScreen() {
 
           {smartDefaultsExpanded && (
             <>
-              {!form.isGeneric && (
+              <ToggleRow
+                label="Set a default storage location"
+                description="Prefills the location when logging a purchase of this ingredient."
+                value={wantsDefaultLocation}
+                onChange={setWantsDefaultLocation}
+              />
+              {wantsDefaultLocation && (
                 <>
-                  <ToggleRow
-                    label="Set a default storage location"
-                    description="Prefills the location when logging a purchase of this ingredient."
-                    value={wantsDefaultLocation}
-                    onChange={setWantsDefaultLocation}
+                  <FieldLabel text="Default storage location" />
+                  <SearchableObjectDropdown<SelectOption>
+                    options={storageLocations}
+                    selectedId={form.defaultStorageLocationId}
+                    selectedName={form.defaultStorageLocationName}
+                    placeholder="Search or type a location"
+                    onTextChange={(value) => {
+                      if (value !== form.defaultStorageLocationName) {
+                        updateForm("defaultStorageLocationId", "");
+                      }
+                      setDefaultLocationDraft(value);
+                    }}
+                    onSelect={(option) => {
+                      updateForm("defaultStorageLocationId", option._id);
+                      updateForm("defaultStorageLocationName", option.name);
+                      setDefaultLocationDraft(option.name);
+                    }}
                   />
-                  {wantsDefaultLocation && (
-                    <>
-                      <FieldLabel text="Default storage location" />
-                      <SearchableObjectDropdown<SelectOption>
-                        options={storageLocations}
-                        selectedId={form.defaultStorageLocationId}
-                        selectedName={form.defaultStorageLocationName}
-                        placeholder="Search or type a location"
-                        onTextChange={(value) => {
-                          if (value !== form.defaultStorageLocationName) {
-                            updateForm("defaultStorageLocationId", "");
-                          }
-                          setDefaultLocationDraft(value);
-                        }}
-                        onSelect={(option) => {
-                          updateForm("defaultStorageLocationId", option._id);
-                          updateForm("defaultStorageLocationName", option.name);
-                          setDefaultLocationDraft(option.name);
-                        }}
-                      />
-                    </>
-                  )}
                 </>
               )}
 
@@ -1466,107 +1445,103 @@ export default function AddManualPantryItemScreen() {
             </>
           )}
 
-          {!form.isGeneric && (
+          {isResolvingGroceryItem ? (
+            <SectionTitle
+              icon="archive-outline"
+              title="Pantry inventory"
+              description="Required — completes the grocery item you're logging."
+            />
+          ) : (
+            <Pressable
+              className="mt-8 flex-row items-center justify-between"
+              onPress={() =>
+                setPantryInventoryExpanded((current) => !current)
+              }
+            >
+              <View className="mr-3 flex-1 flex-row items-center">
+                <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                  <Ionicons name="archive-outline" size={18} color="#2563EB" />
+                </View>
+
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-slate-950">
+                    Pantry inventory
+                  </Text>
+                  <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                    Optional — add stock now, or later.
+                  </Text>
+                </View>
+              </View>
+
+              <Ionicons
+                name={pantryInventoryExpanded ? "chevron-up" : "chevron-down"}
+                size={22}
+                color="#64748B"
+              />
+            </Pressable>
+          )}
+
+          {pantryInventoryExpanded && (
             <>
-              {isResolvingGroceryItem ? (
-                <SectionTitle
-                  icon="archive-outline"
-                  title="Pantry inventory"
-                  description="Required — completes the grocery item you're logging."
-                />
-              ) : (
-                <Pressable
-                  className="mt-8 flex-row items-center justify-between"
-                  onPress={() =>
-                    setPantryInventoryExpanded((current) => !current)
+              <FieldLabel text="Storage location" required />
+
+              <SearchableObjectDropdown<SelectOption>
+                options={storageLocations}
+                selectedId={form.storageLocationId}
+                selectedName={form.storageLocationName}
+                placeholder="Search or type a new storage location"
+                onTextChange={(value) => {
+                  if (value !== form.storageLocationName) {
+                    updateForm("storageLocationId", "");
                   }
-                >
-                  <View className="mr-3 flex-1 flex-row items-center">
-                    <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                      <Ionicons name="archive-outline" size={18} color="#2563EB" />
-                    </View>
 
-                    <View className="flex-1">
-                      <Text className="text-base font-bold text-slate-950">
-                        Pantry inventory
-                      </Text>
-                      <Text className="mt-0.5 text-xs leading-4 text-slate-500">
-                        Optional — add stock now, or later.
-                      </Text>
-                    </View>
-                  </View>
+                  setStorageLocationDraft(value);
+                }}
+                onSelect={(option) => {
+                  updateForm("storageLocationId", option._id);
+                  updateForm("storageLocationName", option.name);
+                  setStorageLocationDraft(option.name);
+                }}
+              />
 
-                  <Ionicons
-                    name={pantryInventoryExpanded ? "chevron-up" : "chevron-down"}
-                    size={22}
-                    color="#64748B"
-                  />
-                </Pressable>
-              )}
+              <FieldLabel text="Quantity" required />
 
-              {pantryInventoryExpanded && (
-                <>
-                  <FieldLabel text="Storage location" required />
+              <QuantityServingInput
+                quantityAvailable={form.quantityAvailable}
+                quantityUnit={form.quantityUnit}
+                onChangeQuantity={(value) => updateForm("quantityAvailable", value)}
+                onChangeUnit={(value) => updateForm("quantityUnit", value)}
+                unitOptions={units}
+                onAddUnit={handleAddUnit}
+                defaultPortionAmount={optionalNumber(form.defaultPortionAmount)}
+                defaultPortionUnit={form.quantityUnit.trim() || undefined}
+              />
 
-                  <SearchableObjectDropdown<SelectOption>
-                    options={storageLocations}
-                    selectedId={form.storageLocationId}
-                    selectedName={form.storageLocationName}
-                    placeholder="Search or type a new storage location"
-                    onTextChange={(value) => {
-                      if (value !== form.storageLocationName) {
-                        updateForm("storageLocationId", "");
-                      }
+              <FieldLabel text="Purchase date" />
 
-                      setStorageLocationDraft(value);
-                    }}
-                    onSelect={(option) => {
-                      updateForm("storageLocationId", option._id);
-                      updateForm("storageLocationName", option.name);
-                      setStorageLocationDraft(option.name);
-                    }}
-                  />
+              <FormInput
+                value={form.purchaseDate}
+                placeholder="YYYY-MM-DD"
+                keyboardType="numbers-and-punctuation"
+                autoCapitalize="none"
+                onChangeText={(value) => updateForm("purchaseDate", value)}
+              />
 
-                  <FieldLabel text="Quantity" required />
+              <FieldLabel text="Expiry date" />
 
-                  <QuantityServingInput
-                    quantityAvailable={form.quantityAvailable}
-                    quantityUnit={form.quantityUnit}
-                    onChangeQuantity={(value) => updateForm("quantityAvailable", value)}
-                    onChangeUnit={(value) => updateForm("quantityUnit", value)}
-                    unitOptions={units}
-                    onAddUnit={handleAddUnit}
-                    defaultPortionAmount={optionalNumber(form.defaultPortionAmount)}
-                    defaultPortionUnit={form.quantityUnit.trim() || undefined}
-                  />
+              <FormInput
+                value={form.expiryDate}
+                placeholder="YYYY-MM-DD"
+                keyboardType="numbers-and-punctuation"
+                autoCapitalize="none"
+                onChangeText={(value) => updateForm("expiryDate", value)}
+              />
 
-                  <FieldLabel text="Purchase date" />
-
-                  <FormInput
-                    value={form.purchaseDate}
-                    placeholder="YYYY-MM-DD"
-                    keyboardType="numbers-and-punctuation"
-                    autoCapitalize="none"
-                    onChangeText={(value) => updateForm("purchaseDate", value)}
-                  />
-
-                  <FieldLabel text="Expiry date" />
-
-                  <FormInput
-                    value={form.expiryDate}
-                    placeholder="YYYY-MM-DD"
-                    keyboardType="numbers-and-punctuation"
-                    autoCapitalize="none"
-                    onChangeText={(value) => updateForm("expiryDate", value)}
-                  />
-
-                  <FieldLabel text="Or set expiry from purchase date" />
-                  <DurationExpiryInput
-                    purchaseDate={form.purchaseDate}
-                    onApply={(expiryDate) => updateForm("expiryDate", expiryDate)}
-                  />
-                </>
-              )}
+              <FieldLabel text="Or set expiry from purchase date" />
+              <DurationExpiryInput
+                purchaseDate={form.purchaseDate}
+                onApply={(expiryDate) => updateForm("expiryDate", expiryDate)}
+              />
             </>
           )}
         </ScrollView>

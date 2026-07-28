@@ -11,12 +11,11 @@ async function getCustomUnitConversions() {
 /**
  * Pantry stock for one ingredient, grouped by unit.
  *
- * Generic ingredients (e.g. "Soy Sauce") are a matching umbrella, not a
- * physical product — they never hold pantry stock directly (enforced in
- * PantryRoutes). So for a generic, this aggregates stock across every
- * branded/specific variant registered under it (e.g. "Kikkoman Soy Sauce")
- * instead: availability of a generic depends on the combined stock of all
- * its options.
+ * Generic ingredients (e.g. "Soy Sauce") are a matching umbrella — a recipe
+ * calling for one can be satisfied by any specific/branded variant
+ * registered under it (e.g. "Kikkoman Soy Sauce") — but they can also hold
+ * pantry stock directly (e.g. buying garlic with no brand in mind). So a
+ * generic's availability is its own direct stock plus every variant's.
  *
  * Stock is grouped by unit rather than summed into one number: a 750ml
  * bottle of Kikkoman and 2 tbsp of a store-brand aren't comparable without
@@ -27,13 +26,15 @@ export async function getAvailableStock(ingredientId) {
   if (!ingredient) return null;
 
   let ingredientIds = [ingredient._id];
+  let variantCount = 0;
 
   if (ingredient.isGeneric) {
     const variants = await Ingredient.find({
       genericParent: ingredient._id,
       isArchived: false,
     }).select("_id");
-    ingredientIds = variants.map((v) => v._id);
+    variantCount = variants.length;
+    ingredientIds = [ingredient._id, ...variants.map((v) => v._id)];
   }
 
   const pantryItems = await PantryItem.find({
@@ -64,7 +65,7 @@ export async function getAvailableStock(ingredientId) {
     ingredientId: ingredient._id,
     isGeneric: ingredient.isGeneric,
     isAlwaysAvailable: ingredient.isAlwaysAvailable,
-    variantCount: ingredient.isGeneric ? ingredientIds.length : 0,
+    variantCount,
     unit: ingredient.defaultPortionUnit,
     totalInOwnUnit,
     lowStockThreshold: ingredient.lowStockThreshold,

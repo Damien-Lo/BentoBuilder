@@ -42,6 +42,7 @@ import {
   getGroceryItems,
   updateGroceryItem,
   type GroceryItem,
+  type GroceryItemIngredientRef,
   type GroceryItemStatus,
 } from "@/src/services/groceryListApi";
 import { loadSettings } from "@/src/services/settingsService";
@@ -56,16 +57,11 @@ import {
   suggestStorageLocation,
 } from "@/src/utils/pantryDefaults";
 
-// A pendingLog item can only be logged to pantry directly when it's linked
-// to a specific/branded ingredient — generics can't hold pantry stock
-// (mirrors the same rule enforced by the pantry API), and free-text items
-// have no ingredient to log at all. Both of those are a future step.
-function isDirectlyLoggable(item: GroceryItem): boolean {
-  return (
-    typeof item.ingredient === "object" &&
-    item.ingredient !== null &&
-    !item.ingredient.isGeneric
-  );
+// A pendingLog item can be logged to pantry (directly, or via a quick
+// choice for generics) as long as it's linked to a catalog ingredient —
+// free-text items have nothing to log against.
+function isLinkedToIngredient(item: GroceryItem): boolean {
+  return typeof item.ingredient === "object" && item.ingredient !== null;
 }
 
 function getReferenceName(value: unknown): string {
@@ -93,8 +89,13 @@ export default function GroceryListScreen() {
   const [unit, setUnit] = useState("");
   const [adding, setAdding] = useState(false);
 
-  // Log-to-pantry modal state
+  // Log-to-pantry modal state — logTargetIngredientId is explicit (not just
+  // derived from loggingItem.ingredient) so this same modal can log against
+  // a different ingredient than the grocery item's own link — e.g. a
+  // specific variant chosen from the generic-resolve modal below.
   const [loggingItem, setLoggingItem] = useState<GroceryItem | null>(null);
+  const [logTargetIngredientId, setLogTargetIngredientId] = useState<string | null>(null);
+  const [logTargetIngredientName, setLogTargetIngredientName] = useState("");
   const [logLocationId, setLogLocationId] = useState("");
   const [logLocationName, setLogLocationName] = useState("");
   const [logLocationDraft, setLogLocationDraft] = useState("");
@@ -105,6 +106,15 @@ export default function GroceryListScreen() {
   const [logSaving, setLogSaving] = useState(false);
   const [logLocationTouched, setLogLocationTouched] = useState(false);
   const [logExpiryTouched, setLogExpiryTouched] = useState(false);
+
+  // Resolve-a-generic-linked-item modal state — offers logging the generic
+  // itself, logging the one existing variant (if there's exactly one), or
+  // adding/choosing a specific product.
+  const [resolvingGenericItem, setResolvingGenericItem] = useState<{
+    item: GroceryItem;
+    generic: GroceryItemIngredientRef;
+    variants: Ingredient[];
+  } | null>(null);
 
   // Refetches every time this screen regains focus — e.g. coming back from
   // resolving a grocery item via the add-ingredient screen, which updates
@@ -318,93 +328,16 @@ export default function GroceryListScreen() {
     }
   }
 
-  function handleTapPendingItem(item: GroceryItem) {
-    if (!isDirectlyLoggable(item)) {
-      const genericIngredient =
-        typeof item.ingredient === "object" && item.ingredient?.isGeneric
-          ? item.ingredient
-          : null;
-
-      const addNewParams = {
-        groceryItemId: item._id,
-        prefillName: item.name,
-        ...(genericIngredient
-          ? {
-              genericParentId: genericIngredient._id,
-              genericParentName: genericIngredient.name,
-            }
-          : {}),
-      };
-
-      if (!genericIngredient) {
-        Alert.alert(
-          "Add as a new ingredient?",
-          `"${item.name}" isn't linked to a catalog ingredient yet. Add it so you can log it to your pantry.`,
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Add ingredient",
-              onPress: () =>
-                router.push({ pathname: "/ingredients/add_manual", params: addNewParams }),
-            },
-          ],
-        );
-        return;
-      }
-
-      // A generic (e.g. "Oat Milk") is a matching umbrella — if a specific
-      // product already fulfills it, log a pantry entry for that one
-      // instead of always steering toward creating a duplicate.
-      const existingVariants = ingredients.filter(
-        (candidate) => !candidate.isGeneric && referenceId(candidate.genericParent) === genericIngredient._id,
-      );
-
-      if (existingVariants.length === 1) {
-        const existing = existingVariants[0];
-
-        Alert.alert(
-          "Log this purchase",
-          `"${item.name}" is linked to the generic ingredient "${genericIngredient.name}" — you already have "${existing.name}" cataloged for it. Log this purchase for that product, or add a different one.`,
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Add a different product",
-              onPress: () =>
-                router.push({ pathname: "/ingredients/add_manual", params: addNewParams }),
-            },
-            {
-              text: `Log "${existing.name}"`,
-              onPress: () =>
-                router.push({
-                  pathname: "/ingredients/add_manual",
-                  params: { groceryItemId: item._id, existingIngredientId: existing._id },
-                }),
-            },
-          ],
-        );
-        return;
-      }
-
-      Alert.alert(
-        "Add as a new ingredient?",
-        existingVariants.length > 1
-          ? `"${item.name}" is linked to the generic ingredient "${genericIngredient.name}", which already has ${existingVariants.length} products cataloged. Search for one on the next screen, or add a new one.`
-          : `"${item.name}" is linked to the generic ingredient "${genericIngredient.name}". Add the specific product you bought to log it to your pantry.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Add ingredient",
-            onPress: () =>
-              router.push({ pathname: "/ingredients/add_manual", params: addNewParams }),
-          },
-        ],
-      );
-      return;
-    }
-
-    const ingredient = item.ingredient as { defaultPortionUnit?: string };
+  // Opens the lightweight log-to-pantry modal targeting a specific
+  // ingredient — either the grocery item's own link (the common case) or an
+  // alternate chosen from the generic-resolve modal (a specific variant, or
+  // the generic itself).
+  function openLogModal(item: GroceryItem, targetIngredientId: string, targetIngredientName: string) {
+    const targetIngredient = ingredients.find((i) => i._id === targetIngredientId);
 
     setLoggingItem(item);
+    setLogTargetIngredientId(targetIngredientId);
+    setLogTargetIngredientName(targetIngredientName);
     setLogLocationId("");
     setLogLocationName("");
     setLogLocationDraft("");
@@ -413,41 +346,74 @@ export default function GroceryListScreen() {
     setLogExpiryDate("");
     setLogExpiryTouched(false);
     setLogQuantity(item.quantity != null ? String(item.quantity) : "");
-    setLogUnit(item.unit || ingredient.defaultPortionUnit || "");
+    setLogUnit(item.unit || targetIngredient?.defaultPortionUnit || "");
+  }
+
+  function handleTapPendingItem(item: GroceryItem) {
+    const linkedIngredient =
+      typeof item.ingredient === "object" ? item.ingredient : null;
+
+    if (!linkedIngredient) {
+      Alert.alert(
+        "Add as a new ingredient?",
+        `"${item.name}" isn't linked to a catalog ingredient yet. Add it so you can log it to your pantry.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Add ingredient",
+            onPress: () =>
+              router.push({
+                pathname: "/ingredients/add_manual",
+                params: { groceryItemId: item._id, prefillName: item.name },
+              }),
+          },
+        ],
+      );
+      return;
+    }
+
+    if (!linkedIngredient.isGeneric) {
+      openLogModal(item, linkedIngredient._id, linkedIngredient.name);
+      return;
+    }
+
+    // Generic (e.g. "Garlic") — could be logged directly, against an
+    // existing specific variant, or resolved by adding a new one. Always
+    // ask, since a past purchase being generic doesn't mean this one is.
+    const existingVariants = ingredients.filter(
+      (candidate) => !candidate.isGeneric && referenceId(candidate.genericParent) === linkedIngredient._id,
+    );
+
+    setResolvingGenericItem({ item, generic: linkedIngredient, variants: existingVariants });
   }
 
   function closeLogModal() {
     setLoggingItem(null);
+    setLogTargetIngredientId(null);
+    setLogTargetIngredientName("");
   }
-
-  const loggingIngredientUnit =
-    loggingItem && typeof loggingItem.ingredient === "object" && loggingItem.ingredient
-      ? loggingItem.ingredient.defaultPortionUnit
-      : undefined;
-
-  const logUnitOptions = loggingIngredientUnit
-    ? getRelatedUnits(loggingIngredientUnit, customUnitConversions)
-    : unitOptions;
-
-  const loggingIngredientId =
-    loggingItem && typeof loggingItem.ingredient === "object" && loggingItem.ingredient
-      ? loggingItem.ingredient._id
-      : null;
 
   // The grocery item's populated ingredient is a thin projection — look up
   // the full record (with defaultStorageLocation/defaultExpiryDuration...)
   // from the ingredient catalog already loaded on this page.
   const loggingFullIngredient = useMemo(
-    () => (loggingIngredientId ? ingredients.find((i) => i._id === loggingIngredientId) ?? null : null),
-    [ingredients, loggingIngredientId],
+    () =>
+      logTargetIngredientId
+        ? ingredients.find((i) => i._id === logTargetIngredientId) ?? null
+        : null,
+    [ingredients, logTargetIngredientId],
   );
 
+  const logUnitOptions = loggingFullIngredient?.defaultPortionUnit
+    ? getRelatedUnits(loggingFullIngredient.defaultPortionUnit, customUnitConversions)
+    : unitOptions;
+
   const recentLoggingHistory = useMemo(() => {
-    if (!loggingIngredientId) return [];
+    if (!logTargetIngredientId) return [];
     return recentPantryEntries(
-      pantryItems.filter((item) => referenceId(item.ingredient) === loggingIngredientId),
+      pantryItems.filter((item) => referenceId(item.ingredient) === logTargetIngredientId),
     );
-  }, [pantryItems, loggingIngredientId]);
+  }, [pantryItems, logTargetIngredientId]);
 
   const suggestedLogLocation = useMemo(
     () => suggestStorageLocation(recentLoggingHistory),
@@ -501,13 +467,7 @@ export default function GroceryListScreen() {
   }, [loggingItem, logPurchaseDate, effectiveLogExpiryDuration, logExpiryTouched]);
 
   async function handleCreatePantryEntry() {
-    if (!loggingItem) return;
-
-    const ingredientId =
-      typeof loggingItem.ingredient === "object" && loggingItem.ingredient
-        ? loggingItem.ingredient._id
-        : null;
-    if (!ingredientId) return;
+    if (!loggingItem || !logTargetIngredientId) return;
 
     const qty = Number(logQuantity);
     if (!Number.isFinite(qty) || qty <= 0) {
@@ -537,7 +497,7 @@ export default function GroceryListScreen() {
       }
 
       const newPantryItem = await addIngredientToPantry({
-        ingredient: ingredientId,
+        ingredient: logTargetIngredientId,
         storageLocation: storageLocation._id,
         quantityAvailable: qty,
         quantityUnit: logUnit.trim(),
@@ -550,7 +510,7 @@ export default function GroceryListScreen() {
         pantryItem: newPantryItem._id,
       });
       setGroceryItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
-      setLoggingItem(null);
+      closeLogModal();
     } catch (err) {
       Alert.alert(
         "Could not log to pantry",
@@ -576,6 +536,7 @@ export default function GroceryListScreen() {
         key={item._id}
         friction={2}
         rightThreshold={40}
+        leftThreshold={40}
         renderLeftActions={() => (
           <Pressable
             className="mb-2.5 w-20 items-center justify-center rounded-2xl bg-red-500 active:bg-red-600"
@@ -584,6 +545,19 @@ export default function GroceryListScreen() {
             <Ionicons name="trash-outline" size={22} color="white" />
           </Pressable>
         )}
+        renderRightActions={
+          isPending
+            ? () => (
+                <Pressable
+                  className="mb-2.5 w-24 items-center justify-center rounded-2xl bg-slate-400 active:bg-slate-500"
+                  onPress={() => void handleAdvanceItem(item)}
+                >
+                  <Ionicons name="arrow-undo-outline" size={22} color="white" />
+                  <Text className="mt-1 text-xs font-medium text-white">Undo</Text>
+                </Pressable>
+              )
+            : undefined
+        }
       >
         <Pressable
           onPress={() =>
@@ -605,7 +579,7 @@ export default function GroceryListScreen() {
             </Text>
             {isPending ? (
               <Text className="mt-0.5 text-xs text-amber-600">
-                {isDirectlyLoggable(item) ? "Tap to log to pantry" : "Tap for more info"}
+                {isLinkedToIngredient(item) ? "Tap to log to pantry" : "Tap for more info"}
               </Text>
             ) : (
               !isCompleted &&
@@ -828,8 +802,12 @@ export default function GroceryListScreen() {
             <Pressable className="absolute inset-0" onPress={closeLogModal} />
 
             <View className="w-full rounded-3xl bg-white p-5">
-              <Text className="text-lg font-bold text-slate-950">{loggingItem?.name}</Text>
-              <Text className="mt-0.5 mb-4 text-sm text-slate-400">Log to pantry</Text>
+              <Text className="text-lg font-bold text-slate-950">{logTargetIngredientName}</Text>
+              <Text className="mt-0.5 mb-4 text-sm text-slate-400">
+                {logTargetIngredientName === loggingItem?.name
+                  ? "Log to pantry"
+                  : `Log to pantry — for "${loggingItem?.name}"`}
+              </Text>
 
               <FieldLabel text="Storage location" required />
               <SearchableObjectDropdown<SelectOption>
@@ -867,7 +845,7 @@ export default function GroceryListScreen() {
                     onChangeText={setLogPurchaseDate}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor="#94A3B8"
-                    keyboardType="numeric"
+                    keyboardType="numbers-and-punctuation"
                     className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                   />
                 </View>
@@ -881,7 +859,7 @@ export default function GroceryListScreen() {
                     }}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor="#94A3B8"
-                    keyboardType="numeric"
+                    keyboardType="numbers-and-punctuation"
                     className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                   />
                 </View>
@@ -954,6 +932,120 @@ export default function GroceryListScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Resolve a generic-linked item — could be logged directly, against
+          an existing variant, or resolved by adding/choosing a specific
+          product. Always asked, never auto-picked. */}
+      <Modal
+        visible={!!resolvingGenericItem}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setResolvingGenericItem(null)}
+      >
+        <View className="flex-1 items-center justify-center bg-black/40 px-6">
+          <Pressable
+            className="absolute inset-0"
+            onPress={() => setResolvingGenericItem(null)}
+          />
+
+          <View className="w-full rounded-3xl bg-white p-5">
+            <Text className="text-lg font-bold text-slate-950">
+              {resolvingGenericItem?.item.name}
+            </Text>
+            <Text className="mt-0.5 mb-4 text-sm text-slate-400">
+              Linked to the generic ingredient &quot;{resolvingGenericItem?.generic.name}&quot;
+            </Text>
+
+            <Pressable
+              className="mb-2 flex-row items-center rounded-2xl border border-slate-200 px-4 py-3.5 active:bg-slate-50"
+              onPress={() => {
+                if (!resolvingGenericItem) return;
+                const { item, generic } = resolvingGenericItem;
+                setResolvingGenericItem(null);
+                openLogModal(item, generic._id, generic.name);
+              }}
+            >
+              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                <Ionicons name="pricetag-outline" size={16} color="#2563EB" />
+              </View>
+              <View className="flex-1">
+                <Text className="font-semibold text-slate-900">
+                  Log &quot;{resolvingGenericItem?.generic.name}&quot; directly
+                </Text>
+                <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                  No specific brand — logs straight to the generic.
+                </Text>
+              </View>
+            </Pressable>
+
+            {resolvingGenericItem?.variants.length === 1 && (
+              <Pressable
+                className="mb-2 flex-row items-center rounded-2xl border border-slate-200 px-4 py-3.5 active:bg-slate-50"
+                onPress={() => {
+                  if (!resolvingGenericItem) return;
+                  const { item, variants } = resolvingGenericItem;
+                  const existing = variants[0];
+                  setResolvingGenericItem(null);
+                  openLogModal(item, existing._id, existing.name);
+                }}
+              >
+                <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-emerald-50">
+                  <Ionicons name="checkmark-circle-outline" size={16} color="#059669" />
+                </View>
+                <View className="flex-1">
+                  <Text className="font-semibold text-slate-900">
+                    Log &quot;{resolvingGenericItem.variants[0].name}&quot;
+                  </Text>
+                  <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                    The specific product you already have cataloged.
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
+            <Pressable
+              className="mb-2 flex-row items-center rounded-2xl border border-slate-200 px-4 py-3.5 active:bg-slate-50"
+              onPress={() => {
+                if (!resolvingGenericItem) return;
+                const { item, generic } = resolvingGenericItem;
+                setResolvingGenericItem(null);
+                router.push({
+                  pathname: "/ingredients/add_manual",
+                  params: {
+                    groceryItemId: item._id,
+                    prefillName: item.name,
+                    genericParentId: generic._id,
+                    genericParentName: generic.name,
+                  },
+                });
+              }}
+            >
+              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-violet-50">
+                <Ionicons name="add-circle-outline" size={16} color="#7C3AED" />
+              </View>
+              <View className="flex-1">
+                <Text className="font-semibold text-slate-900">
+                  {resolvingGenericItem && resolvingGenericItem.variants.length > 0
+                    ? "Choose or add a specific product"
+                    : "Add a specific product"}
+                </Text>
+                <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                  {resolvingGenericItem && resolvingGenericItem.variants.length > 1
+                    ? `Search ${resolvingGenericItem.variants.length} existing products, or create a new one.`
+                    : "Create a new branded ingredient under this generic."}
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              className="mt-1 items-center rounded-2xl bg-slate-100 py-3"
+              onPress={() => setResolvingGenericItem(null)}
+            >
+              <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );

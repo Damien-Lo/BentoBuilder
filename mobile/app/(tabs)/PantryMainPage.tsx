@@ -260,10 +260,10 @@ export default function PantryMainPage() {
     [ingredients],
   );
 
-  // Generic ingredients never hold pantry stock directly — their total is
-  // the sum of every specific/branded variant's stock that shares their
-  // unit (a generic's threshold in "tbsp" can't be checked against a
-  // variant's stock recorded in "ml").
+  // A generic's total is its own direct pantry stock plus every
+  // specific/branded variant's stock that shares its unit (a generic's
+  // threshold in "tbsp" can't be checked against a variant's stock recorded
+  // in "ml").
   const genericStockByIngredientId = useMemo(() => {
     const stats = new Map<string, { total: number; variantCount: number }>();
 
@@ -277,11 +277,15 @@ export default function PantryMainPage() {
     }
 
     for (const pantryItem of pantryItems) {
-      const childId = getReferenceId(pantryItem.ingredient as unknown);
-      const child = ingredientById.get(childId);
-      if (!child) continue;
+      const itemIngredientId = getReferenceId(pantryItem.ingredient as unknown);
+      const itemIngredient = ingredientById.get(itemIngredientId);
+      if (!itemIngredient) continue;
 
-      const parentId = getReferenceId(child.genericParent as unknown);
+      // Either logged directly against a generic, or against one of its
+      // specific/branded variants — both count toward the same total.
+      const parentId = itemIngredient.isGeneric
+        ? itemIngredient._id
+        : getReferenceId(itemIngredient.genericParent as unknown);
       if (!parentId) continue;
 
       const parent = ingredientById.get(parentId);

@@ -608,7 +608,7 @@ export default function AddPantryItemByIngredientScreen() {
                   onChangeText={setPurchaseDate}
                   placeholder="YYYY-MM-DD"
                   placeholderTextColor="#94A3B8"
-                  keyboardType="numeric"
+                  keyboardType="numbers-and-punctuation"
                   className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 />
               </View>
@@ -624,7 +624,7 @@ export default function AddPantryItemByIngredientScreen() {
                   }}
                   placeholder="YYYY-MM-DD"
                   placeholderTextColor="#94A3B8"
-                  keyboardType="numeric"
+                  keyboardType="numbers-and-punctuation"
                   className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 />
               </View>

@@ -483,7 +483,7 @@ export default function IngredientDetailScreen() {
       // Only resolved when the user opted in — leaving the toggle off always
       // clears the value, even if a field still has leftover typed text.
       const defaultStorageLocation =
-        wantsDefaultLocation && !currentIngredient?.isGeneric
+        wantsDefaultLocation
           ? await resolveOrCreateOption(
               storageLocations,
               form.defaultStorageLocationId,
@@ -716,8 +716,8 @@ export default function IngredientDetailScreen() {
   const categoryName = getReferenceName(ingredient.category);
   const nutrition = ingredient.nutrition;
 
-  // Generic ingredients never hold pantry stock directly — their totals come
-  // from the aggregation across specific/branded variants instead.
+  // A generic's total is its own direct pantry stock plus the aggregation
+  // across its specific/branded variants (both computed server-side).
   const totalQuantity = ingredient.isGeneric
     ? (genericAvailability?.totalInOwnUnit ?? 0)
     : ingredientPantryItems.reduce((sum, p) => sum + (p.quantityAvailable ?? 0), 0);
@@ -808,9 +808,8 @@ export default function IngredientDetailScreen() {
                       Generic ingredient
                     </Text>
                     <Text className="mt-0.5 text-xs leading-4 text-violet-600">
-                      It has no brand and can&apos;t be stocked in the pantry
-                      directly — availability comes from its specific/branded
-                      variants.
+                      It has no brand — its availability also includes any
+                      specific/branded variants linked to it.
                     </Text>
                   </View>
                 </View>
@@ -1056,47 +1055,43 @@ export default function IngredientDetailScreen() {
 
               {smartDefaultsExpanded && (
                 <>
-                  {!currentIngredient?.isGeneric && (
+                  <ToggleRow
+                    label="Set a default storage location"
+                    description="Prefills the location when logging a purchase of this ingredient."
+                    value={wantsDefaultLocation}
+                    onChange={setWantsDefaultLocation}
+                  />
+                  {suggestedLocation && (
+                    <Pressable
+                      className="mt-2 flex-row items-center self-start rounded-full bg-blue-50 px-3 py-1.5 active:bg-blue-100"
+                      onPress={handleAutofillLocation}
+                    >
+                      <Ionicons name="sparkles-outline" size={14} color="#2563EB" />
+                      <Text className="ml-1.5 text-xs font-semibold text-blue-600">
+                        Autofill: {suggestedLocation.name}
+                      </Text>
+                    </Pressable>
+                  )}
+                  {wantsDefaultLocation && (
                     <>
-                      <ToggleRow
-                        label="Set a default storage location"
-                        description="Prefills the location when logging a purchase of this ingredient."
-                        value={wantsDefaultLocation}
-                        onChange={setWantsDefaultLocation}
+                      <FieldLabel text="Default storage location" />
+                      <SearchableObjectDropdown<SelectOption>
+                        options={storageLocations}
+                        selectedId={form.defaultStorageLocationId}
+                        selectedName={form.defaultStorageLocationName}
+                        placeholder="Search or type a location"
+                        onTextChange={(value) => {
+                          if (value !== form.defaultStorageLocationName) {
+                            updateForm("defaultStorageLocationId", "");
+                          }
+                          setDefaultLocationDraft(value);
+                        }}
+                        onSelect={(option) => {
+                          updateForm("defaultStorageLocationId", option._id);
+                          updateForm("defaultStorageLocationName", option.name);
+                          setDefaultLocationDraft(option.name);
+                        }}
                       />
-                      {suggestedLocation && (
-                        <Pressable
-                          className="mt-2 flex-row items-center self-start rounded-full bg-blue-50 px-3 py-1.5 active:bg-blue-100"
-                          onPress={handleAutofillLocation}
-                        >
-                          <Ionicons name="sparkles-outline" size={14} color="#2563EB" />
-                          <Text className="ml-1.5 text-xs font-semibold text-blue-600">
-                            Autofill: {suggestedLocation.name}
-                          </Text>
-                        </Pressable>
-                      )}
-                      {wantsDefaultLocation && (
-                        <>
-                          <FieldLabel text="Default storage location" />
-                          <SearchableObjectDropdown<SelectOption>
-                            options={storageLocations}
-                            selectedId={form.defaultStorageLocationId}
-                            selectedName={form.defaultStorageLocationName}
-                            placeholder="Search or type a location"
-                            onTextChange={(value) => {
-                              if (value !== form.defaultStorageLocationName) {
-                                updateForm("defaultStorageLocationId", "");
-                              }
-                              setDefaultLocationDraft(value);
-                            }}
-                            onSelect={(option) => {
-                              updateForm("defaultStorageLocationId", option._id);
-                              updateForm("defaultStorageLocationName", option.name);
-                              setDefaultLocationDraft(option.name);
-                            }}
-                          />
-                        </>
-                      )}
                     </>
                   )}
 
@@ -1228,9 +1223,18 @@ export default function IngredientDetailScreen() {
                   </View>
                   <Text className="mt-1 text-xs text-slate-500">
                     {ingredient.isGeneric
-                      ? `across ${genericAvailability?.variantCount ?? 0} variant${
-                          genericAvailability?.variantCount === 1 ? "" : "s"
-                        }`
+                      ? [
+                          ingredientPantryItems.length > 0
+                            ? `${ingredientPantryItems.length} direct ${
+                                ingredientPantryItems.length === 1 ? "entry" : "entries"
+                              }`
+                            : null,
+                          `${genericAvailability?.variantCount ?? 0} variant${
+                            genericAvailability?.variantCount === 1 ? "" : "s"
+                          }`,
+                        ]
+                          .filter(Boolean)
+                          .join(" + ")
                       : `${ingredientPantryItems.length} ${
                           ingredientPantryItems.length === 1
                             ? "entry"
@@ -1393,20 +1397,20 @@ export default function IngredientDetailScreen() {
             </>
           )}
 
-          {/* Generic ingredients are a matching umbrella, not a physical
-              product — they never hold pantry stock directly. Availability
-              is aggregated from specific/branded variants instead. */}
+          {/* Generic ingredients are a matching umbrella — a recipe calling
+              for this can be satisfied by any specific/branded variant too,
+              so availability below includes more than just its own entries. */}
           {!isEditing && ingredient.isGeneric && (
             <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-6 py-6">
               <View className="flex-row items-center">
                 <Ionicons name="git-branch-outline" size={22} color="#7C3AED" />
                 <Text className="ml-2 flex-1 font-semibold text-slate-700">
-                  Generic ingredients aren&apos;t stocked directly
+                  Includes specific/branded variants
                 </Text>
               </View>
               <Text className="mt-2 text-sm leading-5 text-slate-500">
-                Availability comes from the specific/branded ingredients
-                linked to it, not from a pantry entry here.
+                Availability also counts any specific/branded ingredients
+                linked to this one, not just the entries below.
               </Text>
 
               {loadingAvailability ? (
@@ -1429,8 +1433,7 @@ export default function IngredientDetailScreen() {
                       }`}
                     >
                       Low: {ingredient.lowStockThreshold}{" "}
-                      {ingredient.defaultPortionUnit || "units"} total across
-                      variants
+                      {ingredient.defaultPortionUnit || "units"} combined total
                     </Text>
                   </View>
                 )
@@ -1439,7 +1442,7 @@ export default function IngredientDetailScreen() {
           )}
 
           {/* Pantry entries — view mode only */}
-          {!isEditing && !ingredient.isGeneric && (
+          {!isEditing && (
             <>
               <View className="mb-3 mt-2 flex-row items-center">
                 <Text className="flex-1 text-base font-bold text-slate-900">
@@ -1644,7 +1647,7 @@ export default function IngredientDetailScreen() {
                       placeholderTextColor="#94a3b8"
                       value={quickAddPurchaseDate}
                       onChangeText={setQuickAddPurchaseDate}
-                      keyboardType="numeric"
+                      keyboardType="numbers-and-punctuation"
                     />
                   </View>
                   <View className="flex-1">
@@ -1658,7 +1661,7 @@ export default function IngredientDetailScreen() {
                         setQuickAddExpiryDate(value);
                         setQuickAddExpiryTouched(true);
                       }}
-                      keyboardType="numeric"
+                      keyboardType="numbers-and-punctuation"
                     />
                   </View>
                 </View>
