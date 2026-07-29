@@ -321,6 +321,21 @@ export default function IngredientDetailScreen() {
     [pantryItems, id],
   );
 
+  // The Pantry entries list below shows a generic's own direct entries plus
+  // every specific/branded variant's entries too — that's genuinely where
+  // most of a generic's real-world stock lives. Every other use of "this
+  // ingredient's pantry items" (smart-default suggestions, quick-add
+  // fallbacks, the "direct entries" count) stays scoped to direct entries
+  // only, via ingredientPantryItems above.
+  const displayedPantryItems = useMemo(() => {
+    if (!currentIngredient?.isGeneric) return ingredientPantryItems;
+
+    return pantryItems.filter((p) => {
+      if (getReferenceId(p.ingredient as unknown) === id) return true;
+      return getReferenceId(p.ingredient?.genericParent as unknown) === id;
+    });
+  }, [pantryItems, id, currentIngredient?.isGeneric, ingredientPantryItems]);
+
   useEffect(() => {
     const lastEntry = ingredientPantryItems[0];
     if (!lastEntry) return;
@@ -499,7 +514,10 @@ export default function IngredientDetailScreen() {
       const updated = await updateIngredient(id, {
         name: form.name.trim(),
         description: form.description.trim() || undefined,
-        barcode: form.barcode.trim() || null,
+        // Generics are an abstract matching umbrella, not one physical
+        // product — never save a barcode for one, even if it already had a
+        // stray value from before this rule existed.
+        barcode: currentIngredient?.isGeneric ? null : form.barcode.trim() || null,
         brand: brand?._id || null,
         category: category?._id || null,
         defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
@@ -879,14 +897,18 @@ export default function IngredientDetailScreen() {
                 onChangeText={(v) => updateForm("description", v)}
               />
 
-              <FieldLabel text="Barcode" />
-              <FormInput
-                value={form.barcode}
-                placeholder="Optional barcode"
-                autoCapitalize="none"
-                keyboardType="numbers-and-punctuation"
-                onChangeText={(v) => updateForm("barcode", v)}
-              />
+              {!ingredient.isGeneric && (
+                <>
+                  <FieldLabel text="Barcode" />
+                  <FormInput
+                    value={form.barcode}
+                    placeholder="Optional barcode"
+                    autoCapitalize="none"
+                    keyboardType="numbers-and-punctuation"
+                    onChangeText={(v) => updateForm("barcode", v)}
+                  />
+                </>
+              )}
 
               <SectionTitle
                 icon="scale-outline"
@@ -1471,7 +1493,7 @@ export default function IngredientDetailScreen() {
                 )}
               </View>
 
-              {ingredientPantryItems.length === 0 ? (
+              {displayedPantryItems.length === 0 ? (
                 <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-10">
                   <Ionicons
                     name="file-tray-outline"
@@ -1482,11 +1504,13 @@ export default function IngredientDetailScreen() {
                     Not in pantry
                   </Text>
                   <Text className="mt-1 text-center text-sm text-slate-500">
-                    This ingredient has no pantry entries yet.
+                    {currentIngredient?.isGeneric
+                      ? "No entries yet — directly, or under any specific/branded variant."
+                      : "This ingredient has no pantry entries yet."}
                   </Text>
                 </View>
               ) : (
-                ingredientPantryItems.map((entry) => {
+                displayedPantryItems.map((entry) => {
                   const daysToExpiry = daysUntil(entry.expiryDate);
                   const isExpired = daysToExpiry != null && daysToExpiry < 0;
                   const isExpiringSoon =
@@ -1529,9 +1553,18 @@ export default function IngredientDetailScreen() {
                                   color="#2563EB"
                                 />
                               </View>
-                              <Text className="ml-3 font-semibold text-slate-900">
-                                {getLocationName(entry)}
-                              </Text>
+                              <View>
+                                <Text className="ml-3 font-semibold text-slate-900">
+                                  {getLocationName(entry)}
+                                </Text>
+                                {currentIngredient?.isGeneric && (
+                                  <Text className="ml-3 mt-0.5 text-xs text-slate-400">
+                                    {getReferenceId(entry.ingredient as unknown) === id
+                                      ? "Generic"
+                                      : (entry.ingredient?.name ?? "Unknown product")}
+                                  </Text>
+                                )}
+                              </View>
                             </View>
                             <View className="flex-row items-center">
                               <Text className="font-bold text-slate-900">

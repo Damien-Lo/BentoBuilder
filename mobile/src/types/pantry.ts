@@ -14,6 +14,8 @@ export interface Ingredient {
   category: string;
   brand: string;
   barcode: string | null;
+  isGeneric?: boolean;
+  genericParent?: string | { _id: string } | null;
   defaultPortionAmount: number;
   defaultPortionUnit: string;
   nutrition: Nutrition;

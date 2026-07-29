@@ -827,7 +827,11 @@ export default function AddManualPantryItemScreen() {
 
         const newGeneric = await createIngredient({
           name: form.ingredientName.trim(),
-          barcode: form.barcode.trim() || null,
+          // Generics are an abstract matching umbrella, not one physical
+          // product — a barcode only ever identifies a specific item, so
+          // this is never sent even if the field had a leftover value from
+          // before the type was switched to Generic.
+          barcode: null,
           description: form.description.trim() || undefined,
           isGeneric: true,
           brand: null,
@@ -1186,19 +1190,23 @@ export default function AddManualPantryItemScreen() {
             onChangeText={(value) => updateForm("description", value)}
           />
 
-          <FieldLabel text="Barcode" />
+          {!form.isGeneric && (
+            <>
+              <FieldLabel text="Barcode" />
 
-          <FormInput
-            value={form.barcode}
-            placeholder="Optional barcode"
-            autoCapitalize="none"
-            keyboardType="numbers-and-punctuation"
-            onChangeText={(value) => updateForm("barcode", value)}
-          />
-          <Text className="mt-2 text-xs leading-4 text-slate-500">
-            Scanning a barcode fills this in automatically — type one here if
-            a scan came back empty, so it&apos;s recognized next time.
-          </Text>
+              <FormInput
+                value={form.barcode}
+                placeholder="Optional barcode"
+                autoCapitalize="none"
+                keyboardType="numbers-and-punctuation"
+                onChangeText={(value) => updateForm("barcode", value)}
+              />
+              <Text className="mt-2 text-xs leading-4 text-slate-500">
+                Scanning a barcode fills this in automatically — type one here if
+                a scan came back empty, so it&apos;s recognized next time.
+              </Text>
+            </>
+          )}
 
           <FieldLabel text="Category" required />
 

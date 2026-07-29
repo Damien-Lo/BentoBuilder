@@ -45,9 +45,9 @@ router.get("/", async (req, res) => {
  */
 router.get("/:id", async (req, res) => {
   try {
-    const pantryItem = await PantryItem.findById(req.params.id).populate(
-      INGREDIENT_POPULATE
-    );
+    const pantryItem = await PantryItem.findById(req.params.id)
+      .populate(INGREDIENT_POPULATE)
+      .populate("storageLocation");
 
     if (!pantryItem) {
       return res.status(404).json({
