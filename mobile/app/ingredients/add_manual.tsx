@@ -24,6 +24,7 @@ import {
   DurationValueInput,
   FieldLabel,
   FormInput,
+  PriceInput,
   QuantityServingInput,
   SearchableObjectDropdown,
   SectionTitle,
@@ -83,6 +84,7 @@ interface FormState {
   entryCount: string;
   purchaseDate: string;
   expiryDate: string;
+  purchasePrice: string;
   lowStockThreshold: string;
   alwaysAvailable: boolean;
 
@@ -126,6 +128,7 @@ const initialForm: FormState = {
   entryCount: "1",
   purchaseDate: todayDateInputString(),
   expiryDate: "",
+  purchasePrice: "",
   lowStockThreshold: "0",
   alwaysAvailable: false,
 
@@ -814,6 +817,14 @@ export default function AddManualPantryItemScreen() {
         return;
       }
 
+      if (form.purchasePrice.trim()) {
+        const parsedPrice = Number(form.purchasePrice);
+        if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+          Alert.alert("Invalid price", "Enter a valid price of 0 or more.");
+          return;
+        }
+      }
+
       if (!form.storageLocationId && !storageLocationDraft.trim()) {
         Alert.alert(
           "Storage location is required",
@@ -1022,6 +1033,7 @@ export default function AddManualPantryItemScreen() {
             quantityUnit: form.quantityUnit.trim(),
             purchaseDate: form.purchaseDate.trim() || undefined,
             expiryDate: form.expiryDate.trim() || undefined,
+            purchasePrice: form.purchasePrice.trim() ? Number(form.purchasePrice) : undefined,
           });
         }
       }
@@ -1651,6 +1663,12 @@ export default function AddManualPantryItemScreen() {
               <DurationExpiryInput
                 purchaseDate={form.purchaseDate}
                 onApply={(expiryDate) => updateForm("expiryDate", expiryDate)}
+              />
+
+              <FieldLabel text="Price paid (optional)" />
+              <PriceInput
+                value={form.purchasePrice}
+                onChangeText={(value) => updateForm("purchasePrice", value)}
               />
             </>
           )}

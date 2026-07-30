@@ -21,7 +21,7 @@ import {
 } from "@/src/services/optionsApi";
 import { getPantryItemById, updatePantryItem } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
-import { DateTextInput, DurationExpiryInput, QuantityServingInput } from "@/src/components/forms";
+import { DateTextInput, DurationExpiryInput, PriceInput, QuantityServingInput } from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
 import { toDateOnly } from "@/src/utils/date";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
@@ -67,6 +67,7 @@ interface FormState {
   storageLocationName: string;
   purchaseDate: string;
   expiryDate: string;
+  purchasePrice: string;
   notes: string;
 }
 
@@ -78,6 +79,7 @@ function itemToForm(item: PantryItem): FormState {
     storageLocationName: getReferenceName(item.storageLocation as unknown),
     purchaseDate: toDateOnly(item.purchaseDate),
     expiryDate: toDateOnly(item.expiryDate),
+    purchasePrice: item.purchasePrice != null ? String(item.purchasePrice) : "",
     notes: item.notes ?? "",
   };
 }
@@ -159,6 +161,13 @@ export default function EditPantryItemScreen() {
       return;
     }
 
+    const trimmedPrice = form.purchasePrice.trim();
+    const price = trimmedPrice ? Number(trimmedPrice) : null;
+    if (trimmedPrice && (!Number.isFinite(price) || (price as number) < 0)) {
+      Alert.alert("Invalid price", "Enter a valid price of 0 or more.");
+      return;
+    }
+
     try {
       setSaving(true);
       await updatePantryItem(id, {
@@ -167,6 +176,7 @@ export default function EditPantryItemScreen() {
         storageLocation: form.storageLocationId,
         purchaseDate: form.purchaseDate || undefined,
         expiryDate: form.expiryDate || undefined,
+        purchasePrice: price,
         notes: form.notes.trim() || undefined,
       });
       router.back();
@@ -372,6 +382,17 @@ export default function EditPantryItemScreen() {
             <DurationExpiryInput
               purchaseDate={form.purchaseDate}
               onApply={(expiryDate) => update("expiryDate", expiryDate)}
+            />
+          </View>
+
+          {/* Price */}
+          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
+            Price paid (optional)
+          </Text>
+          <View className="mb-5">
+            <PriceInput
+              value={form.purchasePrice}
+              onChangeText={(v) => update("purchasePrice", v)}
             />
           </View>
 

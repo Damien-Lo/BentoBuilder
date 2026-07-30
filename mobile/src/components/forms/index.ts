@@ -6,6 +6,7 @@ export { DurationExpiryInput } from "./DurationExpiryInput";
 export { DurationValueInput } from "./DurationValueInput";
 export { FieldLabel } from "./FieldLabel";
 export { FormInput } from "./FormInput";
+export { PriceInput } from "./PriceInput";
 export { QuantityServingInput } from "./QuantityServingInput";
 export { SearchableObjectDropdown } from "./SearchableObjectDropdown";
 export { SectionTitle } from "./SectionTitle";

@@ -21,6 +21,7 @@ import {
   DurationValueInput,
   FieldLabel,
   FormInput,
+  PriceInput,
   QuantityServingInput,
   SearchableObjectDropdown,
   SectionTitle,
@@ -227,6 +228,7 @@ export default function IngredientDetailScreen() {
   const [quickAddQuantity, setQuickAddQuantity] = useState("");
   const [quickAddQuantityUnit, setQuickAddQuantityUnit] = useState("");
   const [quickAddEntryCount, setQuickAddEntryCount] = useState("1");
+  const [quickAddPrice, setQuickAddPrice] = useState("");
   const [savingEntry, setSavingEntry] = useState(false);
 
   const [genericAvailability, setGenericAvailability] =
@@ -687,6 +689,14 @@ export default function IngredientDetailScreen() {
       return;
     }
 
+    if (quickAddPrice.trim()) {
+      const parsedPrice = Number(quickAddPrice);
+      if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+        Alert.alert("Invalid price", "Enter a valid price of 0 or more.");
+        return;
+      }
+    }
+
     try {
       setSavingEntry(true);
 
@@ -712,6 +722,7 @@ export default function IngredientDetailScreen() {
             quantityUnit: quickAddQuantityUnit.trim() || lastEntry.quantityUnit,
             purchaseDate: quickAddPurchaseDate || undefined,
             expiryDate: quickAddExpiryDate || undefined,
+            purchasePrice: quickAddPrice.trim() ? Number(quickAddPrice) : undefined,
             lowStockThreshold: lastEntry.lowStockThreshold,
           }),
         );
@@ -721,6 +732,7 @@ export default function IngredientDetailScreen() {
       setQuickAddPurchaseDate(todayDateInputString());
       setQuickAddExpiryDate("");
       setQuickAddExpiryTouched(false);
+      setQuickAddPrice("");
       setQuickAddLocationTouched(false);
       setQuickAddQuantity("");
       setQuickAddEntryCount("1");
@@ -1779,6 +1791,11 @@ export default function IngredientDetailScreen() {
                       setQuickAddExpiryTouched(true);
                     }}
                   />
+                </View>
+
+                <View className="mt-2">
+                  <FieldLabel text="Price paid (optional)" />
+                  <PriceInput value={quickAddPrice} onChangeText={setQuickAddPrice} />
                 </View>
 
                 <Pressable

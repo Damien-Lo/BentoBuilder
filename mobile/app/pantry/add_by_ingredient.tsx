@@ -25,7 +25,13 @@ import {
 
 import { addIngredientToPantry, getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
-import { DateTextInput, DurationExpiryInput, QuantityServingInput } from "@/src/components/forms";
+import {
+  CreateGenericIngredientModal,
+  DateTextInput,
+  DurationExpiryInput,
+  PriceInput,
+  QuantityServingInput,
+} from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
@@ -111,6 +117,7 @@ export default function AddPantryItemByIngredientScreen() {
     useState<Ingredient | null>(null);
 
   const [searchText, setSearchText] = useState("");
+  const [showCreateIngredient, setShowCreateIngredient] = useState(false);
   const [quantity, setQuantity] = useState("1");
   const [quantityUnit, setQuantityUnit] = useState("item");
   const [entryCount, setEntryCount] = useState("1");
@@ -122,6 +129,7 @@ export default function AddPantryItemByIngredientScreen() {
   const [purchaseDate, setPurchaseDate] = useState(todayDateInputString());
   const [expiryDate, setExpiryDate] = useState("");
   const [expiryTouched, setExpiryTouched] = useState(false);
+  const [purchasePrice, setPurchasePrice] = useState("");
 
   const [showLocationOptions, setShowLocationOptions] = useState(false);
 
@@ -278,6 +286,32 @@ export default function AddPantryItemByIngredientScreen() {
     );
   }, [purchaseDate, effectiveExpiryDuration, expiryTouched]);
 
+  // Shared by tapping a search result and by finishing the "create a new
+  // ingredient" flow below — both land on the same quantity form.
+  function handleSelectIngredient(ingredient: Ingredient) {
+    setSelectedIngredient(ingredient);
+
+    if (ingredient.defaultPortionUnit) {
+      setQuantityUnit(ingredient.defaultPortionUnit);
+    }
+
+    if (ingredient.defaultPortionAmount !== undefined) {
+      setQuantity(String(ingredient.defaultPortionAmount));
+    }
+
+    // A location passed in via route params stays pinned regardless of
+    // which ingredient gets picked; otherwise let this ingredient's own
+    // suggestion apply fresh.
+    if (!locationId) {
+      setStorageLocationId("");
+      setStorageLocationTouched(false);
+    }
+    setExpiryDate("");
+    setExpiryTouched(false);
+    setEntryCount("1");
+    setPurchasePrice("");
+  }
+
   async function handleSave() {
     if (!selectedIngredient) {
       Alert.alert(
@@ -310,6 +344,14 @@ export default function AddPantryItemByIngredientScreen() {
       return;
     }
 
+    if (purchasePrice.trim()) {
+      const parsedPrice = Number(purchasePrice);
+      if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+        Alert.alert("Invalid price", "Enter a valid price of 0 or more.");
+        return;
+      }
+    }
+
     const parsedCount = Math.max(1, Math.round(Number(entryCount)) || 1);
 
     try {
@@ -323,6 +365,7 @@ export default function AddPantryItemByIngredientScreen() {
           quantityUnit: quantityUnit.trim(),
           purchaseDate: purchaseDate.trim() || undefined,
           expiryDate: expiryDate.trim() || undefined,
+          purchasePrice: purchasePrice.trim() ? Number(purchasePrice) : undefined,
         });
       }
 
@@ -367,6 +410,7 @@ export default function AddPantryItemByIngredientScreen() {
   }
 
   return (
+    <>
     <SafeAreaView className="flex-1 bg-slate-50">
       <KeyboardAvoidingView
         className="flex-1"
@@ -435,28 +479,7 @@ export default function AddPantryItemByIngredientScreen() {
                 return (
                   <Pressable
                     className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-                    onPress={() => {
-                      setSelectedIngredient(ingredient);
-
-                      if (ingredient.defaultPortionUnit) {
-                        setQuantityUnit(ingredient.defaultPortionUnit);
-                      }
-
-                      if (ingredient.defaultPortionAmount !== undefined) {
-                        setQuantity(String(ingredient.defaultPortionAmount));
-                      }
-
-                      // A location passed in via route params stays pinned
-                      // regardless of which ingredient gets picked; otherwise
-                      // let this ingredient's own suggestion apply fresh.
-                      if (!locationId) {
-                        setStorageLocationId("");
-                        setStorageLocationTouched(false);
-                      }
-                      setExpiryDate("");
-                      setExpiryTouched(false);
-                      setEntryCount("1");
-                    }}
+                    onPress={() => handleSelectIngredient(ingredient)}
                   >
                     <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
                       <Ionicons
@@ -497,9 +520,18 @@ export default function AddPantryItemByIngredientScreen() {
                   </Text>
 
                   <Text className="mt-2 text-center text-slate-500">
-                    Try another search or create a new ingredient from the
-                    ingredients page.
+                    Try another search, or create a new ingredient below.
                   </Text>
+
+                  <Pressable
+                    className="mt-5 flex-row items-center rounded-2xl bg-blue-600 px-5 py-3 active:bg-blue-700"
+                    onPress={() => setShowCreateIngredient(true)}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color="white" />
+                    <Text className="ml-2 font-semibold text-white">
+                      Create &quot;{searchText.trim()}&quot;
+                    </Text>
+                  </Pressable>
                 </View>
               }
             />
@@ -667,6 +699,11 @@ export default function AddPantryItemByIngredientScreen() {
                 setExpiryTouched(true);
               }}
             />
+
+            <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
+              Price paid (optional)
+            </Text>
+            <PriceInput value={purchasePrice} onChangeText={setPurchasePrice} />
           </ScrollView>
 
             <View className="pb-6 pt-4">
@@ -690,5 +727,17 @@ export default function AddPantryItemByIngredientScreen() {
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
+
+    <CreateGenericIngredientModal
+      visible={showCreateIngredient}
+      initialName={searchText}
+      onClose={() => setShowCreateIngredient(false)}
+      onCreated={(ingredient) => {
+        setIngredients((prev) => [...prev, ingredient]);
+        handleSelectIngredient(ingredient);
+        setShowCreateIngredient(false);
+      }}
+    />
+    </>
   );
 }

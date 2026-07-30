@@ -34,6 +34,7 @@ import {
   DateTextInput,
   DurationExpiryInput,
   FieldLabel,
+  PriceInput,
   SearchableObjectDropdown,
   UnitFamilyDropdown,
 } from "@/src/components/forms";
@@ -106,6 +107,7 @@ export default function GroceryListScreen() {
   const [logQuantity, setLogQuantity] = useState("");
   const [logUnit, setLogUnit] = useState("");
   const [logEntryCount, setLogEntryCount] = useState("1");
+  const [logPrice, setLogPrice] = useState("");
   const [logSaving, setLogSaving] = useState(false);
   const [logLocationTouched, setLogLocationTouched] = useState(false);
   const [logExpiryTouched, setLogExpiryTouched] = useState(false);
@@ -351,6 +353,7 @@ export default function GroceryListScreen() {
     setLogQuantity(item.quantity != null ? String(item.quantity) : "");
     setLogUnit(item.unit || targetIngredient?.defaultPortionUnit || "");
     setLogEntryCount("1");
+    setLogPrice("");
   }
 
   function handleTapPendingItem(item: GroceryItem) {
@@ -482,6 +485,13 @@ export default function GroceryListScreen() {
       Alert.alert("Unit required", "Select or enter a unit.");
       return;
     }
+    if (logPrice.trim()) {
+      const parsedPrice = Number(logPrice);
+      if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+        Alert.alert("Invalid price", "Enter a valid price of 0 or more.");
+        return;
+      }
+    }
 
     try {
       setLogSaving(true);
@@ -510,6 +520,7 @@ export default function GroceryListScreen() {
           quantityUnit: logUnit.trim(),
           purchaseDate: logPurchaseDate || undefined,
           expiryDate: logExpiryDate || undefined,
+          purchasePrice: logPrice.trim() ? Number(logPrice) : undefined,
         });
       }
 
@@ -970,6 +981,11 @@ export default function GroceryListScreen() {
                   </Text>
                 )}
               </View>
+
+              <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">
+                Price paid (optional)
+              </Text>
+              <PriceInput value={logPrice} onChangeText={setLogPrice} />
 
               <View className="mt-5 flex-row gap-3">
                 <Pressable
