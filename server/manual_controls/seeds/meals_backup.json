@@ -1,0 +1,124 @@
+[
+  {
+    "_id": "6a514508888d8e0ab5690a16",
+    "name": "Chicken Karaage",
+    "type": "course",
+    "notes": "",
+    "isArchived": true,
+    "courses": [
+      {
+        "label": "Course 1",
+        "recipe": {
+          "isConfirmed": false,
+          "_id": "6a4dbf5d54b7e39a5733a785",
+          "name": "Air Fryer Japanese Fried Chicken (Karaage)",
+          "description": "Crispy, juicy Japanese fried chicken made in the air fryer. The double-fry technique — low heat first, then high heat — gives the signature crunchy exterior while keeping the meat tender inside.",
+          "recipeCategory": "6a4dc38cf8d89f9a72f510c9",
+          "mealCategory": [
+            "dinner",
+            "lunch"
+          ],
+          "servings": 4,
+          "defaultPortionUnit": "serving",
+          "nutritionBasis": "per-serving",
+          "imageUrl": "",
+          "notes": "Marinate for at least 30 min (up to 1 hour). Potato starch (katakuriko) gives the crispiest coating — use cornstarch as a substitute. Serve with lemon wedges.",
+          "isArchived": true,
+          "ingredientList": [
+            {
+              "ingredient": "6a4dbc8a8107da39b13b35d3",
+              "quantity": 450,
+              "unit": "g"
+            },
+            {
+              "ingredient": "6a4dbc8c8107da39b13b35ec",
+              "quantity": 4,
+              "unit": "cloves"
+            },
+            {
+              "ingredient": "6a4dbc8e8107da39b13b3600",
+              "quantity": 1,
+              "unit": "tbsp"
+            },
+            {
+              "ingredient": "6a4dbc948107da39b13b3637",
+              "quantity": 2,
+              "unit": "tbsp"
+            },
+            {
+              "ingredient": "6a4dbc9e8107da39b13b3695",
+              "quantity": 1,
+              "unit": "tbsp"
+            },
+            {
+              "ingredient": "6a4dbc948107da39b13b3635",
+              "quantity": 1,
+              "unit": "tsp"
+            },
+            {
+              "ingredient": "6a4dbc978107da39b13b3656",
+              "quantity": 0.5,
+              "unit": "tsp"
+            },
+            {
+              "ingredient": "6a4dbc978107da39b13b3655",
+              "quantity": 0.5,
+              "unit": "tsp"
+            },
+            {
+              "ingredient": "6a4dbc958107da39b13b363d",
+              "quantity": 4,
+              "unit": "tbsp"
+            },
+            {
+              "ingredient": "6a4dbc968107da39b13b364c",
+              "quantity": 2,
+              "unit": "tbsp"
+            },
+            {
+              "ingredient": "6a4dbc978107da39b13b3654",
+              "quantity": 1,
+              "unit": "tbsp"
+            }
+          ],
+          "instructions": [
+            "Combine chicken thighs with grated garlic, grated ginger, soy sauce, sake, sesame oil, white pepper, and salt in a bowl. Cover and refrigerate for 30 minutes to 1 hour.",
+            "Pour potato starch onto a tray. Coat each piece of chicken thoroughly, shaking off excess.",
+            "Spray the air fryer basket with neutral oil. Arrange chicken in a single layer with space between pieces. Spray chicken generously with oil.",
+            "Air fry at 350°F (175°C) for 10 minutes. Flip pieces, spray the other side with oil, then air fry at 400°F (200°C) for 8–10 minutes until golden and crispy.",
+            "Mix Japanese mayo, sriracha, grated garlic, lemon juice, salt, and pepper for the dipping sauce.",
+            "Squeeze fresh lemon juice over finished chicken before serving with the spicy mayo."
+          ],
+          "nutrition": {
+            "calories": 249.4,
+            "protein": 29.5,
+            "carbs": 1.3,
+            "fats": 13.4,
+            "fiber": 0.1,
+            "sodium": 192.8
+          },
+          "createdAt": "2026-07-08T03:09:17.229Z",
+          "updatedAt": "2026-07-30T00:09:36.072Z",
+          "__v": 0,
+          "scores": []
+        },
+        "servings": 1,
+        "_id": "6a5148c76794037cf5090002"
+      }
+    ],
+    "bentoLayout": null,
+    "createdAt": "2026-07-10T19:16:24.502Z",
+    "updatedAt": "2026-07-26T19:01:02.564Z",
+    "__v": 0,
+    "tags": [
+      {
+        "_id": "6a5148c66794037cf5090001",
+        "name": "Japanese",
+        "normalizedName": "japanese",
+        "createdAt": "2026-07-10T19:32:22.189Z",
+        "updatedAt": "2026-07-10T19:32:22.189Z",
+        "__v": 0
+      }
+    ]
+  }
+]

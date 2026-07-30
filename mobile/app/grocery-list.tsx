@@ -35,6 +35,7 @@ import {
   DurationExpiryInput,
   FieldLabel,
   SearchableObjectDropdown,
+  UnitFamilyDropdown,
 } from "@/src/components/forms";
 import {
   clearCompletedGroceryItems,
@@ -901,21 +902,38 @@ export default function GroceryListScreen() {
                   className="h-12 w-20 rounded-2xl border border-slate-200 bg-white px-3 text-center text-base text-slate-900"
                 />
                 <View className="flex-1">
-                  <CreatableStringDropdown
-                    options={logUnitOptions}
-                    selectedValue={logUnit}
-                    placeholder="Unit"
-                    onSelect={(unit) => {
-                      const converted = convertAmountForUnitChange(
-                        Number(logQuantity),
-                        logUnit,
-                        unit,
-                        customUnitConversions,
-                      );
-                      if (converted != null) setLogQuantity(String(converted));
-                      setLogUnit(unit);
-                    }}
-                  />
+                  {loggingFullIngredient?.defaultPortionUnit ? (
+                    <UnitFamilyDropdown
+                      unit={logUnit || loggingFullIngredient.defaultPortionUnit}
+                      options={logUnitOptions}
+                      onSelect={(unit) => {
+                        const converted = convertAmountForUnitChange(
+                          Number(logQuantity),
+                          logUnit,
+                          unit,
+                          customUnitConversions,
+                        );
+                        if (converted != null) setLogQuantity(String(converted));
+                        setLogUnit(unit);
+                      }}
+                    />
+                  ) : (
+                    <CreatableStringDropdown
+                      options={logUnitOptions}
+                      selectedValue={logUnit}
+                      placeholder="Unit"
+                      onSelect={(unit) => {
+                        const converted = convertAmountForUnitChange(
+                          Number(logQuantity),
+                          logUnit,
+                          unit,
+                          customUnitConversions,
+                        );
+                        if (converted != null) setLogQuantity(String(converted));
+                        setLogUnit(unit);
+                      }}
+                    />
+                  )}
                 </View>
               </View>
 

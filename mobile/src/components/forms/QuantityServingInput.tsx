@@ -3,7 +3,12 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { CreatableStringDropdown } from "./CreatableStringDropdown";
-import { convertAmountForUnitChange, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import { UnitFamilyDropdown } from "./UnitFamilyDropdown";
+import {
+  convertAmountForUnitChange,
+  getRelatedUnits,
+  type CustomUnitConversion,
+} from "@/src/utils/unitConversion";
 
 type QuantityMode = "servings" | "total";
 
@@ -81,6 +86,16 @@ export function QuantityServingInput({
 
   const parsedEntryCount = Math.max(1, Math.round(Number(entryCount)) || 1);
   const effectiveUnit = quantityUnit || defaultPortionUnit || "";
+
+  // Once the ingredient's own unit is known, the pantry quantity's unit is
+  // restricted to its family (same convertible-family rule already applied
+  // to recipe ingredient rows) — free-typing a brand-new unrelated unit is
+  // no longer allowed here, since that unit would never participate in
+  // stock/availability math. Falls back to free text only when the caller
+  // has no defaultPortionUnit to anchor a family to.
+  const familyUnits = defaultPortionUnit
+    ? getRelatedUnits(defaultPortionUnit, customUnitConversions)
+    : [];
 
   function adjustEntryCount(delta: number) {
     onChangeEntryCount?.(String(Math.max(1, parsedEntryCount + delta)));
@@ -173,13 +188,22 @@ export function QuantityServingInput({
             className="mr-3 h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
           />
           <View className="flex-1">
-            <CreatableStringDropdown
-              options={unitOptions}
-              selectedValue={quantityUnit}
-              placeholder="Unit"
-              disabled={disabled}
-              onSelect={handleUnitSelect}
-            />
+            {defaultPortionUnit ? (
+              <UnitFamilyDropdown
+                unit={quantityUnit || defaultPortionUnit}
+                options={familyUnits}
+                disabled={disabled}
+                onSelect={handleUnitSelect}
+              />
+            ) : (
+              <CreatableStringDropdown
+                options={unitOptions}
+                selectedValue={quantityUnit}
+                placeholder="Unit"
+                disabled={disabled}
+                onSelect={handleUnitSelect}
+              />
+            )}
           </View>
         </View>
       )}

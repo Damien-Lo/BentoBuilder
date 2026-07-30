@@ -22,16 +22,18 @@ import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import {
+  confirmMealPlanEntry,
   createMealPlanEntry,
   deleteMealPlanEntry,
   getMealPlanForDate,
-  updateMealPlanEntryStatus,
+  unconfirmMealPlanEntry,
   type MealPlanEntry,
   type MealPlanEntryStatus,
   type MealSlot,
 } from "@/src/services/mealPlanApi";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { RateAndConfirmModal } from "@/src/components/planner/RateAndConfirmModal";
+import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
 import {
   friendlyDayLabel,
   getEntryAvailability,
@@ -49,6 +51,14 @@ import {
   weekRangeLabel,
   type ScaledNutrition,
 } from "@/src/utils/mealPlan";
+import {
+  buildIngredientRequirements,
+  getDefaultDeductionInstructions,
+  getResolvedDeductionInstructions,
+  hasAmbiguity,
+  type DeductionInstruction,
+  type IngredientRequirement,
+} from "@/src/utils/pantryDeduction";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -198,6 +208,14 @@ export default function HomeScreen() {
   // a "Rate" button alongside the plain "Confirm" one.
   const [rateConfirmEntry, setRateConfirmEntry] = useState<MealPlanEntry | null>(null);
   const [ratingSaving, setRatingSaving] = useState(false);
+
+  // Resolve-sources overlay — only shown when confirming an entry whose
+  // pantry deduction has a genuine choice (2+ possible sources) for at
+  // least one ingredient.
+  const [pendingConfirmEntry, setPendingConfirmEntry] = useState<MealPlanEntry | null>(null);
+  const [ambiguousRequirements, setAmbiguousRequirements] = useState<IngredientRequirement[]>([]);
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [resolvingSaving, setResolvingSaving] = useState(false);
 
   const dateStripRef = useRef<FlatList<string>>(null);
   const swipeableRefs = useRef(new Map<string, SwipeableMethods>()).current;
@@ -402,14 +420,66 @@ export default function HomeScreen() {
     }
   }
 
-  async function handleToggleEntryStatus(entry: MealPlanEntry) {
-    const nextStatus: MealPlanEntryStatus = entry.status === "planned" ? "confirmed" : "planned";
+  async function performConfirm(entry: MealPlanEntry, instructions: DeductionInstruction[]) {
     swipeableRefs.get(entry._id)?.close();
     try {
-      const updated = await updateMealPlanEntryStatus(entry._id, nextStatus);
+      const updated = await confirmMealPlanEntry(entry._id, instructions);
       setEntries(prev => prev.map(e => (e._id === entry._id ? updated : e)));
     } catch (err) {
-      Alert.alert("Error", err instanceof Error ? err.message : "Could not update status.");
+      Alert.alert("Error", err instanceof Error ? err.message : "Could not confirm.");
+    }
+  }
+
+  async function handleUnconfirmEntry(entry: MealPlanEntry) {
+    swipeableRefs.get(entry._id)?.close();
+    try {
+      const updated = await unconfirmMealPlanEntry(entry._id);
+      setEntries(prev => prev.map(e => (e._id === entry._id ? updated : e)));
+    } catch (err) {
+      Alert.alert("Error", err instanceof Error ? err.message : "Could not unconfirm.");
+    }
+  }
+
+  // Confirming deducts pantry stock. Most of the time that's fully
+  // automatic (nearest-expiry order) — the resolve-sources overlay only
+  // appears when at least one ingredient genuinely has more than one
+  // pantry source to choose from.
+  function handleConfirmEntry(entry: MealPlanEntry) {
+    const conversions = appSettings?.unitConversions ?? [];
+    const requirements = buildIngredientRequirements(
+      entry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions,
+    );
+
+    if (hasAmbiguity(requirements)) {
+      swipeableRefs.get(entry._id)?.close();
+      setPendingConfirmEntry(entry);
+      setAmbiguousRequirements(requirements.filter(r => r.groups.length > 1));
+      setShowResolveModal(true);
+      return;
+    }
+
+    void performConfirm(entry, getDefaultDeductionInstructions(requirements, conversions));
+  }
+
+  function handleToggleEntryStatus(entry: MealPlanEntry) {
+    if (entry.status === "planned") {
+      handleConfirmEntry(entry);
+    } else {
+      void handleUnconfirmEntry(entry);
+    }
+  }
+
+  async function handleResolvedConfirm(selections: Record<string, string[]>) {
+    if (!pendingConfirmEntry) return;
+    setResolvingSaving(true);
+    try {
+      const conversions = appSettings?.unitConversions ?? [];
+      const instructions = getResolvedDeductionInstructions(ambiguousRequirements, selections, conversions);
+      await performConfirm(pendingConfirmEntry, instructions);
+      setShowResolveModal(false);
+      setPendingConfirmEntry(null);
+    } finally {
+      setResolvingSaving(false);
     }
   }
 
@@ -423,8 +493,9 @@ export default function HomeScreen() {
     setRatingSaving(true);
     try {
       await addRecipeScore(rateConfirmEntry.recipe._id, value);
-      await handleToggleEntryStatus(rateConfirmEntry);
+      const entry = rateConfirmEntry;
       setRateConfirmEntry(null);
+      handleConfirmEntry(entry);
     } catch (err) {
       Alert.alert(
         "Couldn't save rating",
@@ -1528,6 +1599,17 @@ export default function HomeScreen() {
         saving={ratingSaving}
         onCancel={() => setRateConfirmEntry(null)}
         onConfirm={(value) => void handleSubmitRateAndConfirm(value)}
+      />
+
+      <ResolveIngredientSourcesModal
+        visible={showResolveModal}
+        requirements={ambiguousRequirements}
+        saving={resolvingSaving}
+        onCancel={() => {
+          setShowResolveModal(false);
+          setPendingConfirmEntry(null);
+        }}
+        onConfirm={(selections) => void handleResolvedConfirm(selections)}
       />
     </SafeAreaView>
   );

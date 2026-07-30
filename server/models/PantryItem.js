@@ -65,6 +65,21 @@ const pantryItemSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // When isFinished was set by an automatic meal-plan-confirm deduction —
+    // null when finished some other way (or not finished). Kept (not
+    // hard-deleted) so the entry's history is available for undo and for
+    // future price/usage-pattern analysis.
+    finishedAt: {
+      type: Date,
+      default: null,
+    },
+
+    finishedByEntry: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MealPlanEntry",
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -46,6 +46,10 @@ export interface PantryItem {
   purchasePrice: number | null;
   notes: string;
   isFinished: boolean;
+  // Set when isFinished was flipped by an automatic meal-plan-confirm
+  // deduction — null when finished some other way (or not finished).
+  finishedAt?: string | null;
+  finishedByEntry?: string | null;
   createdAt: string;
   updatedAt: string;
 }

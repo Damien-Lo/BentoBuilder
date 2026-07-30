@@ -1,5 +1,13 @@
 import mongoose from "mongoose";
 
+const stockDeductionSchema = new mongoose.Schema(
+  {
+    pantryItem: { type: mongoose.Schema.Types.ObjectId, ref: "PantryItem", required: true },
+    amount: { type: Number, min: 0, required: true },
+  },
+  { _id: false },
+);
+
 const mealPlanEntrySchema = new mongoose.Schema(
   {
     date: { type: String, required: [true, "Date is required"] }, // "YYYY-MM-DD"
@@ -23,6 +31,13 @@ const mealPlanEntrySchema = new mongoose.Schema(
       enum: ["planned", "confirmed"],
       default: "planned",
     },
+
+    // Exactly what was deducted from the pantry when this entry was
+    // confirmed — populated by POST /:id/confirm, replayed in reverse by
+    // POST /:id/unconfirm (or on delete of a confirmed entry) so undoing a
+    // confirm restores the same pantry items by the same amounts rather
+    // than guessing.
+    stockDeductions: [stockDeductionSchema],
 
     notes:      { type: String, trim: true, default: "" },
     isArchived: { type: Boolean, default: false },

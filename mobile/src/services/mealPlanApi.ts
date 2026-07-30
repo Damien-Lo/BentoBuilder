@@ -8,6 +8,11 @@ export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 // "planned" = tentative, not yet eaten; "confirmed" = logged as actually eaten
 export type MealPlanEntryStatus = "planned" | "confirmed";
 
+export interface StockDeduction {
+  pantryItem: string;
+  amount: number;
+}
+
 export interface MealPlanEntry {
   _id: string;
   date: string; // "YYYY-MM-DD"
@@ -22,6 +27,10 @@ export interface MealPlanEntry {
   ingredient?: Ingredient;
   ingredientQuantity?: number;
   ingredientUnit?: string;
+
+  // Exactly what confirming this entry deducted from the pantry — replayed
+  // in reverse on unconfirm/delete. Empty while planned.
+  stockDeductions?: StockDeduction[];
 
   notes?: string;
   createdAt?: string;
@@ -71,6 +80,35 @@ export async function updateMealPlanEntryStatus(id: string, status: MealPlanEntr
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
+  });
+  const result = await parseResponse<{ success: boolean; data: MealPlanEntry }>(res);
+  return result.data;
+}
+
+// Confirming deducts pantry stock — the caller works out which pantry items
+// to draw from (brother-grouping, expiry order, any manual choice) and
+// sends the flat result here. The server clamps each amount to what's
+// actually available and never blocks on a shortfall.
+export async function confirmMealPlanEntry(
+  id: string,
+  instructions: { pantryItemId: string; amount: number }[],
+): Promise<MealPlanEntry> {
+  const deductions: StockDeduction[] = instructions.map((i) => ({
+    pantryItem: i.pantryItemId,
+    amount: i.amount,
+  }));
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deductions }),
+  });
+  const result = await parseResponse<{ success: boolean; data: MealPlanEntry }>(res);
+  return result.data;
+}
+
+export async function unconfirmMealPlanEntry(id: string): Promise<MealPlanEntry> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}/unconfirm`, {
+    method: "POST",
   });
   const result = await parseResponse<{ success: boolean; data: MealPlanEntry }>(res);
   return result.data;
