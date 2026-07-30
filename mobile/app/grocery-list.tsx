@@ -19,7 +19,9 @@ import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeabl
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import {
   createStorageLocation,
+  createStore,
   getStorageLocations,
+  getStores,
   getUnitSuggestions,
   type SelectOption,
 } from "@/src/services/optionsApi";
@@ -63,6 +65,7 @@ import {
   referenceName,
   suggestExpiryDuration,
   suggestStorageLocation,
+  suggestStore,
 } from "@/src/utils/pantryDefaults";
 
 // A pendingLog item can be logged to pantry (directly, or via a quick
@@ -87,6 +90,7 @@ export default function GroceryListScreen() {
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
   const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
+  const [stores, setStores] = useState<SelectOption[]>([]);
   const [groceryItems, setGroceryItems] = useState<GroceryItem[]>([]);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -113,6 +117,10 @@ export default function GroceryListScreen() {
   const [logUnit, setLogUnit] = useState("");
   const [logEntryCount, setLogEntryCount] = useState("1");
   const [logPrice, setLogPrice] = useState("");
+  const [logStoreId, setLogStoreId] = useState("");
+  const [logStoreName, setLogStoreName] = useState("");
+  const [logStoreDraft, setLogStoreDraft] = useState("");
+  const [logStoreTouched, setLogStoreTouched] = useState(false);
   const [logSaving, setLogSaving] = useState(false);
   const [logLocationTouched, setLogLocationTouched] = useState(false);
   const [logExpiryTouched, setLogExpiryTouched] = useState(false);
@@ -147,6 +155,7 @@ export default function GroceryListScreen() {
             loadedGroceryItems,
             loadedSettings,
             loadedLocations,
+            loadedStores,
             loadedPantryItems,
           ] = await Promise.all([
             getIngredients(),
@@ -154,6 +163,7 @@ export default function GroceryListScreen() {
             getGroceryItems(),
             loadSettings(),
             getStorageLocations(),
+            getStores(),
             getPantryItems(),
           ]);
           if (!cancelled) {
@@ -162,6 +172,7 @@ export default function GroceryListScreen() {
             setGroceryItems(loadedGroceryItems);
             setCustomUnitConversions(loadedSettings.unitConversions ?? []);
             setStorageLocations(Array.isArray(loadedLocations) ? loadedLocations : []);
+            setStores(Array.isArray(loadedStores) ? loadedStores : []);
             setPantryItems(Array.isArray(loadedPantryItems) ? loadedPantryItems : []);
             hasLoadedOnceRef.current = true;
           }
@@ -359,6 +370,10 @@ export default function GroceryListScreen() {
     setLogUnit(item.unit || targetIngredient?.defaultPortionUnit || "");
     setLogEntryCount("1");
     setLogPrice("");
+    setLogStoreId("");
+    setLogStoreName("");
+    setLogStoreDraft("");
+    setLogStoreTouched(false);
   }
 
   function handleTapPendingItem(item: GroceryItem) {
@@ -481,6 +496,21 @@ export default function GroceryListScreen() {
     );
   }, [loggingItem, logPurchaseDate, effectiveLogExpiryDuration, logExpiryTouched]);
 
+  // The most frequently bought-from store across this ingredient's recent
+  // history — no per-ingredient "default store" to check first, since store
+  // is purely a per-purchase attribute.
+  const suggestedLogStore = useMemo(
+    () => suggestStore(recentLoggingHistory),
+    [recentLoggingHistory],
+  );
+
+  useEffect(() => {
+    if (!loggingItem || logStoreTouched || !suggestedLogStore) return;
+    setLogStoreId(suggestedLogStore.id);
+    setLogStoreName(suggestedLogStore.name);
+    setLogStoreDraft(suggestedLogStore.name);
+  }, [loggingItem, suggestedLogStore, logStoreTouched]);
+
   async function handleCreatePantryEntry() {
     if (!loggingItem || !logTargetIngredientId) return;
 
@@ -518,6 +548,11 @@ export default function GroceryListScreen() {
         setStorageLocations((prev) => [...prev, storageLocation]);
       }
 
+      const store = await resolveOrCreateOption(stores, logStoreId, logStoreDraft, createStore);
+      if (store && !stores.some((s) => s._id === store._id)) {
+        setStores((prev) => [...prev, store]);
+      }
+
       const entryCount = Math.max(1, Math.round(Number(logEntryCount)) || 1);
       let newPantryItem: PantryItem | undefined;
       for (let i = 0; i < entryCount; i++) {
@@ -529,6 +564,7 @@ export default function GroceryListScreen() {
           purchaseDate: logPurchaseDate || undefined,
           expiryDate: logExpiryDate || undefined,
           purchasePrice: logPrice.trim() ? Number(logPrice) : undefined,
+          store: store ? store._id : null,
         });
       }
 
@@ -989,6 +1025,32 @@ export default function GroceryListScreen() {
                   </Text>
                 )}
               </View>
+
+              <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">
+                Store (optional)
+              </Text>
+              <SearchableObjectDropdown<SelectOption>
+                options={stores}
+                selectedId={logStoreId}
+                selectedName={logStoreName}
+                placeholder="Search or type a new store"
+                onTextChange={(value) => {
+                  if (value !== logStoreName) setLogStoreId("");
+                  setLogStoreDraft(value);
+                  setLogStoreTouched(true);
+                }}
+                onSelect={(option) => {
+                  setLogStoreId(option._id);
+                  setLogStoreName(option.name);
+                  setLogStoreDraft(option.name);
+                  setLogStoreTouched(true);
+                }}
+              />
+              {suggestedLogStore && !logStoreTouched ? (
+                <Text className="mt-1.5 text-xs leading-4 text-slate-400">
+                  Auto-filled from recent purchase history.
+                </Text>
+              ) : null}
 
               <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">
                 Price paid (optional)

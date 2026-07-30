@@ -33,10 +33,12 @@ import {
   getBrands,
   getCategories,
   getStorageLocations,
+  getStores,
   getUnitSuggestions,
   createBrand,
   createCategory,
   createStorageLocation,
+  createStore,
   type SelectOption,
 } from "@/src/services/optionsApi";
 
@@ -70,6 +72,7 @@ import {
   recentPantryEntries,
   suggestExpiryDuration,
   suggestStorageLocation,
+  suggestStore,
 } from "@/src/utils/pantryDefaults";
 import { loadSettings } from "@/src/services/settingsService";
 import {
@@ -207,6 +210,7 @@ export default function IngredientDetailScreen() {
   );
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
+  const [stores, setStores] = useState<SelectOption[]>([]);
   const [brands, setBrands] = useState<SelectOption[]>([]);
   const [categories, setCategories] = useState<SelectOption[]>([]);
   const [units, setUnits] = useState<string[]>([]);
@@ -234,6 +238,10 @@ export default function IngredientDetailScreen() {
   const [quickAddLocationName, setQuickAddLocationName] = useState("");
   const [quickAddLocationDraft, setQuickAddLocationDraft] = useState("");
   const [quickAddLocationTouched, setQuickAddLocationTouched] = useState(false);
+  const [quickAddStoreId, setQuickAddStoreId] = useState("");
+  const [quickAddStoreName, setQuickAddStoreName] = useState("");
+  const [quickAddStoreDraft, setQuickAddStoreDraft] = useState("");
+  const [quickAddStoreTouched, setQuickAddStoreTouched] = useState(false);
   const [quickAddQuantity, setQuickAddQuantity] = useState("");
   const [quickAddQuantityUnit, setQuickAddQuantityUnit] = useState("");
   const [quickAddEntryCount, setQuickAddEntryCount] = useState("1");
@@ -256,6 +264,7 @@ export default function IngredientDetailScreen() {
           loadedIngredient,
           loadedPantryItems,
           loadedLocations,
+          loadedStores,
           loadedBrands,
           loadedCategories,
           loadedUnits,
@@ -264,6 +273,7 @@ export default function IngredientDetailScreen() {
           getIngredientById(id),
           getPantryItems(),
           getStorageLocations(),
+          getStores(),
           getBrands(),
           getCategories(),
           getUnitSuggestions(),
@@ -307,6 +317,7 @@ export default function IngredientDetailScreen() {
         setStorageLocations(
           Array.isArray(loadedLocations) ? loadedLocations : [],
         );
+        setStores(Array.isArray(loadedStores) ? loadedStores : []);
         setBrands(Array.isArray(loadedBrands) ? loadedBrands : []);
         setCategories(Array.isArray(loadedCategories) ? loadedCategories : []);
         setUnits(Array.isArray(loadedUnits) ? loadedUnits : []);
@@ -418,6 +429,22 @@ export default function IngredientDetailScreen() {
     setQuickAddLocationName(effectiveLocation.name);
     setQuickAddLocationDraft(effectiveLocation.name);
   }, [effectiveLocation, quickAddLocationTouched]);
+
+  // The most frequently bought-from store across recent entries — unlike
+  // storage location/expiry, there's no per-ingredient "default store" to
+  // check first, since store is purely a per-purchase attribute.
+  const suggestedStore = useMemo(
+    () => suggestStore(recentPantryHistory),
+    [recentPantryHistory],
+  );
+
+  useEffect(() => {
+    if (quickAddStoreTouched || !suggestedStore) return;
+
+    setQuickAddStoreId(suggestedStore.id);
+    setQuickAddStoreName(suggestedStore.name);
+    setQuickAddStoreDraft(suggestedStore.name);
+  }, [suggestedStore, quickAddStoreTouched]);
 
   // What actually drives quick-add's expiry auto-fill: the ingredient's own
   // saved default duration if one has been set (typed or accepted via
@@ -632,6 +659,16 @@ export default function IngredientDetailScreen() {
     return location;
   }
 
+  async function handleCreateStore(name: string): Promise<SelectOption> {
+    const store = await createStore(name);
+    setStores((current) =>
+      current.some((s) => s._id === store._id)
+        ? current
+        : [...current, store].sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    return store;
+  }
+
   async function handleCreateCategory(name: string): Promise<SelectOption> {
     const category = await createCategory(name);
     setCategories((current) =>
@@ -754,6 +791,13 @@ export default function IngredientDetailScreen() {
         throw new Error("Enter a storage location.");
       }
 
+      const store = await resolveOrCreateOption(
+        stores,
+        quickAddStoreId,
+        quickAddStoreDraft,
+        handleCreateStore,
+      );
+
       const entryCount = Math.max(1, Math.round(Number(quickAddEntryCount)) || 1);
       const newEntries: PantryItem[] = [];
       for (let i = 0; i < entryCount; i++) {
@@ -766,6 +810,7 @@ export default function IngredientDetailScreen() {
             purchaseDate: quickAddPurchaseDate || undefined,
             expiryDate: quickAddExpiryDate || undefined,
             purchasePrice: quickAddPrice.trim() ? Number(quickAddPrice) : undefined,
+            store: store ? store._id : null,
             lowStockThreshold: lastEntry.lowStockThreshold,
           }),
         );
@@ -777,6 +822,7 @@ export default function IngredientDetailScreen() {
       setQuickAddExpiryTouched(false);
       setQuickAddPrice("");
       setQuickAddLocationTouched(false);
+      setQuickAddStoreTouched(false);
       setQuickAddQuantity("");
       setQuickAddEntryCount("1");
     } catch (err) {
@@ -1905,6 +1951,34 @@ export default function IngredientDetailScreen() {
                       setQuickAddExpiryTouched(true);
                     }}
                   />
+                </View>
+
+                <View className="mt-2">
+                  <FieldLabel text="Store (optional)" />
+                  <SearchableObjectDropdown<SelectOption>
+                    options={stores}
+                    selectedId={quickAddStoreId}
+                    selectedName={quickAddStoreName}
+                    placeholder="Search or type a new store"
+                    onTextChange={(value) => {
+                      if (value !== quickAddStoreName) {
+                        setQuickAddStoreId("");
+                      }
+                      setQuickAddStoreDraft(value);
+                      setQuickAddStoreTouched(true);
+                    }}
+                    onSelect={(option) => {
+                      setQuickAddStoreId(option._id);
+                      setQuickAddStoreName(option.name);
+                      setQuickAddStoreDraft(option.name);
+                      setQuickAddStoreTouched(true);
+                    }}
+                  />
+                  {suggestedStore && !quickAddStoreTouched ? (
+                    <Text className="mt-1.5 text-xs leading-4 text-slate-400">
+                      Auto-filled from recent purchase history.
+                    </Text>
+                  ) : null}
                 </View>
 
                 <View className="mt-2">

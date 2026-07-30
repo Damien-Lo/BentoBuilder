@@ -15,14 +15,23 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import {
+  createStore,
   getStorageLocations,
+  getStores,
   getUnitSuggestions,
   type SelectOption,
 } from "@/src/services/optionsApi";
 import { deletePantryItem, getPantryItemById, updatePantryItem } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
-import { DateTextInput, DurationExpiryInput, PriceInput, QuantityServingInput } from "@/src/components/forms";
+import {
+  DateTextInput,
+  DurationExpiryInput,
+  PriceInput,
+  QuantityServingInput,
+  SearchableObjectDropdown,
+} from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
+import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { toDateOnly } from "@/src/utils/date";
 import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
@@ -68,6 +77,8 @@ interface FormState {
   purchaseDate: string;
   expiryDate: string;
   purchasePrice: string;
+  storeId: string;
+  storeName: string;
   notes: string;
 }
 
@@ -80,6 +91,8 @@ function itemToForm(item: PantryItem): FormState {
     purchaseDate: toDateOnly(item.purchaseDate),
     expiryDate: toDateOnly(item.expiryDate),
     purchasePrice: item.purchasePrice != null ? String(item.purchasePrice) : "",
+    storeId: getReferenceId(item.store as unknown),
+    storeName: getReferenceName(item.store as unknown),
     notes: item.notes ?? "",
   };
 }
@@ -91,6 +104,8 @@ export default function EditPantryItemScreen() {
   const [item, setItem] = useState<PantryItem | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
+  const [stores, setStores] = useState<SelectOption[]>([]);
+  const [storeDraft, setStoreDraft] = useState("");
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
   const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
 
@@ -105,20 +120,24 @@ export default function EditPantryItemScreen() {
     async function load() {
       setIsLoading(true);
       try {
-        const [loadedItem, loadedLocations, loadedUnits, loadedSettings] = await Promise.all([
+        const [loadedItem, loadedLocations, loadedStores, loadedUnits, loadedSettings] = await Promise.all([
           getPantryItemById(id),
           getStorageLocations(),
+          getStores(),
           getUnitSuggestions(),
           loadSettings(),
         ]);
 
         if (cancelled) return;
 
+        const loadedForm = itemToForm(loadedItem);
         setItem(loadedItem);
-        setForm(itemToForm(loadedItem));
+        setForm(loadedForm);
+        setStoreDraft(loadedForm.storeName);
         setStorageLocations(
           Array.isArray(loadedLocations) ? loadedLocations : [],
         );
+        setStores(Array.isArray(loadedStores) ? loadedStores : []);
         setUnitOptions(Array.isArray(loadedUnits) ? loadedUnits : []);
         setCustomUnitConversions(loadedSettings.unitConversions ?? []);
       } catch (err) {
@@ -170,6 +189,12 @@ export default function EditPantryItemScreen() {
 
     try {
       setSaving(true);
+
+      const store = await resolveOrCreateOption(stores, form.storeId, storeDraft, createStore);
+      if (store && !stores.some((s) => s._id === store._id)) {
+        setStores((prev) => [...prev, store]);
+      }
+
       await updatePantryItem(id, {
         quantityAvailable: qty,
         quantityUnit: form.quantityUnit.trim(),
@@ -177,6 +202,7 @@ export default function EditPantryItemScreen() {
         purchaseDate: form.purchaseDate || undefined,
         expiryDate: form.expiryDate || undefined,
         purchasePrice: price,
+        store: store ? store._id : null,
         notes: form.notes.trim() || undefined,
       });
       router.back();
@@ -406,6 +432,28 @@ export default function EditPantryItemScreen() {
             <DurationExpiryInput
               purchaseDate={form.purchaseDate}
               onApply={(expiryDate) => update("expiryDate", expiryDate)}
+            />
+          </View>
+
+          {/* Store */}
+          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
+            Store (optional)
+          </Text>
+          <View className="mb-5">
+            <SearchableObjectDropdown<SelectOption>
+              options={stores}
+              selectedId={form.storeId}
+              selectedName={form.storeName}
+              placeholder="Search or type a new store"
+              onTextChange={(value) => {
+                if (value !== form.storeName) update("storeId", "");
+                setStoreDraft(value);
+              }}
+              onSelect={(option) => {
+                update("storeId", option._id);
+                update("storeName", option.name);
+                setStoreDraft(option.name);
+              }}
             />
           </View>
 

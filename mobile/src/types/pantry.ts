@@ -36,6 +36,11 @@ export interface StorageLocationOption {
   name: string;
 }
 
+export interface StoreOption {
+  _id: string;
+  name: string;
+}
+
 export interface PantryItem {
   _id: string;
   ingredient: Ingredient;
@@ -47,6 +52,7 @@ export interface PantryItem {
   expiryDate: string | null;
   lowStockThreshold: number;
   purchasePrice: number | null;
+  store: string | StoreOption | null;
   notes: string;
   isFinished: boolean;
   // Set when isFinished was flipped by an automatic meal-plan-confirm

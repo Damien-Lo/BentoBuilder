@@ -23,6 +23,7 @@ router.get("/", async (req, res) => {
         })
         .populate(INGREDIENT_POPULATE)
         .populate("storageLocation")
+        .populate("store")
         .sort({
             expiryDate: 1,
             createdAt: -1,
@@ -50,7 +51,8 @@ router.get("/:id", async (req, res) => {
   try {
     const pantryItem = await PantryItem.findById(req.params.id)
       .populate(INGREDIENT_POPULATE)
-      .populate("storageLocation");
+      .populate("storageLocation")
+      .populate("store");
 
     if (!pantryItem) {
       return res.status(404).json({
@@ -133,6 +135,7 @@ router.post("/create", async (req, res) => {
       purchaseDate,
       expiryDate,
       purchasePrice,
+      store,
       lowStockThreshold,
       notes,
       nutrition,
@@ -167,6 +170,7 @@ router.post("/create", async (req, res) => {
         purchasePrice === "" || purchasePrice === undefined
           ? null
           : Number(purchasePrice),
+      store: store || null,
       lowStockThreshold:
         lowStockThreshold === "" || lowStockThreshold === undefined
           ? 0
@@ -178,6 +182,9 @@ router.post("/create", async (req, res) => {
       INGREDIENT_POPULATE,
       {
         path: "storageLocation",
+      },
+      {
+        path: "store",
       },
     ]);
 
@@ -216,7 +223,8 @@ router.patch("/:id", async (req, res) => {
       }
     )
       .populate(INGREDIENT_POPULATE)
-      .populate("storageLocation");
+      .populate("storageLocation")
+      .populate("store");
 
     if (!pantryItem) {
       return res.status(404).json({

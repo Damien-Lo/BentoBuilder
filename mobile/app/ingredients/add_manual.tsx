@@ -40,9 +40,11 @@ import {
   createBrand,
   createCategory,
   createStorageLocation,
+  createStore,
   getBrands,
   getCategories,
   getStorageLocations,
+  getStores,
   getUnitSuggestions,
 } from "@/src/services/optionsApi";
 
@@ -92,6 +94,8 @@ interface FormState {
   purchaseDate: string;
   expiryDate: string;
   purchasePrice: string;
+  storeId: string;
+  storeName: string;
   lowStockThreshold: string;
   alwaysAvailable: boolean;
 
@@ -138,6 +142,8 @@ const initialForm: FormState = {
   purchaseDate: todayDateInputString(),
   expiryDate: "",
   purchasePrice: "",
+  storeId: "",
+  storeName: "",
   lowStockThreshold: "0",
   alwaysAvailable: false,
 
@@ -368,6 +374,8 @@ export default function AddManualPantryItemScreen() {
 
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
 
+  const [stores, setStores] = useState<SelectOption[]>([]);
+
   const [brands, setBrands] = useState<SelectOption[]>([]);
 
   const [brandDraft, setBrandDraft] = useState(() => params.scannedBrand ?? "");
@@ -379,6 +387,8 @@ export default function AddManualPantryItemScreen() {
   const [categoryDraft, setCategoryDraft] = useState("");
 
   const [storageLocationDraft, setStorageLocationDraft] = useState("");
+
+  const [storeDraft, setStoreDraft] = useState("");
 
   const [defaultLocationDraft, setDefaultLocationDraft] = useState("");
 
@@ -428,6 +438,7 @@ export default function AddManualPantryItemScreen() {
           loadedIngredients,
           loadedCategories,
           loadedStorageLocations,
+          loadedStores,
           loadedBrands,
           loadedUnits,
           loadedSettings,
@@ -435,6 +446,7 @@ export default function AddManualPantryItemScreen() {
           getIngredients(),
           getCategories(),
           getStorageLocations(),
+          getStores(),
           getBrands(),
           getUnitSuggestions(),
           loadSettings(),
@@ -472,6 +484,8 @@ export default function AddManualPantryItemScreen() {
         setStorageLocations(
           Array.isArray(loadedStorageLocations) ? loadedStorageLocations : [],
         );
+
+        setStores(Array.isArray(loadedStores) ? loadedStores : []);
 
         setBrands(Array.isArray(loadedBrands) ? loadedBrands : []);
 
@@ -665,6 +679,22 @@ export default function AddManualPantryItemScreen() {
     });
 
     return location;
+  }
+
+  async function handleCreateStore(name: string): Promise<SelectOption> {
+    const store = await createStore(name);
+
+    setStores((current) => {
+      const exists = current.some((item) => item._id === store._id);
+
+      return exists
+        ? current
+        : [...current, store].sort((first, second) =>
+            first.name.localeCompare(second.name),
+          );
+    });
+
+    return store;
   }
 
   async function handleCreateBrand(name: string): Promise<SelectOption> {
@@ -1060,6 +1090,16 @@ export default function AddManualPantryItemScreen() {
           throw new Error("Enter a storage location.");
         }
 
+        const store = await resolveOrCreateOption(
+          stores,
+          form.storeId,
+          storeDraft,
+          handleCreateStore,
+        );
+        if (store && !stores.some((s) => s._id === store._id)) {
+          setStores((prev) => [...prev, store]);
+        }
+
         const entryCount = Math.max(1, Math.round(Number(form.entryCount)) || 1);
 
         for (let i = 0; i < entryCount; i++) {
@@ -1071,6 +1111,7 @@ export default function AddManualPantryItemScreen() {
             purchaseDate: form.purchaseDate.trim() || undefined,
             expiryDate: form.expiryDate.trim() || undefined,
             purchasePrice: form.purchasePrice.trim() ? Number(form.purchasePrice) : undefined,
+            store: store ? store._id : null,
           });
         }
       }
@@ -1739,6 +1780,26 @@ export default function AddManualPantryItemScreen() {
               <DurationExpiryInput
                 purchaseDate={form.purchaseDate}
                 onApply={(expiryDate) => updateForm("expiryDate", expiryDate)}
+              />
+
+              <FieldLabel text="Store (optional)" />
+              <SearchableObjectDropdown<SelectOption>
+                options={stores}
+                selectedId={form.storeId}
+                selectedName={form.storeName}
+                placeholder="Search or type a new store"
+                onTextChange={(value) => {
+                  if (value !== form.storeName) {
+                    updateForm("storeId", "");
+                  }
+
+                  setStoreDraft(value);
+                }}
+                onSelect={(option) => {
+                  updateForm("storeId", option._id);
+                  updateForm("storeName", option.name);
+                  setStoreDraft(option.name);
+                }}
               />
 
               <FieldLabel text="Price paid (optional)" />

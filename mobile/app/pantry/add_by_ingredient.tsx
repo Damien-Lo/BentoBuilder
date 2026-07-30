@@ -18,7 +18,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 
 import {
+  createStore,
   getStorageLocations,
+  getStores,
   getUnitSuggestions,
   type SelectOption,
 } from "@/src/services/optionsApi";
@@ -31,8 +33,10 @@ import {
   DurationExpiryInput,
   PriceInput,
   QuantityServingInput,
+  SearchableObjectDropdown,
 } from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
+import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
   recentPantryEntries,
@@ -40,6 +44,7 @@ import {
   referenceName,
   suggestExpiryDuration,
   suggestStorageLocation,
+  suggestStore,
 } from "@/src/utils/pantryDefaults";
 import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
@@ -109,6 +114,7 @@ export default function AddPantryItemByIngredientScreen() {
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
+  const [stores, setStores] = useState<SelectOption[]>([]);
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
@@ -130,6 +136,10 @@ export default function AddPantryItemByIngredientScreen() {
   const [expiryDate, setExpiryDate] = useState("");
   const [expiryTouched, setExpiryTouched] = useState(false);
   const [purchasePrice, setPurchasePrice] = useState("");
+  const [storeId, setStoreId] = useState("");
+  const [storeName, setStoreName] = useState("");
+  const [storeDraft, setStoreDraft] = useState("");
+  const [storeTouched, setStoreTouched] = useState(false);
 
   const [showLocationOptions, setShowLocationOptions] = useState(false);
 
@@ -141,14 +151,21 @@ export default function AddPantryItemByIngredientScreen() {
 
     async function loadPageData() {
       try {
-        const [loadedIngredients, loadedStorageLocations, loadedUnits, loadedPantryItems, loadedSettings] =
-          await Promise.all([
-            getIngredients(),
-            getStorageLocations(),
-            getUnitSuggestions(),
-            getPantryItems(),
-            loadSettings(),
-          ]);
+        const [
+          loadedIngredients,
+          loadedStorageLocations,
+          loadedStores,
+          loadedUnits,
+          loadedPantryItems,
+          loadedSettings,
+        ] = await Promise.all([
+          getIngredients(),
+          getStorageLocations(),
+          getStores(),
+          getUnitSuggestions(),
+          getPantryItems(),
+          loadSettings(),
+        ]);
 
         if (cancelled) {
           return;
@@ -160,6 +177,8 @@ export default function AddPantryItemByIngredientScreen() {
         setStorageLocations(
           Array.isArray(loadedStorageLocations) ? loadedStorageLocations : [],
         );
+
+        setStores(Array.isArray(loadedStores) ? loadedStores : []);
 
         setUnitOptions(Array.isArray(loadedUnits) ? loadedUnits : []);
         setPantryItems(Array.isArray(loadedPantryItems) ? loadedPantryItems : []);
@@ -286,6 +305,21 @@ export default function AddPantryItemByIngredientScreen() {
     );
   }, [purchaseDate, effectiveExpiryDuration, expiryTouched]);
 
+  // The most frequently bought-from store across this ingredient's recent
+  // history — no per-ingredient "default store" to check first, since store
+  // is purely a per-purchase attribute.
+  const suggestedStore = useMemo(
+    () => suggestStore(recentIngredientHistory),
+    [recentIngredientHistory],
+  );
+
+  useEffect(() => {
+    if (storeTouched || !suggestedStore) return;
+    setStoreId(suggestedStore.id);
+    setStoreName(suggestedStore.name);
+    setStoreDraft(suggestedStore.name);
+  }, [suggestedStore, storeTouched]);
+
   // Shared by tapping a search result and by finishing the "create a new
   // ingredient" flow below — both land on the same quantity form.
   function handleSelectIngredient(ingredient: Ingredient) {
@@ -310,6 +344,20 @@ export default function AddPantryItemByIngredientScreen() {
     setExpiryTouched(false);
     setEntryCount("1");
     setPurchasePrice("");
+    setStoreId("");
+    setStoreName("");
+    setStoreDraft("");
+    setStoreTouched(false);
+  }
+
+  async function handleCreateStore(name: string): Promise<SelectOption> {
+    const store = await createStore(name);
+    setStores((current) =>
+      current.some((s) => s._id === store._id)
+        ? current
+        : [...current, store].sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    return store;
   }
 
   async function handleSave() {
@@ -357,6 +405,11 @@ export default function AddPantryItemByIngredientScreen() {
     try {
       setSaving(true);
 
+      const store = await resolveOrCreateOption(stores, storeId, storeDraft, handleCreateStore);
+      if (store && !stores.some((s) => s._id === store._id)) {
+        setStores((prev) => [...prev, store]);
+      }
+
       for (let i = 0; i < parsedCount; i++) {
         await addIngredientToPantry({
           ingredient: selectedIngredient._id,
@@ -366,6 +419,7 @@ export default function AddPantryItemByIngredientScreen() {
           purchaseDate: purchaseDate.trim() || undefined,
           expiryDate: expiryDate.trim() || undefined,
           purchasePrice: purchasePrice.trim() ? Number(purchasePrice) : undefined,
+          store: store ? store._id : null,
         });
       }
 
@@ -697,6 +751,32 @@ export default function AddPantryItemByIngredientScreen() {
               onApply={(value) => {
                 setExpiryDate(value);
                 setExpiryTouched(true);
+              }}
+            />
+
+            <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
+              Store (optional)
+            </Text>
+            {suggestedStore && !storeTouched ? (
+              <Text className="mb-2 text-xs leading-4 text-slate-500">
+                Auto-filled from recent purchase history.
+              </Text>
+            ) : null}
+            <SearchableObjectDropdown<SelectOption>
+              options={stores}
+              selectedId={storeId}
+              selectedName={storeName}
+              placeholder="Search or type a new store"
+              onTextChange={(value) => {
+                if (value !== storeName) setStoreId("");
+                setStoreDraft(value);
+                setStoreTouched(true);
+              }}
+              onSelect={(option) => {
+                setStoreId(option._id);
+                setStoreName(option.name);
+                setStoreDraft(option.name);
+                setStoreTouched(true);
               }}
             />
 

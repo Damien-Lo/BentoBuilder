@@ -55,6 +55,15 @@ const pantryItemSchema = new mongoose.Schema(
       default: null,
     },
 
+    // Which store this batch was bought at — the source of truth for
+    // per-ingredient store/price history (see Store model). Optional since
+    // plenty of entries are logged without bothering to record it.
+    store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
+      default: null,
+    },
+
     notes: {
       type: String,
       trim: true,

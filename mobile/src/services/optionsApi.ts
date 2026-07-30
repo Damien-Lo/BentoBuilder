@@ -163,6 +163,40 @@ export async function createBrand(
 }
 
 /* -------------------------------------------------------------------------- */
+/*                                    Stores                                  */
+/* -------------------------------------------------------------------------- */
+
+export async function getStores(): Promise<SelectOption[]> {
+  const response = await fetch(`${API_BASE_URL}/api/stores`);
+
+  const result = await parseResponse<OptionListResponse>(response);
+
+  return result.data;
+}
+
+export async function createStore(name: string): Promise<SelectOption> {
+  const trimmedName = name.trim();
+
+  if (!trimmedName) {
+    throw new Error("Store name is required");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/stores`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: trimmedName,
+    }),
+  });
+
+  const result = await parseResponse<OptionResponse>(response);
+
+  return result.data;
+}
+
+/* -------------------------------------------------------------------------- */
 /*                                    Units                                   */
 /* -------------------------------------------------------------------------- */
 

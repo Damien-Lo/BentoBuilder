@@ -18,6 +18,8 @@ export interface CreatePantryItemInput {
   expiryDate?: string | null;
   // Same null-to-clear/undefined-to-omit convention as expiryDate.
   purchasePrice?: number | null;
+  // Same null-to-clear/undefined-to-omit convention as expiryDate.
+  store?: string | null;
   lowStockThreshold?: number;
   notes?: string;
 
@@ -101,6 +103,7 @@ export interface AddIngredientToPantryInput {
   purchaseDate?: string;
   expiryDate?: string;
   purchasePrice?: number;
+  store?: string | null;
   lowStockThreshold?: number;
 }
 

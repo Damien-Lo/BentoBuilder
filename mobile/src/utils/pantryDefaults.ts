@@ -13,6 +13,11 @@ export interface SuggestedStorageLocation {
   name: string;
 }
 
+export interface SuggestedStore {
+  id: string;
+  name: string;
+}
+
 export interface SuggestedExpiryDuration {
   amount: number;
   unit: DurationUnit;
@@ -58,6 +63,31 @@ export function suggestStorageLocation(
     const existing = counts.get(id);
     counts.set(id, {
       name: referenceName(entry.storageLocation) || existing?.name || "",
+      count: (existing?.count ?? 0) + 1,
+    });
+  }
+
+  let best: { id: string; name: string; count: number } | null = null;
+  for (const [id, { name, count }] of counts) {
+    if (!best || count > best.count) {
+      best = { id, name, count };
+    }
+  }
+
+  return best ? { id: best.id, name: best.name } : null;
+}
+
+/** The most frequently bought-from store across the given entries. */
+export function suggestStore(entries: PantryItem[]): SuggestedStore | null {
+  const counts = new Map<string, { name: string; count: number }>();
+
+  for (const entry of entries) {
+    const id = referenceId(entry.store);
+    if (!id) continue;
+
+    const existing = counts.get(id);
+    counts.set(id, {
+      name: referenceName(entry.store) || existing?.name || "",
       count: (existing?.count ?? 0) + 1,
     });
   }
