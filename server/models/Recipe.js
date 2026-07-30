@@ -25,6 +25,33 @@ const ingredientEntrySchema = new mongoose.Schema(
   { _id: false },
 );
 
+// One manual (or, eventually, meal-plan-prompted) rating of a recipe.
+// Kept as raw individual entries rather than a rolling average so nothing
+// is ever thrown away — "last 50" is a display-time window over this array,
+// not a storage cap.
+const scoreEntrySchema = new mongoose.Schema(
+  {
+    value: {
+      type: Number,
+      min: 1,
+      max: 10,
+      required: true,
+    },
+    ratedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    // Set once the meal planner can prompt "rate what you just cooked" —
+    // always null for a manually-added score.
+    mealPlanEntry: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MealPlanEntry",
+      default: null,
+    },
+  },
+  { timestamps: true },
+);
+
 const recipeSchema = new mongoose.Schema(
   {
     name: {
@@ -102,6 +129,11 @@ const recipeSchema = new mongoose.Schema(
     isConfirmed: {
       type: Boolean,
       default: false,
+    },
+
+    scores: {
+      type: [scoreEntrySchema],
+      default: [],
     },
 
     ingredientList: [ingredientEntrySchema],

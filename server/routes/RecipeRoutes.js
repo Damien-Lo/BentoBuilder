@@ -104,6 +104,87 @@ router.get("/:id/availability", async (req, res) => {
   }
 });
 
+/**
+ * POST /api/recipes/:id/scores
+ * Add a manual (or, eventually, meal-plan-linked) rating. Returns just the
+ * updated scores array — the recipe's populated fields (category,
+ * ingredients) are untouched, so the client merges this in rather than
+ * replacing the whole recipe with an unpopulated one.
+ */
+router.post("/:id/scores", async (req, res) => {
+  try {
+    const parsedValue = Number(req.body.value);
+    if (!Number.isFinite(parsedValue) || parsedValue < 1 || parsedValue > 10) {
+      return res.status(400).json({
+        success: false,
+        message: "Score must be a number between 1 and 10",
+      });
+    }
+
+    const recipe = await Recipe.findByIdAndUpdate(
+      req.params.id,
+      {
+        $push: {
+          scores: {
+            value: parsedValue,
+            ratedAt: req.body.ratedAt || undefined,
+            mealPlanEntry: req.body.mealPlanEntry || null,
+          },
+        },
+      },
+      { new: true, runValidators: true },
+    );
+
+    if (!recipe) {
+      return res.status(404).json({
+        success: false,
+        message: "Recipe not found",
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      data: recipe.scores,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/recipes/:id/scores/:scoreId
+ * Remove a single rating (e.g. to undo a mistaken entry).
+ */
+router.delete("/:id/scores/:scoreId", async (req, res) => {
+  try {
+    const recipe = await Recipe.findByIdAndUpdate(
+      req.params.id,
+      { $pull: { scores: { _id: req.params.scoreId } } },
+      { new: true },
+    );
+
+    if (!recipe) {
+      return res.status(404).json({
+        success: false,
+        message: "Recipe not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: recipe.scores,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid recipe or score ID",
+    });
+  }
+});
+
 function normalizeMealCategory(body) {
   if (body.mealCategory !== undefined) {
     body.mealCategory = Array.isArray(body.mealCategory)

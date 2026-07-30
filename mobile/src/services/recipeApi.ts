@@ -34,6 +34,15 @@ export interface RecipeIngredientEntry {
   unit: string;
 }
 
+export interface RecipeScore {
+  _id: string;
+  value: number;
+  ratedAt: string;
+  // Set once the meal planner can prompt for a rating — always null for a
+  // manually-added score.
+  mealPlanEntry?: string | null;
+}
+
 export interface Recipe {
   _id: string;
   name: string;
@@ -52,6 +61,9 @@ export interface Recipe {
   // a meal-plan entry's own planned/confirmed status (whether a specific
   // calendar slot has been eaten yet).
   isConfirmed?: boolean;
+  // Raw rating history, most-recent last — "current score" is an average
+  // computed over the tail of this array, not a stored field.
+  scores?: RecipeScore[];
   ingredientList: RecipeIngredientEntry[];
   instructions: string[];
   createdAt?: string;
@@ -186,4 +198,32 @@ export async function deleteRecipe(recipeId: string): Promise<void> {
     method: "DELETE",
   });
   await parseResponse<{ success: boolean; message: string }>(response);
+}
+
+// Both return the updated scores array (not the whole recipe) — the recipe
+// already held locally has populated fields (category, ingredients) that a
+// plain recipe re-fetch here would clobber with raw, unpopulated ones.
+export async function addRecipeScore(
+  recipeId: string,
+  value: number,
+  ratedAt?: string,
+): Promise<RecipeScore[]> {
+  const response = await fetch(`${API_BASE_URL}/api/recipes/${recipeId}/scores`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value, ratedAt }),
+  });
+  const result = await parseResponse<{ success: boolean; data: RecipeScore[] }>(response);
+  return result.data;
+}
+
+export async function deleteRecipeScore(
+  recipeId: string,
+  scoreId: string,
+): Promise<RecipeScore[]> {
+  const response = await fetch(`${API_BASE_URL}/api/recipes/${recipeId}/scores/${scoreId}`, {
+    method: "DELETE",
+  });
+  const result = await parseResponse<{ success: boolean; data: RecipeScore[] }>(response);
+  return result.data;
 }

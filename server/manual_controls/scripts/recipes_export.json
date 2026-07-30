@@ -1,0 +1,991 @@
+[
+  {
+    "isConfirmed": false,
+    "_id": "6a4dbf5d54b7e39a5733a785",
+    "name": "Air Fryer Japanese Fried Chicken (Karaage)",
+    "description": "Crispy, juicy Japanese fried chicken made in the air fryer. The double-fry technique — low heat first, then high heat — gives the signature crunchy exterior while keeping the meat tender inside.",
+    "recipeCategory": {
+      "_id": "6a4dc38cf8d89f9a72f510c9",
+      "name": "Protein",
+      "normalizedName": "protein",
+      "isDefault": false,
+      "isArchived": false,
+      "createdAt": "2026-07-08T03:27:08.972Z",
+      "updatedAt": "2026-07-08T03:27:08.972Z",
+      "__v": 0
+    },
+    "mealCategory": [
+      "dinner",
+      "lunch"
+    ],
+    "servings": 4,
+    "defaultPortionUnit": "serving",
+    "nutritionBasis": "per-serving",
+    "imageUrl": "",
+    "notes": "Marinate for at least 30 min (up to 1 hour). Potato starch (katakuriko) gives the crispiest coating — use cornstarch as a substitute. Serve with lemon wedges.",
+    "isArchived": true,
+    "ingredientList": [
+      {
+        "ingredient": null,
+        "quantity": 450,
+        "unit": "g"
+      },
+      {
+        "ingredient": null,
+        "quantity": 4,
+        "unit": "cloves"
+      },
+      {
+        "ingredient": null,
+        "quantity": 1,
+        "unit": "tbsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 2,
+        "unit": "tbsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 1,
+        "unit": "tbsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 1,
+        "unit": "tsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 4,
+        "unit": "tbsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 2,
+        "unit": "tbsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 1,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Combine chicken thighs with grated garlic, grated ginger, soy sauce, sake, sesame oil, white pepper, and salt in a bowl. Cover and refrigerate for 30 minutes to 1 hour.",
+      "Pour potato starch onto a tray. Coat each piece of chicken thoroughly, shaking off excess.",
+      "Spray the air fryer basket with neutral oil. Arrange chicken in a single layer with space between pieces. Spray chicken generously with oil.",
+      "Air fry at 350°F (175°C) for 10 minutes. Flip pieces, spray the other side with oil, then air fry at 400°F (200°C) for 8–10 minutes until golden and crispy.",
+      "Mix Japanese mayo, sriracha, grated garlic, lemon juice, salt, and pepper for the dipping sauce.",
+      "Squeeze fresh lemon juice over finished chicken before serving with the spicy mayo."
+    ],
+    "nutrition": {
+      "calories": 249.4,
+      "protein": 29.5,
+      "carbs": 1.3,
+      "fats": 13.4,
+      "fiber": 0.1,
+      "sodium": 192.8
+    },
+    "createdAt": "2026-07-08T03:09:17.229Z",
+    "updatedAt": "2026-07-30T00:09:36.072Z",
+    "__v": 0,
+    "scores": []
+  },
+  {
+    "isConfirmed": false,
+    "_id": "6a4dcf0b84b13f20d1cff961",
+    "name": "Chawanmushi (Steamed Egg Custard)",
+    "description": "A silky Japanese steamed egg custard with chicken, kamaboko, and mushrooms. The key is the 1:2.5 egg-to-dashi ratio and gentle, low-heat steaming for a smooth, pitted-free texture.",
+    "recipeCategory": {
+      "_id": "6a4dc38cf8d89f9a72f510c9",
+      "name": "Protein",
+      "normalizedName": "protein",
+      "isDefault": false,
+      "isArchived": false,
+      "createdAt": "2026-07-08T03:27:08.972Z",
+      "updatedAt": "2026-07-08T03:27:08.972Z",
+      "__v": 0
+    },
+    "mealCategory": [
+      "dinner",
+      "lunch",
+      "snack"
+    ],
+    "servings": 4,
+    "defaultPortionUnit": "serving",
+    "nutritionBasis": "per-serving",
+    "imageUrl": "",
+    "notes": "Use usukuchi (light-colored) soy sauce if possible — it keeps the custard pale. Always strain the egg mixture through a fine-mesh sieve. Maintain water temperature at 80–90°C (176–194°F) throughout steaming; too high creates bubbles and a rough texture. Ginkgo nuts are optional.",
+    "isArchived": true,
+    "ingredientList": [
+      {
+        "ingredient": null,
+        "quantity": 3,
+        "unit": "large"
+      },
+      {
+        "ingredient": null,
+        "quantity": 1,
+        "unit": "tsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 1,
+        "unit": "tsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 1,
+        "unit": "tbsp"
+      },
+      {
+        "ingredient": null,
+        "quantity": 60,
+        "unit": "g"
+      },
+      {
+        "ingredient": null,
+        "quantity": 8,
+        "unit": "slices"
+      },
+      {
+        "ingredient": null,
+        "quantity": 50,
+        "unit": "g"
+      },
+      {
+        "ingredient": null,
+        "quantity": 4,
+        "unit": "sprigs"
+      },
+      {
+        "ingredient": null,
+        "quantity": 8,
+        "unit": "nuts"
+      },
+      {
+        "ingredient": null,
+        "quantity": 1,
+        "unit": "ml (1 cup)"
+      }
+    ],
+    "instructions": [
+      "Weigh the 3 eggs (without shells). Multiply the weight by 2.5 to get the exact amount of dashi needed (approximately 420 ml / 1¾ cups). Combine eggs and dashi in a bowl and add mirin, soy sauce, and salt. Whisk gently until blended, then strain through a fine-mesh sieve to remove any foam or solids.",
+      "Cut chicken into ½-inch (1.5 cm) pieces and marinate in sake for 10 minutes. Slice kamaboko (fish cake) into thin rounds. Trim the root end of shimeji mushrooms and separate into small clusters. Tie mitsuba into loose knots (or thinly slice green onion).",
+      "Place 4 chawanmushi cups (or ramekins) in a large pot. Add enough water to reach halfway up the sides of the cups, then remove the cups. Cover the pot and bring the water to a full boil over high heat, then turn off the heat.",
+      "Divide the chicken pieces among the cups, then add shimeji mushrooms and ginkgo nuts (if using). Arrange kamaboko slices and knotted mitsuba on top. Pour the egg mixture into each cup until about 80% full. Use a spoon to skim off any air bubbles from the surface.",
+      "Bring the water back to a boil over high heat, then reduce to the lowest possible setting to maintain 80–90°C (176–194°F). Carefully lower the filled cups into the pot using tongs. Cover the pot but leave the lid slightly ajar to let steam escape and prevent the temperature from climbing too high. Steam for 20 minutes (or 15 minutes if omitting chicken).",
+      "Test doneness by inserting a skewer into the center of a cup — it is ready when only clear liquid (not cloudy egg) runs out. Carefully lift the cups from the water. Replace the lids and serve immediately while hot, with a small spoon on the side."
+    ],
+    "nutrition": {
+      "calories": 90.9,
+      "protein": 8.8,
+      "carbs": 1.3,
+      "fats": 5.4,
+      "fiber": 0.3,
+      "sodium": 129.9
+    },
+    "createdAt": "2026-07-08T04:16:11.822Z",
+    "updatedAt": "2026-07-30T00:09:36.072Z",
+    "__v": 0,
+    "scores": []
+  },
+  {
+    "_id": "6a6a7031e3f09c8c316d9648",
+    "name": "Japanese Koshihikari Rice",
+    "description": "",
+    "recipeCategory": {
+      "_id": "6a6a7031e3f09c8c316d9647",
+      "name": "Rice",
+      "normalizedName": "rice",
+      "isDefault": false,
+      "isArchived": false,
+      "createdAt": "2026-07-29T21:27:13.298Z",
+      "updatedAt": "2026-07-29T21:27:13.298Z",
+      "__v": 0
+    },
+    "mealCategory": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "servings": 1,
+    "defaultPortionUnit": "serving",
+    "nutrition": {
+      "calories": 240,
+      "protein": 3,
+      "carbs": 49,
+      "fats": 0,
+      "fiber": 1,
+      "sodium": 15
+    },
+    "nutritionBasis": "per-serving",
+    "imageUrl": "",
+    "notes": "",
+    "isArchived": false,
+    "isConfirmed": true,
+    "ingredientList": [
+      {
+        "ingredient": {
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "_id": "6a6680681211fa2ec98bf3b5",
+          "name": "Water",
+          "description": "",
+          "category": {
+            "_id": "6a6680681211fa2ec98bf3b4",
+            "name": "Essentials",
+            "normalizedName": "essentials",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-26T21:47:20.419Z",
+            "updatedAt": "2026-07-26T21:47:20.419Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 1,
+          "defaultPortionUnit": "ml",
+          "nutrition": {
+            "calories": 0,
+            "protein": 0,
+            "carbs": 0,
+            "fats": 0,
+            "fiber": 0,
+            "sodium": 0
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": 0,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-26T21:47:20.540Z",
+          "updatedAt": "2026-07-27T01:05:56.830Z",
+          "__v": 0,
+          "barcode": null,
+          "isAlwaysAvailable": true
+        },
+        "quantity": 0.55,
+        "unit": "cup"
+      },
+      {
+        "ingredient": {
+          "_id": "6a681d1825be1fa8f500172a",
+          "name": "Koshihikari Rice",
+          "description": "Note that 0.5 cups of uncooked rice makes 1 cup of cooked rice (which the nutrition follows)",
+          "category": {
+            "_id": "6a681d1825be1fa8f5001728",
+            "name": "Rice",
+            "normalizedName": "rice",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-28T03:08:08.540Z",
+            "updatedAt": "2026-07-28T03:08:08.540Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 0.5,
+          "defaultPortionUnit": "cup",
+          "nutrition": {
+            "calories": 240,
+            "protein": 3,
+            "carbs": 49,
+            "fats": 0,
+            "fiber": 1,
+            "sodium": 15
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": 5,
+          "isAlwaysAvailable": false,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-28T03:08:08.978Z",
+          "updatedAt": "2026-07-29T23:42:46.723Z",
+          "__v": 0,
+          "barcode": null
+        },
+        "quantity": 0.5,
+        "unit": "cup"
+      }
+    ],
+    "instructions": [],
+    "createdAt": "2026-07-29T21:27:13.387Z",
+    "updatedAt": "2026-07-30T00:09:36.072Z",
+    "__v": 0,
+    "scores": []
+  },
+  {
+    "_id": "6a6681c21211fa2ec98bf3bb",
+    "name": "Miso Soup",
+    "description": "",
+    "recipeCategory": {
+      "_id": "6a6681c21211fa2ec98bf3ba",
+      "name": "Soup",
+      "normalizedName": "soup",
+      "isDefault": false,
+      "isArchived": false,
+      "createdAt": "2026-07-26T21:53:06.017Z",
+      "updatedAt": "2026-07-26T21:53:06.017Z",
+      "__v": 0
+    },
+    "mealCategory": [
+      "breakfast",
+      "lunch",
+      "dinner",
+      "snack"
+    ],
+    "servings": 1,
+    "defaultPortionUnit": "serving",
+    "nutrition": {
+      "calories": 40,
+      "protein": 1.5,
+      "carbs": 6,
+      "fats": 1,
+      "fiber": 0.5,
+      "sodium": 1075
+    },
+    "nutritionBasis": "per-serving",
+    "imageUrl": "",
+    "notes": "",
+    "isArchived": false,
+    "ingredientList": [
+      {
+        "ingredient": {
+          "isAlwaysAvailable": false,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "_id": "6a667f611211fa2ec98bf3ae",
+          "name": "Fueru Wakame Dried Seaweed",
+          "description": "",
+          "category": {
+            "_id": "6a4db79b6119f051d5d2deb3",
+            "name": "Vegetables",
+            "normalizedName": "vegetables",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-08T02:36:11.600Z",
+            "updatedAt": "2026-07-08T02:36:11.600Z",
+            "__v": 0
+          },
+          "brand": {
+            "_id": "6a667f611211fa2ec98bf3ac",
+            "name": "Wel-Pac",
+            "normalizedName": "wel-pac",
+            "icon": null,
+            "isDefault": false,
+            "createdAt": "2026-07-26T21:42:57.185Z",
+            "updatedAt": "2026-07-26T21:42:57.185Z",
+            "__v": 0
+          },
+          "isGeneric": false,
+          "genericParent": "6a667f611211fa2ec98bf3ad",
+          "barcode": "011152887999",
+          "defaultPortionAmount": 2,
+          "defaultPortionUnit": "tbsp",
+          "nutrition": {
+            "calories": 10,
+            "protein": 1,
+            "carbs": 2,
+            "fats": 0,
+            "fiber": 1,
+            "sodium": 490
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": 0,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-26T21:42:57.452Z",
+          "updatedAt": "2026-07-26T21:42:57.452Z",
+          "__v": 0
+        },
+        "quantity": 1,
+        "unit": "tbsp"
+      },
+      {
+        "ingredient": {
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "_id": "6a6680681211fa2ec98bf3b5",
+          "name": "Water",
+          "description": "",
+          "category": {
+            "_id": "6a6680681211fa2ec98bf3b4",
+            "name": "Essentials",
+            "normalizedName": "essentials",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-26T21:47:20.419Z",
+            "updatedAt": "2026-07-26T21:47:20.419Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 1,
+          "defaultPortionUnit": "ml",
+          "nutrition": {
+            "calories": 0,
+            "protein": 0,
+            "carbs": 0,
+            "fats": 0,
+            "fiber": 0,
+            "sodium": 0
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": 0,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-26T21:47:20.540Z",
+          "updatedAt": "2026-07-27T01:05:56.830Z",
+          "__v": 0,
+          "barcode": null,
+          "isAlwaysAvailable": true
+        },
+        "quantity": 1,
+        "unit": "cup"
+      },
+      {
+        "ingredient": {
+          "isAlwaysAvailable": false,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "_id": "6a66812d1211fa2ec98bf3b7",
+          "name": "Miso Paste",
+          "description": "",
+          "category": {
+            "_id": "6a4db79c6119f051d5d2deb9",
+            "name": "Condiments & Sauces",
+            "normalizedName": "condiments & sauces",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-08T02:36:12.980Z",
+            "updatedAt": "2026-07-08T02:36:12.980Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 1,
+          "defaultPortionUnit": "tbsp",
+          "nutrition": {
+            "calories": 35,
+            "protein": 1,
+            "carbs": 5,
+            "fats": 1,
+            "fiber": 0,
+            "sodium": 830
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-26T21:50:37.145Z",
+          "updatedAt": "2026-07-26T21:50:37.145Z",
+          "__v": 0
+        },
+        "quantity": 1,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Simmer water",
+      "In the water, sieve miso paste through a fine sieve",
+      "Add wakame seaweed, sliced tofu and green scallions"
+    ],
+    "createdAt": "2026-07-26T21:53:06.167Z",
+    "updatedAt": "2026-07-30T00:09:36.072Z",
+    "__v": 0,
+    "isConfirmed": true,
+    "scores": []
+  },
+  {
+    "_id": "6a6a73f6e3f09c8c316d964a",
+    "name": "Scrambled Eggs",
+    "description": "",
+    "recipeCategory": {
+      "_id": "6a6a73f5e3f09c8c316d9649",
+      "name": "Eggs",
+      "normalizedName": "eggs",
+      "isDefault": false,
+      "isArchived": false,
+      "createdAt": "2026-07-29T21:43:17.960Z",
+      "updatedAt": "2026-07-29T21:43:17.960Z",
+      "__v": 0
+    },
+    "mealCategory": [
+      "breakfast"
+    ],
+    "servings": 1,
+    "defaultPortionUnit": "serving",
+    "nutrition": {
+      "calories": 316,
+      "protein": 19,
+      "carbs": 1.3,
+      "fats": 25.9,
+      "fiber": 0,
+      "sodium": 214
+    },
+    "nutritionBasis": "per-serving",
+    "imageUrl": "",
+    "notes": "",
+    "isArchived": false,
+    "isConfirmed": true,
+    "ingredientList": [
+      {
+        "ingredient": {
+          "_id": "6a695cb8a2aa8e9521e5f03b",
+          "name": "Egg",
+          "description": "",
+          "category": {
+            "_id": "6a4db79b6119f051d5d2deb2",
+            "name": "Protein",
+            "normalizedName": "protein",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-08T02:36:11.453Z",
+            "updatedAt": "2026-07-08T02:36:11.453Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 1,
+          "defaultPortionUnit": "egg",
+          "nutrition": {
+            "calories": 72,
+            "protein": 6.3,
+            "carbs": 0.4,
+            "fats": 4.8,
+            "fiber": 0,
+            "sodium": 71
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": 4,
+          "isAlwaysAvailable": false,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-29T01:51:52.612Z",
+          "updatedAt": "2026-07-29T01:51:52.612Z",
+          "__v": 0
+        },
+        "quantity": 3,
+        "unit": "egg"
+      },
+      {
+        "ingredient": {
+          "_id": "6a695d5ba2aa8e9521e5f03e",
+          "name": "Unsalted Butter",
+          "description": "",
+          "category": {
+            "_id": "6a4db79c6119f051d5d2deb8",
+            "name": "Oils & Fats",
+            "normalizedName": "oils & fats",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-08T02:36:12.826Z",
+            "updatedAt": "2026-07-08T02:36:12.826Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 1,
+          "defaultPortionUnit": "tbsp",
+          "nutrition": {
+            "calories": 100,
+            "protein": 0.1,
+            "carbs": 0.1,
+            "fats": 11.5,
+            "fiber": null,
+            "sodium": 1
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": null,
+          "isAlwaysAvailable": false,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-29T01:54:35.180Z",
+          "updatedAt": "2026-07-29T01:54:35.180Z",
+          "__v": 0
+        },
+        "quantity": 1,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Start in the cold pan with beaten eggs and butter",
+      "Periodically take the pan on and off the heat constantly stirring until the eggs come out creamy and smooth"
+    ],
+    "createdAt": "2026-07-29T21:43:18.080Z",
+    "updatedAt": "2026-07-30T00:09:36.072Z",
+    "__v": 0,
+    "scores": []
+  },
+  {
+    "_id": "6a6a92e0e3f09c8c316d964c",
+    "name": "Sushi Rice",
+    "description": "",
+    "recipeCategory": {
+      "_id": "6a6a7031e3f09c8c316d9647",
+      "name": "Rice",
+      "normalizedName": "rice",
+      "isDefault": false,
+      "isArchived": false,
+      "createdAt": "2026-07-29T21:27:13.298Z",
+      "updatedAt": "2026-07-29T21:27:13.298Z",
+      "__v": 0
+    },
+    "mealCategory": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "servings": 1,
+    "defaultPortionUnit": "serving",
+    "nutrition": {
+      "calories": 287,
+      "protein": 4,
+      "carbs": 59,
+      "fats": 0,
+      "fiber": 1,
+      "sodium": 1092.3
+    },
+    "nutritionBasis": "per-serving",
+    "imageUrl": "",
+    "notes": "",
+    "isArchived": false,
+    "isConfirmed": false,
+    "ingredientList": [
+      {
+        "ingredient": {
+          "_id": "6a681d1825be1fa8f500172a",
+          "name": "Koshihikari Rice",
+          "description": "Note that 0.5 cups of uncooked rice makes 1 cup of cooked rice (which the nutrition follows)",
+          "category": {
+            "_id": "6a681d1825be1fa8f5001728",
+            "name": "Rice",
+            "normalizedName": "rice",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-28T03:08:08.540Z",
+            "updatedAt": "2026-07-28T03:08:08.540Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 0.5,
+          "defaultPortionUnit": "cup",
+          "nutrition": {
+            "calories": 240,
+            "protein": 3,
+            "carbs": 49,
+            "fats": 0,
+            "fiber": 1,
+            "sodium": 15
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": 5,
+          "isAlwaysAvailable": false,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-28T03:08:08.978Z",
+          "updatedAt": "2026-07-29T23:42:46.723Z",
+          "__v": 0,
+          "barcode": null
+        },
+        "quantity": 0.5,
+        "unit": "cup"
+      },
+      {
+        "ingredient": {
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "_id": "6a6680681211fa2ec98bf3b5",
+          "name": "Water",
+          "description": "",
+          "category": {
+            "_id": "6a6680681211fa2ec98bf3b4",
+            "name": "Essentials",
+            "normalizedName": "essentials",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-26T21:47:20.419Z",
+            "updatedAt": "2026-07-26T21:47:20.419Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 1,
+          "defaultPortionUnit": "ml",
+          "nutrition": {
+            "calories": 0,
+            "protein": 0,
+            "carbs": 0,
+            "fats": 0,
+            "fiber": 0,
+            "sodium": 0
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": 0,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-26T21:47:20.540Z",
+          "updatedAt": "2026-07-27T01:05:56.830Z",
+          "__v": 0,
+          "barcode": null,
+          "isAlwaysAvailable": true
+        },
+        "quantity": 0.5,
+        "unit": "cup"
+      },
+      {
+        "ingredient": {
+          "_id": "6a681e4225be1fa8f5001731",
+          "name": "Kombu",
+          "description": "",
+          "category": {
+            "_id": "6a4db79b6119f051d5d2deb3",
+            "name": "Vegetables",
+            "normalizedName": "vegetables",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-08T02:36:11.600Z",
+            "updatedAt": "2026-07-08T02:36:11.600Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 5,
+          "defaultPortionUnit": "g",
+          "nutrition": {
+            "calories": 15,
+            "protein": 1,
+            "carbs": 2,
+            "fats": 0,
+            "fiber": 0,
+            "sodium": 310
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": null,
+          "isAlwaysAvailable": false,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-28T03:13:06.406Z",
+          "updatedAt": "2026-07-28T03:13:06.406Z",
+          "__v": 0
+        },
+        "quantity": 5,
+        "unit": "g"
+      },
+      {
+        "ingredient": {
+          "isAlwaysAvailable": false,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "_id": "6a66695e1211fa2ec98bf389",
+          "name": "Rice Vinegar",
+          "description": "",
+          "category": {
+            "_id": "6a4db79c6119f051d5d2deb9",
+            "name": "Condiments & Sauces",
+            "normalizedName": "condiments & sauces",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-08T02:36:12.980Z",
+            "updatedAt": "2026-07-08T02:36:12.980Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 1,
+          "defaultPortionUnit": "tbsp",
+          "nutrition": {
+            "calories": 0,
+            "protein": 0,
+            "carbs": 0,
+            "fats": 0,
+            "fiber": 0,
+            "sodium": 0
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-26T20:09:02.246Z",
+          "updatedAt": "2026-07-26T20:09:02.246Z",
+          "__v": 0
+        },
+        "quantity": 4,
+        "unit": "tsp"
+      },
+      {
+        "ingredient": {
+          "_id": "6a6a9177e3f09c8c316d964b",
+          "name": "Sugar",
+          "description": "",
+          "category": {
+            "_id": "6a6680681211fa2ec98bf3b4",
+            "name": "Essentials",
+            "normalizedName": "essentials",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-26T21:47:20.419Z",
+            "updatedAt": "2026-07-26T21:47:20.419Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 1,
+          "defaultPortionUnit": "tsp",
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": null,
+          "isAlwaysAvailable": true,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "nutrition": {
+            "calories": 16,
+            "protein": 0,
+            "carbs": 4,
+            "fats": 0,
+            "fiber": 0,
+            "sodium": 0
+          },
+          "createdAt": "2026-07-29T23:49:11.489Z",
+          "updatedAt": "2026-07-29T23:50:39.327Z",
+          "__v": 0,
+          "barcode": null
+        },
+        "quantity": 2,
+        "unit": "tsp"
+      },
+      {
+        "ingredient": {
+          "_id": "6a680e1a25be1fa8f50016fa",
+          "name": "Salt",
+          "description": "",
+          "category": {
+            "_id": "6a6680681211fa2ec98bf3b4",
+            "name": "Essentials",
+            "normalizedName": "essentials",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-26T21:47:20.419Z",
+            "updatedAt": "2026-07-26T21:47:20.419Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 1,
+          "defaultPortionUnit": "tsp",
+          "nutrition": {
+            "calories": 0,
+            "protein": 0,
+            "carbs": 0,
+            "fats": 0,
+            "fiber": 0,
+            "sodium": 2325
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": 100,
+          "isAlwaysAvailable": true,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": false,
+          "createdAt": "2026-07-28T02:04:10.187Z",
+          "updatedAt": "2026-07-28T02:04:20.180Z",
+          "__v": 0,
+          "barcode": null
+        },
+        "quantity": 0.33,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Rinse rice until clear",
+      "Let rice soak in water for 30 minutes",
+      "Add equal parts water and rice to rice cooker and place the kombu on top",
+      "Make the sushi ingest buy combining the rice vinegar, sugar, and salt in a small saucepan and bring to boil over medium high heat until sugar is dissolved, let cool",
+      "After the rice is cooked, while hot, evenly mix the rice seasoning mixture with the rice."
+    ],
+    "createdAt": "2026-07-29T23:55:12.402Z",
+    "updatedAt": "2026-07-30T00:09:36.072Z",
+    "__v": 0,
+    "scores": []
+  }
+]

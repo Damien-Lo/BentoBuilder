@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   Text,
@@ -9,8 +10,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import {
+  addRecipeScore,
+  deleteRecipeScore,
   getRecipeById,
   type PopulatedIngredient,
   type Recipe,
@@ -21,6 +25,7 @@ import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { loadSettings } from "@/src/services/settingsService";
 import { convertUnits, type CustomUnitConversion } from "@/src/utils/unitConversion";
 import { getIngredientStockInUnit } from "@/src/utils/ingredientStock";
+import { RateRecipeModal } from "@/src/components/recipes/RateRecipeModal";
 
 const MEAL_CATEGORY_LABEL: Record<string, string> = {
   breakfast: "Breakfast",
@@ -49,6 +54,9 @@ export default function RecipeDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPerServing, setShowPerServing] = useState(true);
+  const [showRateModal, setShowRateModal] = useState(false);
+  const [savingScore, setSavingScore] = useState(false);
+  const [showAllScores, setShowAllScores] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -128,6 +136,58 @@ export default function RecipeDetailPage() {
     };
   }, [totalNutrition, showPerServing, recipe]);
 
+  // "Current score" is always computed from the last 50 raw entries, never
+  // stored — the full history stays in recipe.scores regardless.
+  const recentScores = useMemo(() => {
+    const all = recipe?.scores ?? [];
+    return all.slice(-50).slice().reverse();
+  }, [recipe]);
+
+  const averageScore = useMemo(() => {
+    if (recentScores.length === 0) return null;
+    const sum = recentScores.reduce((acc, s) => acc + s.value, 0);
+    return Math.round((sum / recentScores.length) * 10) / 10;
+  }, [recentScores]);
+
+  async function handleAddScore(value: number) {
+    if (!recipe) return;
+    setSavingScore(true);
+    try {
+      const updatedScores = await addRecipeScore(recipe._id, value);
+      setRecipe((prev) => (prev ? { ...prev, scores: updatedScores } : prev));
+      setShowRateModal(false);
+    } catch (err) {
+      Alert.alert(
+        "Couldn't save rating",
+        err instanceof Error ? err.message : "Something went wrong.",
+      );
+    } finally {
+      setSavingScore(false);
+    }
+  }
+
+  function handleDeleteScore(scoreId: string) {
+    if (!recipe) return;
+    Alert.alert("Delete rating", "Remove this rating?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const updatedScores = await deleteRecipeScore(recipe._id, scoreId);
+            setRecipe((prev) => (prev ? { ...prev, scores: updatedScores } : prev));
+          } catch (err) {
+            Alert.alert(
+              "Couldn't delete rating",
+              err instanceof Error ? err.message : "Something went wrong.",
+            );
+          }
+        },
+      },
+    ]);
+  }
+
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
@@ -178,6 +238,7 @@ export default function RecipeDetailPage() {
     : [];
 
   return (
+    <>
     <SafeAreaView className="flex-1 bg-slate-50">
       {/* Nav bar */}
       <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
@@ -260,6 +321,87 @@ export default function RecipeDetailPage() {
               {recipe.description}
             </Text>
           ) : null}
+        </View>
+
+        {/* Rating */}
+        <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+          <View className="flex-row items-center justify-between">
+            <View>
+              <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+                Rating
+              </Text>
+              {averageScore != null ? (
+                <View className="mt-2 flex-row items-baseline">
+                  <Text className="text-2xl font-bold text-slate-900">{averageScore}</Text>
+                  <Text className="ml-1 text-base font-semibold text-slate-400">/ 10</Text>
+                  <Text className="ml-1.5 text-sm text-slate-400">
+                    · {recentScores.length} {recentScores.length === 1 ? "rating" : "ratings"}
+                  </Text>
+                </View>
+              ) : (
+                <Text className="mt-2 text-sm text-slate-400">Not rated yet</Text>
+              )}
+            </View>
+
+            <Pressable
+              className="rounded-2xl bg-blue-600 px-4 py-2.5 active:bg-blue-700"
+              onPress={() => setShowRateModal(true)}
+            >
+              <Text className="text-sm font-semibold text-white">Rate</Text>
+            </Pressable>
+          </View>
+
+          {recentScores.length > 0 && (
+            <>
+              <Pressable
+                className="mt-4 flex-row items-center"
+                onPress={() => setShowAllScores((v) => !v)}
+              >
+                <Text className="text-xs font-semibold text-slate-500">
+                  {showAllScores ? "Hide history" : "Show history"}
+                </Text>
+                <Ionicons
+                  name={showAllScores ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color="#64748B"
+                  style={{ marginLeft: 4 }}
+                />
+              </Pressable>
+
+              {showAllScores && (
+                <View className="mt-2 overflow-hidden rounded-2xl border border-slate-100">
+                  {recentScores.map((score, index) => (
+                    <ReanimatedSwipeable
+                      key={score._id}
+                      friction={2}
+                      rightThreshold={40}
+                      renderLeftActions={() => (
+                        <Pressable
+                          className="w-20 items-center justify-center bg-red-500 active:bg-red-600"
+                          onPress={() => handleDeleteScore(score._id)}
+                        >
+                          <Ionicons name="trash-outline" size={20} color="white" />
+                        </Pressable>
+                      )}
+                    >
+                      <View
+                        className={`flex-row items-center justify-between bg-white px-3 py-2.5 ${
+                          index < recentScores.length - 1 ? "border-b border-slate-100" : ""
+                        }`}
+                      >
+                        <Text className="text-sm text-slate-600">
+                          {new Date(score.ratedAt).toLocaleDateString()}
+                        </Text>
+                        <Text className="text-sm font-semibold text-slate-900">
+                          {score.value} / 10
+                        </Text>
+                      </View>
+                    </ReanimatedSwipeable>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
         </View>
 
         {/* Ingredients */}
@@ -417,5 +559,13 @@ export default function RecipeDetailPage() {
         ) : null}
       </ScrollView>
     </SafeAreaView>
+
+    <RateRecipeModal
+      visible={showRateModal}
+      saving={savingScore}
+      onClose={() => setShowRateModal(false)}
+      onSubmit={(value) => void handleAddScore(value)}
+    />
+    </>
   );
 }

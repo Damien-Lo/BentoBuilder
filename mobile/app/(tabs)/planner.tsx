@@ -13,11 +13,14 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { getMeals, type Meal, type MealRecipeRef } from "@/src/services/mealApi";
-import { getRecipeById, getRecipes, type Recipe } from "@/src/services/recipeApi";
+import { addRecipeScore, getRecipeById, getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import { getPantryItems } from "@/src/services/pantryApi";
+import type { PantryItem } from "@/src/types/pantry";
 import {
   createMealPlanEntry,
   deleteMealPlanEntry,
@@ -28,8 +31,10 @@ import {
   type MealSlot,
 } from "@/src/services/mealPlanApi";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
+import { RateAndConfirmModal } from "@/src/components/planner/RateAndConfirmModal";
 import {
   friendlyDayLabel,
+  getEntryAvailability,
   getIngredientKcal,
   getMealKcal,
   getRecipeKcal,
@@ -146,6 +151,7 @@ function buildDates(): string[] {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
+  const router = useRouter();
   const dates = useMemo(buildDates, []);
   const today = todayStr();
 
@@ -155,6 +161,7 @@ export default function HomeScreen() {
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
   const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
+  const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
   // Daily / weekly nutrition card paging
@@ -187,14 +194,22 @@ export default function HomeScreen() {
   >(null);
   const [infoLoading, setInfoLoading] = useState(false);
 
+  // Rate-then-confirm overlay for a planned recipe entry — swiping it reveals
+  // a "Rate" button alongside the plain "Confirm" one.
+  const [rateConfirmEntry, setRateConfirmEntry] = useState<MealPlanEntry | null>(null);
+  const [ratingSaving, setRatingSaving] = useState(false);
+
   const dateStripRef = useRef<FlatList<string>>(null);
   const swipeableRefs = useRef(new Map<string, SwipeableMethods>()).current;
 
-  // Load available meals/recipes/ingredients for the add overlay, once on mount
+  // Load available meals/recipes/ingredients for the add overlay, once on
+  // mount — pantry items are loaded here too, purely for the planned-entry
+  // availability icon (not re-fetched reactively, matching these others).
   useEffect(() => {
     getMeals().then(setAllMeals).catch(() => {});
     getRecipes().then(setAllRecipes).catch(() => {});
     getIngredients().then(setAllIngredients).catch(() => {});
+    getPantryItems().then(setPantryItems).catch(() => {});
   }, []);
 
   // Load plan for the selected date
@@ -398,6 +413,28 @@ export default function HomeScreen() {
     }
   }
 
+  function handleOpenRateAndConfirm(entry: MealPlanEntry) {
+    swipeableRefs.get(entry._id)?.close();
+    setRateConfirmEntry(entry);
+  }
+
+  async function handleSubmitRateAndConfirm(value: number) {
+    if (!rateConfirmEntry?.recipe) return;
+    setRatingSaving(true);
+    try {
+      await addRecipeScore(rateConfirmEntry.recipe._id, value);
+      await handleToggleEntryStatus(rateConfirmEntry);
+      setRateConfirmEntry(null);
+    } catch (err) {
+      Alert.alert(
+        "Couldn't save rating",
+        err instanceof Error ? err.message : "Something went wrong.",
+      );
+    } finally {
+      setRatingSaving(false);
+    }
+  }
+
   function handleDeleteEntry(id: string) {
     Alert.alert("Remove item", "Remove this item from the plan?", [
       { text: "Cancel", style: "cancel" },
@@ -455,6 +492,29 @@ export default function HomeScreen() {
     );
   }
 
+  // Looked up by getEntryAvailability — a course's own recipe ref and a
+  // recipe's own ingredientList entries are both unpopulated/thin, so the
+  // real Ingredient/Recipe documents (with lowStockThreshold, ingredientList,
+  // etc.) come from these separately-loaded full lists instead.
+  const ingredientMap = useMemo(
+    () => new Map(allIngredients.map(i => [i._id, i])),
+    [allIngredients],
+  );
+  const recipeMap = useMemo(
+    () => new Map(allRecipes.map(r => [r._id, r])),
+    [allRecipes],
+  );
+
+  function handleOpenEntry(entry: MealPlanEntry) {
+    if (entry.recipe) {
+      router.push({ pathname: "/recipes/[id]", params: { id: entry.recipe._id } });
+    } else if (entry.ingredient) {
+      router.push({ pathname: "/ingredients/edit/[id]", params: { id: entry.ingredient._id } });
+    } else if (entry.meal) {
+      router.push({ pathname: "/meals/[id]", params: { id: entry.meal._id } });
+    }
+  }
+
   // ── Render entry card ──
   function renderEntry(entry: MealPlanEntry) {
     let title: string;
@@ -478,6 +538,23 @@ export default function HomeScreen() {
       kcal = entry.meal ? getMealKcal(entry.meal) : null;
     }
 
+    const availability = getEntryAvailability(
+      entry,
+      recipeMap,
+      ingredientMap,
+      allIngredients,
+      pantryItems,
+      appSettings?.unitConversions ?? [],
+    );
+    const availabilityIcon =
+      availability === "green"
+        ? { name: "checkmark-circle-outline" as const, color: "#34D399" }
+        : availability === "yellow"
+          ? { name: "alert-circle-outline" as const, color: "#FBBF24" }
+          : availability === "red"
+            ? { name: "close-circle-outline" as const, color: "#F87171" }
+            : null;
+
     return (
       <ReanimatedSwipeable
         key={entry._id}
@@ -496,29 +573,58 @@ export default function HomeScreen() {
             <Ionicons name="trash-outline" size={20} color="white" />
           </Pressable>
         )}
-        renderRightActions={() => (
-          <Pressable
-            className="mb-2 w-20 items-center justify-center rounded-2xl active:opacity-80"
-            style={{ backgroundColor: entry.status === "planned" ? "#10B981" : "#94A3B8" }}
-            onPress={() => void handleToggleEntryStatus(entry)}
-          >
-            <Ionicons
-              name={entry.status === "planned" ? "checkmark-circle-outline" : "time-outline"}
-              size={20}
-              color="white"
-            />
-            <Text className="mt-1 text-[10px] font-semibold text-white">
-              {entry.status === "planned" ? "Confirm" : "Unconfirm"}
-            </Text>
-          </Pressable>
-        )}
+        renderRightActions={() =>
+          entry.status === "planned" && entry.recipe ? (
+            <View className="mb-2 flex-row gap-2">
+              <Pressable
+                className="w-20 items-center justify-center rounded-2xl bg-blue-600 active:opacity-80"
+                onPress={() => handleOpenRateAndConfirm(entry)}
+              >
+                <Ionicons name="star-outline" size={20} color="white" />
+                <Text className="mt-1 text-[10px] font-semibold text-white">Rate</Text>
+              </Pressable>
+              <Pressable
+                className="w-20 items-center justify-center rounded-2xl active:opacity-80"
+                style={{ backgroundColor: "#10B981" }}
+                onPress={() => void handleToggleEntryStatus(entry)}
+              >
+                <Ionicons name="checkmark-circle-outline" size={20} color="white" />
+                <Text className="mt-1 text-[10px] font-semibold text-white">Confirm</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              className="mb-2 w-20 items-center justify-center rounded-2xl active:opacity-80"
+              style={{ backgroundColor: entry.status === "planned" ? "#10B981" : "#94A3B8" }}
+              onPress={() => void handleToggleEntryStatus(entry)}
+            >
+              <Ionicons
+                name={entry.status === "planned" ? "checkmark-circle-outline" : "time-outline"}
+                size={20}
+                color="white"
+              />
+              <Text className="mt-1 text-[10px] font-semibold text-white">
+                {entry.status === "planned" ? "Confirm" : "Unconfirm"}
+              </Text>
+            </Pressable>
+          )
+        }
       >
-        <View
-          className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 py-3"
+        <Pressable
+          className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 py-3 active:bg-slate-50"
           style={entry.status === "planned" ? styles.plannedEntry : undefined}
+          onPress={() => handleOpenEntry(entry)}
         >
           {entry.status === "planned" && (
             <Ionicons name="time-outline" size={16} color="#94A3B8" style={{ marginRight: 8 }} />
+          )}
+          {entry.status === "planned" && availabilityIcon && (
+            <Ionicons
+              name={availabilityIcon.name}
+              size={16}
+              color={availabilityIcon.color}
+              style={{ marginRight: 8 }}
+            />
           )}
           <View className="flex-1">
             <Text className="font-semibold text-slate-900" numberOfLines={1}>{title}</Text>
@@ -529,7 +635,7 @@ export default function HomeScreen() {
           {kcal != null && (
             <Text className="text-sm font-semibold text-slate-500">{kcal} kcal</Text>
           )}
-        </View>
+        </Pressable>
       </ReanimatedSwipeable>
     );
   }
@@ -1415,6 +1521,14 @@ export default function HomeScreen() {
       )}
 
       {renderInfoOverlay()}
+
+      <RateAndConfirmModal
+        visible={!!rateConfirmEntry}
+        recipeName={rateConfirmEntry?.recipe?.name ?? ""}
+        saving={ratingSaving}
+        onCancel={() => setRateConfirmEntry(null)}
+        onConfirm={(value) => void handleSubmitRateAndConfirm(value)}
+      />
     </SafeAreaView>
   );
 }

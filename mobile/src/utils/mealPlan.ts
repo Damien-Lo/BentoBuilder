@@ -1,9 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 
 import type { Meal, MealRecipeRef } from "@/src/services/mealApi";
-import type { MealSlot } from "@/src/services/mealPlanApi";
+import type { MealPlanEntry, MealSlot } from "@/src/services/mealPlanApi";
 import type { Recipe } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
+import type { PantryItem } from "@/src/types/pantry";
+import { getIngredientStockInUnit } from "./ingredientStock";
+import { convertUnits, type CustomUnitConversion } from "./unitConversion";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -151,4 +154,97 @@ export function scaleIngredientNutrition(ingredient: Ingredient, quantity: numbe
 export function getIngredientKcal(ingredient: Ingredient, quantity: number): number | null {
   const cal = scaleIngredientNutrition(ingredient, quantity).calories;
   return cal == null ? null : Math.round(cal);
+}
+
+// ── Pantry availability (shared "can this be made from what's in stock"
+// check — same worst-ingredient-wins logic as the recipe list's dot and the
+// recipe detail page's per-ingredient bars, applied here to a meal-plan
+// entry, whichever of recipe/ingredient/meal it points at) ─────────────────
+
+export type AvailabilityState = "green" | "yellow" | "red";
+
+function ingredientAvailabilityState(
+  ingredient: Ingredient,
+  quantity: number,
+  unit: string,
+  allIngredients: Ingredient[],
+  pantryItems: PantryItem[],
+  customConversions: CustomUnitConversion[],
+): AvailabilityState {
+  const inStock = getIngredientStockInUnit(ingredient, unit, allIngredients, pantryItems, customConversions);
+  const remaining = inStock - quantity;
+  const rawThreshold = ingredient.lowStockThreshold ?? 0;
+  const threshold = ingredient.defaultPortionUnit
+    ? (convertUnits(rawThreshold, ingredient.defaultPortionUnit, unit, customConversions) ?? rawThreshold)
+    : rawThreshold;
+  return remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
+}
+
+function worseOf(current: AvailabilityState | null, next: AvailabilityState): AvailabilityState {
+  if (current === null) return next;
+  if (current === "red" || next === "red") return "red";
+  if (current === "yellow" || next === "yellow") return "yellow";
+  return "green";
+}
+
+export function getRecipeAvailability(
+  recipe: Recipe,
+  ingredientMap: Map<string, Ingredient>,
+  allIngredients: Ingredient[],
+  pantryItems: PantryItem[],
+  customConversions: CustomUnitConversion[],
+): AvailabilityState | null {
+  let availability: AvailabilityState | null = null;
+  for (const entry of recipe.ingredientList) {
+    const ingId = typeof entry.ingredient === "string" ? entry.ingredient : entry.ingredient._id;
+    const ing = ingredientMap.get(ingId);
+    if (!ing) continue;
+    const state = ingredientAvailabilityState(ing, entry.quantity, entry.unit, allIngredients, pantryItems, customConversions);
+    availability = worseOf(availability, state);
+    if (availability === "red") break;
+  }
+  return availability;
+}
+
+// A meal-plan entry can point at a recipe, a bare ingredient, or a meal (a
+// set of recipe courses) — a course's own recipe ref is a thin projection
+// with no ingredientList, so it's looked up in `recipeMap` (the full recipe
+// list) to get the real ingredients to check.
+export function getEntryAvailability(
+  entry: MealPlanEntry,
+  recipeMap: Map<string, Recipe>,
+  ingredientMap: Map<string, Ingredient>,
+  allIngredients: Ingredient[],
+  pantryItems: PantryItem[],
+  customConversions: CustomUnitConversion[],
+): AvailabilityState | null {
+  if (entry.recipe) {
+    return getRecipeAvailability(entry.recipe, ingredientMap, allIngredients, pantryItems, customConversions);
+  }
+
+  if (entry.ingredient) {
+    return ingredientAvailabilityState(
+      entry.ingredient,
+      entry.ingredientQuantity ?? 0,
+      entry.ingredientUnit ?? "",
+      allIngredients,
+      pantryItems,
+      customConversions,
+    );
+  }
+
+  if (entry.meal) {
+    let availability: AvailabilityState | null = null;
+    for (const course of entry.meal.courses ?? []) {
+      const ref = course.recipe;
+      if (!ref || typeof ref === "string") continue;
+      const fullRecipe = recipeMap.get(ref._id);
+      if (!fullRecipe) continue;
+      const state = getRecipeAvailability(fullRecipe, ingredientMap, allIngredients, pantryItems, customConversions);
+      if (state) availability = worseOf(availability, state);
+    }
+    return availability;
+  }
+
+  return null;
 }
