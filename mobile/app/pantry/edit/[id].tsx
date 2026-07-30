@@ -19,7 +19,7 @@ import {
   getUnitSuggestions,
   type SelectOption,
 } from "@/src/services/optionsApi";
-import { getPantryItemById, updatePantryItem } from "@/src/services/pantryApi";
+import { deletePantryItem, getPantryItemById, updatePantryItem } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { DateTextInput, DurationExpiryInput, PriceInput, QuantityServingInput } from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
@@ -188,6 +188,30 @@ export default function EditPantryItemScreen() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleDelete() {
+    Alert.alert("Delete pantry entry", "Remove this entry from your pantry?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setSaving(true);
+            await deletePantryItem(id);
+            router.back();
+          } catch (err) {
+            Alert.alert(
+              "Unable to delete",
+              err instanceof Error ? err.message : "Could not delete entry.",
+            );
+          } finally {
+            setSaving(false);
+          }
+        },
+      },
+    ]);
   }
 
   if (isLoading) {
@@ -410,6 +434,14 @@ export default function EditPantryItemScreen() {
             textAlignVertical="top"
             className="min-h-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
           />
+
+          <Pressable
+            disabled={saving}
+            className="mt-8 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
+            onPress={handleDelete}
+          >
+            <Text className="font-semibold text-red-600">Delete pantry entry</Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

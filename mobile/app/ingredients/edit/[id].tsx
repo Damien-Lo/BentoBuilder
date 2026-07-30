@@ -40,6 +40,7 @@ import {
 } from "@/src/services/optionsApi";
 
 import {
+  deleteIngredient,
   getIngredientAvailability,
   getIngredientById,
   updateIngredient,
@@ -478,6 +479,35 @@ export default function IngredientDetailScreen() {
       );
     }
     setIsEditing(false);
+  }
+
+  function handleDeleteIngredient() {
+    if (!currentIngredient) return;
+    Alert.alert(
+      "Delete ingredient",
+      `Delete "${currentIngredient.name}"? This will remove it and all its pantry entries.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setSaving(true);
+              await deleteIngredient(id);
+              router.back();
+            } catch (err) {
+              Alert.alert(
+                "Unable to delete",
+                err instanceof Error ? err.message : "Could not delete ingredient.",
+              );
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
   }
 
   async function handleSave() {
@@ -1204,6 +1234,14 @@ export default function IngredientDetailScreen() {
                   )}
                 </>
               )}
+
+              <Pressable
+                disabled={saving}
+                className="mt-8 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
+                onPress={handleDeleteIngredient}
+              >
+                <Text className="font-semibold text-red-600">Delete ingredient</Text>
+              </Pressable>
             </>
           ) : (
             /* ── Detail view ── */
