@@ -2,7 +2,7 @@ import type { MealPlanEntry } from "@/src/services/mealPlanApi";
 import type { Recipe } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
 import type { PantryItem } from "@/src/types/pantry";
-import { convertUnits, type CustomUnitConversion } from "./unitConversion";
+import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
 
 function extractId(value: unknown): string {
   if (typeof value === "string") return value;
@@ -32,6 +32,12 @@ export interface PantryGroup {
   expiryDate: string | null;
   // Combined amount across members, converted into the requirement's unit.
   totalAvailable: number;
+  // This group's own ingredient's resolved conversions (its own entries,
+  // then its generic parent's, then the app-wide list) — a group's members
+  // all share one specific ingredient by construction (it's part of the
+  // grouping key), but that can differ from the requirement's own
+  // ingredient when the requirement is a generic aggregating variants.
+  conversions: CustomUnitConversion[];
 }
 
 export interface IngredientRequirement {
@@ -102,7 +108,7 @@ export function buildIngredientRequirements(
   ingredientMap: Map<string, Ingredient>,
   allIngredients: Ingredient[],
   pantryItems: PantryItem[],
-  customConversions: CustomUnitConversion[],
+  globalConversions: CustomUnitConversion[],
 ): IngredientRequirement[] {
   const rows = gatherRows(entry, recipeMap);
 
@@ -115,7 +121,12 @@ export function buildIngredientRequirements(
     const ing = ingredientMap.get(row.ingredientId);
     if (!ing || ing.isAlwaysAvailable) continue;
     const nativeUnit = ing.defaultPortionUnit || row.unit;
-    const converted = convertUnits(row.quantity, row.unit, nativeUnit, customConversions);
+    const converted = convertUnits(
+      row.quantity,
+      row.unit,
+      nativeUnit,
+      getIngredientConversions(ing, globalConversions, allIngredients),
+    );
     if (converted == null) continue;
     neededByIngredient.set(row.ingredientId, (neededByIngredient.get(row.ingredientId) ?? 0) + converted);
   }
@@ -141,7 +152,7 @@ export function buildIngredientRequirements(
 
     const groupMap = new Map<
       string,
-      { members: PantryGroupMember[]; displayName: string; expiryDate: string | null }
+      { members: PantryGroupMember[]; displayName: string; expiryDate: string | null; ingredientId: string }
     >();
 
     for (const item of pantryItems) {
@@ -161,6 +172,7 @@ export function buildIngredientRequirements(
           members: [],
           displayName: itemIngredient?.name ?? ing.name,
           expiryDate: item.expiryDate ?? null,
+          ingredientId: itemIngredientId,
         };
         groupMap.set(groupKey, group);
       }
@@ -171,12 +183,25 @@ export function buildIngredientRequirements(
       });
     }
 
+    // Each group's members all share one specific ingredient by
+    // construction (part of the grouping key) — resolve conversions from
+    // *that* ingredient, which can differ from the requirement's own when
+    // the requirement is a generic aggregating variants.
     const groups: PantryGroup[] = Array.from(groupMap.entries()).map(([key, g]) => {
+      const groupIngredient = ingredientMap.get(g.ingredientId) ?? ing;
+      const conversions = getIngredientConversions(groupIngredient, globalConversions, allIngredients);
       const totalAvailable = g.members.reduce((sum, m) => {
-        const converted = convertUnits(m.quantityAvailable, m.quantityUnit, unit, customConversions);
+        const converted = convertUnits(m.quantityAvailable, m.quantityUnit, unit, conversions);
         return sum + (converted ?? 0);
       }, 0);
-      return { key, members: g.members, displayName: g.displayName, expiryDate: g.expiryDate, totalAvailable: round(totalAvailable) };
+      return {
+        key,
+        members: g.members,
+        displayName: g.displayName,
+        expiryDate: g.expiryDate,
+        totalAvailable: round(totalAvailable),
+        conversions,
+      };
     });
 
     groups.sort((a, b) => {
@@ -199,12 +224,14 @@ export function hasAmbiguity(requirements: IngredientRequirement[]): boolean {
 // Drains `groups` in the given order, up to `neededQuantity` (in `unit`),
 // splitting each group's contribution across its member documents in
 // member order — siblings are interchangeable, so the order among them
-// doesn't matter, only the order between groups does.
+// doesn't matter, only the order between groups does. Each group already
+// carries its own resolved conversions (built in buildIngredientRequirements
+// from that group's specific ingredient), so no conversions list needs to
+// be passed in here.
 function drainGroups(
   groups: PantryGroup[],
   neededQuantity: number,
   unit: string,
-  customConversions: CustomUnitConversion[],
 ): DeductionInstruction[] {
   const instructions: DeductionInstruction[] = [];
   let remaining = neededQuantity;
@@ -213,11 +240,11 @@ function drainGroups(
     if (remaining <= 0) break;
     for (const member of group.members) {
       if (remaining <= 0) break;
-      const availableInUnit = convertUnits(member.quantityAvailable, member.quantityUnit, unit, customConversions);
+      const availableInUnit = convertUnits(member.quantityAvailable, member.quantityUnit, unit, group.conversions);
       if (availableInUnit == null || availableInUnit <= 0) continue;
 
       const takeInUnit = Math.min(remaining, availableInUnit);
-      const takeInMemberUnit = convertUnits(takeInUnit, unit, member.quantityUnit, customConversions);
+      const takeInMemberUnit = convertUnits(takeInUnit, unit, member.quantityUnit, group.conversions);
       if (takeInMemberUnit == null || takeInMemberUnit <= 0) continue;
 
       instructions.push({ pantryItemId: member.pantryItemId, amount: round(takeInMemberUnit) });
@@ -240,11 +267,10 @@ function mergeInstructions(instructions: DeductionInstruction[]): DeductionInstr
 // user choice involved. Used directly when nothing is ambiguous.
 export function getDefaultDeductionInstructions(
   requirements: IngredientRequirement[],
-  customConversions: CustomUnitConversion[],
 ): DeductionInstruction[] {
   const all: DeductionInstruction[] = [];
   for (const req of requirements) {
-    all.push(...drainGroups(req.groups, req.neededQuantity, req.unit, customConversions));
+    all.push(...drainGroups(req.groups, req.neededQuantity, req.unit));
   }
   return mergeInstructions(all);
 }
@@ -258,21 +284,20 @@ export function getDefaultDeductionInstructions(
 export function getResolvedDeductionInstructions(
   requirements: IngredientRequirement[],
   selections: Record<string, string[]>,
-  customConversions: CustomUnitConversion[],
 ): DeductionInstruction[] {
   const all: DeductionInstruction[] = [];
 
   for (const req of requirements) {
     const pickedKeys = selections[req.ingredientId];
     if (!pickedKeys || pickedKeys.length === 0) {
-      all.push(...drainGroups(req.groups, req.neededQuantity, req.unit, customConversions));
+      all.push(...drainGroups(req.groups, req.neededQuantity, req.unit));
       continue;
     }
 
     const orderedGroups = pickedKeys
       .map((key) => req.groups.find((g) => g.key === key))
       .filter((g): g is PantryGroup => !!g);
-    all.push(...drainGroups(orderedGroups, req.neededQuantity, req.unit, customConversions));
+    all.push(...drainGroups(orderedGroups, req.neededQuantity, req.unit));
   }
 
   return mergeInstructions(all);

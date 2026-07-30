@@ -996,5 +996,202 @@
     "updatedAt": "2026-07-30T00:09:36.072Z",
     "__v": 0,
     "scores": []
+  },
+  {
+    "_id": "6a6ab4b9bed510a8ab40a232",
+    "name": "Test Recepie",
+    "description": "Re",
+    "recipeCategory": {
+      "_id": "6a6ab4b9bed510a8ab40a231",
+      "name": "Test Recepies",
+      "normalizedName": "test recepies",
+      "isDefault": false,
+      "isArchived": false,
+      "createdAt": "2026-07-30T02:19:37.207Z",
+      "updatedAt": "2026-07-30T02:19:37.207Z",
+      "__v": 0
+    },
+    "mealCategory": [
+      "snack",
+      "dinner",
+      "lunch",
+      "breakfast"
+    ],
+    "servings": 1,
+    "defaultPortionUnit": "serving",
+    "nutritionBasis": "per-serving",
+    "imageUrl": "",
+    "notes": "",
+    "isArchived": true,
+    "isConfirmed": false,
+    "ingredientList": [
+      {
+        "ingredient": {
+          "_id": "6a6ab45ebed510a8ab40a22b",
+          "name": "Test Ingredient 1",
+          "description": "",
+          "category": {
+            "_id": "6a6ab419bed510a8ab40a227",
+            "name": "Test Ingredients",
+            "normalizedName": "test ingredients",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-30T02:16:57.759Z",
+            "updatedAt": "2026-07-30T02:16:57.759Z",
+            "__v": 0
+          },
+          "brand": {
+            "_id": "6a667e251211fa2ec98bf3a8",
+            "name": "Aji No Moto",
+            "normalizedName": "aji no moto",
+            "icon": null,
+            "isDefault": false,
+            "createdAt": "2026-07-26T21:37:41.065Z",
+            "updatedAt": "2026-07-26T21:37:41.065Z",
+            "__v": 0
+          },
+          "isGeneric": false,
+          "genericParent": "6a6ab419bed510a8ab40a228",
+          "defaultPortionAmount": 1,
+          "defaultPortionUnit": "g",
+          "nutrition": {
+            "calories": null,
+            "protein": null,
+            "carbs": null,
+            "fats": null,
+            "fiber": null,
+            "sodium": null
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": 0,
+          "isAlwaysAvailable": false,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": true,
+          "createdAt": "2026-07-30T02:18:06.134Z",
+          "updatedAt": "2026-07-30T02:21:40.821Z",
+          "__v": 0
+        },
+        "quantity": 1,
+        "unit": "g"
+      },
+      {
+        "ingredient": {
+          "_id": "6a6ab487bed510a8ab40a22e",
+          "name": "Test Ingredient 2",
+          "description": "",
+          "category": {
+            "_id": "6a6ab419bed510a8ab40a227",
+            "name": "Test Ingredients",
+            "normalizedName": "test ingredients",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-30T02:16:57.759Z",
+            "updatedAt": "2026-07-30T02:16:57.759Z",
+            "__v": 0
+          },
+          "brand": {
+            "_id": "6a667c5f1211fa2ec98bf39b",
+            "name": "Ajinomoto",
+            "normalizedName": "ajinomoto",
+            "icon": null,
+            "isDefault": false,
+            "createdAt": "2026-07-26T21:30:07.890Z",
+            "updatedAt": "2026-07-26T21:30:07.890Z",
+            "__v": 0
+          },
+          "isGeneric": false,
+          "genericParent": "6a6ab419bed510a8ab40a228",
+          "defaultPortionAmount": 1,
+          "defaultPortionUnit": "g",
+          "nutrition": {
+            "calories": null,
+            "protein": null,
+            "carbs": null,
+            "fats": null,
+            "fiber": null,
+            "sodium": null
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": 0,
+          "isAlwaysAvailable": false,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": true,
+          "createdAt": "2026-07-30T02:18:47.466Z",
+          "updatedAt": "2026-07-30T02:21:42.915Z",
+          "__v": 0
+        },
+        "quantity": 20,
+        "unit": "g"
+      },
+      {
+        "ingredient": {
+          "_id": "6a6ab419bed510a8ab40a228",
+          "name": "Test Ingredient Generic",
+          "description": "",
+          "category": {
+            "_id": "6a6ab419bed510a8ab40a227",
+            "name": "Test Ingredients",
+            "normalizedName": "test ingredients",
+            "icon": "nutrition-outline",
+            "isDefault": false,
+            "isArchived": false,
+            "createdAt": "2026-07-30T02:16:57.759Z",
+            "updatedAt": "2026-07-30T02:16:57.759Z",
+            "__v": 0
+          },
+          "brand": null,
+          "isGeneric": true,
+          "genericParent": null,
+          "defaultPortionAmount": 100,
+          "defaultPortionUnit": "g",
+          "nutrition": {
+            "calories": null,
+            "protein": null,
+            "carbs": null,
+            "fats": null,
+            "fiber": null,
+            "sodium": null
+          },
+          "nutritionBasis": "per-serving",
+          "lowStockThreshold": 0,
+          "isAlwaysAvailable": false,
+          "defaultStorageLocation": null,
+          "defaultExpiryDurationAmount": null,
+          "defaultExpiryDurationUnit": null,
+          "imageUrl": "",
+          "notes": "",
+          "isArchived": true,
+          "createdAt": "2026-07-30T02:16:57.898Z",
+          "updatedAt": "2026-07-30T02:21:45.529Z",
+          "__v": 0,
+          "barcode": null
+        },
+        "quantity": 50,
+        "unit": "g"
+      }
+    ],
+    "instructions": [],
+    "nutrition": {
+      "calories": 0,
+      "protein": 0,
+      "carbs": 0,
+      "fats": 0,
+      "fiber": 0,
+      "sodium": 0
+    },
+    "scores": [],
+    "createdAt": "2026-07-30T02:19:37.304Z",
+    "updatedAt": "2026-07-30T02:21:31.905Z",
+    "__v": 0
   }
 ]

@@ -1,6 +1,7 @@
 import { API_BASE_URL } from "@/src/config/api";
 import type { SelectOption } from "@/src/services/optionsApi";
 import type { DurationUnit } from "@/src/utils/date";
+import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 export interface IngredientNutrition {
   calories?: number;
@@ -47,6 +48,11 @@ export interface Ingredient {
   defaultExpiryDurationAmount?: number | null;
   defaultExpiryDurationUnit?: DurationUnit | null;
 
+  // Density-style overrides for this ingredient specifically (e.g. "1 tbsp
+  // = 10 g" for ginger) — checked before this ingredient's genericParent's
+  // own conversions, which are checked before the app-wide fallback list.
+  unitConversions?: CustomUnitConversion[];
+
   isArchived?: boolean;
 
   createdAt?: string;
@@ -84,6 +90,8 @@ export interface CreateIngredientInput {
   defaultStorageLocation?: string | null;
   defaultExpiryDurationAmount?: number | null;
   defaultExpiryDurationUnit?: DurationUnit | null;
+
+  unitConversions?: CustomUnitConversion[];
 
   isArchived?: boolean;
 }

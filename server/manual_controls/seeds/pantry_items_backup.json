@@ -1,5 +1,7 @@
 [
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a66655ed03fd7d75836b78a",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -107,6 +109,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a66695e1211fa2ec98bf38b",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -214,6 +218,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6678a41211fa2ec98bf38f",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -321,6 +327,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a66790a1211fa2ec98bf393",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -428,6 +436,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a667afe1211fa2ec98bf399",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -534,6 +544,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a667c601211fa2ec98bf39e",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -641,6 +653,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a667d001211fa2ec98bf3a3",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -748,6 +762,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a667ddc1211fa2ec98bf3a7",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -854,6 +870,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a667e251211fa2ec98bf3ab",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -961,6 +979,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a667f621211fa2ec98bf3af",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -1068,6 +1088,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a667fed1211fa2ec98bf3b3",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -1175,6 +1197,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a66812d1211fa2ec98bf3b9",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -1282,6 +1306,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a66a87b73299ad50b2f828a",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -1389,6 +1415,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a680fba25be1fa8f50016fe",
     "ingredient": {
       "_id": "6a680fb925be1fa8f50016fd",
@@ -1496,6 +1524,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a68105625be1fa8f5001701",
     "ingredient": {
       "_id": "6a68105625be1fa8f5001700",
@@ -1603,6 +1633,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6811db25be1fa8f5001704",
     "ingredient": {
       "_id": "6a6811da25be1fa8f5001703",
@@ -1711,6 +1743,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6812a025be1fa8f5001707",
     "ingredient": {
       "_id": "6a6812a025be1fa8f5001706",
@@ -1818,6 +1852,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a68131c25be1fa8f500170b",
     "ingredient": {
       "_id": "6a68131c25be1fa8f500170a",
@@ -2028,10 +2064,14 @@
     "notes": "",
     "isFinished": false,
     "createdAt": "2026-07-28T02:29:20.166Z",
-    "updatedAt": "2026-07-28T02:29:20.166Z",
-    "__v": 0
+    "updatedAt": "2026-07-30T02:00:52.539Z",
+    "__v": 0,
+    "finishedAt": null,
+    "finishedByEntry": null
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a68147025be1fa8f5001712",
     "ingredient": {
       "_id": "6a68147025be1fa8f5001711",
@@ -2139,6 +2179,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6814ec25be1fa8f5001715",
     "ingredient": {
       "_id": "6a6814eb25be1fa8f5001714",
@@ -2246,6 +2288,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a68156025be1fa8f5001719",
     "ingredient": {
       "_id": "6a68156025be1fa8f5001718",
@@ -2353,6 +2397,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a68165825be1fa8f500171d",
     "ingredient": {
       "_id": "6a68165725be1fa8f500171c",
@@ -2460,6 +2506,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a68170e25be1fa8f5001720",
     "ingredient": {
       "_id": "6a68170d25be1fa8f500171f",
@@ -2566,6 +2614,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a68178425be1fa8f5001723",
     "ingredient": {
       "_id": "6a68178425be1fa8f5001722",
@@ -2673,6 +2723,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6817c625be1fa8f5001726",
     "ingredient": {
       "_id": "6a6817c525be1fa8f5001725",
@@ -2780,6 +2832,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a681d1925be1fa8f500172c",
     "ingredient": {
       "_id": "6a681d1925be1fa8f500172b",
@@ -2888,6 +2942,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a681db425be1fa8f5001730",
     "ingredient": {
       "_id": "6a681db425be1fa8f500172f",
@@ -2994,6 +3050,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a681e4225be1fa8f5001733",
     "ingredient": {
       "_id": "6a681e4225be1fa8f5001732",
@@ -3100,6 +3158,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a681e8f25be1fa8f5001737",
     "ingredient": {
       "_id": "6a681e8f25be1fa8f5001736",
@@ -3207,6 +3267,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a681ecb25be1fa8f500173b",
     "ingredient": {
       "_id": "6a681eca25be1fa8f500173a",
@@ -3314,6 +3376,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a68fe364e0143a111475303",
     "ingredient": {
       "_id": "6a68fe364e0143a111475302",
@@ -3421,6 +3485,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a68ff754e0143a111475306",
     "ingredient": {
       "_id": "6a68ff754e0143a111475305",
@@ -3528,6 +3594,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a68ffbf4e0143a111475309",
     "ingredient": {
       "_id": "6a68ffbe4e0143a111475308",
@@ -3596,6 +3664,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a69002f4e0143a11147530d",
     "ingredient": {
       "_id": "6a69002f4e0143a11147530c",
@@ -3703,6 +3773,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6900a14e0143a111475311",
     "ingredient": {
       "_id": "6a6900a04e0143a111475310",
@@ -3810,6 +3882,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6901864e0143a111475315",
     "ingredient": {
       "_id": "6a6901864e0143a111475314",
@@ -3917,6 +3991,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6901aa4e0143a111475316",
     "ingredient": {
       "_id": "6a6901864e0143a111475314",
@@ -4024,6 +4100,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6901dd4e0143a111475317",
     "ingredient": {
       "_id": "6a6900a04e0143a111475310",
@@ -4131,6 +4209,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a69061e4e0143a111475319",
     "ingredient": {
       "_id": "6a69061e4e0143a111475318",
@@ -4199,6 +4279,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6908784e0143a11147531c",
     "ingredient": {
       "_id": "6a6908774e0143a11147531b",
@@ -4267,6 +4349,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6908944e0143a11147531d",
     "ingredient": {
       "_id": "6a6908774e0143a11147531b",
@@ -4398,10 +4482,14 @@
     "notes": "",
     "isFinished": false,
     "createdAt": "2026-07-28T20:00:16.709Z",
-    "updatedAt": "2026-07-28T20:00:16.709Z",
-    "__v": 0
+    "updatedAt": "2026-07-30T02:11:04.100Z",
+    "__v": 0,
+    "finishedAt": null,
+    "finishedByEntry": null
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a690a754e0143a111475320",
     "ingredient": {
       "_id": "6a690a504e0143a11147531e",
@@ -4465,10 +4553,12 @@
     "notes": "",
     "isFinished": false,
     "createdAt": "2026-07-28T20:00:53.801Z",
-    "updatedAt": "2026-07-28T20:19:22.473Z",
+    "updatedAt": "2026-07-30T02:11:04.242Z",
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a690ce70f94cb20253ba6d5",
     "ingredient": {
       "_id": "6a690ce60f94cb20253ba6d4",
@@ -4576,6 +4666,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a690d660f94cb20253ba6d7",
     "ingredient": {
       "_id": "6a690d660f94cb20253ba6d6",
@@ -4643,6 +4735,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a690df40f94cb20253ba6d9",
     "ingredient": {
       "_id": "6a690df40f94cb20253ba6d8",
@@ -4710,6 +4804,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a690e7c0f94cb20253ba6dd",
     "ingredient": {
       "_id": "6a690e7c0f94cb20253ba6dc",
@@ -4817,6 +4913,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a69123f0f94cb20253ba6e3",
     "ingredient": {
       "_id": "6a69123f0f94cb20253ba6e2",
@@ -4884,6 +4982,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6912d90f94cb20253ba6e7",
     "ingredient": {
       "_id": "6a6912d90f94cb20253ba6e6",
@@ -4991,6 +5091,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6913680f94cb20253ba6ea",
     "ingredient": {
       "_id": "6a6913680f94cb20253ba6e9",
@@ -5098,6 +5200,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6913890f94cb20253ba6eb",
     "ingredient": {
       "_id": "6a6913680f94cb20253ba6e9",
@@ -5205,6 +5309,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6917380f94cb20253ba6ed",
     "ingredient": {
       "_id": "6a6917380f94cb20253ba6ec",
@@ -5273,6 +5379,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6917990f94cb20253ba6f0",
     "ingredient": {
       "_id": "6a6917990f94cb20253ba6ef",
@@ -5380,6 +5488,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6917f10f94cb20253ba6f3",
     "ingredient": {
       "_id": "6a6917f10f94cb20253ba6f2",
@@ -5487,6 +5597,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6918160f94cb20253ba6f4",
     "ingredient": {
       "_id": "6a6917f10f94cb20253ba6f2",
@@ -5594,6 +5706,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a69187d0f94cb20253ba6f7",
     "ingredient": {
       "_id": "6a69187d0f94cb20253ba6f6",
@@ -5701,6 +5815,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6918c60f94cb20253ba6fa",
     "ingredient": {
       "_id": "6a6918c60f94cb20253ba6f9",
@@ -5808,6 +5924,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a691a100f94cb20253ba6fc",
     "ingredient": {
       "_id": "6a691a100f94cb20253ba6fb",
@@ -5875,113 +5993,8 @@
     "__v": 0
   },
   {
-    "_id": "6a691a660f94cb20253ba6ff",
-    "ingredient": {
-      "_id": "6a691a650f94cb20253ba6fe",
-      "name": "LKK's PREMIUM DARK SOY SAUCE",
-      "description": "",
-      "category": {
-        "_id": "6a4db79c6119f051d5d2deb9",
-        "name": "Condiments & Sauces",
-        "normalizedName": "condiments & sauces",
-        "icon": "nutrition-outline",
-        "isDefault": false,
-        "isArchived": false,
-        "createdAt": "2026-07-08T02:36:12.980Z",
-        "updatedAt": "2026-07-08T02:36:12.980Z",
-        "__v": 0
-      },
-      "brand": {
-        "_id": "6a657fcaaf76383bd3b0dcae",
-        "name": "Lee Kum Kee",
-        "normalizedName": "lee kum kee",
-        "icon": null,
-        "isDefault": false,
-        "createdAt": "2026-07-26T03:32:26.922Z",
-        "updatedAt": "2026-07-26T03:32:26.922Z",
-        "__v": 0
-      },
-      "isGeneric": false,
-      "genericParent": {
-        "_id": "6a691a650f94cb20253ba6fd",
-        "name": "Dark Soy Sauce",
-        "description": "",
-        "category": "6a4db79c6119f051d5d2deb9",
-        "brand": null,
-        "isGeneric": true,
-        "genericParent": null,
-        "defaultPortionAmount": 1,
-        "defaultPortionUnit": "tbsp",
-        "nutrition": {
-          "calories": 25,
-          "protein": 0.9,
-          "carbs": 4.7,
-          "fats": 0.1,
-          "fiber": null,
-          "sodium": 1160
-        },
-        "nutritionBasis": "per-serving",
-        "lowStockThreshold": null,
-        "isAlwaysAvailable": false,
-        "defaultStorageLocation": null,
-        "defaultExpiryDurationAmount": null,
-        "defaultExpiryDurationUnit": null,
-        "imageUrl": "",
-        "notes": "",
-        "isArchived": false,
-        "createdAt": "2026-07-28T21:08:53.665Z",
-        "updatedAt": "2026-07-28T21:08:53.665Z",
-        "__v": 0
-      },
-      "barcode": "078895126389",
-      "defaultPortionAmount": 1,
-      "defaultPortionUnit": "tbsp",
-      "nutrition": {
-        "calories": 25,
-        "protein": 0.9,
-        "carbs": 4.7,
-        "fats": 0.1,
-        "fiber": null,
-        "sodium": 1160
-      },
-      "nutritionBasis": "per-serving",
-      "lowStockThreshold": 0,
-      "isAlwaysAvailable": false,
-      "defaultStorageLocation": null,
-      "defaultExpiryDurationAmount": null,
-      "defaultExpiryDurationUnit": null,
-      "imageUrl": "",
-      "notes": "",
-      "isArchived": false,
-      "createdAt": "2026-07-28T21:08:53.741Z",
-      "updatedAt": "2026-07-28T21:08:53.741Z",
-      "__v": 0
-    },
-    "storageLocation": {
-      "_id": "6a3ca04504f26ff1191471c4",
-      "name": "Refrigerator",
-      "normalizedName": "refrigerator",
-      "icon": "file-tray-stacked-outline",
-      "isDefault": true,
-      "isArchived": false,
-      "createdAt": "2026-06-25T03:28:05.781Z",
-      "updatedAt": "2026-06-25T03:28:05.781Z",
-      "__v": 0
-    },
-    "quantityAvailable": 25,
-    "quantityUnit": "tbsp",
-    "purchaseDate": "2026-07-28T00:00:00.000Z",
-    "openedDate": null,
-    "expiryDate": "2025-12-26T00:00:00.000Z",
-    "lowStockThreshold": 0,
-    "purchasePrice": null,
-    "notes": "",
-    "isFinished": false,
-    "createdAt": "2026-07-28T21:08:54.190Z",
-    "updatedAt": "2026-07-28T21:08:54.190Z",
-    "__v": 0
-  },
-  {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a691b500f94cb20253ba701",
     "ingredient": {
       "_id": "6a691b500f94cb20253ba700",
@@ -6089,6 +6102,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a691bfa0f94cb20253ba704",
     "ingredient": {
       "_id": "6a691bfa0f94cb20253ba703",
@@ -6196,6 +6211,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a691c670f94cb20253ba707",
     "ingredient": {
       "_id": "6a691c670f94cb20253ba706",
@@ -6303,6 +6320,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a691d930f94cb20253ba70a",
     "ingredient": {
       "_id": "6a691d930f94cb20253ba709",
@@ -6410,113 +6429,8 @@
     "__v": 0
   },
   {
-    "_id": "6a691de40f94cb20253ba70d",
-    "ingredient": {
-      "_id": "6a691de40f94cb20253ba70c",
-      "name": "Light Soy Sauce",
-      "description": "",
-      "category": {
-        "_id": "6a4db79c6119f051d5d2deb9",
-        "name": "Condiments & Sauces",
-        "normalizedName": "condiments & sauces",
-        "icon": "nutrition-outline",
-        "isDefault": false,
-        "isArchived": false,
-        "createdAt": "2026-07-08T02:36:12.980Z",
-        "updatedAt": "2026-07-08T02:36:12.980Z",
-        "__v": 0
-      },
-      "brand": {
-        "_id": "6a657fcaaf76383bd3b0dcae",
-        "name": "Lee Kum Kee",
-        "normalizedName": "lee kum kee",
-        "icon": null,
-        "isDefault": false,
-        "createdAt": "2026-07-26T03:32:26.922Z",
-        "updatedAt": "2026-07-26T03:32:26.922Z",
-        "__v": 0
-      },
-      "isGeneric": false,
-      "genericParent": {
-        "_id": "6a691de30f94cb20253ba70b",
-        "name": "Light Soy Sauce",
-        "description": "",
-        "category": "6a4db79c6119f051d5d2deb9",
-        "brand": null,
-        "isGeneric": true,
-        "genericParent": null,
-        "defaultPortionAmount": 15,
-        "defaultPortionUnit": "ml",
-        "nutrition": {
-          "calories": 10,
-          "protein": 0.6,
-          "carbs": 1.7,
-          "fats": 0,
-          "fiber": null,
-          "sodium": 1090
-        },
-        "nutritionBasis": "per-serving",
-        "lowStockThreshold": null,
-        "isAlwaysAvailable": false,
-        "defaultStorageLocation": null,
-        "defaultExpiryDurationAmount": null,
-        "defaultExpiryDurationUnit": null,
-        "imageUrl": "",
-        "notes": "",
-        "isArchived": false,
-        "createdAt": "2026-07-28T21:23:47.893Z",
-        "updatedAt": "2026-07-28T21:23:47.893Z",
-        "__v": 0
-      },
-      "barcode": "078895128789",
-      "defaultPortionAmount": 15,
-      "defaultPortionUnit": "ml",
-      "nutrition": {
-        "calories": 10,
-        "protein": 0.6,
-        "carbs": 1.7,
-        "fats": 0,
-        "fiber": null,
-        "sodium": 1090
-      },
-      "nutritionBasis": "per-serving",
-      "lowStockThreshold": 0,
-      "isAlwaysAvailable": false,
-      "defaultStorageLocation": null,
-      "defaultExpiryDurationAmount": null,
-      "defaultExpiryDurationUnit": null,
-      "imageUrl": "",
-      "notes": "",
-      "isArchived": false,
-      "createdAt": "2026-07-28T21:23:48.081Z",
-      "updatedAt": "2026-07-28T21:23:48.081Z",
-      "__v": 0
-    },
-    "storageLocation": {
-      "_id": "6a3ca04504f26ff1191471c4",
-      "name": "Refrigerator",
-      "normalizedName": "refrigerator",
-      "icon": "file-tray-stacked-outline",
-      "isDefault": true,
-      "isArchived": false,
-      "createdAt": "2026-06-25T03:28:05.781Z",
-      "updatedAt": "2026-06-25T03:28:05.781Z",
-      "__v": 0
-    },
-    "quantityAvailable": 270,
-    "quantityUnit": "ml",
-    "purchaseDate": "2026-07-28T00:00:00.000Z",
-    "openedDate": null,
-    "expiryDate": "2026-05-23T00:00:00.000Z",
-    "lowStockThreshold": 0,
-    "purchasePrice": null,
-    "notes": "",
-    "isFinished": false,
-    "createdAt": "2026-07-28T21:23:48.367Z",
-    "updatedAt": "2026-07-29T21:02:54.202Z",
-    "__v": 0
-  },
-  {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a691e360f94cb20253ba710",
     "ingredient": {
       "_id": "6a691e360f94cb20253ba70f",
@@ -6624,6 +6538,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a691e9b0f94cb20253ba714",
     "ingredient": {
       "_id": "6a691e9b0f94cb20253ba713",
@@ -6731,6 +6647,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6920da0f94cb20253ba718",
     "ingredient": {
       "_id": "6a6920da0f94cb20253ba717",
@@ -6838,6 +6756,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6921430f94cb20253ba71c",
     "ingredient": {
       "_id": "6a6921420f94cb20253ba71b",
@@ -6945,6 +6865,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a6959df0f94cb20253ba71d",
     "ingredient": {
       "isAlwaysAvailable": false,
@@ -7052,6 +6974,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a695ba9a2aa8e9521e5f03a",
     "ingredient": {
       "_id": "6a695ba9a2aa8e9521e5f039",
@@ -7119,6 +7043,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a695cb8a2aa8e9521e5f03c",
     "ingredient": {
       "_id": "6a695cb8a2aa8e9521e5f03b",
@@ -7182,10 +7108,12 @@
     "notes": "",
     "isFinished": false,
     "createdAt": "2026-07-29T01:51:52.909Z",
-    "updatedAt": "2026-07-29T21:07:40.310Z",
+    "updatedAt": "2026-07-30T02:15:37.684Z",
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a695d5ba2aa8e9521e5f040",
     "ingredient": {
       "_id": "6a695d5ba2aa8e9521e5f03f",
@@ -7289,10 +7217,12 @@
     "notes": "",
     "isFinished": false,
     "createdAt": "2026-07-29T01:54:35.700Z",
-    "updatedAt": "2026-07-29T01:54:35.700Z",
+    "updatedAt": "2026-07-30T02:15:37.826Z",
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a695ed1a2aa8e9521e5f042",
     "ingredient": {
       "_id": "6a695ed0a2aa8e9521e5f041",
@@ -7360,6 +7290,8 @@
     "__v": 0
   },
   {
+    "finishedAt": null,
+    "finishedByEntry": null,
     "_id": "6a696cb8e3f09c8c316d9646",
     "ingredient": {
       "_id": "6a696cb8e3f09c8c316d9645",
@@ -7464,6 +7396,442 @@
     "isFinished": false,
     "createdAt": "2026-07-29T03:00:08.549Z",
     "updatedAt": "2026-07-29T03:00:08.549Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6b8fe8bed510a8ab40a249",
+    "ingredient": {
+      "_id": "6a691a650f94cb20253ba6fe",
+      "name": "LKK's PREMIUM DARK SOY SAUCE",
+      "description": "",
+      "category": {
+        "_id": "6a4db79c6119f051d5d2deb9",
+        "name": "Condiments & Sauces",
+        "normalizedName": "condiments & sauces",
+        "icon": "nutrition-outline",
+        "isDefault": false,
+        "isArchived": false,
+        "createdAt": "2026-07-08T02:36:12.980Z",
+        "updatedAt": "2026-07-08T02:36:12.980Z",
+        "__v": 0
+      },
+      "brand": {
+        "_id": "6a657fcaaf76383bd3b0dcae",
+        "name": "Lee Kum Kee",
+        "normalizedName": "lee kum kee",
+        "icon": null,
+        "isDefault": false,
+        "createdAt": "2026-07-26T03:32:26.922Z",
+        "updatedAt": "2026-07-26T03:32:26.922Z",
+        "__v": 0
+      },
+      "isGeneric": false,
+      "genericParent": {
+        "_id": "6a691a650f94cb20253ba6fd",
+        "name": "Dark Soy Sauce",
+        "description": "",
+        "category": "6a4db79c6119f051d5d2deb9",
+        "brand": null,
+        "isGeneric": true,
+        "genericParent": null,
+        "defaultPortionAmount": 1,
+        "defaultPortionUnit": "tbsp",
+        "nutrition": {
+          "calories": 25,
+          "protein": 0.9,
+          "carbs": 4.7,
+          "fats": 0.1,
+          "fiber": null,
+          "sodium": 1160
+        },
+        "nutritionBasis": "per-serving",
+        "lowStockThreshold": null,
+        "isAlwaysAvailable": false,
+        "defaultStorageLocation": null,
+        "defaultExpiryDurationAmount": null,
+        "defaultExpiryDurationUnit": null,
+        "imageUrl": "",
+        "notes": "",
+        "isArchived": false,
+        "createdAt": "2026-07-28T21:08:53.665Z",
+        "updatedAt": "2026-07-28T21:08:53.665Z",
+        "__v": 0
+      },
+      "barcode": "078895126389",
+      "defaultPortionAmount": 1,
+      "defaultPortionUnit": "tbsp",
+      "nutrition": {
+        "calories": 25,
+        "protein": 0.9,
+        "carbs": 4.7,
+        "fats": 0.1,
+        "fiber": null,
+        "sodium": 1160
+      },
+      "nutritionBasis": "per-serving",
+      "lowStockThreshold": 0,
+      "isAlwaysAvailable": false,
+      "defaultStorageLocation": null,
+      "defaultExpiryDurationAmount": null,
+      "defaultExpiryDurationUnit": null,
+      "imageUrl": "",
+      "notes": "",
+      "isArchived": false,
+      "createdAt": "2026-07-28T21:08:53.741Z",
+      "updatedAt": "2026-07-28T21:08:53.741Z",
+      "__v": 0
+    },
+    "storageLocation": {
+      "_id": "6a3ca04504f26ff1191471c4",
+      "name": "Refrigerator",
+      "normalizedName": "refrigerator",
+      "icon": "file-tray-stacked-outline",
+      "isDefault": true,
+      "isArchived": false,
+      "createdAt": "2026-06-25T03:28:05.781Z",
+      "updatedAt": "2026-06-25T03:28:05.781Z",
+      "__v": 0
+    },
+    "quantityAvailable": 33,
+    "quantityUnit": "tbsp",
+    "purchaseDate": "2026-07-30T00:00:00.000Z",
+    "openedDate": null,
+    "expiryDate": "2028-02-11T00:00:00.000Z",
+    "lowStockThreshold": 0,
+    "purchasePrice": null,
+    "notes": "",
+    "isFinished": false,
+    "finishedAt": null,
+    "finishedByEntry": null,
+    "createdAt": "2026-07-30T17:54:48.435Z",
+    "updatedAt": "2026-07-30T17:54:48.435Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6b908dbed510a8ab40a24b",
+    "ingredient": {
+      "_id": "6a6b908dbed510a8ab40a24a",
+      "name": "Premium Soy Sauce",
+      "description": "",
+      "category": {
+        "_id": "6a4db79c6119f051d5d2deb9",
+        "name": "Condiments & Sauces",
+        "normalizedName": "condiments & sauces",
+        "icon": "nutrition-outline",
+        "isDefault": false,
+        "isArchived": false,
+        "createdAt": "2026-07-08T02:36:12.980Z",
+        "updatedAt": "2026-07-08T02:36:12.980Z",
+        "__v": 0
+      },
+      "brand": {
+        "_id": "6a657fcaaf76383bd3b0dcae",
+        "name": "Lee Kum Kee",
+        "normalizedName": "lee kum kee",
+        "icon": null,
+        "isDefault": false,
+        "createdAt": "2026-07-26T03:32:26.922Z",
+        "updatedAt": "2026-07-26T03:32:26.922Z",
+        "__v": 0
+      },
+      "isGeneric": false,
+      "genericParent": {
+        "_id": "6a691de30f94cb20253ba70b",
+        "name": "Light Soy Sauce",
+        "description": "",
+        "category": "6a4db79c6119f051d5d2deb9",
+        "brand": null,
+        "isGeneric": true,
+        "genericParent": null,
+        "defaultPortionAmount": 15,
+        "defaultPortionUnit": "ml",
+        "nutrition": {
+          "calories": 10,
+          "protein": 0.6,
+          "carbs": 1.7,
+          "fats": 0,
+          "fiber": null,
+          "sodium": 1090
+        },
+        "nutritionBasis": "per-serving",
+        "lowStockThreshold": null,
+        "isAlwaysAvailable": false,
+        "defaultStorageLocation": null,
+        "defaultExpiryDurationAmount": null,
+        "defaultExpiryDurationUnit": null,
+        "imageUrl": "",
+        "notes": "",
+        "isArchived": false,
+        "createdAt": "2026-07-28T21:23:47.893Z",
+        "updatedAt": "2026-07-28T21:23:47.893Z",
+        "__v": 0
+      },
+      "barcode": "078895126396",
+      "defaultPortionAmount": 1,
+      "defaultPortionUnit": "tbsp",
+      "nutrition": {
+        "calories": 14,
+        "protein": 1.2,
+        "carbs": 2.1,
+        "fats": 0.1,
+        "fiber": null,
+        "sodium": 1010
+      },
+      "nutritionBasis": "per-serving",
+      "lowStockThreshold": 0,
+      "isAlwaysAvailable": false,
+      "defaultStorageLocation": null,
+      "defaultExpiryDurationAmount": null,
+      "defaultExpiryDurationUnit": null,
+      "imageUrl": "",
+      "notes": "",
+      "isArchived": false,
+      "createdAt": "2026-07-30T17:57:33.359Z",
+      "updatedAt": "2026-07-30T17:57:33.359Z",
+      "__v": 0
+    },
+    "storageLocation": {
+      "_id": "6a3ca04504f26ff1191471c4",
+      "name": "Refrigerator",
+      "normalizedName": "refrigerator",
+      "icon": "file-tray-stacked-outline",
+      "isDefault": true,
+      "isArchived": false,
+      "createdAt": "2026-06-25T03:28:05.781Z",
+      "updatedAt": "2026-06-25T03:28:05.781Z",
+      "__v": 0
+    },
+    "quantityAvailable": 33,
+    "quantityUnit": "tbsp",
+    "purchaseDate": "2026-07-30T00:00:00.000Z",
+    "openedDate": null,
+    "expiryDate": "2026-11-27T00:00:00.000Z",
+    "lowStockThreshold": 0,
+    "purchasePrice": 4.99,
+    "notes": "",
+    "isFinished": false,
+    "finishedAt": null,
+    "finishedByEntry": null,
+    "createdAt": "2026-07-30T17:57:33.630Z",
+    "updatedAt": "2026-07-30T17:57:33.630Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6b918ebed510a8ab40a24f",
+    "ingredient": {
+      "_id": "6a6b918ebed510a8ab40a24e",
+      "name": "Sliced Cheddar Cheese",
+      "description": "",
+      "category": {
+        "_id": "6a68ffbe4e0143a111475307",
+        "name": "Cheese",
+        "normalizedName": "cheese",
+        "icon": "nutrition-outline",
+        "isDefault": false,
+        "isArchived": false,
+        "createdAt": "2026-07-28T19:15:10.742Z",
+        "updatedAt": "2026-07-28T19:15:10.742Z",
+        "__v": 0
+      },
+      "brand": {
+        "_id": "6a6b918dbed510a8ab40a24c",
+        "name": "Sargento",
+        "normalizedName": "sargento",
+        "icon": null,
+        "isDefault": false,
+        "createdAt": "2026-07-30T18:01:49.894Z",
+        "updatedAt": "2026-07-30T18:01:49.894Z",
+        "__v": 0
+      },
+      "isGeneric": false,
+      "genericParent": {
+        "_id": "6a6b918ebed510a8ab40a24d",
+        "name": "Chedder Cheese",
+        "description": "",
+        "category": "6a68ffbe4e0143a111475307",
+        "brand": null,
+        "isGeneric": true,
+        "genericParent": null,
+        "defaultPortionAmount": 1,
+        "defaultPortionUnit": "slice",
+        "nutrition": {
+          "calories": 70,
+          "protein": 3,
+          "carbs": 0,
+          "fats": 7,
+          "fiber": 0,
+          "sodium": 130
+        },
+        "nutritionBasis": "per-serving",
+        "lowStockThreshold": null,
+        "isAlwaysAvailable": false,
+        "defaultStorageLocation": null,
+        "defaultExpiryDurationAmount": null,
+        "defaultExpiryDurationUnit": null,
+        "imageUrl": "",
+        "notes": "",
+        "isArchived": false,
+        "createdAt": "2026-07-30T18:01:50.333Z",
+        "updatedAt": "2026-07-30T18:01:50.333Z",
+        "__v": 0
+      },
+      "barcode": "046100020463",
+      "defaultPortionAmount": 1,
+      "defaultPortionUnit": "slice",
+      "nutrition": {
+        "calories": 70,
+        "protein": 3,
+        "carbs": 0,
+        "fats": 7,
+        "fiber": 0,
+        "sodium": 130
+      },
+      "nutritionBasis": "per-serving",
+      "lowStockThreshold": 0,
+      "isAlwaysAvailable": false,
+      "defaultStorageLocation": null,
+      "defaultExpiryDurationAmount": null,
+      "defaultExpiryDurationUnit": null,
+      "imageUrl": "",
+      "notes": "",
+      "isArchived": false,
+      "createdAt": "2026-07-30T18:01:50.470Z",
+      "updatedAt": "2026-07-30T18:01:50.470Z",
+      "__v": 0
+    },
+    "storageLocation": {
+      "_id": "6a3ca04504f26ff1191471c4",
+      "name": "Refrigerator",
+      "normalizedName": "refrigerator",
+      "icon": "file-tray-stacked-outline",
+      "isDefault": true,
+      "isArchived": false,
+      "createdAt": "2026-06-25T03:28:05.781Z",
+      "updatedAt": "2026-06-25T03:28:05.781Z",
+      "__v": 0
+    },
+    "quantityAvailable": 10,
+    "quantityUnit": "slice",
+    "purchaseDate": "2026-07-30T00:00:00.000Z",
+    "openedDate": null,
+    "expiryDate": "2026-08-20T00:00:00.000Z",
+    "lowStockThreshold": 0,
+    "purchasePrice": null,
+    "notes": "",
+    "isFinished": false,
+    "finishedAt": null,
+    "finishedByEntry": null,
+    "createdAt": "2026-07-30T18:01:50.779Z",
+    "updatedAt": "2026-07-30T18:01:50.779Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6b918fbed510a8ab40a250",
+    "ingredient": {
+      "_id": "6a6b918ebed510a8ab40a24e",
+      "name": "Sliced Cheddar Cheese",
+      "description": "",
+      "category": {
+        "_id": "6a68ffbe4e0143a111475307",
+        "name": "Cheese",
+        "normalizedName": "cheese",
+        "icon": "nutrition-outline",
+        "isDefault": false,
+        "isArchived": false,
+        "createdAt": "2026-07-28T19:15:10.742Z",
+        "updatedAt": "2026-07-28T19:15:10.742Z",
+        "__v": 0
+      },
+      "brand": {
+        "_id": "6a6b918dbed510a8ab40a24c",
+        "name": "Sargento",
+        "normalizedName": "sargento",
+        "icon": null,
+        "isDefault": false,
+        "createdAt": "2026-07-30T18:01:49.894Z",
+        "updatedAt": "2026-07-30T18:01:49.894Z",
+        "__v": 0
+      },
+      "isGeneric": false,
+      "genericParent": {
+        "_id": "6a6b918ebed510a8ab40a24d",
+        "name": "Chedder Cheese",
+        "description": "",
+        "category": "6a68ffbe4e0143a111475307",
+        "brand": null,
+        "isGeneric": true,
+        "genericParent": null,
+        "defaultPortionAmount": 1,
+        "defaultPortionUnit": "slice",
+        "nutrition": {
+          "calories": 70,
+          "protein": 3,
+          "carbs": 0,
+          "fats": 7,
+          "fiber": 0,
+          "sodium": 130
+        },
+        "nutritionBasis": "per-serving",
+        "lowStockThreshold": null,
+        "isAlwaysAvailable": false,
+        "defaultStorageLocation": null,
+        "defaultExpiryDurationAmount": null,
+        "defaultExpiryDurationUnit": null,
+        "imageUrl": "",
+        "notes": "",
+        "isArchived": false,
+        "createdAt": "2026-07-30T18:01:50.333Z",
+        "updatedAt": "2026-07-30T18:01:50.333Z",
+        "__v": 0
+      },
+      "barcode": "046100020463",
+      "defaultPortionAmount": 1,
+      "defaultPortionUnit": "slice",
+      "nutrition": {
+        "calories": 70,
+        "protein": 3,
+        "carbs": 0,
+        "fats": 7,
+        "fiber": 0,
+        "sodium": 130
+      },
+      "nutritionBasis": "per-serving",
+      "lowStockThreshold": 0,
+      "isAlwaysAvailable": false,
+      "defaultStorageLocation": null,
+      "defaultExpiryDurationAmount": null,
+      "defaultExpiryDurationUnit": null,
+      "imageUrl": "",
+      "notes": "",
+      "isArchived": false,
+      "createdAt": "2026-07-30T18:01:50.470Z",
+      "updatedAt": "2026-07-30T18:01:50.470Z",
+      "__v": 0
+    },
+    "storageLocation": {
+      "_id": "6a3ca04504f26ff1191471c4",
+      "name": "Refrigerator",
+      "normalizedName": "refrigerator",
+      "icon": "file-tray-stacked-outline",
+      "isDefault": true,
+      "isArchived": false,
+      "createdAt": "2026-06-25T03:28:05.781Z",
+      "updatedAt": "2026-06-25T03:28:05.781Z",
+      "__v": 0
+    },
+    "quantityAvailable": 10,
+    "quantityUnit": "slice",
+    "purchaseDate": "2026-07-30T00:00:00.000Z",
+    "openedDate": null,
+    "expiryDate": "2026-08-20T00:00:00.000Z",
+    "lowStockThreshold": 0,
+    "purchasePrice": 3.5,
+    "notes": "",
+    "isFinished": false,
+    "finishedAt": null,
+    "finishedByEntry": null,
+    "createdAt": "2026-07-30T18:01:51.197Z",
+    "updatedAt": "2026-07-30T18:02:45.066Z",
     "__v": 0
   }
 ]

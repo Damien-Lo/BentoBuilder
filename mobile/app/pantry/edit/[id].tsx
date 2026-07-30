@@ -24,7 +24,7 @@ import type { PantryItem } from "@/src/types/pantry";
 import { DateTextInput, DurationExpiryInput, PriceInput, QuantityServingInput } from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
 import { toDateOnly } from "@/src/utils/date";
-import type { CustomUnitConversion } from "@/src/utils/unitConversion";
+import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
 type ReferenceObject = { _id?: string; id?: string; name?: string };
 
@@ -321,7 +321,7 @@ export default function EditPantryItemScreen() {
               defaultPortionAmount={item.ingredient?.defaultPortionAmount}
               defaultPortionUnit={item.ingredient?.defaultPortionUnit}
               initialMode="total"
-              customUnitConversions={customUnitConversions}
+              customUnitConversions={getIngredientConversions(item.ingredient, customUnitConversions)}
             />
           </View>
 

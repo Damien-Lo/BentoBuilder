@@ -6,7 +6,10 @@ const router = express.Router();
 
 const INGREDIENT_POPULATE = {
   path: "ingredient",
-  populate: [{ path: "category" }, { path: "brand" }],
+  // genericParent is populated so the client can resolve its unitConversions
+  // (density-style conversions fall back from a specific ingredient to its
+  // generic before the app-wide list) without a separate lookup.
+  populate: [{ path: "category" }, { path: "brand" }, { path: "genericParent" }],
 };
 
 /**

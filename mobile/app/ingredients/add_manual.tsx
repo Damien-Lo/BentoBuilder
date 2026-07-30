@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarcodeScannerModal,
   type ScannedProduct,
@@ -30,6 +30,7 @@ import {
   SectionTitle,
   SegmentedToggle,
   ToggleRow,
+  UnitConversionsEditor,
 } from "@/src/components/forms";
 
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
@@ -55,7 +56,11 @@ import { barcodesMatch } from "@/src/utils/barcode";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { todayDateInputString } from "@/src/utils/date";
 import { loadSettings } from "@/src/services/settingsService";
-import { convertAmountForUnitChange, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import {
+  convertAmountForUnitChange,
+  getIngredientConversions,
+  type CustomUnitConversion,
+} from "@/src/utils/unitConversion";
 
 interface FormState {
   ingredientId: string;
@@ -72,6 +77,8 @@ interface FormState {
 
   genericParentId: string;
   genericParentName: string;
+
+  unitConversions: CustomUnitConversion[];
 
   categoryId: string;
   categoryName: string;
@@ -116,6 +123,8 @@ const initialForm: FormState = {
 
   genericParentId: "",
   genericParentName: "",
+
+  unitConversions: [],
 
   categoryId: "",
   categoryName: "",
@@ -219,6 +228,8 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
         : ""),
 
     genericParentName: genericParent?.name ?? "",
+
+    unitConversions: ingredient.unitConversions ?? [],
 
     unit: ingredient.defaultPortionUnit ?? "",
     defaultPortionAmount: ingredient.defaultPortionAmount,
@@ -346,6 +357,9 @@ export default function AddManualPantryItemScreen() {
   // Collapsed by default — smart defaults are optional.
   const [smartDefaultsExpanded, setSmartDefaultsExpanded] = useState(false);
 
+  // Collapsed by default — unit conversions are optional.
+  const [unitConversionsExpanded, setUnitConversionsExpanded] = useState(false);
+
   const [loadingOptions, setLoadingOptions] = useState(true);
 
   const [ingredients, setIngredients] = useState<IngredientOption[]>([]);
@@ -377,6 +391,25 @@ export default function AddManualPantryItemScreen() {
   const genericIngredientOptions = ingredients.filter(
     (option) => option.isGeneric,
   );
+
+  // This ingredient's own conversions, then its selected generic parent's (if
+  // any), then the app-wide list as a last-resort fallback — mirrors the
+  // ingredient/genericParent/global resolution order used everywhere else.
+  const resolvedConversions = useMemo(() => {
+    const genericParent = form.genericParentId
+      ? ingredients.find((option) => option._id === form.genericParentId)
+      : undefined;
+
+    return getIngredientConversions(
+      {
+        unitConversions: form.unitConversions,
+        genericParent: genericParent
+          ? { unitConversions: genericParent.unitConversions }
+          : null,
+      },
+      customUnitConversions,
+    );
+  }, [form.unitConversions, form.genericParentId, ingredients, customUnitConversions]);
 
   // Adding a specific product under a known generic requires a
   // specific/branded ingredient, so generics are excluded from the Name
@@ -540,6 +573,8 @@ export default function AddManualPantryItemScreen() {
       genericParentId: option.genericParentId ?? "",
       genericParentName: option.genericParentName ?? "",
 
+      unitConversions: option.unitConversions ?? [],
+
       quantityUnit: option.unit ?? "",
       defaultPortionAmount: numberToFormValue(option.defaultPortionAmount),
 
@@ -687,7 +722,7 @@ export default function AddManualPantryItemScreen() {
         Number(current.defaultPortionAmount),
         oldUnit,
         trimmedUnit,
-        customUnitConversions,
+        resolvedConversions,
       );
       if (portionConverted != null) next.defaultPortionAmount = String(portionConverted);
 
@@ -695,7 +730,7 @@ export default function AddManualPantryItemScreen() {
         Number(current.quantityAvailable),
         oldUnit,
         trimmedUnit,
-        customUnitConversions,
+        resolvedConversions,
       );
       if (quantityConverted != null) next.quantityAvailable = String(quantityConverted);
 
@@ -703,7 +738,7 @@ export default function AddManualPantryItemScreen() {
         Number(current.lowStockThreshold),
         oldUnit,
         trimmedUnit,
-        customUnitConversions,
+        resolvedConversions,
       );
       if (thresholdConverted != null) next.lowStockThreshold = String(thresholdConverted);
 
@@ -728,7 +763,7 @@ export default function AddManualPantryItemScreen() {
         Number(current.defaultPortionAmount),
         oldUnit,
         trimmedUnit,
-        customUnitConversions,
+        resolvedConversions,
       );
       if (portionConverted != null) next.defaultPortionAmount = String(portionConverted);
 
@@ -736,7 +771,7 @@ export default function AddManualPantryItemScreen() {
         Number(current.lowStockThreshold),
         oldUnit,
         trimmedUnit,
-        customUnitConversions,
+        resolvedConversions,
       );
       if (thresholdConverted != null) next.lowStockThreshold = String(thresholdConverted);
 
@@ -938,6 +973,7 @@ export default function AddManualPantryItemScreen() {
           defaultExpiryDurationUnit:
             defaultExpiryDurationAmount != null ? form.defaultExpiryDurationUnit : null,
           nutrition,
+          unitConversions: form.unitConversions,
         });
         ingredientId = newGeneric._id;
       } else if (!ingredientId) {
@@ -1005,6 +1041,7 @@ export default function AddManualPantryItemScreen() {
           defaultExpiryDurationUnit:
             defaultExpiryDurationAmount != null ? form.defaultExpiryDurationUnit : null,
           nutrition,
+          unitConversions: form.unitConversions,
         });
         ingredientId = newIngredient._id;
       }
@@ -1491,6 +1528,45 @@ export default function AddManualPantryItemScreen() {
 
           <Pressable
             className="mt-8 flex-row items-center justify-between"
+            onPress={() => setUnitConversionsExpanded((current) => !current)}
+          >
+            <View className="mr-3 flex-1 flex-row items-center">
+              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                <Ionicons name="swap-horizontal-outline" size={18} color="#2563EB" />
+              </View>
+
+              <View className="flex-1">
+                <Text className="text-base font-bold text-slate-950">
+                  Unit conversions
+                </Text>
+                <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                  Optional — e.g. 1 tbsp = 10 g, specific to this ingredient
+                  (density varies, so this doesn&apos;t apply to other
+                  ingredients).
+                </Text>
+              </View>
+            </View>
+
+            <Ionicons
+              name={unitConversionsExpanded ? "chevron-up" : "chevron-down"}
+              size={22}
+              color="#64748B"
+            />
+          </Pressable>
+
+          {unitConversionsExpanded && (
+            <View className="mt-4">
+              <UnitConversionsEditor
+                conversions={form.unitConversions}
+                onChange={(conversions) => updateForm("unitConversions", conversions)}
+                unitOptions={units}
+                disabled={saving}
+              />
+            </View>
+          )}
+
+          <Pressable
+            className="mt-8 flex-row items-center justify-between"
             onPress={() => setSmartDefaultsExpanded((current) => !current)}
           >
             <View className="mr-3 flex-1 flex-row items-center">
@@ -1638,7 +1714,7 @@ export default function AddManualPantryItemScreen() {
                 defaultPortionUnit={form.quantityUnit.trim() || undefined}
                 entryCount={form.entryCount}
                 onChangeEntryCount={(value) => updateForm("entryCount", value)}
-                customUnitConversions={customUnitConversions}
+                customUnitConversions={resolvedConversions}
               />
 
               <FieldLabel text="Purchase date" />

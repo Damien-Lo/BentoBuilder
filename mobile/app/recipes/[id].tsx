@@ -23,7 +23,7 @@ import { getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { loadSettings } from "@/src/services/settingsService";
-import { convertUnits, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 import { getIngredientStockInUnit } from "@/src/utils/ingredientStock";
 import { RateRecipeModal } from "@/src/components/recipes/RateRecipeModal";
 
@@ -105,7 +105,7 @@ export default function RecipeDetailPage() {
         entry.quantity,
         entry.unit,
         ing.defaultPortionUnit ?? "",
-        customUnitConversions,
+        getIngredientConversions(ing, customUnitConversions, allIngredients),
       );
       if (qtyInNativeUnit == null) continue;
 
@@ -121,7 +121,7 @@ export default function RecipeDetailPage() {
 
     if (!hasData) return null;
     return { calories, protein, carbs, fats, fiber, sodium };
-  }, [recipe, customUnitConversions]);
+  }, [recipe, customUnitConversions, allIngredients]);
 
   const displayedNutrition = useMemo(() => {
     if (!totalNutrition || !recipe) return null;
@@ -446,8 +446,12 @@ export default function RecipeDetailPage() {
                 const remaining = inStock - displayQty;
                 const rawThreshold = ing?.lowStockThreshold ?? 0;
                 const threshold = ing?.defaultPortionUnit
-                  ? (convertUnits(rawThreshold, ing.defaultPortionUnit, entry.unit, customUnitConversions) ??
-                    rawThreshold)
+                  ? (convertUnits(
+                      rawThreshold,
+                      ing.defaultPortionUnit,
+                      entry.unit,
+                      getIngredientConversions(ing, customUnitConversions, allIngredients),
+                    ) ?? rawThreshold)
                   : rawThreshold;
                 const barState: "green" | "yellow" | "red" =
                   remaining > threshold ? "green" :

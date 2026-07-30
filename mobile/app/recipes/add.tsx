@@ -37,6 +37,7 @@ import { loadSettings } from "@/src/services/settingsService";
 import {
   convertAmountForUnitChange,
   convertUnits,
+  getIngredientConversions,
   getRelatedUnits,
   type CustomUnitConversion,
 } from "@/src/utils/unitConversion";
@@ -81,6 +82,8 @@ function ingredientToOption(ingredient: Ingredient) {
     fats: ingredient.nutrition?.fats ?? undefined,
     fiber: ingredient.nutrition?.fiber ?? undefined,
     sodium: ingredient.nutrition?.sodium ?? undefined,
+    unitConversions: ingredient.unitConversions ?? [],
+    genericParent: ingredient.genericParent ?? null,
   };
 }
 
@@ -174,7 +177,13 @@ export default function AddRecipePage() {
     return ingredientRows.reduce(
       (acc, row) => {
         const qty = Number(row.quantity) || 0;
-        const qtyInNativeUnit = convertUnits(qty, row.unit, row.nativeUnit, customUnitConversions);
+        const rowIngredient = ingredientOptions.find((o) => o._id === row.ingredientId);
+        const qtyInNativeUnit = convertUnits(
+          qty,
+          row.unit,
+          row.nativeUnit,
+          getIngredientConversions(rowIngredient, customUnitConversions),
+        );
         const multiplier =
           qtyInNativeUnit != null ? qtyInNativeUnit / (row.portionAmount || 1) : 0;
         return {
@@ -195,7 +204,7 @@ export default function AddRecipePage() {
         sodium: 0,
       } as RecipeNutrition,
     );
-  }, [ingredientRows, customUnitConversions]);
+  }, [ingredientRows, customUnitConversions, ingredientOptions]);
 
   const perServingNutrition = useMemo<RecipeNutrition>(() => {
     const s = Math.max(1, Number(servings) || 1);
@@ -212,7 +221,7 @@ export default function AddRecipePage() {
   const pickerRelatedUnits = useMemo(
     () =>
       pickerSelected?.unit
-        ? getRelatedUnits(pickerSelected.unit, customUnitConversions)
+        ? getRelatedUnits(pickerSelected.unit, getIngredientConversions(pickerSelected, customUnitConversions))
         : [],
     [pickerSelected, customUnitConversions],
   );
@@ -596,7 +605,7 @@ export default function AddRecipePage() {
                           Number(pickerQuantity),
                           pickerUnit || pickerSelected.unit,
                           unit,
-                          customUnitConversions,
+                          getIngredientConversions(pickerSelected, customUnitConversions),
                         );
                         if (converted != null) setPickerQuantity(String(converted));
                         setPickerUnit(unit);
@@ -635,7 +644,7 @@ export default function AddRecipePage() {
                     Number(pickerQuantity) || 0,
                     pickerUnit,
                     pickerSelected.unit,
-                    customUnitConversions,
+                    getIngredientConversions(pickerSelected, customUnitConversions),
                   );
                   return converted != null
                     ? `≈ ${Math.round(converted * 1000) / 1000} ${pickerSelected.unit} — used for nutrition & stock checks`

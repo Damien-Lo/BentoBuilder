@@ -132,7 +132,8 @@
     "isArchived": true,
     "createdAt": "2026-07-10T20:28:37.447Z",
     "updatedAt": "2026-07-10T20:30:45.410Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "recipeServings": 1,
@@ -267,7 +268,8 @@
     "isArchived": true,
     "createdAt": "2026-07-10T20:31:21.210Z",
     "updatedAt": "2026-07-10T20:31:33.889Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "recipeServings": 1,
@@ -402,7 +404,8 @@
     "isArchived": true,
     "createdAt": "2026-07-10T20:31:24.005Z",
     "updatedAt": "2026-07-10T20:31:31.649Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "recipeServings": 1,
@@ -537,7 +540,8 @@
     "isArchived": true,
     "createdAt": "2026-07-10T20:57:17.566Z",
     "updatedAt": "2026-07-10T20:59:09.399Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "status": "planned",
@@ -644,7 +648,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T19:05:31.233Z",
     "updatedAt": "2026-07-25T19:06:25.193Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "status": "planned",
@@ -751,7 +756,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T19:05:31.504Z",
     "updatedAt": "2026-07-25T19:06:25.301Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "recipeServings": 1,
@@ -765,7 +771,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T16:33:30.346Z",
     "updatedAt": "2026-07-25T16:33:37.765Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "recipeServings": 1,
@@ -872,7 +879,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T16:34:40.492Z",
     "updatedAt": "2026-07-25T16:35:16.551Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "recipeServings": 1,
@@ -886,7 +894,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T16:46:21.648Z",
     "updatedAt": "2026-07-25T16:46:27.184Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "status": "planned",
@@ -900,7 +909,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T17:11:54.000Z",
     "updatedAt": "2026-07-25T17:12:04.520Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "status": "planned",
@@ -915,7 +925,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T17:11:54.247Z",
     "updatedAt": "2026-07-25T17:12:04.607Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "status": "planned",
@@ -930,7 +941,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T17:14:18.840Z",
     "updatedAt": "2026-07-25T17:16:37.232Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "status": "planned",
@@ -945,7 +957,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T17:15:07.694Z",
     "updatedAt": "2026-07-25T17:16:37.469Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "status": "planned",
@@ -1052,7 +1065,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T17:15:30.504Z",
     "updatedAt": "2026-07-25T17:16:37.558Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "status": "planned",
@@ -1159,7 +1173,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T18:48:27.326Z",
     "updatedAt": "2026-07-25T18:48:32.629Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "status": "planned",
@@ -1174,7 +1189,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T18:48:41.340Z",
     "updatedAt": "2026-07-25T18:48:45.858Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a650fa49e36fd40468654fd",
@@ -1281,7 +1297,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T19:33:56.546Z",
     "updatedAt": "2026-07-25T19:34:42.208Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a650fa49e36fd40468654fe",
@@ -1388,7 +1405,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T19:33:56.778Z",
     "updatedAt": "2026-07-25T19:34:42.483Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a6511609e36fd4046865505",
@@ -1495,7 +1513,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T19:41:20.157Z",
     "updatedAt": "2026-07-25T19:41:29.210Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a6511779e36fd4046865506",
@@ -1602,7 +1621,8 @@
     "isArchived": true,
     "createdAt": "2026-07-25T19:41:43.200Z",
     "updatedAt": "2026-07-26T00:06:30.708Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a654f459e36fd4046865508",
@@ -1709,7 +1729,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T00:05:25.988Z",
     "updatedAt": "2026-07-26T00:08:05.453Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a654f469e36fd4046865509",
@@ -1816,7 +1837,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T00:05:26.340Z",
     "updatedAt": "2026-07-26T00:08:05.574Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a655b5a9e36fd4046865511",
@@ -1923,7 +1945,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T00:56:58.586Z",
     "updatedAt": "2026-07-26T01:04:42.949Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a655ca261183048bfc4f183",
@@ -2030,7 +2053,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:02:26.511Z",
     "updatedAt": "2026-07-26T01:02:27.205Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a655cc661183048bfc4f184",
@@ -2137,7 +2161,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:03:02.149Z",
     "updatedAt": "2026-07-26T01:05:25.966Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a655e6261183048bfc4f18a",
@@ -2244,7 +2269,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:09:54.516Z",
     "updatedAt": "2026-07-26T01:25:42.704Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a655f0e61183048bfc4f18b",
@@ -2379,7 +2405,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:12:46.337Z",
     "updatedAt": "2026-07-26T01:12:53.486Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a65647f61183048bfc4f19e",
@@ -2514,7 +2541,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:35:59.917Z",
     "updatedAt": "2026-07-26T01:42:45.525Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a65648861183048bfc4f1a0",
@@ -2622,7 +2650,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:36:08.792Z",
     "updatedAt": "2026-07-26T01:42:45.611Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a65659f61183048bfc4f1a7",
@@ -2729,7 +2758,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:40:47.477Z",
     "updatedAt": "2026-07-26T01:42:45.691Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a65660261183048bfc4f1ae",
@@ -2836,7 +2866,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:42:26.499Z",
     "updatedAt": "2026-07-26T01:43:35.913Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a65662361183048bfc4f1b1",
@@ -2943,7 +2974,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:42:59.019Z",
     "updatedAt": "2026-07-26T01:43:35.996Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a65663e61183048bfc4f1b3",
@@ -3050,7 +3082,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:43:26.525Z",
     "updatedAt": "2026-07-26T01:43:36.231Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a65665b61183048bfc4f1b5",
@@ -3157,7 +3190,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:43:55.058Z",
     "updatedAt": "2026-07-26T01:44:44.497Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a65672d61183048bfc4f1b7",
@@ -3292,7 +3326,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:47:25.750Z",
     "updatedAt": "2026-07-26T02:23:25.954Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a65679561183048bfc4f1ba",
@@ -3399,7 +3434,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T01:49:09.699Z",
     "updatedAt": "2026-07-26T01:50:37.911Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a656b9244c74c50a5ecaee3",
@@ -3414,7 +3450,8 @@
     "isArchived": true,
     "createdAt": "2026-07-26T02:06:10.645Z",
     "updatedAt": "2026-07-26T02:06:11.319Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a6a9b1c03183b6b418f5a6d",
@@ -3486,10 +3523,11 @@
     "ingredientUnit": "",
     "status": "planned",
     "notes": "",
-    "isArchived": false,
+    "isArchived": true,
     "createdAt": "2026-07-30T00:30:20.114Z",
-    "updatedAt": "2026-07-30T00:53:27.733Z",
-    "__v": 0
+    "updatedAt": "2026-07-30T02:21:55.345Z",
+    "__v": 1,
+    "stockDeductions": []
   },
   {
     "_id": "6a6a9b2803183b6b418f5a74",
@@ -3542,10 +3580,11 @@
     "ingredientUnit": "",
     "status": "planned",
     "notes": "",
-    "isArchived": false,
+    "isArchived": true,
     "createdAt": "2026-07-30T00:30:32.381Z",
-    "updatedAt": "2026-07-30T01:00:35.496Z",
-    "__v": 0
+    "updatedAt": "2026-07-30T02:21:52.240Z",
+    "__v": 1,
+    "stockDeductions": []
   },
   {
     "_id": "6a6a9da703183b6b418f5a9b",
@@ -3610,7 +3649,8 @@
     "isArchived": true,
     "createdAt": "2026-07-30T00:41:11.241Z",
     "updatedAt": "2026-07-30T00:41:30.375Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
   },
   {
     "_id": "6a6a9fdd03183b6b418f5ac9",
@@ -3675,6 +3715,250 @@
     "isArchived": true,
     "createdAt": "2026-07-30T00:50:37.249Z",
     "updatedAt": "2026-07-30T00:50:49.134Z",
-    "__v": 0
+    "__v": 0,
+    "stockDeductions": []
+  },
+  {
+    "_id": "6a6ab39ebed510a8ab40a222",
+    "date": "2026-07-29",
+    "slot": "dinner",
+    "recipe": {
+      "_id": "6a6a73f6e3f09c8c316d964a",
+      "name": "Scrambled Eggs",
+      "description": "",
+      "recipeCategory": "6a6a73f5e3f09c8c316d9649",
+      "mealCategory": [
+        "breakfast"
+      ],
+      "servings": 1,
+      "defaultPortionUnit": "serving",
+      "nutrition": {
+        "calories": 316,
+        "protein": 19,
+        "carbs": 1.3,
+        "fats": 25.9,
+        "fiber": 0,
+        "sodium": 214
+      },
+      "nutritionBasis": "per-serving",
+      "imageUrl": "",
+      "notes": "",
+      "isArchived": false,
+      "isConfirmed": true,
+      "ingredientList": [
+        {
+          "ingredient": "6a695cb8a2aa8e9521e5f03b",
+          "quantity": 3,
+          "unit": "egg"
+        },
+        {
+          "ingredient": "6a695d5ba2aa8e9521e5f03e",
+          "quantity": 1,
+          "unit": "tbsp"
+        }
+      ],
+      "instructions": [
+        "Start in the cold pan with beaten eggs and butter",
+        "Periodically take the pan on and off the heat constantly stirring until the eggs come out creamy and smooth"
+      ],
+      "createdAt": "2026-07-29T21:43:18.080Z",
+      "updatedAt": "2026-07-30T00:09:36.072Z",
+      "__v": 0,
+      "scores": []
+    },
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "status": "planned",
+    "notes": "",
+    "isArchived": true,
+    "stockDeductions": [],
+    "createdAt": "2026-07-30T02:14:54.204Z",
+    "updatedAt": "2026-07-30T02:21:49.983Z",
+    "__v": 2
+  },
+  {
+    "_id": "6a6ab4e6bed510a8ab40a23b",
+    "date": "2026-07-29",
+    "slot": "snack",
+    "recipe": {
+      "_id": "6a6ab4b9bed510a8ab40a232",
+      "name": "Test Recepie",
+      "description": "Re",
+      "recipeCategory": "6a6ab4b9bed510a8ab40a231",
+      "mealCategory": [
+        "snack",
+        "dinner",
+        "lunch",
+        "breakfast"
+      ],
+      "servings": 1,
+      "defaultPortionUnit": "serving",
+      "nutritionBasis": "per-serving",
+      "imageUrl": "",
+      "notes": "",
+      "isArchived": true,
+      "isConfirmed": false,
+      "ingredientList": [
+        {
+          "ingredient": "6a6ab45ebed510a8ab40a22b",
+          "quantity": 1,
+          "unit": "g"
+        },
+        {
+          "ingredient": "6a6ab487bed510a8ab40a22e",
+          "quantity": 20,
+          "unit": "g"
+        },
+        {
+          "ingredient": "6a6ab419bed510a8ab40a228",
+          "quantity": 50,
+          "unit": "g"
+        }
+      ],
+      "instructions": [],
+      "nutrition": {
+        "calories": 0,
+        "protein": 0,
+        "carbs": 0,
+        "fats": 0,
+        "fiber": 0,
+        "sodium": 0
+      },
+      "scores": [],
+      "createdAt": "2026-07-30T02:19:37.304Z",
+      "updatedAt": "2026-07-30T02:21:31.905Z",
+      "__v": 0
+    },
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "status": "planned",
+    "notes": "",
+    "isArchived": true,
+    "stockDeductions": [],
+    "createdAt": "2026-07-30T02:20:22.217Z",
+    "updatedAt": "2026-07-30T02:21:27.889Z",
+    "__v": 2
+  },
+  {
+    "_id": "6a6ab020bed510a8ab40a1fe",
+    "date": "2026-07-30",
+    "slot": "snack",
+    "recipeServings": 1,
+    "ingredient": {
+      "_id": "6a6813ff25be1fa8f500170e",
+      "name": "Granulated Chicken Flavor Soup Base Mix",
+      "description": "",
+      "category": {
+        "_id": "6a667c5f1211fa2ec98bf39a",
+        "name": "Stock & Soups",
+        "normalizedName": "stock & soups",
+        "icon": "nutrition-outline",
+        "isDefault": false,
+        "isArchived": false,
+        "createdAt": "2026-07-26T21:30:07.690Z",
+        "updatedAt": "2026-07-26T21:30:07.690Z",
+        "__v": 0
+      },
+      "brand": {
+        "_id": "6a6813ff25be1fa8f500170c",
+        "name": "Totole Chicken Flavor Soup Base Mix",
+        "normalizedName": "totole chicken flavor soup base mix",
+        "icon": null,
+        "isDefault": false,
+        "createdAt": "2026-07-28T02:29:19.568Z",
+        "updatedAt": "2026-07-28T02:29:19.568Z",
+        "__v": 0
+      },
+      "isGeneric": false,
+      "genericParent": "6a6813ff25be1fa8f500170d",
+      "barcode": "6922130101461",
+      "defaultPortionAmount": 0.25,
+      "defaultPortionUnit": "tsp",
+      "nutrition": {
+        "calories": 0,
+        "protein": 0,
+        "carbs": 0,
+        "fats": 0,
+        "fiber": 0,
+        "sodium": 180
+      },
+      "nutritionBasis": "per-serving",
+      "lowStockThreshold": 0,
+      "isAlwaysAvailable": false,
+      "defaultStorageLocation": null,
+      "defaultExpiryDurationAmount": null,
+      "defaultExpiryDurationUnit": null,
+      "imageUrl": "",
+      "notes": "",
+      "isArchived": false,
+      "createdAt": "2026-07-28T02:29:19.841Z",
+      "updatedAt": "2026-07-28T02:29:19.841Z",
+      "__v": 0
+    },
+    "ingredientQuantity": 10,
+    "ingredientUnit": "tsp",
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": true,
+    "stockDeductions": [],
+    "createdAt": "2026-07-30T02:00:00.185Z",
+    "updatedAt": "2026-07-30T02:00:52.612Z",
+    "__v": 4
+  },
+  {
+    "_id": "6a6ab2a2bed510a8ab40a21b",
+    "date": "2026-07-30",
+    "slot": "dinner",
+    "recipeServings": 1,
+    "ingredient": {
+      "_id": "6a690a504e0143a11147531e",
+      "name": "Salmon Fillet",
+      "description": "",
+      "category": {
+        "_id": "6a4db79b6119f051d5d2deb2",
+        "name": "Protein",
+        "normalizedName": "protein",
+        "icon": "nutrition-outline",
+        "isDefault": false,
+        "isArchived": false,
+        "createdAt": "2026-07-08T02:36:11.453Z",
+        "updatedAt": "2026-07-08T02:36:11.453Z",
+        "__v": 0
+      },
+      "brand": null,
+      "isGeneric": true,
+      "genericParent": null,
+      "defaultPortionAmount": 100,
+      "defaultPortionUnit": "g",
+      "nutrition": {
+        "calories": 208,
+        "protein": 20,
+        "carbs": 0,
+        "fats": 13,
+        "fiber": 0,
+        "sodium": 59
+      },
+      "nutritionBasis": "per-serving",
+      "lowStockThreshold": 0,
+      "isAlwaysAvailable": false,
+      "defaultStorageLocation": null,
+      "defaultExpiryDurationAmount": null,
+      "defaultExpiryDurationUnit": null,
+      "imageUrl": "",
+      "notes": "",
+      "isArchived": false,
+      "createdAt": "2026-07-28T20:00:16.052Z",
+      "updatedAt": "2026-07-28T20:00:16.052Z",
+      "__v": 0
+    },
+    "ingredientQuantity": 200,
+    "ingredientUnit": "g",
+    "status": "planned",
+    "notes": "",
+    "isArchived": true,
+    "stockDeductions": [],
+    "createdAt": "2026-07-30T02:10:42.489Z",
+    "updatedAt": "2026-07-30T02:11:05.301Z",
+    "__v": 2
   }
 ]

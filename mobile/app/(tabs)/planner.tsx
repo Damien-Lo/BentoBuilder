@@ -458,7 +458,7 @@ export default function HomeScreen() {
       return;
     }
 
-    void performConfirm(entry, getDefaultDeductionInstructions(requirements, conversions));
+    void performConfirm(entry, getDefaultDeductionInstructions(requirements));
   }
 
   function handleToggleEntryStatus(entry: MealPlanEntry) {
@@ -473,8 +473,7 @@ export default function HomeScreen() {
     if (!pendingConfirmEntry) return;
     setResolvingSaving(true);
     try {
-      const conversions = appSettings?.unitConversions ?? [];
-      const instructions = getResolvedDeductionInstructions(ambiguousRequirements, selections, conversions);
+      const instructions = getResolvedDeductionInstructions(ambiguousRequirements, selections);
       await performConfirm(pendingConfirmEntry, instructions);
       setShowResolveModal(false);
       setPendingConfirmEntry(null);

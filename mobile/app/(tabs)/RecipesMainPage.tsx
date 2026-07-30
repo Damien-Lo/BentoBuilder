@@ -31,7 +31,7 @@ import { deleteMeal, getMeals, type Meal } from "@/src/services/mealApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { loadSettings } from "@/src/services/settingsService";
-import { convertUnits, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 import { getIngredientStockInUnit } from "@/src/utils/ingredientStock";
 
 type SortMode = "category" | "meal";
@@ -94,7 +94,12 @@ function getMealAvailability(
       const remaining = inStock - entry.quantity;
       const rawThreshold = ing.lowStockThreshold ?? 0;
       const threshold = ing.defaultPortionUnit
-        ? (convertUnits(rawThreshold, ing.defaultPortionUnit, entry.unit, customConversions) ?? rawThreshold)
+        ? (convertUnits(
+            rawThreshold,
+            ing.defaultPortionUnit,
+            entry.unit,
+            getIngredientConversions(ing, customConversions, allIngredients),
+          ) ?? rawThreshold)
         : rawThreshold;
       const state: "green" | "yellow" | "red" =
         remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
@@ -357,7 +362,12 @@ export default function RecipesMainPage() {
       const remaining = inStock - entry.quantity;
       const rawThreshold = ing.lowStockThreshold ?? 0;
       const threshold = ing.defaultPortionUnit
-        ? (convertUnits(rawThreshold, ing.defaultPortionUnit, entry.unit, customUnitConversions) ?? rawThreshold)
+        ? (convertUnits(
+            rawThreshold,
+            ing.defaultPortionUnit,
+            entry.unit,
+            getIngredientConversions(ing, customUnitConversions, ingredients),
+          ) ?? rawThreshold)
         : rawThreshold;
       const state: "green" | "yellow" | "red" =
         remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";

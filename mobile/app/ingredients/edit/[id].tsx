@@ -26,6 +26,7 @@ import {
   SearchableObjectDropdown,
   SectionTitle,
   ToggleRow,
+  UnitConversionsEditor,
 } from "@/src/components/forms";
 
 import {
@@ -71,7 +72,11 @@ import {
   suggestStorageLocation,
 } from "@/src/utils/pantryDefaults";
 import { loadSettings } from "@/src/services/settingsService";
-import { convertAmountForUnitChange, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import {
+  convertAmountForUnitChange,
+  getIngredientConversions,
+  type CustomUnitConversion,
+} from "@/src/utils/unitConversion";
 
 // How many of the ingredient's most recent pantry entries to consider when
 // suggesting a default storage location / expiry duration.
@@ -136,6 +141,7 @@ interface FormState {
   fats: string;
   fiber: string;
   sodium: string;
+  unitConversions: CustomUnitConversion[];
 }
 
 function ingredientToForm(ingredient: Ingredient): FormState {
@@ -188,6 +194,7 @@ function ingredientToForm(ingredient: Ingredient): FormState {
       ingredient.nutrition?.sodium != null
         ? String(ingredient.nutrition.sodium)
         : "",
+    unitConversions: ingredient.unitConversions ?? [],
   };
 }
 
@@ -217,6 +224,7 @@ export default function IngredientDetailScreen() {
   const [wantsDefaultExpiry, setWantsDefaultExpiry] = useState(false);
   const [nutritionExpanded, setNutritionExpanded] = useState(false);
   const [smartDefaultsExpanded, setSmartDefaultsExpanded] = useState(false);
+  const [unitConversionsExpanded, setUnitConversionsExpanded] = useState(false);
   const [quickAddPurchaseDate, setQuickAddPurchaseDate] = useState(
     todayDateInputString(),
   );
@@ -575,6 +583,7 @@ export default function IngredientDetailScreen() {
           fiber: optionalNumber(form.fiber),
           sodium: optionalNumber(form.sodium),
         },
+        unitConversions: form.unitConversions,
       });
 
       const updatedForm = ingredientToForm(updated);
@@ -656,12 +665,16 @@ export default function IngredientDetailScreen() {
       }
 
       const next = { ...current, defaultPortionUnit: trimmed };
+      const resolvedConversions = getIngredientConversions(
+        { unitConversions: current.unitConversions, genericParent: currentIngredient?.genericParent },
+        customUnitConversions,
+      );
 
       const amountConverted = convertAmountForUnitChange(
         Number(current.defaultPortionAmount),
         oldUnit,
         trimmed,
-        customUnitConversions,
+        resolvedConversions,
       );
       if (amountConverted != null) next.defaultPortionAmount = String(amountConverted);
 
@@ -669,7 +682,7 @@ export default function IngredientDetailScreen() {
         Number(current.lowStockThreshold),
         oldUnit,
         trimmed,
-        customUnitConversions,
+        resolvedConversions,
       );
       if (thresholdConverted != null) next.lowStockThreshold = String(thresholdConverted);
 
@@ -1236,6 +1249,44 @@ export default function IngredientDetailScreen() {
               )}
 
               <Pressable
+                className="mt-8 flex-row items-center justify-between"
+                onPress={() => setUnitConversionsExpanded((current) => !current)}
+              >
+                <View className="mr-3 flex-1 flex-row items-center">
+                  <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                    <Ionicons name="swap-horizontal-outline" size={18} color="#2563EB" />
+                  </View>
+
+                  <View className="flex-1">
+                    <Text className="text-base font-bold text-slate-950">
+                      Unit conversions
+                    </Text>
+                    <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                      Optional — e.g. 1 tbsp = 10 g, specific to this ingredient (density
+                      varies, so this doesn&apos;t apply to other ingredients).
+                    </Text>
+                  </View>
+                </View>
+
+                <Ionicons
+                  name={unitConversionsExpanded ? "chevron-up" : "chevron-down"}
+                  size={22}
+                  color="#64748B"
+                />
+              </Pressable>
+
+              {unitConversionsExpanded && (
+                <View className="mt-4">
+                  <UnitConversionsEditor
+                    conversions={form.unitConversions}
+                    onChange={(conversions) => updateForm("unitConversions", conversions)}
+                    unitOptions={units}
+                    disabled={saving}
+                  />
+                </View>
+              )}
+
+              <Pressable
                 disabled={saving}
                 className="mt-8 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
                 onPress={handleDeleteIngredient}
@@ -1447,6 +1498,31 @@ export default function IngredientDetailScreen() {
                       </Text>
                     </View>
                   ) : null}
+                </View>
+              ) : null}
+
+              {/* Unit conversions */}
+              {ingredient.unitConversions && ingredient.unitConversions.length > 0 ? (
+                <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
+                  <Text className="mb-3 text-base font-bold text-slate-900">
+                    Unit conversions
+                  </Text>
+
+                  {ingredient.unitConversions.map((conversion, index) => (
+                    <View
+                      key={`${conversion.unit}-${conversion.baseUnit}-${index}`}
+                      className={`flex-row items-center justify-between ${
+                        index < ingredient.unitConversions!.length - 1 ? "mb-2" : ""
+                      }`}
+                    >
+                      <Text className="text-sm text-slate-500">
+                        1 {conversion.unit}
+                      </Text>
+                      <Text className="text-sm font-medium text-slate-900">
+                        = {conversion.factor} {conversion.baseUnit}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
               ) : null}
 
@@ -1779,7 +1855,7 @@ export default function IngredientDetailScreen() {
                     defaultPortionUnit={ingredient.defaultPortionUnit}
                     entryCount={quickAddEntryCount}
                     onChangeEntryCount={setQuickAddEntryCount}
-                    customUnitConversions={customUnitConversions}
+                    customUnitConversions={getIngredientConversions(ingredient, customUnitConversions)}
                   />
                 </View>
 

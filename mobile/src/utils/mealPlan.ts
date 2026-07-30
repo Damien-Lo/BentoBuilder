@@ -6,7 +6,7 @@ import type { Recipe } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { getIngredientStockInUnit } from "./ingredientStock";
-import { convertUnits, type CustomUnitConversion } from "./unitConversion";
+import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -175,7 +175,12 @@ function ingredientAvailabilityState(
   const remaining = inStock - quantity;
   const rawThreshold = ingredient.lowStockThreshold ?? 0;
   const threshold = ingredient.defaultPortionUnit
-    ? (convertUnits(rawThreshold, ingredient.defaultPortionUnit, unit, customConversions) ?? rawThreshold)
+    ? (convertUnits(
+        rawThreshold,
+        ingredient.defaultPortionUnit,
+        unit,
+        getIngredientConversions(ingredient, customConversions, allIngredients),
+      ) ?? rawThreshold)
     : rawThreshold;
   return remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
 }

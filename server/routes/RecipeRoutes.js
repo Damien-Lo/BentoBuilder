@@ -2,7 +2,7 @@ import express from "express";
 import Recipe from "../models/Recipe.js";
 import UserProfile from "../models/UserProfile.js";
 import { isRecipeIngredientAvailable } from "../services/ingredientAvailability.js";
-import { convertUnits } from "../services/unitConversion.js";
+import { convertUnits, getIngredientConversions } from "../services/unitConversion.js";
 
 const router = express.Router();
 
@@ -41,7 +41,7 @@ router.get("/:id", async (req, res) => {
       .populate("recipeCategory")
       .populate({
         path: "ingredientList.ingredient",
-        populate: [{ path: "category" }, { path: "brand" }],
+        populate: [{ path: "category" }, { path: "brand" }, { path: "genericParent" }],
       });
 
     if (!recipe) {
@@ -201,7 +201,7 @@ function normalizeMealCategory(body) {
 // Returns null if no ingredient has nutrition data.
 async function calcNutrition(recipe) {
   const profile = await UserProfile.findOne().select("unitConversions").lean();
-  const customConversions = profile?.unitConversions ?? [];
+  const globalConversions = profile?.unitConversions ?? [];
 
   const servings = Math.max(1, recipe.servings || 1);
   let calories = 0, protein = 0, carbs = 0, fats = 0, fiber = 0, sodium = 0;
@@ -215,7 +215,7 @@ async function calcNutrition(recipe) {
       entry.quantity,
       entry.unit,
       ing.defaultPortionUnit,
-      customConversions,
+      getIngredientConversions(ing, globalConversions),
     );
     if (quantityInNativeUnit == null) continue;
 
@@ -244,7 +244,7 @@ router.post("/", async (req, res) => {
     await recipe.populate("recipeCategory");
     await recipe.populate({
       path: "ingredientList.ingredient",
-      populate: [{ path: "category" }, { path: "brand" }],
+      populate: [{ path: "category" }, { path: "brand" }, { path: "genericParent" }],
     });
 
     const nutrition = await calcNutrition(recipe);
@@ -279,7 +279,7 @@ router.patch("/:id", async (req, res) => {
       .populate("recipeCategory")
       .populate({
         path: "ingredientList.ingredient",
-        populate: [{ path: "category" }, { path: "brand" }],
+        populate: [{ path: "category" }, { path: "brand" }, { path: "genericParent" }],
       });
 
     if (!recipe) {

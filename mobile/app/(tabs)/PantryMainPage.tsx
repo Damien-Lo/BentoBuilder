@@ -44,7 +44,7 @@ import { SplitPantryItemModal } from "@/src/components/pantry/SplitPantryItemMod
 import type { PantryItem } from "@/src/types/pantry";
 import { barcodesMatch } from "@/src/utils/barcode";
 import { loadSettings } from "@/src/services/settingsService";
-import { convertUnits, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 import { daysUntil } from "@/src/utils/date";
 
 type ReferenceObject = {
@@ -299,7 +299,7 @@ export default function PantryMainPage() {
         Number(pantryItem.quantityAvailable ?? 0),
         pantryItem.quantityUnit,
         parent.defaultPortionUnit,
-        customUnitConversions,
+        getIngredientConversions(itemIngredient, customUnitConversions, ingredients),
       );
       if (converted == null) continue;
 

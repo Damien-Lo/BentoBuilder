@@ -203,3 +203,50 @@ export function getRelatedUnits(
 
   return Array.from(related);
 }
+
+// Structural rather than the concrete Ingredient type — this app has more
+// than one Ingredient shape floating around (recipeApi's PopulatedIngredient,
+// types/pantry's Ingredient, etc.), and every one of them at least has these.
+export interface ConversionSource {
+  _id?: string;
+  unitConversions?: CustomUnitConversion[];
+  genericParent?: string | (ConversionSource & { _id?: string }) | null;
+}
+
+/**
+ * The conversion list to actually use for one ingredient — its own entries
+ * first (most specific, e.g. "this particular peanut butter is denser"),
+ * then its genericParent's (e.g. "peanut butter is generally ~16g/tbsp"),
+ * then the app-wide list as a last-resort fallback for anything that isn't
+ * really density-dependent. `convertUnits` doesn't need to know about this
+ * layering — it just searches whatever array it's handed in order, so a
+ * match on the ingredient's own entry is found before a same-pair global
+ * entry would ever be tried.
+ *
+ * `allIngredients` is only needed when `genericParent` is an unpopulated id
+ * string rather than the populated object — pass the already-loaded
+ * ingredient list so the parent's own conversions can be looked up.
+ */
+export function getIngredientConversions(
+  ingredient: ConversionSource | null | undefined,
+  globalConversions: CustomUnitConversion[] = [],
+  allIngredients: ConversionSource[] = [],
+): CustomUnitConversion[] {
+  if (!ingredient) return globalConversions;
+
+  const own = ingredient.unitConversions ?? [];
+
+  let generic: CustomUnitConversion[] = [];
+  const parentRef = ingredient.genericParent;
+  if (parentRef) {
+    if (typeof parentRef === "object" && parentRef.unitConversions) {
+      generic = parentRef.unitConversions;
+    } else {
+      const parentId = typeof parentRef === "string" ? parentRef : parentRef._id;
+      const found = allIngredients.find((i) => i._id === parentId);
+      generic = found?.unitConversions ?? [];
+    }
+  }
+
+  return [...own, ...generic, ...globalConversions];
+}

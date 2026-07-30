@@ -49,7 +49,12 @@ import {
   type GroceryItemStatus,
 } from "@/src/services/groceryListApi";
 import { loadSettings } from "@/src/services/settingsService";
-import { convertAmountForUnitChange, getRelatedUnits, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import {
+  convertAmountForUnitChange,
+  getIngredientConversions,
+  getRelatedUnits,
+  type CustomUnitConversion,
+} from "@/src/utils/unitConversion";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import {
@@ -194,7 +199,7 @@ export default function GroceryListScreen() {
   // volume, or a custom conversion linked to it) make sense to buy it in —
   // otherwise fall back to the full suggestion list for free-text items.
   const unitDropdownOptions = selectedIngredient?.defaultPortionUnit
-    ? getRelatedUnits(selectedIngredient.defaultPortionUnit, customUnitConversions)
+    ? getRelatedUnits(selectedIngredient.defaultPortionUnit, getIngredientConversions(selectedIngredient, customUnitConversions))
     : unitOptions;
 
   const toBuyItems = useMemo(
@@ -412,7 +417,10 @@ export default function GroceryListScreen() {
   );
 
   const logUnitOptions = loggingFullIngredient?.defaultPortionUnit
-    ? getRelatedUnits(loggingFullIngredient.defaultPortionUnit, customUnitConversions)
+    ? getRelatedUnits(
+        loggingFullIngredient.defaultPortionUnit,
+        getIngredientConversions(loggingFullIngredient, customUnitConversions),
+      )
     : unitOptions;
 
   const recentLoggingHistory = useMemo(() => {
@@ -922,7 +930,7 @@ export default function GroceryListScreen() {
                           Number(logQuantity),
                           logUnit,
                           unit,
-                          customUnitConversions,
+                          getIngredientConversions(loggingFullIngredient, customUnitConversions),
                         );
                         if (converted != null) setLogQuantity(String(converted));
                         setLogUnit(unit);
@@ -938,7 +946,7 @@ export default function GroceryListScreen() {
                           Number(logQuantity),
                           logUnit,
                           unit,
-                          customUnitConversions,
+                          getIngredientConversions(loggingFullIngredient, customUnitConversions),
                         );
                         if (converted != null) setLogQuantity(String(converted));
                         setLogUnit(unit);

@@ -41,7 +41,7 @@ import {
   suggestExpiryDuration,
   suggestStorageLocation,
 } from "@/src/utils/pantryDefaults";
-import type { CustomUnitConversion } from "@/src/utils/unitConversion";
+import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
 type SelectedIngredientCardProps = {
   ingredient: Ingredient;
@@ -571,7 +571,7 @@ export default function AddPantryItemByIngredientScreen() {
               defaultPortionUnit={selectedIngredient.defaultPortionUnit}
               entryCount={entryCount}
               onChangeEntryCount={setEntryCount}
-              customUnitConversions={customUnitConversions}
+              customUnitConversions={getIngredientConversions(selectedIngredient, customUnitConversions)}
             />
 
             {/* Storage location */}

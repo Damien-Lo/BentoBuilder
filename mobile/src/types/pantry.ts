@@ -1,3 +1,5 @@
+import type { CustomUnitConversion } from "@/src/utils/unitConversion";
+
 export interface Nutrition {
   calories: number | null;
   protein: number | null;
@@ -15,13 +17,14 @@ export interface Ingredient {
   brand: string;
   barcode: string | null;
   isGeneric?: boolean;
-  genericParent?: string | { _id: string } | null;
+  genericParent?: string | { _id: string; unitConversions?: CustomUnitConversion[] } | null;
   defaultPortionAmount: number;
   defaultPortionUnit: string;
   nutrition: Nutrition;
   nutritionBasis: "per-serving" | "per-100g";
   lowStockThreshold?: number | null;
   isAlwaysAvailable?: boolean;
+  unitConversions?: CustomUnitConversion[];
   imageUrl: string;
   notes: string;
   createdAt: string;

@@ -15,8 +15,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
+import { getUnitSuggestions } from "@/src/services/optionsApi";
 import { DAY_ABBREVS } from "@/src/utils/mealPlan";
-import type { CustomUnitConversion } from "@/src/utils/unitConversion";
+import { UnitConversionsEditor } from "@/src/components/forms";
 
 function SectionHeader({ title }: { title: string }) {
   return (
@@ -139,39 +140,14 @@ export default function SettingsScreen() {
     unitConversions: [],
   });
 
-  const [newConversionUnit, setNewConversionUnit] = useState("");
-  const [newConversionFactor, setNewConversionFactor] = useState("");
-  const [newConversionBaseUnit, setNewConversionBaseUnit] = useState("");
-
-  function addUnitConversion() {
-    const unit = newConversionUnit.trim();
-    const baseUnit = newConversionBaseUnit.trim();
-    const factor = Number(newConversionFactor);
-
-    if (!unit || !baseUnit || !Number.isFinite(factor) || factor <= 0) {
-      Alert.alert(
-        "Incomplete conversion",
-        "Enter a unit, a positive amount, and the unit it converts to.",
-      );
-      return;
-    }
-
-    const conversion: CustomUnitConversion = { unit, baseUnit, factor };
-    patch({ unitConversions: [...settings.unitConversions, conversion] });
-    setNewConversionUnit("");
-    setNewConversionFactor("");
-    setNewConversionBaseUnit("");
-  }
-
-  function removeUnitConversion(index: number) {
-    patch({
-      unitConversions: settings.unitConversions.filter((_, i) => i !== index),
-    });
-  }
+  const [units, setUnits] = useState<string[]>([]);
 
   useEffect(() => {
-    loadSettings()
-      .then(setSettings)
+    Promise.all([loadSettings(), getUnitSuggestions()])
+      .then(([loadedSettings, loadedUnits]) => {
+        setSettings(loadedSettings);
+        setUnits(Array.isArray(loadedUnits) ? loadedUnits : []);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -262,61 +238,11 @@ export default function SettingsScreen() {
             Built-in conversions (g/kg, mL/L, cup/tbsp/tsp, oz/lb, etc.) apply
             automatically. Add your own for anything else, e.g. 1 packet = 340 g.
           </Text>
-          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            {settings.unitConversions.length === 0 ? (
-              <View className="px-4 py-4">
-                <Text className="text-sm text-slate-400">No custom conversions yet.</Text>
-              </View>
-            ) : (
-              settings.unitConversions.map((conversion, index) => (
-                <View
-                  key={`${conversion.unit}-${conversion.baseUnit}-${index}`}
-                  className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3.5 last:border-b-0"
-                >
-                  <Text className="flex-1 text-base text-slate-700">
-                    1 {conversion.unit} = {conversion.factor} {conversion.baseUnit}
-                  </Text>
-                  <Pressable onPress={() => removeUnitConversion(index)} hitSlop={10}>
-                    <Ionicons name="close-circle" size={20} color="#94A3B8" />
-                  </Pressable>
-                </View>
-              ))
-            )}
-
-            <View className="flex-row items-center gap-2 border-t border-slate-100 px-4 py-3.5">
-              <TextInput
-                value={newConversionUnit}
-                onChangeText={setNewConversionUnit}
-                placeholder="unit"
-                placeholderTextColor="#94A3B8"
-                autoCapitalize="none"
-                className="w-20 rounded-xl bg-slate-100 px-3 py-2 text-base text-slate-900"
-              />
-              <Text className="text-slate-400">=</Text>
-              <TextInput
-                value={newConversionFactor}
-                onChangeText={setNewConversionFactor}
-                placeholder="340"
-                placeholderTextColor="#94A3B8"
-                keyboardType="decimal-pad"
-                className="w-16 rounded-xl bg-slate-100 px-3 py-2 text-base text-slate-900"
-              />
-              <TextInput
-                value={newConversionBaseUnit}
-                onChangeText={setNewConversionBaseUnit}
-                placeholder="g"
-                placeholderTextColor="#94A3B8"
-                autoCapitalize="none"
-                className="w-16 rounded-xl bg-slate-100 px-3 py-2 text-base text-slate-900"
-              />
-              <Pressable
-                onPress={addUnitConversion}
-                className="ml-auto h-10 w-10 items-center justify-center rounded-xl bg-blue-600 active:bg-blue-700"
-              >
-                <Ionicons name="add" size={22} color="white" />
-              </Pressable>
-            </View>
-          </View>
+          <UnitConversionsEditor
+            conversions={settings.unitConversions}
+            onChange={(conversions) => patch({ unitConversions: conversions })}
+            unitOptions={units}
+          />
 
           {/* ── Daily nutrition goals ── */}
           <SectionHeader title="Daily Nutrition Goals" />

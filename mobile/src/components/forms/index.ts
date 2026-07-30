@@ -12,4 +12,5 @@ export { SearchableObjectDropdown } from "./SearchableObjectDropdown";
 export { SectionTitle } from "./SectionTitle";
 export { SegmentedToggle } from "./SegmentedToggle";
 export { ToggleRow } from "./ToggleRow";
+export { UnitConversionsEditor } from "./UnitConversionsEditor";
 export { UnitFamilyDropdown } from "./UnitFamilyDropdown";

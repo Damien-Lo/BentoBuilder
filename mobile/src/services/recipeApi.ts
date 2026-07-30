@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/src/config/api";
+import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 export type MealCategory = "breakfast" | "lunch" | "dinner" | "snack";
 
@@ -25,7 +26,8 @@ export interface PopulatedIngredient {
   lowStockThreshold?: number | null;
   isGeneric?: boolean;
   isAlwaysAvailable?: boolean;
-  genericParent?: string | { _id: string; name?: string } | null;
+  unitConversions?: CustomUnitConversion[];
+  genericParent?: string | { _id: string; name?: string; unitConversions?: CustomUnitConversion[] } | null;
 }
 
 export interface RecipeIngredientEntry {

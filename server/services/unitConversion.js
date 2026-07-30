@@ -117,3 +117,25 @@ export function convertibleTotal(amountsByUnit, targetUnit, customConversions = 
   }
   return total;
 }
+
+/**
+ * The conversion list to actually use for one ingredient — its own entries
+ * first (most specific), then its genericParent's (if it has one and
+ * `genericParent` is populated with its own unitConversions), then the
+ * global UserProfile list as a last-resort fallback. `convertUnits` doesn't
+ * need to know about this layering at all — it just gets handed the merged
+ * array and searches it in order, so a match on the ingredient's own entry
+ * is found (and returned) before a same-pair global entry ever gets tried.
+ */
+export function getIngredientConversions(ingredient, globalConversions = []) {
+  if (!ingredient) return globalConversions;
+
+  const own = ingredient.unitConversions ?? [];
+  const parent =
+    ingredient.genericParent && typeof ingredient.genericParent === "object"
+      ? ingredient.genericParent
+      : null;
+  const generic = parent?.unitConversions ?? [];
+
+  return [...own, ...generic, ...globalConversions];
+}

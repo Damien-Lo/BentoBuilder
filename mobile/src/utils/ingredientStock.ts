@@ -1,10 +1,11 @@
-import { convertibleTotal, type CustomUnitConversion } from "./unitConversion";
+import { convertibleTotal, getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
 
 interface StockLookupIngredient {
   _id: string;
   isGeneric?: boolean;
   isAlwaysAvailable?: boolean;
-  genericParent?: string | { _id?: string } | null;
+  genericParent?: string | { _id?: string; unitConversions?: CustomUnitConversion[] } | null;
+  unitConversions?: CustomUnitConversion[];
 }
 
 interface StockLookupPantryItem {
@@ -58,5 +59,20 @@ export function getIngredientStockInUnit(
     byUnit[item.quantityUnit] = (byUnit[item.quantityUnit] ?? 0) + (item.quantityAvailable ?? 0);
   }
 
-  return convertibleTotal(byUnit, targetUnit, customConversions);
+  // Prefers this ingredient's own density-style conversions (and its
+  // generic parent's), falling back to each variant's own — pooled here
+  // since byUnit above is already merged across variants by unit, not
+  // tracked per source ingredient — and finally the app-wide list.
+  const variantConversions = ingredient.isGeneric
+    ? allIngredients
+        .filter((other) => extractId(other.genericParent) === ingredient._id)
+        .flatMap((other) => other.unitConversions ?? [])
+    : [];
+  const resolvedConversions = [
+    ...getIngredientConversions(ingredient, [], allIngredients),
+    ...variantConversions,
+    ...customConversions,
+  ];
+
+  return convertibleTotal(byUnit, targetUnit, resolvedConversions);
 }

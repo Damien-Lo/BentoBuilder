@@ -1,9 +1,9 @@
 import Ingredient from "../models/Ingredient.js";
 import PantryItem from "../models/PantryItem.js";
 import UserProfile from "../models/UserProfile.js";
-import { convertibleTotal } from "./unitConversion.js";
+import { convertibleTotal, getIngredientConversions } from "./unitConversion.js";
 
-async function getCustomUnitConversions() {
+async function getGlobalUnitConversions() {
   const profile = await UserProfile.findOne().select("unitConversions").lean();
   return profile?.unitConversions ?? [];
 }
@@ -22,17 +22,18 @@ async function getCustomUnitConversions() {
  * unit conversion, so callers compare like-for-like units.
  */
 export async function getAvailableStock(ingredientId) {
-  const ingredient = await Ingredient.findById(ingredientId);
+  const ingredient = await Ingredient.findById(ingredientId).populate("genericParent");
   if (!ingredient) return null;
 
   let ingredientIds = [ingredient._id];
   let variantCount = 0;
+  let variants = [];
 
   if (ingredient.isGeneric) {
-    const variants = await Ingredient.find({
+    variants = await Ingredient.find({
       genericParent: ingredient._id,
       isArchived: false,
-    }).select("_id");
+    }).select("_id unitConversions");
     variantCount = variants.length;
     ingredientIds = [ingredient._id, ...variants.map((v) => v._id)];
   }
@@ -50,8 +51,16 @@ export async function getAvailableStock(ingredientId) {
 
   // Convert whatever's convertible into the ingredient's own unit — a 750ml
   // bottle and 0.75L both count toward the same total — and skip anything
-  // that isn't convertible.
-  const customConversions = await getCustomUnitConversions();
+  // that isn't convertible. Prefers this ingredient's own density-style
+  // conversions (and its generic parent's), falling back to each variant's
+  // own (pooled here since stock above is already merged across variants by
+  // unit, not tracked per source ingredient) and finally the global list.
+  const globalConversions = await getGlobalUnitConversions();
+  const customConversions = [
+    ...getIngredientConversions(ingredient, []),
+    ...variants.flatMap((v) => v.unitConversions ?? []),
+    ...globalConversions,
+  ];
   const totalInOwnUnit = convertibleTotal(byUnit, ingredient.defaultPortionUnit, customConversions);
 
   const isOutOfStock = !ingredient.isAlwaysAvailable && totalInOwnUnit <= 0;
@@ -82,12 +91,22 @@ export async function getAvailableStock(ingredientId) {
  * calling for "2 cups" soy sauce checked against pantry stock in mL) —
  * whatever's convertible into the recipe's unit counts toward the total.
  */
-export async function isRecipeIngredientAvailable({ ingredient, quantity, unit }) {
-  const stock = await getAvailableStock(ingredient);
+export async function isRecipeIngredientAvailable({ ingredient: ingredientId, quantity, unit }) {
+  const stock = await getAvailableStock(ingredientId);
   if (!stock) return false;
   if (stock.isAlwaysAvailable) return true;
 
-  const customConversions = await getCustomUnitConversions();
+  const ingredient = await Ingredient.findById(ingredientId).populate("genericParent");
+  const variants = stock.isGeneric
+    ? await Ingredient.find({ genericParent: ingredientId, isArchived: false }).select("unitConversions")
+    : [];
+  const globalConversions = await getGlobalUnitConversions();
+  const customConversions = [
+    ...getIngredientConversions(ingredient, []),
+    ...variants.flatMap((v) => v.unitConversions ?? []),
+    ...globalConversions,
+  ];
+
   const available = convertibleTotal(stock.byUnit, unit, customConversions);
   return available >= quantity;
 }

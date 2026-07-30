@@ -1,4 +1,5 @@
 import type { DurationUnit } from "@/src/utils/date";
+import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 export interface SelectOption {
   _id: string;
@@ -19,6 +20,8 @@ export interface IngredientOption
 
   genericParentId?: string;
   genericParentName?: string;
+
+  unitConversions?: CustomUnitConversion[];
 
   lowStockThreshold?: number;
   isAlwaysAvailable?: boolean;

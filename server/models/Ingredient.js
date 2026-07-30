@@ -38,6 +38,21 @@ const nutritionSchema = new mongoose.Schema(
   },
 );
 
+// Same shape as UserProfile's global unitConversions — but scoped to this
+// one ingredient (e.g. "1 tbsp = 10 g" for ginger specifically), since
+// mass<->volume factors are density-dependent and don't hold across
+// unrelated ingredients. Resolution order (see services/unitConversion.js's
+// getIngredientConversions): this ingredient's own entries, then its
+// genericParent's, then UserProfile's global list as a last-resort fallback.
+const unitConversionSchema = new mongoose.Schema(
+  {
+    unit: { type: String, required: true, trim: true },
+    baseUnit: { type: String, required: true, trim: true },
+    factor: { type: Number, required: true, min: 0 },
+  },
+  { _id: false },
+);
+
 const ingredientSchema = new mongoose.Schema(
   {
     name: {
@@ -141,6 +156,11 @@ const ingredientSchema = new mongoose.Schema(
       type: String,
       enum: ["day", "week", "month", "year", null],
       default: null,
+    },
+
+    unitConversions: {
+      type: [unitConversionSchema],
+      default: [],
     },
 
     imageUrl: {
