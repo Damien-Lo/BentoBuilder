@@ -53,6 +53,8 @@ import type { PantryItem } from "@/src/types/pantry";
 import { barcodesMatch } from "@/src/utils/barcode";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { todayDateInputString } from "@/src/utils/date";
+import { loadSettings } from "@/src/services/settingsService";
+import { convertAmountForUnitChange, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
 interface FormState {
   ingredientId: string;
@@ -78,6 +80,7 @@ interface FormState {
 
   quantityAvailable: string;
   quantityUnit: string;
+  entryCount: string;
   purchaseDate: string;
   expiryDate: string;
   lowStockThreshold: string;
@@ -120,6 +123,7 @@ const initialForm: FormState = {
 
   quantityAvailable: "",
   quantityUnit: "",
+  entryCount: "1",
   purchaseDate: todayDateInputString(),
   expiryDate: "",
   lowStockThreshold: "0",
@@ -365,6 +369,7 @@ export default function AddManualPantryItemScreen() {
   const [wantsDefaultExpiry, setWantsDefaultExpiry] = useState(false);
 
   const [units, setUnits] = useState<string[]>([]);
+  const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
 
   const genericIngredientOptions = ingredients.filter(
     (option) => option.isGeneric,
@@ -389,12 +394,14 @@ export default function AddManualPantryItemScreen() {
           loadedStorageLocations,
           loadedBrands,
           loadedUnits,
+          loadedSettings,
         ] = await Promise.all([
           getIngredients(),
           getCategories(),
           getStorageLocations(),
           getBrands(),
           getUnitSuggestions(),
+          loadSettings(),
         ]);
 
         if (cancelled) {
@@ -433,6 +440,7 @@ export default function AddManualPantryItemScreen() {
         setBrands(Array.isArray(loadedBrands) ? loadedBrands : []);
 
         setUnits(Array.isArray(loadedUnits) ? loadedUnits : []);
+        setCustomUnitConversions(loadedSettings.unitConversions ?? []);
       } catch (error) {
         const message =
           error instanceof Error
@@ -637,7 +645,7 @@ export default function AddManualPantryItemScreen() {
     return brand;
   }
 
-  function handleAddUnit(unit: string) {
+  function registerUnit(unit: string) {
     const trimmedUnit = unit.trim();
 
     if (!trimmedUnit) {
@@ -655,8 +663,82 @@ export default function AddManualPantryItemScreen() {
             first.localeCompare(second),
           );
     });
+  }
 
-    updateForm("quantityUnit", trimmedUnit);
+  // "Serving size" and "Pantry entry"'s Quantity both share form.quantityUnit
+  // — this changes it directly (bypassing QuantityServingInput, which owns
+  // its own quantityAvailable conversion), so it converts BOTH numbers that
+  // are anchored to that unit.
+  function handleServingUnitChange(unit: string) {
+    const trimmedUnit = unit.trim();
+    if (!trimmedUnit) return;
+
+    registerUnit(trimmedUnit);
+
+    setForm((current) => {
+      const oldUnit = current.quantityUnit;
+      const next = { ...current, quantityUnit: trimmedUnit };
+      if (!oldUnit || trimmedUnit === oldUnit) return next;
+
+      const portionConverted = convertAmountForUnitChange(
+        Number(current.defaultPortionAmount),
+        oldUnit,
+        trimmedUnit,
+        customUnitConversions,
+      );
+      if (portionConverted != null) next.defaultPortionAmount = String(portionConverted);
+
+      const quantityConverted = convertAmountForUnitChange(
+        Number(current.quantityAvailable),
+        oldUnit,
+        trimmedUnit,
+        customUnitConversions,
+      );
+      if (quantityConverted != null) next.quantityAvailable = String(quantityConverted);
+
+      const thresholdConverted = convertAmountForUnitChange(
+        Number(current.lowStockThreshold),
+        oldUnit,
+        trimmedUnit,
+        customUnitConversions,
+      );
+      if (thresholdConverted != null) next.lowStockThreshold = String(thresholdConverted);
+
+      return next;
+    });
+  }
+
+  // Pantry Quantity's own unit dropdown (inside QuantityServingInput) already
+  // converts quantityAvailable itself before calling this — this only needs
+  // to also convert defaultPortionAmount/lowStockThreshold, which share the
+  // same unit.
+  function handlePantryUnitChange(unit: string) {
+    const trimmedUnit = unit.trim();
+    if (!trimmedUnit) return;
+
+    setForm((current) => {
+      const oldUnit = current.quantityUnit;
+      const next = { ...current, quantityUnit: trimmedUnit };
+      if (!oldUnit || trimmedUnit === oldUnit) return next;
+
+      const portionConverted = convertAmountForUnitChange(
+        Number(current.defaultPortionAmount),
+        oldUnit,
+        trimmedUnit,
+        customUnitConversions,
+      );
+      if (portionConverted != null) next.defaultPortionAmount = String(portionConverted);
+
+      const thresholdConverted = convertAmountForUnitChange(
+        Number(current.lowStockThreshold),
+        oldUnit,
+        trimmedUnit,
+        customUnitConversions,
+      );
+      if (thresholdConverted != null) next.lowStockThreshold = String(thresholdConverted);
+
+      return next;
+    });
   }
 
   /**
@@ -930,14 +1012,18 @@ export default function AddManualPantryItemScreen() {
           throw new Error("Enter a storage location.");
         }
 
-        newPantryItem = await addIngredientToPantry({
-          ingredient: ingredientId,
-          storageLocation: storageLocation._id,
-          quantityAvailable,
-          quantityUnit: form.quantityUnit.trim(),
-          purchaseDate: form.purchaseDate.trim() || undefined,
-          expiryDate: form.expiryDate.trim() || undefined,
-        });
+        const entryCount = Math.max(1, Math.round(Number(form.entryCount)) || 1);
+
+        for (let i = 0; i < entryCount; i++) {
+          newPantryItem = await addIngredientToPantry({
+            ingredient: ingredientId,
+            storageLocation: storageLocation._id,
+            quantityAvailable,
+            quantityUnit: form.quantityUnit.trim(),
+            purchaseDate: form.purchaseDate.trim() || undefined,
+            expiryDate: form.expiryDate.trim() || undefined,
+          });
+        }
       }
 
       if (params.groceryItemId) {
@@ -1254,7 +1340,7 @@ export default function AddManualPantryItemScreen() {
                 options={units}
                 selectedValue={form.quantityUnit}
                 placeholder="Search or type a new unit"
-                onSelect={handleAddUnit}
+                onSelect={handleServingUnitChange}
               />
             </View>
           </View>
@@ -1533,11 +1619,14 @@ export default function AddManualPantryItemScreen() {
                 quantityAvailable={form.quantityAvailable}
                 quantityUnit={form.quantityUnit}
                 onChangeQuantity={(value) => updateForm("quantityAvailable", value)}
-                onChangeUnit={(value) => updateForm("quantityUnit", value)}
+                onChangeUnit={handlePantryUnitChange}
                 unitOptions={units}
-                onAddUnit={handleAddUnit}
+                onAddUnit={registerUnit}
                 defaultPortionAmount={optionalNumber(form.defaultPortionAmount)}
                 defaultPortionUnit={form.quantityUnit.trim() || undefined}
+                entryCount={form.entryCount}
+                onChangeEntryCount={(value) => updateForm("entryCount", value)}
+                customUnitConversions={customUnitConversions}
               />
 
               <FieldLabel text="Purchase date" />

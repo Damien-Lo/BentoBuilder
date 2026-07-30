@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  CreateGenericIngredientModal,
   FieldLabel,
   FormInput,
   SearchableObjectDropdown,
@@ -34,6 +35,7 @@ import {
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { loadSettings } from "@/src/services/settingsService";
 import {
+  convertAmountForUnitChange,
   convertUnits,
   getRelatedUnits,
   type CustomUnitConversion,
@@ -50,6 +52,7 @@ type IngredientRow = {
   key: string;
   ingredientId: string;
   ingredientName: string;
+  isGeneric: boolean;
   quantity: string;
   unit: string;
   // The ingredient's own unit — quantity/unit above may be in a different
@@ -69,6 +72,7 @@ function ingredientToOption(ingredient: Ingredient) {
   return {
     _id: ingredient._id,
     name: ingredient.name,
+    isGeneric: ingredient.isGeneric ?? false,
     portionAmount: ingredient.defaultPortionAmount ?? 1,
     unit: ingredient.defaultPortionUnit ?? "",
     calories: ingredient.nutrition?.calories ?? undefined,
@@ -91,6 +95,9 @@ export default function AddRecipePage() {
 
   // Form fields
   const [name, setName] = useState("");
+  // Manual curation status — "want to try" is the default for a new recipe;
+  // distinct from a meal-plan entry's own planned/confirmed status.
+  const [isConfirmed, setIsConfirmed] = useState(false);
   const [mealCategories, setMealCategories] = useState<MealCategory[]>([]);
   const [recipeCategoryId, setRecipeCategoryId] = useState("");
   const [recipeCategoryName, setRecipeCategoryName] = useState("");
@@ -101,6 +108,9 @@ export default function AddRecipePage() {
 
   // Ingredient rows
   const [ingredientRows, setIngredientRows] = useState<IngredientRow[]>([]);
+  // Set while the picker card below is editing an already-added row in
+  // place, rather than staging a brand-new one.
+  const [editingRowKey, setEditingRowKey] = useState<string | null>(null);
 
   // Ingredient picker state
   const [pickerIngredientId, setPickerIngredientId] = useState("");
@@ -112,6 +122,7 @@ export default function AddRecipePage() {
   const [customUnitConversions, setCustomUnitConversions] = useState<
     CustomUnitConversion[]
   >([]);
+  const [showCreateIngredient, setShowCreateIngredient] = useState(false);
 
   // Instructions
   const [steps, setSteps] = useState<string[]>([]);
@@ -232,25 +243,49 @@ export default function AddRecipePage() {
     const nativeUnit = pickerSelected?.unit ?? "serving";
     const unit = pickerUnit || nativeUnit;
 
-    setIngredientRows((prev) => [
-      ...prev,
-      {
-        key: `${pickerIngredientId}-${Date.now()}`,
-        ingredientId: pickerIngredientId,
-        ingredientName: pickerIngredientName,
-        quantity: pickerQuantity,
-        unit,
-        nativeUnit,
-        portionAmount: pickerSelected?.portionAmount ?? 1,
-        calories: pickerSelected?.calories ?? null,
-        protein: pickerSelected?.protein ?? null,
-        carbs: pickerSelected?.carbs ?? null,
-        fats: pickerSelected?.fats ?? null,
-        fiber: pickerSelected?.fiber ?? null,
-        sodium: pickerSelected?.sodium ?? null,
-      },
-    ]);
+    const row: IngredientRow = {
+      key: editingRowKey ?? `${pickerIngredientId}-${Date.now()}`,
+      ingredientId: pickerIngredientId,
+      ingredientName: pickerIngredientName,
+      isGeneric: pickerSelected?.isGeneric ?? false,
+      quantity: pickerQuantity,
+      unit,
+      nativeUnit,
+      portionAmount: pickerSelected?.portionAmount ?? 1,
+      calories: pickerSelected?.calories ?? null,
+      protein: pickerSelected?.protein ?? null,
+      carbs: pickerSelected?.carbs ?? null,
+      fats: pickerSelected?.fats ?? null,
+      fiber: pickerSelected?.fiber ?? null,
+      sodium: pickerSelected?.sodium ?? null,
+    };
 
+    if (editingRowKey) {
+      setIngredientRows((prev) => prev.map((r) => (r.key === editingRowKey ? row : r)));
+    } else {
+      setIngredientRows((prev) => [...prev, row]);
+    }
+
+    setEditingRowKey(null);
+    setPickerIngredientId("");
+    setPickerIngredientName("");
+    setPickerQuantity("1");
+    setPickerUnit("");
+    setPickerSelected(null);
+  }
+
+  function startEditingRow(row: IngredientRow) {
+    const option = ingredientOptions.find((o) => o._id === row.ingredientId) ?? null;
+    setEditingRowKey(row.key);
+    setPickerIngredientId(row.ingredientId);
+    setPickerIngredientName(row.ingredientName);
+    setPickerQuantity(row.quantity);
+    setPickerUnit(row.unit);
+    setPickerSelected(option);
+  }
+
+  function cancelEditingRow() {
+    setEditingRowKey(null);
     setPickerIngredientId("");
     setPickerIngredientName("");
     setPickerQuantity("1");
@@ -324,6 +359,7 @@ export default function AddRecipePage() {
           .map((s) => s.trim())
           .filter((s) => s.length > 0),
         nutrition: hasNutritionData ? perServingNutrition : undefined,
+        isConfirmed,
       });
 
       router.back();
@@ -346,6 +382,7 @@ export default function AddRecipePage() {
   }
 
   return (
+    <>
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         className="flex-1"
@@ -433,6 +470,38 @@ export default function AddRecipePage() {
             })}
           </View>
 
+          <FieldLabel text="Status" />
+          <View className="mt-1 mb-4 flex-row overflow-hidden rounded-2xl border border-slate-200">
+            <Pressable
+              className={`flex-1 items-center py-3 ${
+                !isConfirmed ? "bg-blue-600" : "bg-white"
+              }`}
+              onPress={() => setIsConfirmed(false)}
+            >
+              <Text
+                className={`text-xs font-semibold ${
+                  !isConfirmed ? "text-white" : "text-slate-600"
+                }`}
+              >
+                Want to try
+              </Text>
+            </Pressable>
+            <Pressable
+              className={`flex-1 items-center border-l border-slate-200 py-3 ${
+                isConfirmed ? "bg-blue-600" : "bg-white"
+              }`}
+              onPress={() => setIsConfirmed(true)}
+            >
+              <Text
+                className={`text-xs font-semibold ${
+                  isConfirmed ? "text-white" : "text-slate-600"
+                }`}
+              >
+                Confirmed
+              </Text>
+            </Pressable>
+          </View>
+
           <FieldLabel text="Category" />
           <SearchableObjectDropdown<RecipeCategory>
             options={recipeCategories}
@@ -497,6 +566,12 @@ export default function AddRecipePage() {
                 setPickerSelected(option);
                 setPickerUnit(option.unit);
               }}
+              onCreateNew={() => setShowCreateIngredient(true)}
+              renderSubtitle={(option) =>
+                option.isGeneric ? (
+                  <Text className="mt-0.5 text-xs font-medium text-violet-600">Generic</Text>
+                ) : null
+              }
             />
 
             <View className="mt-3 flex-row items-end">
@@ -516,7 +591,16 @@ export default function AddRecipePage() {
                     <UnitFamilyDropdown
                       unit={pickerUnit || pickerSelected.unit}
                       options={pickerRelatedUnits}
-                      onSelect={setPickerUnit}
+                      onSelect={(unit) => {
+                        const converted = convertAmountForUnitChange(
+                          Number(pickerQuantity),
+                          pickerUnit || pickerSelected.unit,
+                          unit,
+                          customUnitConversions,
+                        );
+                        if (converted != null) setPickerQuantity(String(converted));
+                        setPickerUnit(unit);
+                      }}
                     />
                   </View>
                 ) : (
@@ -532,9 +616,17 @@ export default function AddRecipePage() {
                 className="mb-1 rounded-2xl bg-blue-600 px-5 py-3 active:bg-blue-700"
                 onPress={handleAddIngredient}
               >
-                <Text className="font-semibold text-white">Add</Text>
+                <Text className="font-semibold text-white">
+                  {editingRowKey ? "Update" : "Add"}
+                </Text>
               </Pressable>
             </View>
+
+            {editingRowKey && (
+              <Pressable className="mt-1 self-start" onPress={cancelEditingRow}>
+                <Text className="text-sm font-semibold text-slate-500">Cancel edit</Text>
+              </Pressable>
+            )}
 
             {pickerSelected?.unit && pickerUnit && pickerUnit !== pickerSelected.unit ? (
               <Text className="mt-2 text-xs text-slate-400">
@@ -557,13 +649,14 @@ export default function AddRecipePage() {
           {ingredientRows.length > 0 && (
             <View className="mb-4 rounded-2xl border border-slate-200 bg-white overflow-hidden">
               {ingredientRows.map((row, index) => (
-                <View
+                <Pressable
                   key={row.key}
                   className={`flex-row items-center px-4 py-3 ${
                     index < ingredientRows.length - 1
                       ? "border-b border-slate-100"
                       : ""
-                  }`}
+                  } ${editingRowKey === row.key ? "bg-blue-50" : "active:bg-slate-50"}`}
+                  onPress={() => startEditingRow(row)}
                 >
                   <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
                     <Text className="text-xs font-bold text-blue-700">
@@ -572,9 +665,16 @@ export default function AddRecipePage() {
                   </View>
 
                   <View className="ml-3 flex-1">
-                    <Text className="font-semibold text-slate-900">
-                      {row.ingredientName}
-                    </Text>
+                    <View className="flex-row items-center">
+                      <Text className="font-semibold text-slate-900">
+                        {row.ingredientName}
+                      </Text>
+                      {row.isGeneric && (
+                        <Text className="ml-1.5 text-xs font-medium text-violet-600">
+                          Generic
+                        </Text>
+                      )}
+                    </View>
                     <Text className="mt-0.5 text-sm text-slate-500">
                       {row.quantity}{" "}
                       {row.unit
@@ -585,7 +685,11 @@ export default function AddRecipePage() {
 
                   <Pressable
                     className="ml-2 p-1"
-                    onPress={() => removeIngredientRow(row.key)}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      if (editingRowKey === row.key) cancelEditingRow();
+                      removeIngredientRow(row.key);
+                    }}
                   >
                     <Ionicons
                       name="close-circle-outline"
@@ -593,7 +697,7 @@ export default function AddRecipePage() {
                       color="#94A3B8"
                     />
                   </Pressable>
-                </View>
+                </Pressable>
               ))}
             </View>
           )}
@@ -693,5 +797,21 @@ export default function AddRecipePage() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+
+    <CreateGenericIngredientModal
+      visible={showCreateIngredient}
+      initialName={pickerIngredientName}
+      onClose={() => setShowCreateIngredient(false)}
+      onCreated={(ingredient) => {
+        const option = ingredientToOption(ingredient);
+        setIngredientOptions((prev) => [...prev, option]);
+        setPickerIngredientId(option._id);
+        setPickerIngredientName(option.name);
+        setPickerSelected(option);
+        setPickerUnit(option.unit);
+        setShowCreateIngredient(false);
+      }}
+    />
+    </>
   );
 }

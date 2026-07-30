@@ -1,7 +1,9 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { CreatableStringDropdown } from "./CreatableStringDropdown";
+import { convertAmountForUnitChange, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
 type QuantityMode = "servings" | "total";
 
@@ -18,6 +20,16 @@ interface QuantityServingInputProps {
   // "total" is a better default when editing an entry that already has a
   // real total amount saved — "servings" (the default) suits a fresh add.
   initialMode?: QuantityMode;
+  // When both are provided, shows a "× N entries" stepper below the amount
+  // — e.g. "2 × 100 g" creates 2 separate pantry entries of 100g each
+  // rather than one 200g entry. The caller owns the looping at submit time;
+  // this component only collects the count.
+  entryCount?: string;
+  onChangeEntryCount?: (value: string) => void;
+  // Lets switching the unit within a convertible family (e.g. g -> kg)
+  // rescale the entered amount to the equivalent value, instead of leaving
+  // the number as-is under a now-mismatched unit.
+  customUnitConversions?: CustomUnitConversion[];
 }
 
 // Lets the user record how much of an ingredient they have either as a
@@ -35,6 +47,9 @@ export function QuantityServingInput({
   defaultPortionUnit,
   disabled = false,
   initialMode,
+  entryCount,
+  onChangeEntryCount,
+  customUnitConversions = [],
 }: QuantityServingInputProps) {
   const hasPortionInfo =
     defaultPortionAmount != null && defaultPortionAmount > 0 && !!defaultPortionUnit;
@@ -63,6 +78,25 @@ export function QuantityServingInput({
     hasPortionInfo && Number.isFinite(parsedServings)
       ? Math.round(parsedServings * (defaultPortionAmount as number) * 1000) / 1000
       : null;
+
+  const parsedEntryCount = Math.max(1, Math.round(Number(entryCount)) || 1);
+  const effectiveUnit = quantityUnit || defaultPortionUnit || "";
+
+  function adjustEntryCount(delta: number) {
+    onChangeEntryCount?.(String(Math.max(1, parsedEntryCount + delta)));
+  }
+
+  function handleUnitSelect(unit: string) {
+    const converted = convertAmountForUnitChange(
+      Number(quantityAvailable),
+      quantityUnit,
+      unit,
+      customUnitConversions,
+    );
+    if (converted != null) onChangeQuantity(String(converted));
+    onChangeUnit(unit);
+    onAddUnit?.(unit);
+  }
 
   function handleServingsChange(value: string) {
     setServingsText(value);
@@ -144,12 +178,47 @@ export function QuantityServingInput({
               selectedValue={quantityUnit}
               placeholder="Unit"
               disabled={disabled}
-              onSelect={(unit) => {
-                onChangeUnit(unit);
-                onAddUnit?.(unit);
-              }}
+              onSelect={handleUnitSelect}
             />
           </View>
+        </View>
+      )}
+
+      {onChangeEntryCount && (
+        <View className="mt-3">
+          <Text className="mb-1.5 text-xs font-semibold text-slate-500">Number of entries</Text>
+          <View className="flex-row items-center">
+            <Pressable
+              disabled={disabled}
+              onPress={() => adjustEntryCount(-1)}
+              className="h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white active:bg-slate-50"
+            >
+              <Ionicons name="remove" size={18} color="#475569" />
+            </Pressable>
+            <TextInput
+              value={entryCount}
+              onChangeText={onChangeEntryCount}
+              editable={!disabled}
+              keyboardType="number-pad"
+              className="mx-2 h-11 w-16 rounded-2xl border border-slate-200 bg-white text-center text-base text-slate-950"
+            />
+            <Pressable
+              disabled={disabled}
+              onPress={() => adjustEntryCount(1)}
+              className="h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white active:bg-slate-50"
+            >
+              <Ionicons name="add" size={18} color="#475569" />
+            </Pressable>
+          </View>
+          {parsedEntryCount > 1 && (
+            <Text className="mt-1.5 text-xs text-slate-400">
+              Creates {parsedEntryCount} separate pantry entries of{" "}
+              {mode === "servings" && computedTotal != null
+                ? `${computedTotal} ${defaultPortionUnit}`
+                : `${quantityAvailable || "0"} ${effectiveUnit}`}{" "}
+              each.
+            </Text>
+          )}
         </View>
       )}
     </View>

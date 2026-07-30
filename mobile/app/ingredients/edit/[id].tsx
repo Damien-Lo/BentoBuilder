@@ -68,6 +68,8 @@ import {
   suggestExpiryDuration,
   suggestStorageLocation,
 } from "@/src/utils/pantryDefaults";
+import { loadSettings } from "@/src/services/settingsService";
+import { convertAmountForUnitChange, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
 // How many of the ingredient's most recent pantry entries to consider when
 // suggesting a default storage location / expiry duration.
@@ -199,6 +201,7 @@ export default function IngredientDetailScreen() {
   const [brands, setBrands] = useState<SelectOption[]>([]);
   const [categories, setCategories] = useState<SelectOption[]>([]);
   const [units, setUnits] = useState<string[]>([]);
+  const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -223,6 +226,7 @@ export default function IngredientDetailScreen() {
   const [quickAddLocationTouched, setQuickAddLocationTouched] = useState(false);
   const [quickAddQuantity, setQuickAddQuantity] = useState("");
   const [quickAddQuantityUnit, setQuickAddQuantityUnit] = useState("");
+  const [quickAddEntryCount, setQuickAddEntryCount] = useState("1");
   const [savingEntry, setSavingEntry] = useState(false);
 
   const [genericAvailability, setGenericAvailability] =
@@ -244,6 +248,7 @@ export default function IngredientDetailScreen() {
           loadedBrands,
           loadedCategories,
           loadedUnits,
+          loadedSettings,
         ] = await Promise.all([
           getIngredientById(id),
           getPantryItems(),
@@ -251,6 +256,7 @@ export default function IngredientDetailScreen() {
           getBrands(),
           getCategories(),
           getUnitSuggestions(),
+          loadSettings(),
         ]);
 
         if (cancelled) return;
@@ -293,6 +299,7 @@ export default function IngredientDetailScreen() {
         setBrands(Array.isArray(loadedBrands) ? loadedBrands : []);
         setCategories(Array.isArray(loadedCategories) ? loadedCategories : []);
         setUnits(Array.isArray(loadedUnits) ? loadedUnits : []);
+        setCustomUnitConversions(loadedSettings.unitConversions ?? []);
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -606,7 +613,36 @@ export default function IngredientDetailScreen() {
 
   function handleAddUnit(unit: string) {
     registerUnit(unit);
-    updateForm("defaultPortionUnit", unit.trim());
+    const trimmed = unit.trim();
+
+    setForm((current) => {
+      if (!current) return current;
+
+      const oldUnit = current.defaultPortionUnit;
+      if (!oldUnit || trimmed === oldUnit) {
+        return { ...current, defaultPortionUnit: trimmed };
+      }
+
+      const next = { ...current, defaultPortionUnit: trimmed };
+
+      const amountConverted = convertAmountForUnitChange(
+        Number(current.defaultPortionAmount),
+        oldUnit,
+        trimmed,
+        customUnitConversions,
+      );
+      if (amountConverted != null) next.defaultPortionAmount = String(amountConverted);
+
+      const thresholdConverted = convertAmountForUnitChange(
+        Number(current.lowStockThreshold),
+        oldUnit,
+        trimmed,
+        customUnitConversions,
+      );
+      if (thresholdConverted != null) next.lowStockThreshold = String(thresholdConverted);
+
+      return next;
+    });
   }
 
   async function handleDeleteEntry(entryId: string) {
@@ -665,22 +701,29 @@ export default function IngredientDetailScreen() {
         throw new Error("Enter a storage location.");
       }
 
-      const newEntry = await addIngredientToPantry({
-        ingredient: id,
-        storageLocation: storageLocation._id,
-        quantityAvailable: quickAddQuantity ? Number(quickAddQuantity) : 0,
-        quantityUnit: quickAddQuantityUnit.trim() || lastEntry.quantityUnit,
-        purchaseDate: quickAddPurchaseDate || undefined,
-        expiryDate: quickAddExpiryDate || undefined,
-        lowStockThreshold: lastEntry.lowStockThreshold,
-      });
+      const entryCount = Math.max(1, Math.round(Number(quickAddEntryCount)) || 1);
+      const newEntries: PantryItem[] = [];
+      for (let i = 0; i < entryCount; i++) {
+        newEntries.push(
+          await addIngredientToPantry({
+            ingredient: id,
+            storageLocation: storageLocation._id,
+            quantityAvailable: quickAddQuantity ? Number(quickAddQuantity) : 0,
+            quantityUnit: quickAddQuantityUnit.trim() || lastEntry.quantityUnit,
+            purchaseDate: quickAddPurchaseDate || undefined,
+            expiryDate: quickAddExpiryDate || undefined,
+            lowStockThreshold: lastEntry.lowStockThreshold,
+          }),
+        );
+      }
 
-      setPantryItems((current) => [...current, newEntry]);
+      setPantryItems((current) => [...current, ...newEntries]);
       setQuickAddPurchaseDate(todayDateInputString());
       setQuickAddExpiryDate("");
       setQuickAddExpiryTouched(false);
       setQuickAddLocationTouched(false);
       setQuickAddQuantity("");
+      setQuickAddEntryCount("1");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not add pantry entry.";
@@ -1684,6 +1727,9 @@ export default function IngredientDetailScreen() {
                     onAddUnit={registerUnit}
                     defaultPortionAmount={ingredient.defaultPortionAmount}
                     defaultPortionUnit={ingredient.defaultPortionUnit}
+                    entryCount={quickAddEntryCount}
+                    onChangeEntryCount={setQuickAddEntryCount}
+                    customUnitConversions={customUnitConversions}
                   />
                 </View>
 

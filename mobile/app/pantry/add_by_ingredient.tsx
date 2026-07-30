@@ -26,6 +26,7 @@ import {
 import { addIngredientToPantry, getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { DateTextInput, DurationExpiryInput, QuantityServingInput } from "@/src/components/forms";
+import { loadSettings } from "@/src/services/settingsService";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
   recentPantryEntries,
@@ -34,6 +35,7 @@ import {
   suggestExpiryDuration,
   suggestStorageLocation,
 } from "@/src/utils/pantryDefaults";
+import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 type SelectedIngredientCardProps = {
   ingredient: Ingredient;
@@ -103,6 +105,7 @@ export default function AddPantryItemByIngredientScreen() {
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+  const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
 
   const [selectedIngredient, setSelectedIngredient] =
     useState<Ingredient | null>(null);
@@ -110,6 +113,7 @@ export default function AddPantryItemByIngredientScreen() {
   const [searchText, setSearchText] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [quantityUnit, setQuantityUnit] = useState("item");
+  const [entryCount, setEntryCount] = useState("1");
   const [storageLocationId, setStorageLocationId] = useState(locationId ?? "");
   // A location passed in via route params (e.g. "add here" from a specific
   // storage location page) is itself a deliberate choice — don't let the
@@ -129,12 +133,13 @@ export default function AddPantryItemByIngredientScreen() {
 
     async function loadPageData() {
       try {
-        const [loadedIngredients, loadedStorageLocations, loadedUnits, loadedPantryItems] =
+        const [loadedIngredients, loadedStorageLocations, loadedUnits, loadedPantryItems, loadedSettings] =
           await Promise.all([
             getIngredients(),
             getStorageLocations(),
             getUnitSuggestions(),
             getPantryItems(),
+            loadSettings(),
           ]);
 
         if (cancelled) {
@@ -150,6 +155,7 @@ export default function AddPantryItemByIngredientScreen() {
 
         setUnitOptions(Array.isArray(loadedUnits) ? loadedUnits : []);
         setPantryItems(Array.isArray(loadedPantryItems) ? loadedPantryItems : []);
+        setCustomUnitConversions(loadedSettings.unitConversions ?? []);
 
         if (ingredientId) {
           const match = ingredientList.find((i) => i._id === ingredientId);
@@ -304,23 +310,31 @@ export default function AddPantryItemByIngredientScreen() {
       return;
     }
 
+    const parsedCount = Math.max(1, Math.round(Number(entryCount)) || 1);
+
     try {
       setSaving(true);
 
-      await addIngredientToPantry({
-        ingredient: selectedIngredient._id,
-        storageLocation: storageLocationId,
-        quantityAvailable: parsedQuantity,
-        quantityUnit: quantityUnit.trim(),
-        purchaseDate: purchaseDate.trim() || undefined,
-        expiryDate: expiryDate.trim() || undefined,
-      });
+      for (let i = 0; i < parsedCount; i++) {
+        await addIngredientToPantry({
+          ingredient: selectedIngredient._id,
+          storageLocation: storageLocationId,
+          quantityAvailable: parsedQuantity,
+          quantityUnit: quantityUnit.trim(),
+          purchaseDate: purchaseDate.trim() || undefined,
+          expiryDate: expiryDate.trim() || undefined,
+        });
+      }
 
       Alert.alert(
         "Added to pantry",
-        `${selectedIngredient.name} was added to ${
-          selectedStorageLocation?.name ?? "your pantry"
-        }.`,
+        parsedCount > 1
+          ? `${parsedCount} entries of ${selectedIngredient.name} were added to ${
+              selectedStorageLocation?.name ?? "your pantry"
+            }.`
+          : `${selectedIngredient.name} was added to ${
+              selectedStorageLocation?.name ?? "your pantry"
+            }.`,
         [
           {
             text: "Done",
@@ -441,6 +455,7 @@ export default function AddPantryItemByIngredientScreen() {
                       }
                       setExpiryDate("");
                       setExpiryTouched(false);
+                      setEntryCount("1");
                     }}
                   >
                     <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
@@ -522,6 +537,9 @@ export default function AddPantryItemByIngredientScreen() {
               }}
               defaultPortionAmount={selectedIngredient.defaultPortionAmount}
               defaultPortionUnit={selectedIngredient.defaultPortionUnit}
+              entryCount={entryCount}
+              onChangeEntryCount={setEntryCount}
+              customUnitConversions={customUnitConversions}
             />
 
             {/* Storage location */}

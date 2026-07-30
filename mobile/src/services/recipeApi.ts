@@ -47,6 +47,11 @@ export interface Recipe {
   imageUrl?: string;
   notes?: string;
   isArchived?: boolean;
+  // Manual curation flag — false ("want to try") is the default for a new
+  // recipe, true means the user has confirmed it as a keeper. Distinct from
+  // a meal-plan entry's own planned/confirmed status (whether a specific
+  // calendar slot has been eaten yet).
+  isConfirmed?: boolean;
   ingredientList: RecipeIngredientEntry[];
   instructions: string[];
   createdAt?: string;
@@ -70,6 +75,7 @@ export interface CreateRecipeInput {
   nutritionBasis?: string;
   imageUrl?: string;
   notes?: string;
+  isConfirmed?: boolean;
   ingredientList?: RecipeIngredientInput[];
   instructions?: string[];
 }

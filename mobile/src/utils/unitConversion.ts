@@ -131,6 +131,24 @@ export function convertUnits(
   return null;
 }
 
+/**
+ * The single rule for "the unit on this field just changed — should the
+ * number change too?" used everywhere a quantity+unit pair is edited in
+ * place (pantry entries, ingredient serving sizes, recipe ingredient rows):
+ * rescale to the equivalent value when the new unit is a convertible match,
+ * otherwise return null and leave the typed number untouched.
+ */
+export function convertAmountForUnitChange(
+  amount: number,
+  oldUnit: string,
+  newUnit: string,
+  customConversions: CustomUnitConversion[] = [],
+): number | null {
+  if (!oldUnit || newUnit === oldUnit || !Number.isFinite(amount)) return null;
+  const converted = convertUnits(amount, oldUnit, newUnit, customConversions);
+  return converted != null ? Math.round(converted * 1000) / 1000 : null;
+}
+
 export function isConvertible(
   fromUnit: string,
   toUnit: string,

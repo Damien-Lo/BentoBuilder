@@ -133,6 +133,7 @@ export default function RecipesMainPage() {
   const [searchText, setSearchText] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("category");
+  const [statusFilter, setStatusFilter] = useState<"all" | "wantToTry" | "confirmed">("all");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [activePage, setActivePage] = useState<"meals" | "recipes">("meals");
   const scrollRef = useRef<ScrollView>(null);
@@ -208,8 +209,10 @@ export default function RecipesMainPage() {
 
   const filteredRecipes = useMemo(() => {
     const query = searchText.trim().toLowerCase();
-    if (!query) return recipes;
     return recipes.filter((recipe) => {
+      if (statusFilter === "wantToTry" && recipe.isConfirmed) return false;
+      if (statusFilter === "confirmed" && !recipe.isConfirmed) return false;
+      if (!query) return true;
       const mealCats = Array.isArray(recipe.mealCategory)
         ? recipe.mealCategory.join(" ")
         : recipe.mealCategory;
@@ -220,7 +223,7 @@ export default function RecipesMainPage() {
         mealCats,
       ].some((v) => v.toLowerCase().includes(query));
     });
-  }, [recipes, searchText]);
+  }, [recipes, searchText, statusFilter]);
 
   const groupedRecipes = useMemo<RecipeGroup[]>(() => {
     if (sortMode === "meal") {
@@ -584,6 +587,32 @@ export default function RecipesMainPage() {
                         </Text>
                       </Pressable>
                     </View>
+                  </View>
+                  <View className="mt-3 flex-row overflow-hidden rounded-xl border border-slate-200">
+                    <Pressable
+                      className={`flex-1 items-center py-1.5 ${statusFilter === "all" ? "bg-blue-600" : "bg-white"}`}
+                      onPress={() => setStatusFilter("all")}
+                    >
+                      <Text className={`text-xs font-semibold ${statusFilter === "all" ? "text-white" : "text-slate-600"}`}>
+                        All
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      className={`flex-1 items-center border-l border-slate-200 py-1.5 ${statusFilter === "confirmed" ? "bg-blue-600" : "bg-white"}`}
+                      onPress={() => setStatusFilter("confirmed")}
+                    >
+                      <Text className={`text-xs font-semibold ${statusFilter === "confirmed" ? "text-white" : "text-slate-600"}`}>
+                        Tried!
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      className={`flex-1 items-center border-l border-slate-200 py-1.5 ${statusFilter === "wantToTry" ? "bg-blue-600" : "bg-white"}`}
+                      onPress={() => setStatusFilter("wantToTry")}
+                    >
+                      <Text className={`text-xs font-semibold ${statusFilter === "wantToTry" ? "text-white" : "text-slate-600"}`}>
+                        Want to Try
+                      </Text>
+                    </Pressable>
                   </View>
                   <View className="mt-3 flex-row items-center">
                     <View className="h-2 w-2 rounded-full bg-slate-300" />

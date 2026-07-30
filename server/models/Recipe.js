@@ -94,6 +94,16 @@ const recipeSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Manual curation flag — "want to try" (false, the default for a newly
+    // saved recipe) vs "confirmed" (true, a recipe the user has decided is
+    // a keeper). Distinct from MealPlanEntry.status ("planned"/"confirmed"),
+    // which tracks whether a specific calendar slot has been eaten yet —
+    // this tracks the recipe itself, independent of any one meal plan.
+    isConfirmed: {
+      type: Boolean,
+      default: false,
+    },
+
     ingredientList: [ingredientEntrySchema],
 
     instructions: [{ type: String, trim: true }],

@@ -22,7 +22,9 @@ import {
 import { getPantryItemById, updatePantryItem } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { DateTextInput, DurationExpiryInput, QuantityServingInput } from "@/src/components/forms";
+import { loadSettings } from "@/src/services/settingsService";
 import { toDateOnly } from "@/src/utils/date";
+import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 type ReferenceObject = { _id?: string; id?: string; name?: string };
 
@@ -88,6 +90,7 @@ export default function EditPantryItemScreen() {
   const [form, setForm] = useState<FormState | null>(null);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
+  const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -100,10 +103,11 @@ export default function EditPantryItemScreen() {
     async function load() {
       setIsLoading(true);
       try {
-        const [loadedItem, loadedLocations, loadedUnits] = await Promise.all([
+        const [loadedItem, loadedLocations, loadedUnits, loadedSettings] = await Promise.all([
           getPantryItemById(id),
           getStorageLocations(),
           getUnitSuggestions(),
+          loadSettings(),
         ]);
 
         if (cancelled) return;
@@ -114,6 +118,7 @@ export default function EditPantryItemScreen() {
           Array.isArray(loadedLocations) ? loadedLocations : [],
         );
         setUnitOptions(Array.isArray(loadedUnits) ? loadedUnits : []);
+        setCustomUnitConversions(loadedSettings.unitConversions ?? []);
       } catch (err) {
         if (!cancelled) {
           Alert.alert(
@@ -282,6 +287,7 @@ export default function EditPantryItemScreen() {
               defaultPortionAmount={item.ingredient?.defaultPortionAmount}
               defaultPortionUnit={item.ingredient?.defaultPortionUnit}
               initialMode="total"
+              customUnitConversions={customUnitConversions}
             />
           </View>
 

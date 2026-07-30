@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 interface BaseDropdownOption {
@@ -19,6 +19,15 @@ interface SearchableObjectDropdownProps<T extends BaseDropdownOption> {
 
   onSelect: (option: T) => void;
   onTextChange?: (value: string) => void;
+
+  // When provided, a "Create '<query>'" row replaces the plain "No matching
+  // options" message once nothing matches the typed text — lets the caller
+  // offer to create a new option inline instead of just blocking.
+  onCreateNew?: (query: string) => void;
+
+  // Optional second line under an option's name — e.g. flagging it as
+  // generic — so options that share a name are still distinguishable.
+  renderSubtitle?: (option: T) => ReactNode;
 }
 
 export function SearchableObjectDropdown<T extends BaseDropdownOption>({
@@ -30,6 +39,8 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
   disabled = false,
   onSelect,
   onTextChange,
+  onCreateNew,
+  renderSubtitle,
 }: SearchableObjectDropdownProps<T>) {
   const safeOptions = useMemo<T[]>(
     () => (Array.isArray(options) ? options : []),
@@ -182,9 +193,12 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
                   className="flex-row items-center border-b border-slate-100 px-4 py-4 active:bg-slate-50"
                   onPress={() => handleSelect(option)}
                 >
-                  <Text className="flex-1 text-base text-slate-900">
-                    {option.name}
-                  </Text>
+                  <View className="flex-1">
+                    <Text className="text-base text-slate-900">
+                      {option.name}
+                    </Text>
+                    {renderSubtitle?.(option)}
+                  </View>
 
                   {isSelected && (
                     <Ionicons name="checkmark" size={20} color="#2563EB" />
@@ -193,13 +207,27 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
               );
             })}
 
-            {filteredOptions.length === 0 && (
-              <View className="px-4 py-5">
-                <Text className="text-center text-sm text-slate-500">
-                  No matching options
-                </Text>
-              </View>
-            )}
+            {filteredOptions.length === 0 &&
+              (onCreateNew && normalizedQuery ? (
+                <Pressable
+                  className="flex-row items-center px-4 py-4 active:bg-slate-50"
+                  onPress={() => {
+                    setOpen(false);
+                    onCreateNew(query.trim());
+                  }}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
+                  <Text className="ml-2 text-base font-semibold text-blue-600">
+                    Create &quot;{query.trim()}&quot;
+                  </Text>
+                </Pressable>
+              ) : (
+                <View className="px-4 py-5">
+                  <Text className="text-center text-sm text-slate-500">
+                    No matching options
+                  </Text>
+                </View>
+              ))}
           </ScrollView>
         </View>
       )}

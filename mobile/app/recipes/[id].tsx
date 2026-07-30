@@ -215,6 +215,20 @@ export default function RecipeDetailPage() {
           <Text className="mt-4 text-2xl font-bold text-slate-900">{recipe.name}</Text>
 
           <View className="mt-3 flex-row flex-wrap gap-2">
+            <View
+              className={`rounded-full px-3 py-1 ${
+                recipe.isConfirmed ? "bg-blue-50" : "bg-slate-100"
+              }`}
+            >
+              <Text
+                className={`text-xs font-semibold ${
+                  recipe.isConfirmed ? "text-blue-600" : "text-slate-500"
+                }`}
+              >
+                {recipe.isConfirmed ? "Confirmed" : "Want to try"}
+              </Text>
+            </View>
+
             {(Array.isArray(recipe.mealCategory)
               ? recipe.mealCategory
               : [recipe.mealCategory]

@@ -47,7 +47,7 @@ import {
   type GroceryItemStatus,
 } from "@/src/services/groceryListApi";
 import { loadSettings } from "@/src/services/settingsService";
-import { getRelatedUnits, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import { convertAmountForUnitChange, getRelatedUnits, type CustomUnitConversion } from "@/src/utils/unitConversion";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import {
@@ -104,6 +104,7 @@ export default function GroceryListScreen() {
   const [logExpiryDate, setLogExpiryDate] = useState("");
   const [logQuantity, setLogQuantity] = useState("");
   const [logUnit, setLogUnit] = useState("");
+  const [logEntryCount, setLogEntryCount] = useState("1");
   const [logSaving, setLogSaving] = useState(false);
   const [logLocationTouched, setLogLocationTouched] = useState(false);
   const [logExpiryTouched, setLogExpiryTouched] = useState(false);
@@ -348,6 +349,7 @@ export default function GroceryListScreen() {
     setLogExpiryTouched(false);
     setLogQuantity(item.quantity != null ? String(item.quantity) : "");
     setLogUnit(item.unit || targetIngredient?.defaultPortionUnit || "");
+    setLogEntryCount("1");
   }
 
   function handleTapPendingItem(item: GroceryItem) {
@@ -497,18 +499,22 @@ export default function GroceryListScreen() {
         setStorageLocations((prev) => [...prev, storageLocation]);
       }
 
-      const newPantryItem = await addIngredientToPantry({
-        ingredient: logTargetIngredientId,
-        storageLocation: storageLocation._id,
-        quantityAvailable: qty,
-        quantityUnit: logUnit.trim(),
-        purchaseDate: logPurchaseDate || undefined,
-        expiryDate: logExpiryDate || undefined,
-      });
+      const entryCount = Math.max(1, Math.round(Number(logEntryCount)) || 1);
+      let newPantryItem: PantryItem | undefined;
+      for (let i = 0; i < entryCount; i++) {
+        newPantryItem = await addIngredientToPantry({
+          ingredient: logTargetIngredientId,
+          storageLocation: storageLocation._id,
+          quantityAvailable: qty,
+          quantityUnit: logUnit.trim(),
+          purchaseDate: logPurchaseDate || undefined,
+          expiryDate: logExpiryDate || undefined,
+        });
+      }
 
       const updated = await updateGroceryItem(loggingItem._id, {
         status: "completed",
-        pantryItem: newPantryItem._id,
+        pantryItem: newPantryItem!._id,
       });
       setGroceryItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
       closeLogModal();
@@ -899,9 +905,52 @@ export default function GroceryListScreen() {
                     options={logUnitOptions}
                     selectedValue={logUnit}
                     placeholder="Unit"
-                    onSelect={setLogUnit}
+                    onSelect={(unit) => {
+                      const converted = convertAmountForUnitChange(
+                        Number(logQuantity),
+                        logUnit,
+                        unit,
+                        customUnitConversions,
+                      );
+                      if (converted != null) setLogQuantity(String(converted));
+                      setLogUnit(unit);
+                    }}
                   />
                 </View>
+              </View>
+
+              <View className="mt-3">
+                <Text className="mb-1.5 text-xs font-semibold text-slate-500">Number of entries</Text>
+                <View className="flex-row items-center">
+                  <Pressable
+                    onPress={() =>
+                      setLogEntryCount((current) => String(Math.max(1, (Number(current) || 1) - 1)))
+                    }
+                    className="h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white active:bg-slate-50"
+                  >
+                    <Ionicons name="remove" size={18} color="#475569" />
+                  </Pressable>
+                  <TextInput
+                    value={logEntryCount}
+                    onChangeText={setLogEntryCount}
+                    keyboardType="number-pad"
+                    className="mx-2 h-11 w-16 rounded-2xl border border-slate-200 bg-white text-center text-base text-slate-900"
+                  />
+                  <Pressable
+                    onPress={() =>
+                      setLogEntryCount((current) => String((Number(current) || 1) + 1))
+                    }
+                    className="h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white active:bg-slate-50"
+                  >
+                    <Ionicons name="add" size={18} color="#475569" />
+                  </Pressable>
+                </View>
+                {Math.max(1, Math.round(Number(logEntryCount)) || 1) > 1 && (
+                  <Text className="mt-1.5 text-xs text-slate-400">
+                    Creates {Math.max(1, Math.round(Number(logEntryCount)) || 1)} separate pantry
+                    entries of {logQuantity || "0"} {logUnit} each.
+                  </Text>
+                )}
               </View>
 
               <View className="mt-5 flex-row gap-3">

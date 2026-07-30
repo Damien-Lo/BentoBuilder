@@ -1196,6 +1196,10 @@ export default function PantryMainPage() {
                           className="mb-2 flex-row items-center rounded-2xl bg-slate-50 p-3"
                           onPress={() => {
                             closeSearch();
+                            router.push({
+                              pathname: "/pantry/edit/[id]",
+                              params: { id: pantryItem._id },
+                            });
                           }}
                         >
                           <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
