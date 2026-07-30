@@ -218,21 +218,18 @@ export function BarcodeScannerModal({
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
+      {/* Padded black border on every side — the camera never touches the
+          screen edges, and the close button lives outside the camera view
+          entirely rather than overlaid on top of it, so it can't end up
+          obscured by or fighting the camera feed/status bar for space.
+          bg-black lives on this plain View (not the SafeAreaView below) —
+          background color doesn't reliably apply via className directly
+          on SafeAreaView here. */}
       <View className="flex-1 bg-black">
-        <CameraView
-          style={StyleSheet.absoluteFillObject}
-          facing="back"
-          onBarcodeScanned={looking ? undefined : handleBarcode}
-          barcodeScannerSettings={{
-            barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"],
-          }}
-        />
-
-        <SafeAreaView className="flex-1">
-          {/* Top bar */}
-          <View className="flex-row items-center px-4 py-3">
+        <SafeAreaView className="flex-1 p-4">
+          <View className="flex-row items-center pb-3">
             <Pressable
-              className="h-11 w-11 items-center justify-center rounded-full bg-black/50"
+              className="h-11 w-11 items-center justify-center rounded-full bg-white/10"
               onPress={onClose}
             >
               <Ionicons name="close" size={24} color="white" />
@@ -242,25 +239,36 @@ export function BarcodeScannerModal({
             </Text>
           </View>
 
-          {/* Viewfinder */}
-          <View className="flex-1 items-center justify-center">
-            <View className="h-44 w-72 rounded-2xl border-2 border-white/80" />
-            <Text className="mt-4 text-sm text-white/70">
-              Point the camera at a product barcode
-            </Text>
+          <View className="flex-1 overflow-hidden rounded-3xl bg-slate-900">
+            <CameraView
+              style={StyleSheet.absoluteFillObject}
+              facing="back"
+              onBarcodeScanned={looking ? undefined : handleBarcode}
+              barcodeScannerSettings={{
+                barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"],
+              }}
+            />
+
+            {/* Viewfinder */}
+            <View className="flex-1 items-center justify-center">
+              <View className="h-44 w-72 rounded-2xl border-2 border-white/80" />
+              <Text className="mt-4 text-sm text-white/70">
+                Point the camera at a product barcode
+              </Text>
+            </View>
+
+            {/* Lookup overlay */}
+            {looking && (
+              <View
+                style={StyleSheet.absoluteFillObject}
+                className="items-center justify-center bg-black/70"
+              >
+                <ActivityIndicator size="large" color="white" />
+                <Text className="mt-3 text-white">Looking up product…</Text>
+              </View>
+            )}
           </View>
         </SafeAreaView>
-
-        {/* Lookup overlay */}
-        {looking && (
-          <View
-            style={StyleSheet.absoluteFillObject}
-            className="items-center justify-center bg-black/70"
-          >
-            <ActivityIndicator size="large" color="white" />
-            <Text className="mt-3 text-white">Looking up product…</Text>
-          </View>
-        )}
       </View>
     </Modal>
   );

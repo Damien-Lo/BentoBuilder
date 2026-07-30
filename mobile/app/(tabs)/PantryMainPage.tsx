@@ -3,6 +3,7 @@ import {
   BarcodeScannerModal,
   type ScannedProduct,
 } from "@/src/components/BarcodeScannerModal";
+import { ReceiptScannerModal } from "@/src/components/ReceiptScannerModal";
 import {
   ActivityIndicator,
   Alert,
@@ -171,6 +172,7 @@ export default function PantryMainPage() {
   const [pantryAddMenuVisible, setPantryAddMenuVisible] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [scanContext, setScanContext] = useState<"ingredient" | "pantry">("ingredient");
+  const [receiptScannerVisible, setReceiptScannerVisible] = useState(false);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
@@ -1471,6 +1473,25 @@ export default function PantryMainPage() {
             </Pressable>
 
             <Pressable
+              className="mt-3 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+              onPress={() => {
+                setPantryAddMenuVisible(false);
+                setReceiptScannerVisible(true);
+              }}
+            >
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
+                <Ionicons name="receipt-outline" size={27} color="#2563EB" />
+              </View>
+              <View className="ml-4 flex-1">
+                <Text className="text-lg font-bold text-slate-900">Scan receipt</Text>
+                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                  Beta — photograph a receipt. Auto-fill isn&apos;t built yet, this just captures the photo.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
+            </Pressable>
+
+            <Pressable
               className="mt-5 items-center rounded-2xl bg-slate-100 py-4"
               onPress={() => setPantryAddMenuVisible(false)}
             >
@@ -1546,6 +1567,18 @@ export default function PantryMainPage() {
           }
 
           router.push({ pathname: "/ingredients/add_manual", params: scannedParams });
+        }}
+      />
+
+      <ReceiptScannerModal
+        visible={receiptScannerVisible}
+        onClose={() => setReceiptScannerVisible(false)}
+        onCaptured={() => {
+          setReceiptScannerVisible(false);
+          Alert.alert(
+            "Receipt captured",
+            "Saved for now — automatic parsing (matching items, prices, and store) isn't wired up yet. This step is just testing the capture flow.",
+          );
         }}
       />
 
