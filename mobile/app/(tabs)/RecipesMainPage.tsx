@@ -221,11 +221,17 @@ export default function RecipesMainPage() {
       const mealCats = Array.isArray(recipe.mealCategory)
         ? recipe.mealCategory.join(" ")
         : recipe.mealCategory;
+      const tagNames = Array.isArray(recipe.tags)
+        ? recipe.tags
+            .map((tag) => (typeof tag === "object" && tag !== null ? tag.name : ""))
+            .filter(Boolean)
+        : [];
       return [
         recipe.name,
         recipe.description ?? "",
         getRecipeCategoryName(recipe),
         mealCats,
+        ...tagNames,
       ].some((v) => v.toLowerCase().includes(query));
     });
   }, [recipes, searchText, statusFilter]);

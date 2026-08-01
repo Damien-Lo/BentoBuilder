@@ -197,6 +197,42 @@ export async function createStore(name: string): Promise<SelectOption> {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                                    Tags                                    */
+/* -------------------------------------------------------------------------- */
+
+// Shared across Ingredients, Recipes, and Meals — one tag namespace, not
+// scoped per type, so e.g. "Freezer-friendly" works the same everywhere.
+export async function getTags(): Promise<SelectOption[]> {
+  const response = await fetch(`${API_BASE_URL}/api/tags`);
+
+  const result = await parseResponse<OptionListResponse>(response);
+
+  return result.data;
+}
+
+export async function createTag(name: string): Promise<SelectOption> {
+  const trimmedName = name.trim();
+
+  if (!trimmedName) {
+    throw new Error("Tag name is required");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/tags`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: trimmedName,
+    }),
+  });
+
+  const result = await parseResponse<OptionResponse>(response);
+
+  return result.data;
+}
+
+/* -------------------------------------------------------------------------- */
 /*                                    Units                                   */
 /* -------------------------------------------------------------------------- */
 

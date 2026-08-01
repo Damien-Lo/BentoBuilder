@@ -1,6 +1,8 @@
 import express from "express";
 import Ingredient from "../models/Ingredient.js";
+import Recipe from "../models/Recipe.js";
 import { getAvailableStock } from "../services/ingredientAvailability.js";
+import { wouldCreateCycle } from "../services/productionCycle.js";
 
 const router = express.Router();
 
@@ -71,6 +73,8 @@ router.get("/", async (req, res) => {
       .populate("category")
       .populate("brand")
       .populate("genericParent").populate("defaultStorageLocation")
+      .populate("productionRecipe")
+      .populate("tags")
       .sort({ name: 1 });
 
     return res.status(200).json({
@@ -97,7 +101,9 @@ router.get("/:id", async (req, res) => {
     const ingredient = await Ingredient.findById(req.params.id)
       .populate("category")
       .populate("brand")
-      .populate("genericParent").populate("defaultStorageLocation");
+      .populate("genericParent").populate("defaultStorageLocation")
+      .populate("productionRecipe")
+      .populate("tags");
 
     if (!ingredient) {
       return res.status(404).json({
@@ -178,7 +184,14 @@ router.post("/", async (req, res) => {
     // Document#populate() (unlike a Query's) resolves to a Promise per call,
     // so it can't be chained without awaiting each one — pass all paths in
     // a single call instead.
-    await ingredient.populate(["category", "brand", "genericParent", "defaultStorageLocation"]);
+    await ingredient.populate([
+      "category",
+      "brand",
+      "genericParent",
+      "defaultStorageLocation",
+      "productionRecipe",
+      "tags",
+    ]);
 
     return res.status(201).json({
       success: true,
@@ -207,6 +220,49 @@ router.post("/", async (req, res) => {
  */
 router.patch("/:id", async (req, res) => {
   try {
+    if (req.body.productionRecipe) {
+      const producingRecipe = await Recipe.findById(req.body.productionRecipe).select(
+        "ingredientList.ingredient nutrition",
+      );
+
+      if (!producingRecipe) {
+        return res.status(400).json({
+          success: false,
+          message: "productionRecipe must reference an existing recipe",
+        });
+      }
+
+      if (await wouldCreateCycle(req.params.id, producingRecipe.ingredientList)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This recipe (directly or through one of its own produced ingredients) already requires this ingredient, so it can't also be the recipe that produces it.",
+        });
+      }
+
+      // "1 serving cooked" == "defaultPortionAmount defaultPortionUnit
+      // produced" is the whole basis for the nutrition copy below and for
+      // how much gets deposited/substituted elsewhere — it's user-chosen
+      // yield data now (e.g. "1 serving = 250 mL"), not something to
+      // force, but it has to actually be present and valid to mean anything.
+      const yieldAmount = Number(req.body.defaultPortionAmount);
+      const yieldUnit = typeof req.body.defaultPortionUnit === "string" ? req.body.defaultPortionUnit.trim() : "";
+      if (!Number.isFinite(yieldAmount) || yieldAmount <= 0 || !yieldUnit) {
+        return res.status(400).json({
+          success: false,
+          message: "Enter how much one serving of the recipe makes (a positive amount and a unit).",
+        });
+      }
+      req.body.defaultPortionAmount = yieldAmount;
+      req.body.defaultPortionUnit = yieldUnit;
+
+      // Nutrition normally stays in sync via RecipeRoutes.js whenever the
+      // recipe itself is saved — but linking happens *after* the recipe is
+      // first created, so without this the very first link would leave
+      // nutrition empty until the recipe is edited again.
+      req.body.nutrition = producingRecipe.nutrition;
+    }
+
     const ingredient = await Ingredient.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -217,7 +273,9 @@ router.patch("/:id", async (req, res) => {
     )
       .populate("category")
       .populate("brand")
-      .populate("genericParent").populate("defaultStorageLocation");
+      .populate("genericParent").populate("defaultStorageLocation")
+      .populate("productionRecipe")
+      .populate("tags");
 
     if (!ingredient) {
       return res.status(404).json({

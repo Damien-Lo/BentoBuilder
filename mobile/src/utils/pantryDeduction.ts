@@ -3,6 +3,7 @@ import type { Recipe } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
+import { getIngredientStockInUnit } from "./ingredientStock";
 
 function extractId(value: unknown): string {
   if (typeof value === "string") return value;
@@ -98,20 +99,110 @@ function gatherRows(entry: MealPlanEntry, recipeMap: Map<string, Recipe>): RawRo
   return rows;
 }
 
-// What a recipe/ingredient/meal-course entry actually needs from the
-// pantry to confirm, plus the candidate pantry entries (grouped into
-// "brothers") available to cover each one — the basis for both the fully
-// automatic deduction and the resolve-sources UI for genuine ambiguity.
-export function buildIngredientRequirements(
-  entry: MealPlanEntry,
+// For any row whose ingredient is produced by a recipe (Ingredient.
+// productionRecipe) and short on pantry stock, splits it into a row for
+// whatever stock *does* cover it (unchanged — still deducted from that
+// ingredient's own pantry entries, per the "stock first" rule) plus
+// recursively-expanded raw-ingredient rows for the shortfall only, scaled
+// by how many multiples of the production recipe's own (whole-batch) yield
+// the shortfall represents: shortfall ÷ (recipe.servings ×
+// ingredient.defaultPortionAmount), since "1 serving cooked" ==
+// "defaultPortionAmount defaultPortionUnit produced" is user-chosen yield
+// data set when linking (see Ingredient.js's productionRecipe comment),
+// not assumed to be 1 — the recipe's own ingredientList quantities make
+// the *whole* batch (every serving), not just one serving's worth.
+//
+// visitedRecipeIds is a runtime cycle guard — defense in depth on top of
+// the save-time checks in productionCycle.js (RecipeRoutes.js /
+// IngredientRoutes.js), which should make a cycle unreachable here. If one
+// slips through anyway, this stops expanding rather than recursing
+// forever, and the shortfall is just left as an ordinary (likely
+// unfulfillable) requirement.
+function expandProducedIngredientRows(
+  rows: RawRow[],
+  ingredientMap: Map<string, Ingredient>,
+  allIngredients: Ingredient[],
+  pantryItems: PantryItem[],
   recipeMap: Map<string, Recipe>,
+  globalConversions: CustomUnitConversion[],
+  visitedRecipeIds: Set<string> = new Set(),
+): RawRow[] {
+  const result: RawRow[] = [];
+
+  for (const row of rows) {
+    const ing = ingredientMap.get(row.ingredientId);
+    const productionRecipeId = ing ? extractId(ing.productionRecipe) : "";
+
+    if (!ing || !productionRecipeId) {
+      result.push(row);
+      continue;
+    }
+
+    const nativeUnit = ing.defaultPortionUnit || row.unit;
+    const conversions = getIngredientConversions(ing, globalConversions, allIngredients);
+    const neededInNative = convertUnits(row.quantity, row.unit, nativeUnit, conversions);
+    if (neededInNative == null) {
+      result.push(row);
+      continue;
+    }
+
+    const availableInNative = getIngredientStockInUnit(
+      ing,
+      nativeUnit,
+      allIngredients,
+      pantryItems,
+      globalConversions,
+    );
+    const covered = Math.min(neededInNative, availableInNative);
+    const shortfall = round(neededInNative - covered);
+
+    if (covered > 0) {
+      result.push({ ingredientId: row.ingredientId, quantity: covered, unit: nativeUnit });
+    }
+
+    if (shortfall <= 0) continue;
+
+    const productionRecipe = recipeMap.get(productionRecipeId);
+    if (!productionRecipe || visitedRecipeIds.has(productionRecipeId)) {
+      result.push({ ingredientId: row.ingredientId, quantity: shortfall, unit: nativeUnit });
+      continue;
+    }
+
+    const totalYield = (productionRecipe.servings || 1) * (ing.defaultPortionAmount || 1);
+    const scale = shortfall / totalYield;
+    const subRows: RawRow[] = productionRecipe.ingredientList.map((line) => ({
+      ingredientId: extractId(line.ingredient),
+      quantity: line.quantity * scale,
+      unit: line.unit,
+    }));
+
+    const nextVisited = new Set(visitedRecipeIds);
+    nextVisited.add(productionRecipeId);
+    result.push(
+      ...expandProducedIngredientRows(
+        subRows,
+        ingredientMap,
+        allIngredients,
+        pantryItems,
+        recipeMap,
+        globalConversions,
+        nextVisited,
+      ),
+    );
+  }
+
+  return result;
+}
+
+// The row-consuming core of buildIngredientRequirements — separated so
+// substitution (above) can run on the row list first.
+function buildRequirementsFromRows(
+  rows: RawRow[],
   ingredientMap: Map<string, Ingredient>,
   allIngredients: Ingredient[],
   pantryItems: PantryItem[],
   globalConversions: CustomUnitConversion[],
 ): IngredientRequirement[] {
-  const rows = gatherRows(entry, recipeMap);
-
   // Aggregate needed quantity per distinct ingredient (in that ingredient's
   // own unit) — a recipe/meal can reference the same ingredient more than
   // once, and the candidate pool must be considered once per ingredient,
@@ -215,6 +306,33 @@ export function buildIngredientRequirements(
   }
 
   return requirements;
+}
+
+// What a recipe/ingredient/meal-course entry actually needs from the
+// pantry to confirm, plus the candidate pantry entries (grouped into
+// "brothers") available to cover each one — the basis for both the fully
+// automatic deduction and the resolve-sources UI for genuine ambiguity.
+// Rows are substitution-expanded first (see expandProducedIngredientRows)
+// so a shortfall of a recipe-produced ingredient is covered by its own raw
+// ingredients rather than left as an unfulfillable requirement.
+export function buildIngredientRequirements(
+  entry: MealPlanEntry,
+  recipeMap: Map<string, Recipe>,
+  ingredientMap: Map<string, Ingredient>,
+  allIngredients: Ingredient[],
+  pantryItems: PantryItem[],
+  globalConversions: CustomUnitConversion[],
+): IngredientRequirement[] {
+  const rows = gatherRows(entry, recipeMap);
+  const expandedRows = expandProducedIngredientRows(
+    rows,
+    ingredientMap,
+    allIngredients,
+    pantryItems,
+    recipeMap,
+    globalConversions,
+  );
+  return buildRequirementsFromRows(expandedRows, ingredientMap, allIngredients, pantryItems, globalConversions);
 }
 
 export function hasAmbiguity(requirements: IngredientRequirement[]): boolean {

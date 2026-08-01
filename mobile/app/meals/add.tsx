@@ -16,15 +16,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CreatableMultiTagDropdown } from "@/src/components/forms";
-import {
-  createMeal,
-  createMealTag,
-  getMealTags,
-  type MealTag,
-  type MealType,
-} from "@/src/services/mealApi";
+import { createMeal, type MealType } from "@/src/services/mealApi";
+import { createTag, getTags, type SelectOption } from "@/src/services/optionsApi";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
-import type { SelectOption } from "@/src/types/options";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 
 const MEAL_TYPE_OPTIONS: { value: MealType; label: string; icon: string; available: boolean }[] = [
@@ -61,12 +55,12 @@ export default function AddMealScreen() {
   const [pickerCourseId, setPickerCourseId] = useState<string | null>(null);
   const [pickerSearch, setPickerSearch] = useState("");
 
-  const [allTags, setAllTags] = useState<MealTag[]>([]);
-  const [selectedTags, setSelectedTags] = useState<MealTag[]>([]);
+  const [allTags, setAllTags] = useState<SelectOption[]>([]);
+  const [selectedTags, setSelectedTags] = useState<SelectOption[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getRecipes(), getMealTags()])
+    Promise.all([getRecipes(), getTags()])
       .then(([r, t]) => {
         if (!cancelled) {
           setRecipes(r);
@@ -110,8 +104,8 @@ export default function AddMealScreen() {
     setCourses(prev => prev.filter(c => c.id !== id));
   }
 
-  async function handleCreateMealTag(tagName: string): Promise<MealTag> {
-    const tag = await createMealTag(tagName);
+  async function handleCreateTag(tagName: string): Promise<SelectOption> {
+    const tag = await createTag(tagName);
     setAllTags(prev => (prev.some(t => t._id === tag._id) ? prev : [...prev, tag]));
     return tag;
   }
@@ -136,14 +130,14 @@ export default function AddMealScreen() {
         selectedTags.map((tag) =>
           tag._id
             ? tag
-            : resolveOrCreateOption(allTags, "", tag.name, handleCreateMealTag),
+            : resolveOrCreateOption(allTags, "", tag.name, handleCreateTag),
         ),
       );
 
       await createMeal({
         name: trimmedName,
         type: mealType,
-        tags: resolvedTags.filter((t): t is MealTag => t != null).map(t => t._id),
+        tags: resolvedTags.filter((t): t is SelectOption => t != null).map(t => t._id),
         notes: notes.trim() || undefined,
         courses: courses.map((c, i) => ({
           label: `Course ${i + 1}`,

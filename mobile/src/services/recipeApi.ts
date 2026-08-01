@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/src/config/api";
+import type { SelectOption } from "@/src/services/optionsApi";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 export type MealCategory = "breakfast" | "lunch" | "dinner" | "snack";
@@ -50,6 +51,7 @@ export interface Recipe {
   name: string;
   description?: string;
   recipeCategory?: RecipeCategory | string | null;
+  tags?: (string | SelectOption)[];
   mealCategory: MealCategory[];
   servings?: number;
   defaultPortionUnit?: string;
@@ -83,6 +85,7 @@ export interface CreateRecipeInput {
   mealCategory: MealCategory[];
   description?: string;
   recipeCategory?: string | null;
+  tags?: string[];
   servings?: number;
   defaultPortionUnit?: string;
   nutrition?: RecipeNutrition;

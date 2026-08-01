@@ -15,15 +15,20 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  CreatableMultiTagDropdown,
+  CreatableStringDropdown,
   CreateGenericIngredientModal,
   FieldLabel,
   FormInput,
   SearchableObjectDropdown,
   SectionTitle,
+  SegmentedToggle,
+  ToggleRow,
   UnitFamilyDropdown,
 } from "@/src/components/forms";
 
-import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import { getIngredients, updateIngredient, type Ingredient } from "@/src/services/ingredientApi";
+import { createTag, getTags, getUnitSuggestions, type SelectOption } from "@/src/services/optionsApi";
 import {
   createRecipeCategory,
   getRecipeById,
@@ -36,6 +41,7 @@ import {
 } from "@/src/services/recipeApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { loadSettings } from "@/src/services/settingsService";
+import { referenceId } from "@/src/utils/pantryDefaults";
 import {
   convertAmountForUnitChange,
   convertUnits,
@@ -86,6 +92,7 @@ function ingredientToOption(ingredient: Ingredient) {
     sodium: ingredient.nutrition?.sodium ?? undefined,
     unitConversions: ingredient.unitConversions ?? [],
     genericParent: ingredient.genericParent ?? null,
+    isMealPrep: ingredient.isMealPrep ?? false,
   };
 }
 
@@ -150,9 +157,34 @@ export default function EditRecipePage() {
   const [pickerSelected, setPickerSelected] = useState<IngredientOption | null>(null);
   const [showCreateIngredient, setShowCreateIngredient] = useState(false);
 
+  // "This recipe produces an ingredient" — see recipes/add.tsx for the
+  // full rationale. The current link (if any) isn't part of the Recipe
+  // document — it's a reverse lookup against the ingredient catalog
+  // (already loaded below for the row picker) for whichever Ingredient's
+  // productionRecipe points at this recipe.
+  const [producesIngredient, setProducesIngredient] = useState(false);
+  const [produceIngredientId, setProduceIngredientId] = useState("");
+  const [produceIngredientName, setProduceIngredientName] = useState("");
+  const [showCreateProducedIngredient, setShowCreateProducedIngredient] = useState(false);
+  // What productionRecipe pointed at on load — lets handleSave notice the
+  // link was removed or switched to a different ingredient, and clear the
+  // old ingredient's link accordingly (it wouldn't otherwise be touched).
+  const [originalProduceIngredientId, setOriginalProduceIngredientId] = useState("");
+  const [produceYieldAmount, setProduceYieldAmount] = useState("1");
+  const [produceYieldUnit, setProduceYieldUnit] = useState("");
+  // "Ingredient" = usable as a component in other recipes (Dashi Stock).
+  // "Meal prep" = a finished dish you reheat/eat directly (Okonomiyaki) —
+  // never offered as a component when building other recipes.
+  const [producedItemIsMealPrep, setProducedItemIsMealPrep] = useState(false);
+
+  // Tags
+  const [allTags, setAllTags] = useState<SelectOption[]>([]);
+  const [selectedTags, setSelectedTags] = useState<SelectOption[]>([]);
+
   // Options
   const [ingredientOptions, setIngredientOptions] = useState<IngredientOption[]>([]);
   const [recipeCategories, setRecipeCategories] = useState<RecipeCategory[]>([]);
+  const [units, setUnits] = useState<string[]>([]);
   const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
 
   // Load recipe + options in parallel
@@ -162,10 +194,12 @@ export default function EditRecipePage() {
 
     async function load() {
       try {
-        const [recipe, loadedIngredients, loadedCategories, loadedSettings] = await Promise.all([
+        const [recipe, loadedIngredients, loadedCategories, loadedTags, loadedUnits, loadedSettings] = await Promise.all([
           getRecipeById(id),
           getIngredients(),
           getRecipeCategories(),
+          getTags(),
+          getUnitSuggestions(),
           loadSettings(),
         ]);
 
@@ -196,14 +230,34 @@ export default function EditRecipePage() {
         }
         setIngredientRows(rows);
 
-        setIngredientOptions(
-          Array.isArray(loadedIngredients)
-            ? loadedIngredients.map(ingredientToOption)
-            : [],
+        const ingredientList = Array.isArray(loadedIngredients) ? loadedIngredients : [];
+        setIngredientOptions(ingredientList.map(ingredientToOption));
+
+        const producedIngredient = ingredientList.find(
+          (ing) => referenceId(ing.productionRecipe) === id,
         );
+        if (producedIngredient) {
+          setProducesIngredient(true);
+          setProduceIngredientId(producedIngredient._id);
+          setProduceIngredientName(producedIngredient.name);
+          setOriginalProduceIngredientId(producedIngredient._id);
+          setProduceYieldAmount(String(producedIngredient.defaultPortionAmount || 1));
+          setProduceYieldUnit(producedIngredient.defaultPortionUnit || "");
+          setProducedItemIsMealPrep(producedIngredient.isMealPrep ?? false);
+        }
+
         setRecipeCategories(
           Array.isArray(loadedCategories) ? loadedCategories : [],
         );
+        setAllTags(Array.isArray(loadedTags) ? loadedTags : []);
+        setSelectedTags(
+          Array.isArray(recipe.tags)
+            ? recipe.tags.filter(
+                (t): t is SelectOption => typeof t === "object" && t !== null,
+              )
+            : [],
+        );
+        setUnits(Array.isArray(loadedUnits) ? loadedUnits : []);
         setCustomUnitConversions(loadedSettings.unitConversions ?? []);
       } catch (err) {
         if (!cancelled) {
@@ -348,6 +402,12 @@ export default function EditRecipePage() {
     return category;
   }
 
+  async function handleCreateTag(tagName: string): Promise<SelectOption> {
+    const tag = await createTag(tagName);
+    setAllTags((prev) => (prev.some((t) => t._id === tag._id) ? prev : [...prev, tag]));
+    return tag;
+  }
+
   function removeIngredientRow(key: string) {
     setIngredientRows((prev) => prev.filter((r) => r.key !== key));
   }
@@ -365,13 +425,22 @@ export default function EditRecipePage() {
       Alert.alert("Name required", "Enter a name for your recipe.");
       return;
     }
-    if (mealCategories.length === 0) {
+    if (mealCategories.length === 0 && !producesIngredient) {
       Alert.alert("Meal type required", "Select at least one meal type.");
       return;
     }
     const numServings = Number(servings);
     if (!Number.isFinite(numServings) || numServings < 1) {
       Alert.alert("Invalid servings", "Enter a serving count of 1 or more.");
+      return;
+    }
+    if (producesIngredient && !produceIngredientId) {
+      Alert.alert("Ingredient required", "Search for or create the ingredient this recipe prepares.");
+      return;
+    }
+    const numYieldAmount = Number(produceYieldAmount);
+    if (producesIngredient && (!Number.isFinite(numYieldAmount) || numYieldAmount <= 0 || !produceYieldUnit.trim())) {
+      Alert.alert("Yield required", "Enter how much one serving makes (a positive amount and a unit).");
       return;
     }
 
@@ -384,10 +453,18 @@ export default function EditRecipePage() {
         handleCreateRecipeCategory,
       );
 
-      await updateRecipe(id, {
+      const resolvedTags = await Promise.all(
+        selectedTags.map((tag) =>
+          tag._id ? tag : resolveOrCreateOption(allTags, "", tag.name, handleCreateTag),
+        ),
+      );
+      const tagIds = resolvedTags.filter((t): t is SelectOption => t != null).map((t) => t._id);
+
+      const savedRecipe = await updateRecipe(id, {
         name: name.trim(),
         mealCategory: mealCategories,
         recipeCategory: recipeCategory?._id || null,
+        tags: tagIds,
         description: description.trim() || undefined,
         servings: numServings,
         notes: notes.trim() || undefined,
@@ -400,6 +477,41 @@ export default function EditRecipePage() {
         nutrition: hasNutritionData ? perServingNutrition : undefined,
         isConfirmed,
       });
+
+      const nextProduceIngredientId = producesIngredient ? produceIngredientId : "";
+
+      // The link moved off the original ingredient (removed, or switched
+      // to a different one) — clear it there too, best-effort, since it
+      // wouldn't otherwise be touched by this save.
+      if (originalProduceIngredientId && originalProduceIngredientId !== nextProduceIngredientId) {
+        try {
+          await updateIngredient(originalProduceIngredientId, { productionRecipe: null });
+        } catch {
+          // non-fatal — worst case the old ingredient still points here
+          // until edited again
+        }
+      }
+
+      if (nextProduceIngredientId) {
+        try {
+          await updateIngredient(nextProduceIngredientId, {
+            productionRecipe: savedRecipe._id,
+            defaultPortionAmount: numYieldAmount,
+            defaultPortionUnit: produceYieldUnit.trim(),
+            isMealPrep: producedItemIsMealPrep,
+          });
+        } catch (linkError) {
+          Alert.alert(
+            "Recipe saved, but not linked",
+            linkError instanceof Error
+              ? linkError.message
+              : `Couldn't link this recipe to ${produceIngredientName || "the ingredient"} — try again.`,
+          );
+          router.back();
+          return;
+        }
+      }
+
       router.back();
     } catch (error) {
       Alert.alert("Unable to save", error instanceof Error ? error.message : "Could not save recipe.");
@@ -466,7 +578,7 @@ export default function EditRecipePage() {
           <FieldLabel text="Recipe name" required />
           <FormInput value={name} placeholder="e.g. Avocado toast" onChangeText={setName} />
 
-          <FieldLabel text="Meal type" required />
+          <FieldLabel text="Meal type" required={!producesIngredient} />
           <View className="mt-1 mb-4 flex-row overflow-hidden rounded-2xl border border-slate-200">
             {MEAL_CATEGORIES.map((cat, i) => {
               const selected = mealCategories.includes(cat.value);
@@ -555,6 +667,15 @@ export default function EditRecipePage() {
             onChangeText={setDescription}
           />
 
+          <FieldLabel text="Tags" />
+          <CreatableMultiTagDropdown
+            options={allTags}
+            selectedItems={selectedTags}
+            placeholder="Add a tag…"
+            onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
+            onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
+          />
+
           <FieldLabel text="Servings" />
           <FormInput
             value={servings}
@@ -562,6 +683,77 @@ export default function EditRecipePage() {
             keyboardType="number-pad"
             onChangeText={setServings}
           />
+
+          <ToggleRow
+            label="This recipe prepares something"
+            description="e.g. Dashi Stock or a batch of Okonomiyaki — cooking this deposits it in your pantry, and its nutrition carries over automatically."
+            value={producesIngredient}
+            onChange={setProducesIngredient}
+          />
+
+          {producesIngredient && (
+            <>
+              <FieldLabel text="Kind" required />
+              <SegmentedToggle<boolean>
+                options={[
+                  { value: false, label: "Ingredient" },
+                  { value: true, label: "Meal prep" },
+                ]}
+                value={producedItemIsMealPrep}
+                onChange={setProducedItemIsMealPrep}
+              />
+              <Text className="mt-2 text-xs leading-4 text-slate-500">
+                {producedItemIsMealPrep
+                  ? "A finished dish you reheat and eat — kept out of the main Ingredients list, but still searchable as an ingredient if another recipe needs to finish it (e.g. adding an egg)."
+                  : "A component other recipes can use (falling back to these ingredients if you're short), e.g. Dashi Stock."}
+              </Text>
+
+              <FieldLabel text="Prepares" required />
+              <SearchableObjectDropdown<IngredientOption>
+                options={ingredientOptions}
+                selectedId={produceIngredientId}
+                selectedName={produceIngredientName}
+                placeholder="Search existing ingredients"
+                showAllWhenEmpty={false}
+                onTextChange={(value) => {
+                  if (value !== produceIngredientName) {
+                    setProduceIngredientId("");
+                  }
+                  setProduceIngredientName(value);
+                }}
+                onSelect={(option) => {
+                  setProduceIngredientId(option._id);
+                  setProduceIngredientName(option.name);
+                }}
+                onCreateNew={() => setShowCreateProducedIngredient(true)}
+              />
+
+              <FieldLabel text="1 serving makes" required />
+              <View className="flex-row">
+                <View className="mr-3 flex-1">
+                  <FormInput
+                    value={produceYieldAmount}
+                    placeholder="1"
+                    keyboardType="decimal-pad"
+                    onChangeText={setProduceYieldAmount}
+                  />
+                </View>
+                <View className="flex-1">
+                  <CreatableStringDropdown
+                    options={units}
+                    selectedValue={produceYieldUnit}
+                    placeholder="e.g. mL"
+                    onSelect={setProduceYieldUnit}
+                  />
+                </View>
+              </View>
+              <Text className="mt-2 text-xs leading-4 text-slate-500">
+                e.g. 250 mL — this becomes {produceIngredientName.trim() || "the ingredient"}
+                &apos;s own portion size, so its nutrition (carried over automatically) means the
+                right thing.
+              </Text>
+            </>
+          )}
 
           {/* ── Ingredients ── */}
           <SectionTitle
@@ -809,6 +1001,25 @@ export default function EditRecipePage() {
         setPickerSelected(option);
         setPickerUnit(option.unit);
         setShowCreateIngredient(false);
+      }}
+    />
+
+    <CreateGenericIngredientModal
+      visible={showCreateProducedIngredient}
+      initialName={produceIngredientName.trim() || name.trim()}
+      title={producedItemIsMealPrep ? "Create meal prep" : "Create prepared ingredient"}
+      description={
+        producedItemIsMealPrep
+          ? "No existing item matched — this creates the meal prep this recipe makes, so cooking it can deposit a batch here."
+          : "No existing ingredient matched — this creates the ingredient this recipe makes, so cooking it can deposit a batch here."
+      }
+      onClose={() => setShowCreateProducedIngredient(false)}
+      onCreated={(ingredient) => {
+        const option = ingredientToOption(ingredient);
+        setIngredientOptions((prev) => [...prev, option]);
+        setProduceIngredientId(option._id);
+        setProduceIngredientName(option.name);
+        setShowCreateProducedIngredient(false);
       }}
     />
     </>

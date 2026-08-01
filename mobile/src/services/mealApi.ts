@@ -1,11 +1,7 @@
 import { API_BASE_URL } from "@/src/config/api";
+import type { SelectOption } from "@/src/services/optionsApi";
 
 export type MealType = "course" | "bento";
-
-export interface MealTag {
-  _id: string;
-  name: string;
-}
 
 export interface MealRecipeRef {
   _id: string;
@@ -50,7 +46,7 @@ export interface Meal {
   _id: string;
   name: string;
   type: MealType;
-  tags?: MealTag[];
+  tags?: SelectOption[];
   notes?: string;
   isArchived?: boolean;
   courses?: CourseEntry[];
@@ -167,24 +163,4 @@ export async function updateMeal(mealId: string, input: UpdateMealInput): Promis
 export async function deleteMeal(mealId: string): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/api/meals/${mealId}`, { method: "DELETE" });
   await parseResponse<{ success: boolean; message: string }>(res);
-}
-
-// ── Meal tags ─────────────────────────────────────────────────────────────────
-
-export async function getMealTags(): Promise<MealTag[]> {
-  const res = await fetch(`${API_BASE_URL}/api/meal-tags`);
-  const result = await parseResponse<{ success: boolean; data: MealTag[] }>(res);
-  return Array.isArray(result.data) ? result.data : [];
-}
-
-export async function createMealTag(name: string): Promise<MealTag> {
-  const trimmed = name.trim();
-  if (!trimmed) throw new Error("Tag name is required");
-  const res = await fetch(`${API_BASE_URL}/api/meal-tags`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: trimmed }),
-  });
-  const result = await parseResponse<{ success: boolean; data: MealTag }>(res);
-  return result.data;
 }

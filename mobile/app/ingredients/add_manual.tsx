@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  CreatableMultiTagDropdown,
   CreatableStringDropdown,
   DateTextInput,
   DurationExpiryInput,
@@ -41,10 +42,12 @@ import {
   createCategory,
   createStorageLocation,
   createStore,
+  createTag,
   getBrands,
   getCategories,
   getStorageLocations,
   getStores,
+  getTags,
   getUnitSuggestions,
 } from "@/src/services/optionsApi";
 
@@ -371,6 +374,8 @@ export default function AddManualPantryItemScreen() {
   const [ingredients, setIngredients] = useState<IngredientOption[]>([]);
 
   const [categories, setCategories] = useState<SelectOption[]>([]);
+  const [allTags, setAllTags] = useState<SelectOption[]>([]);
+  const [selectedTags, setSelectedTags] = useState<SelectOption[]>([]);
 
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
 
@@ -440,6 +445,7 @@ export default function AddManualPantryItemScreen() {
           loadedStorageLocations,
           loadedStores,
           loadedBrands,
+          loadedTags,
           loadedUnits,
           loadedSettings,
         ] = await Promise.all([
@@ -448,6 +454,7 @@ export default function AddManualPantryItemScreen() {
           getStorageLocations(),
           getStores(),
           getBrands(),
+          getTags(),
           getUnitSuggestions(),
           loadSettings(),
         ]);
@@ -488,6 +495,8 @@ export default function AddManualPantryItemScreen() {
         setStores(Array.isArray(loadedStores) ? loadedStores : []);
 
         setBrands(Array.isArray(loadedBrands) ? loadedBrands : []);
+
+        setAllTags(Array.isArray(loadedTags) ? loadedTags : []);
 
         setUnits(Array.isArray(loadedUnits) ? loadedUnits : []);
         setCustomUnitConversions(loadedSettings.unitConversions ?? []);
@@ -645,6 +654,16 @@ export default function AddManualPantryItemScreen() {
       pathname: "/ingredients/edit/[id]",
       params: { id: existingIngredient._id },
     });
+  }
+
+  async function handleCreateTag(name: string): Promise<SelectOption> {
+    const tag = await createTag(name);
+
+    setAllTags((current) =>
+      current.some((item) => item._id === tag._id) ? current : [...current, tag],
+    );
+
+    return tag;
   }
 
   async function handleCreateCategory(name: string): Promise<SelectOption> {
@@ -925,6 +944,17 @@ export default function AddManualPantryItemScreen() {
         throw new Error("Enter a category name.");
       }
 
+      // Tags typed but not yet matched to a real record (pending, no _id
+      // yet) get created here — no separate "create" tap was needed for them.
+      const resolvedTags = await Promise.all(
+        selectedTags.map((tag) =>
+          tag._id ? tag : resolveOrCreateOption(allTags, "", tag.name, handleCreateTag),
+        ),
+      );
+      const tagIds = resolvedTags
+        .filter((t): t is SelectOption => t != null)
+        .map((t) => t._id);
+
       // Optional — resolveOrCreateOption returns null when both the id and
       // draft text are empty, which is fine here (unlike category). Gated by
       // the toggle rather than just presence of text, so leaving it off
@@ -1004,6 +1034,7 @@ export default function AddManualPantryItemScreen() {
             defaultExpiryDurationAmount != null ? form.defaultExpiryDurationUnit : null,
           nutrition,
           unitConversions: form.unitConversions,
+          tags: tagIds,
         });
         ingredientId = newGeneric._id;
       } else if (!ingredientId) {
@@ -1072,6 +1103,7 @@ export default function AddManualPantryItemScreen() {
             defaultExpiryDurationAmount != null ? form.defaultExpiryDurationUnit : null,
           nutrition,
           unitConversions: form.unitConversions,
+          tags: tagIds,
         });
         ingredientId = newIngredient._id;
       }
@@ -1403,6 +1435,16 @@ export default function AddManualPantryItemScreen() {
               updateForm("categoryName", option.name);
               setCategoryDraft(option.name);
             }}
+          />
+
+          <FieldLabel text="Tags" />
+
+          <CreatableMultiTagDropdown
+            options={allTags}
+            selectedItems={selectedTags}
+            placeholder="Add a tag…"
+            onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
+            onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
           />
 
           <SectionTitle

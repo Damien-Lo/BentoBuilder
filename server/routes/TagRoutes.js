@@ -1,14 +1,14 @@
 import express from "express";
-import MealTag from "../models/MealTag.js";
+import Tag from "../models/Tag.js";
 
 const router = express.Router();
 
 router.get("/", async (req, res) => {
   try {
-    const tags = await MealTag.find().sort({ name: 1 });
+    const tags = await Tag.find().sort({ name: 1 });
     return res.status(200).json({ success: true, data: tags });
   } catch (error) {
-    return res.status(500).json({ success: false, message: "Failed to load meal tags" });
+    return res.status(500).json({ success: false, message: "Failed to load tags" });
   }
 });
 
@@ -21,12 +21,12 @@ router.post("/", async (req, res) => {
 
     const normalizedName = name.toLowerCase();
 
-    const existing = await MealTag.findOne({ normalizedName });
+    const existing = await Tag.findOne({ normalizedName });
     if (existing) {
       return res.status(200).json({ success: true, data: existing });
     }
 
-    const tag = await MealTag.create({ name, normalizedName });
+    const tag = await Tag.create({ name, normalizedName });
     return res.status(201).json({ success: true, data: tag });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });

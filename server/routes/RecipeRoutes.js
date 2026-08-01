@@ -1,8 +1,10 @@
 import express from "express";
 import Recipe from "../models/Recipe.js";
+import Ingredient from "../models/Ingredient.js";
 import UserProfile from "../models/UserProfile.js";
 import { isRecipeIngredientAvailable } from "../services/ingredientAvailability.js";
 import { convertUnits, getIngredientConversions } from "../services/unitConversion.js";
+import { wouldCreateCycle } from "../services/productionCycle.js";
 
 const router = express.Router();
 
@@ -14,6 +16,7 @@ router.get("/", async (req, res) => {
   try {
     const recipes = await Recipe.find({ isArchived: false })
       .populate("recipeCategory")
+      .populate("tags")
       .sort({ name: 1 });
 
     return res.status(200).json({
@@ -39,6 +42,7 @@ router.get("/:id", async (req, res) => {
   try {
     const recipe = await Recipe.findById(req.params.id)
       .populate("recipeCategory")
+      .populate("tags")
       .populate({
         path: "ingredientList.ingredient",
         populate: [{ path: "category" }, { path: "brand" }, { path: "genericParent" }],
@@ -234,6 +238,20 @@ async function calcNutrition(recipe) {
   return { calories: r(calories), protein: r(protein), carbs: r(carbs), fats: r(fats), fiber: r(fiber), sodium: r(sodium) };
 }
 
+// A produced ingredient's nutrition is a derived value, not something
+// manually edited once linked — keep it permanently in sync with whatever
+// this recipe's own (already-automatic) nutrition computes to, every time
+// the recipe is saved.
+async function syncProducedIngredientNutrition(recipe, nutrition) {
+  if (!nutrition) return;
+
+  const producedIngredient = await Ingredient.findOne({ productionRecipe: recipe._id });
+  if (!producedIngredient) return;
+
+  producedIngredient.nutrition = nutrition;
+  await producedIngredient.save();
+}
+
 /**
  * POST /api/recipes
  */
@@ -242,6 +260,7 @@ router.post("/", async (req, res) => {
     const recipe = await Recipe.create(normalizeMealCategory(req.body));
 
     await recipe.populate("recipeCategory");
+    await recipe.populate("tags");
     await recipe.populate({
       path: "ingredientList.ingredient",
       populate: [{ path: "category" }, { path: "brand" }, { path: "genericParent" }],
@@ -252,6 +271,7 @@ router.post("/", async (req, res) => {
       recipe.nutrition = nutrition;
       await recipe.save();
     }
+    await syncProducedIngredientNutrition(recipe, nutrition);
 
     return res.status(201).json({
       success: true,
@@ -272,11 +292,32 @@ router.post("/", async (req, res) => {
  */
 router.patch("/:id", async (req, res) => {
   try {
+    // A recipe's own ingredientList changing can introduce a production
+    // cycle even without touching any ingredient's productionRecipe field
+    // directly (e.g. editing this recipe to use an ingredient that, through
+    // its own chain, already requires whatever this recipe itself
+    // produces) — so this needs the same check IngredientRoutes.js runs
+    // when linking, just from the other direction.
+    if (req.body.ingredientList) {
+      const producedIngredient = await Ingredient.findOne({ productionRecipe: req.params.id }).select("_id");
+      if (
+        producedIngredient &&
+        (await wouldCreateCycle(producedIngredient._id, req.body.ingredientList))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This ingredient list would create a production cycle — one of these ingredients (directly or through its own recipe) already requires the ingredient this recipe produces.",
+        });
+      }
+    }
+
     const recipe = await Recipe.findByIdAndUpdate(req.params.id, normalizeMealCategory(req.body), {
       new: true,
       runValidators: true,
     })
       .populate("recipeCategory")
+      .populate("tags")
       .populate({
         path: "ingredientList.ingredient",
         populate: [{ path: "category" }, { path: "brand" }, { path: "genericParent" }],
@@ -294,6 +335,7 @@ router.patch("/:id", async (req, res) => {
       recipe.nutrition = nutrition;
       await recipe.save();
     }
+    await syncProducedIngredientNutrition(recipe, nutrition);
 
     return res.status(200).json({
       success: true,

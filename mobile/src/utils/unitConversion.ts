@@ -88,12 +88,19 @@ export function convertUnits(
   fromUnit: string,
   toUnit: string,
   customConversions: CustomUnitConversion[] = [],
+  // Internal — normalized "from" units already tried in this chain. A custom
+  // conversion can bridge back to a unit already visited (e.g. a "g <-> cup"
+  // density entry: g -> cup -> g -> cup -> ...) once neither side reaches
+  // `toUnit` directly, which without this guard recurses forever instead of
+  // correctly reporting "not convertible".
+  visited: Set<string> = new Set(),
 ): number | null {
   const from = normalizeUnit(fromUnit);
   const to = normalizeUnit(toUnit);
 
   if (!from || !to) return null;
   if (from === to) return amount;
+  if (visited.has(from)) return null;
 
   // Built-in: same family (mass or volume) converts via each unit's factor
   // to the family's base unit.
@@ -102,6 +109,9 @@ export function convertUnits(
   if (fromBuiltIn && toBuiltIn && fromBuiltIn.family === toBuiltIn.family) {
     return (amount * fromBuiltIn.factor) / toBuiltIn.factor;
   }
+
+  const nextVisited = new Set(visited);
+  nextVisited.add(from);
 
   // Custom: user-defined "1 unit = factor baseUnit" entries. Try direct and
   // reverse direction, and chain through a built-in base if needed.
@@ -118,12 +128,12 @@ export function convertUnits(
 
     // e.g. custom "packet -> g", converting packet -> kg: go via g.
     if (customUnit === from) {
-      const viaBase = convertUnits(amount * custom.factor, custom.baseUnit, toUnit, customConversions);
+      const viaBase = convertUnits(amount * custom.factor, custom.baseUnit, toUnit, customConversions, nextVisited);
       if (viaBase != null) return viaBase;
     }
     if (customBase === from) {
       const inCustomUnit = amount / custom.factor;
-      const viaBase = convertUnits(inCustomUnit, custom.unit, toUnit, customConversions);
+      const viaBase = convertUnits(inCustomUnit, custom.unit, toUnit, customConversions, nextVisited);
       if (viaBase != null) return viaBase;
     }
   }

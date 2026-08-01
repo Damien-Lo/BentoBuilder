@@ -26,7 +26,7 @@ import Recipe from "../../models/Recipe.js";
 import "../../models/RecipeCategory.js";
 import GroceryItem from "../../models/GroceryItem.js";
 import Meal from "../../models/Meal.js";
-import "../../models/MealTag.js";
+import "../../models/Tag.js";
 import MealPlanEntry from "../../models/MealPlanEntry.js";
 
 dotenv.config();

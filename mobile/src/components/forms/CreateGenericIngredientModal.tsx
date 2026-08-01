@@ -10,17 +10,28 @@ import {
   View,
 } from "react-native";
 
+import { CreatableStringDropdown } from "./CreatableStringDropdown";
 import { FieldLabel } from "./FieldLabel";
 import { FormInput } from "./FormInput";
 import { SearchableObjectDropdown } from "./SearchableObjectDropdown";
 
 import { createIngredient, type Ingredient } from "@/src/services/ingredientApi";
-import { createCategory, getCategories, type SelectOption } from "@/src/services/optionsApi";
+import {
+  createCategory,
+  getCategories,
+  getUnitSuggestions,
+  type SelectOption,
+} from "@/src/services/optionsApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 
 interface CreateGenericIngredientModalProps {
   visible: boolean;
   initialName: string;
+  // Overridable so callers with a more specific context (e.g. a recipe's
+  // "Prepares" section, where "generic ingredient" / "brands" language
+  // doesn't fit) can swap in copy that actually matches what's being made.
+  title?: string;
+  description?: string;
   onClose: () => void;
   onCreated: (ingredient: Ingredient) => void;
 }
@@ -33,6 +44,8 @@ interface CreateGenericIngredientModalProps {
 export function CreateGenericIngredientModal({
   visible,
   initialName,
+  title = "Create generic ingredient",
+  description = "No existing ingredient matched — this creates a generic one you can add specific brands to later.",
   onClose,
   onCreated,
 }: CreateGenericIngredientModalProps) {
@@ -41,6 +54,8 @@ export function CreateGenericIngredientModal({
   const [categoryId, setCategoryId] = useState("");
   const [categoryName, setCategoryName] = useState("");
   const [categoryDraft, setCategoryDraft] = useState("");
+  const [units, setUnits] = useState<string[]>([]);
+  const [unit, setUnit] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -49,9 +64,13 @@ export function CreateGenericIngredientModal({
     setCategoryId("");
     setCategoryName("");
     setCategoryDraft("");
+    setUnit("");
     getCategories()
       .then((loaded) => setCategories(Array.isArray(loaded) ? loaded : []))
       .catch(() => setCategories([]));
+    getUnitSuggestions()
+      .then((loaded) => setUnits(Array.isArray(loaded) ? loaded : []))
+      .catch(() => setUnits([]));
   }, [visible, initialName]);
 
   async function handleCreate() {
@@ -78,6 +97,7 @@ export function CreateGenericIngredientModal({
         name: trimmedName,
         isGeneric: true,
         category: category._id,
+        defaultPortionUnit: unit.trim() || undefined,
       });
       onCreated(ingredient);
     } catch (error) {
@@ -105,11 +125,8 @@ export function CreateGenericIngredientModal({
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <Text className="text-lg font-bold text-slate-950">Create generic ingredient</Text>
-              <Text className="mt-0.5 mb-5 text-sm text-slate-400">
-                No existing ingredient matched — this creates a generic one you can add specific
-                brands to later.
-              </Text>
+              <Text className="text-lg font-bold text-slate-950">{title}</Text>
+              <Text className="mt-0.5 mb-5 text-sm text-slate-400">{description}</Text>
 
               <FieldLabel text="Name" />
               <FormInput value={name} placeholder="e.g. Soy Sauce" onChangeText={setName} />
@@ -131,6 +148,14 @@ export function CreateGenericIngredientModal({
                   setCategoryName(option.name);
                   setCategoryDraft(option.name);
                 }}
+              />
+
+              <FieldLabel text="Unit" />
+              <CreatableStringDropdown
+                options={units}
+                selectedValue={unit}
+                placeholder="e.g. g, mL, cup — defaults to serving"
+                onSelect={setUnit}
               />
 
               <View className="mt-5 flex-row gap-3">

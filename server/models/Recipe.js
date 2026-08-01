@@ -72,13 +72,13 @@ const recipeSchema = new mongoose.Schema(
       default: null,
     },
 
+    tags: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tag" }],
+
+    // Optional — a recipe that only exists to produce an ingredient (e.g. a
+    // meal-prep batch) isn't a meal itself and doesn't need one of these.
     mealCategory: {
       type: [{ type: String, enum: ["breakfast", "lunch", "dinner", "snack"] }],
-      validate: {
-        validator: (v) => Array.isArray(v) && v.length > 0,
-        message: "At least one meal category is required",
-      },
-      required: true,
+      default: [],
     },
 
     servings: {

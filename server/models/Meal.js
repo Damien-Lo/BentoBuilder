@@ -35,7 +35,7 @@ const mealSchema = new mongoose.Schema(
   {
     name:  { type: String, required: [true, "Meal name is required"], trim: true },
     type:  { type: String, enum: ["course", "bento"], required: [true, "Meal type is required"] },
-    tags:  [{ type: mongoose.Schema.Types.ObjectId, ref: "MealTag" }],
+    tags:  [{ type: mongoose.Schema.Types.ObjectId, ref: "Tag" }],
     notes: { type: String, trim: true, default: "" },
     isArchived:  { type: Boolean, default: false },
 

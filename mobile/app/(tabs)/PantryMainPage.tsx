@@ -65,7 +65,7 @@ type GroupedIngredients = {
   items: Ingredient[];
 };
 
-type ActivePage = "pantry" | "ingredients";
+type ActivePage = "pantry" | "ingredients" | "mealPreps";
 
 function isReferenceObject(value: unknown): value is ReferenceObject {
   return typeof value === "object" && value !== null;
@@ -133,6 +133,20 @@ function getIngredientCategoryName(item: PantryItem): string {
   return getReferenceName(getIngredientField(item, "category"));
 }
 
+function getIngredientTagNames(item: PantryItem): string[] {
+  const ingredient = item.ingredient as unknown;
+  if (typeof ingredient !== "object" || ingredient === null || !("tags" in ingredient)) {
+    return [];
+  }
+
+  const tags = (ingredient as Record<string, unknown>).tags;
+  if (!Array.isArray(tags)) return [];
+
+  return tags
+    .map((tag) => (typeof tag === "object" && tag !== null ? getReferenceName(tag) : ""))
+    .filter(Boolean);
+}
+
 type IngredientTreeNode = {
   parent: Ingredient;
   children: Ingredient[];
@@ -180,8 +194,9 @@ export default function PantryMainPage() {
   const [searchText, setSearchText] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [activePage, setActivePage] = useState<ActivePage>("pantry");
-  const [pantryViewMode, setPantryViewMode] = useState<"locations" | "list">("locations");
+  const [pantryViewMode, setPantryViewMode] = useState<"locations" | "list">("list");
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedMealPrepCategories, setExpandedMealPrepCategories] = useState<Set<string>>(new Set());
   const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
   const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
   const [locationEditMode, setLocationEditMode] = useState(false);
@@ -202,6 +217,15 @@ export default function PantryMainPage() {
 
   const toggleCategory = (category: string) => {
     setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  };
+
+  const toggleMealPrepCategory = (category: string) => {
+    setExpandedMealPrepCategories((prev) => {
       const next = new Set(prev);
       if (next.has(category)) next.delete(category);
       else next.add(category);
@@ -338,6 +362,7 @@ export default function PantryMainPage() {
         getIngredientBrandName(item),
         getIngredientCategoryName(item),
         getStorageLocationName(item),
+        ...getIngredientTagNames(item),
       ];
 
       return searchableValues.some((value) =>
@@ -346,14 +371,23 @@ export default function PantryMainPage() {
     });
   }, [pantryItems, searchText, storageLocationById]);
 
+  // A meal-prep item (a finished dish you reheat/eat directly, e.g.
+  // Okonomiyaki) isn't something you'd browse as a recipe component —
+  // excluded from the Ingredients tab and its search entirely. It still
+  // shows in the Pantry tab (by location), which isn't filtered from this.
+  const browsableIngredients = useMemo(
+    () => ingredients.filter((ingredient) => !ingredient.isMealPrep),
+    [ingredients],
+  );
+
   const filteredIngredients = useMemo(() => {
     const query = searchText.trim().toLowerCase();
 
     if (!query) {
-      return ingredients;
+      return browsableIngredients;
     }
 
-    return ingredients.filter((ingredient) => {
+    return browsableIngredients.filter((ingredient) => {
       const brandName =
         typeof ingredient.brand === "object" && ingredient.brand !== null
           ? (ingredient.brand.name ?? "")
@@ -364,14 +398,21 @@ export default function PantryMainPage() {
           ? (ingredient.category.name ?? "")
           : "";
 
+      const tagNames = Array.isArray(ingredient.tags)
+        ? ingredient.tags
+            .map((tag) => (typeof tag === "object" && tag !== null ? tag.name : ""))
+            .filter(Boolean)
+        : [];
+
       return [
         ingredient.name,
         brandName,
         categoryName,
         ingredient.barcode ?? "",
+        ...tagNames,
       ].some((value) => value.toLowerCase().includes(query));
     });
-  }, [ingredients, searchText]);
+  }, [browsableIngredients, searchText]);
 
   const groupedItems = useMemo<GroupedPantryItems[]>(() => {
     const groups = new Map<string, GroupedPantryItems>();
@@ -391,6 +432,10 @@ export default function PantryMainPage() {
           items: [item],
         });
       }
+    }
+
+    for (const group of groups.values()) {
+      group.items.sort((a, b) => getIngredientName(a).localeCompare(getIngredientName(b)));
     }
 
     return Array.from(groups.values()).sort((a, b) =>
@@ -415,12 +460,76 @@ export default function PantryMainPage() {
       }
     }
 
+    for (const group of groups.values()) {
+      group.items.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
     return Array.from(groups.values()).sort((a, b) => {
       if (a.category === "Uncategorised") return 1;
       if (b.category === "Uncategorised") return -1;
       return a.category.localeCompare(b.category);
     });
   }, [filteredIngredients]);
+
+  // Finished dishes you reheat/eat directly (e.g. Okonomiyaki) — the
+  // mirror image of browsableIngredients, which excludes these.
+  const mealPrepIngredients = useMemo(
+    () => ingredients.filter((ingredient) => ingredient.isMealPrep),
+    [ingredients],
+  );
+
+  const filteredMealPreps = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+
+    if (!query) {
+      return mealPrepIngredients;
+    }
+
+    return mealPrepIngredients.filter((ingredient) => {
+      const categoryName =
+        typeof ingredient.category === "object" && ingredient.category !== null
+          ? (ingredient.category.name ?? "")
+          : "";
+
+      const tagNames = Array.isArray(ingredient.tags)
+        ? ingredient.tags
+            .map((tag) => (typeof tag === "object" && tag !== null ? tag.name : ""))
+            .filter(Boolean)
+        : [];
+
+      return [ingredient.name, categoryName, ...tagNames].some((value) =>
+        value.toLowerCase().includes(query),
+      );
+    });
+  }, [mealPrepIngredients, searchText]);
+
+  const groupedMealPreps = useMemo<GroupedIngredients[]>(() => {
+    const groups = new Map<string, GroupedIngredients>();
+
+    for (const ingredient of filteredMealPreps) {
+      const category =
+        typeof ingredient.category === "object" && ingredient.category !== null
+          ? (ingredient.category.name ?? "Uncategorised")
+          : "Uncategorised";
+
+      const existing = groups.get(category);
+      if (existing) {
+        existing.items.push(ingredient);
+      } else {
+        groups.set(category, { category, items: [ingredient] });
+      }
+    }
+
+    for (const group of groups.values()) {
+      group.items.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.category === "Uncategorised") return 1;
+      if (b.category === "Uncategorised") return -1;
+      return a.category.localeCompare(b.category);
+    });
+  }, [filteredMealPreps]);
 
   const closeSearch = () => {
     Keyboard.dismiss();
@@ -617,7 +726,7 @@ export default function PantryMainPage() {
           {isAlwaysAvailable
             ? "Always available"
             : isInStock
-              ? `${totalQuantity} ${displayUnit ?? ""}`.trim()
+              ? `${Math.round(totalQuantity * 100) / 100} ${displayUnit ?? ""}`.trim()
               : "—"}
         </Text>
       </View>
@@ -644,9 +753,18 @@ export default function PantryMainPage() {
             }}
           >
             <View className="flex-1">
-              <Text className="text-sm font-semibold text-slate-800" numberOfLines={1}>
-                {ingredientItem.name}
-              </Text>
+              <View className="flex-row flex-wrap items-center">
+                <Text className="text-sm font-semibold text-slate-800" numberOfLines={1}>
+                  {ingredientItem.name}
+                </Text>
+                {ingredientItem.productionRecipe && (
+                  <View className="ml-2 rounded-full bg-blue-50 px-2 py-0.5">
+                    <Text className="text-[10px] font-bold uppercase tracking-wide text-blue-600">
+                      Prepared
+                    </Text>
+                  </View>
+                )}
+              </View>
               {subtitle ? (
                 <Text className="mt-0.5 text-xs text-slate-400" numberOfLines={1}>
                   {subtitle}
@@ -698,6 +816,14 @@ export default function PantryMainPage() {
                   </Text>
                 </View>
               )}
+
+              {ingredientItem.productionRecipe && (
+                <View className="ml-2 rounded-full bg-blue-50 px-2 py-0.5">
+                  <Text className="text-[10px] font-bold uppercase tracking-wide text-blue-600">
+                    Prepared
+                  </Text>
+                </View>
+              )}
             </View>
 
             {!ingredientItem.isGeneric &&
@@ -746,7 +872,9 @@ export default function PantryMainPage() {
       event.nativeEvent.contentOffset.x / screenWidth,
     );
 
-    setActivePage(pageIndex === 0 ? "pantry" : "ingredients");
+    setActivePage(
+      pageIndex === 0 ? "pantry" : pageIndex === 1 ? "ingredients" : "mealPreps",
+    );
 
     Keyboard.dismiss();
     setIsSearchActive(false);
@@ -833,6 +961,7 @@ export default function PantryMainPage() {
 
               <View className="mt-3 flex-row items-center">
                 <View className="h-2 w-6 rounded-full bg-blue-600" />
+                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
                 <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
                 <Text className="ml-3 text-xs font-medium text-slate-400">
                   Swipe left for ingredients
@@ -1043,8 +1172,9 @@ export default function PantryMainPage() {
               <View className="mt-3 flex-row items-center">
                 <View className="h-2 w-2 rounded-full bg-slate-300" />
                 <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
+                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
                 <Text className="ml-3 text-xs font-medium text-slate-400">
-                  Swipe right for pantry
+                  Swipe for pantry or meal preps
                 </Text>
               </View>
             </View>
@@ -1115,6 +1245,105 @@ export default function PantryMainPage() {
             </ScrollView>
           </View>
 
+          {/* Page 3: Meal preps — finished dishes you reheat/eat directly */}
+          <View style={{ width: screenWidth }} className="flex-1">
+            <View className="px-5 pt-24">
+              <View className="flex-row items-center">
+                <Text className="flex-1 text-3xl font-bold text-slate-950">
+                  Meal Preps
+                </Text>
+                {expandedMealPrepCategories.size > 0 && (
+                  <Pressable
+                    className="h-10 items-center justify-center rounded-full bg-slate-100 px-3 active:bg-slate-200"
+                    onPress={() => setExpandedMealPrepCategories(new Set())}
+                  >
+                    <Text className="text-sm font-semibold text-slate-600">
+                      Collapse all
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+
+              <Text className="mt-1 text-base text-slate-500">
+                Batches you&apos;ve made ahead, ready to reheat
+              </Text>
+
+              <View className="mt-3 flex-row items-center">
+                <View className="h-2 w-2 rounded-full bg-slate-300" />
+                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
+                <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
+                <Text className="ml-3 text-xs font-medium text-slate-400">
+                  Swipe right for ingredients
+                </Text>
+              </View>
+            </View>
+
+            <ScrollView
+              className="flex-1"
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingTop: 24,
+                paddingBottom: 120,
+              }}
+              showsVerticalScrollIndicator={false}
+            >
+              {groupedMealPreps.length === 0 ? (
+                <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
+                  <Ionicons
+                    name="flask-outline"
+                    size={42}
+                    color="#94A3B8"
+                  />
+
+                  <Text className="mt-4 text-lg font-bold text-slate-900">
+                    No meal preps yet
+                  </Text>
+
+                  <Text className="mt-2 text-center text-slate-500">
+                    Mark a recipe&apos;s &quot;Prepares&quot; section as &quot;Meal prep&quot; and cook a batch to see it here.
+                  </Text>
+                </View>
+              ) : (
+                groupedMealPreps.map((group) => {
+                  const isCollapsed = !expandedMealPrepCategories.has(group.category);
+                  return (
+                  <View key={group.category} className="mb-3">
+                    <Pressable
+                      className="mb-2.5 flex-row items-center justify-between py-1.5"
+                      onPress={() => toggleMealPrepCategory(group.category)}
+                    >
+                      <Text className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                        {group.category}
+                        <Text className="font-semibold text-slate-300"> · {group.items.length}</Text>
+                      </Text>
+                      <Ionicons
+                        name={isCollapsed ? "chevron-forward" : "chevron-down"}
+                        size={16}
+                        color="#CBD5E1"
+                      />
+                    </Pressable>
+
+                    {!isCollapsed &&
+                      buildIngredientTree(group.items).map(
+                        ({ parent, children }) => (
+                          <View key={parent._id}>
+                            {renderIngredientCard(parent)}
+
+                            {children.length > 0 && (
+                              <View className="mb-1 ml-6 border-l-2 border-slate-100 pl-4">
+                                {children.map((child) => renderIngredientCard(child, true))}
+                              </View>
+                            )}
+                          </View>
+                        ),
+                      )}
+                  </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+
         </ScrollView>
 
         {isSearchActive && (
@@ -1141,7 +1370,9 @@ export default function PantryMainPage() {
                 placeholder={
                   activePage === "pantry"
                     ? "Search entire pantry"
-                    : "Search all ingredients"
+                    : activePage === "mealPreps"
+                      ? "Search meal preps"
+                      : "Search all ingredients"
                 }
                 placeholderTextColor="#94a3b8"
                 className="ml-3 flex-1 text-base text-slate-900"
@@ -1172,7 +1403,11 @@ export default function PantryMainPage() {
             <View className="flex-1 border-t border-slate-100 px-4 pb-4">
               <View className="flex-row items-center justify-between py-3">
                 <Text className="text-lg font-bold text-slate-900">
-                  {activePage === "pantry" ? "Pantry" : "All ingredients"}
+                  {activePage === "pantry"
+                    ? "Pantry"
+                    : activePage === "mealPreps"
+                      ? "Meal preps"
+                      : "All ingredients"}
                 </Text>
 
                 <Pressable onPress={closeSearch}>
@@ -1246,7 +1481,7 @@ export default function PantryMainPage() {
                 />
               ) : (
                 <FlatList
-                  data={filteredIngredients}
+                  data={activePage === "mealPreps" ? filteredMealPreps : filteredIngredients}
                   keyExtractor={(ing) => ing._id}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
@@ -1290,7 +1525,11 @@ export default function PantryMainPage() {
                             {ingredient.name}
                           </Text>
 
-                          {ingredient.isGeneric ? (
+                          {ingredient.productionRecipe ? (
+                            <Text className="mt-0.5 text-sm font-medium text-blue-600">
+                              Prepared{ingredient.isGeneric ? " · Generic" : ""}
+                            </Text>
+                          ) : ingredient.isGeneric ? (
                             <Text className="mt-0.5 text-sm font-medium text-violet-600">
                               Generic
                             </Text>

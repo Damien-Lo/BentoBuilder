@@ -53,6 +53,21 @@ export interface Ingredient {
   // own conversions, which are checked before the app-wide fallback list.
   unitConversions?: CustomUnitConversion[];
 
+  // Optional link to the Recipe that produces this ingredient (e.g. a
+  // "Dashi Stock" ingredient made from a "Dashi Stock" recipe) — set from
+  // the recipe screens, not editable here. Cooking that recipe deposits
+  // pantry stock of this ingredient; other recipes that call for it fall
+  // back to this recipe's own ingredients for any shortfall.
+  productionRecipe?: string | { _id: string; name: string } | null;
+
+  // Only meaningful when productionRecipe is set, and only ever set from
+  // the recipe's own "Prepares" section. true = a finished meal you
+  // reheat/eat directly (never usable as a component ingredient elsewhere);
+  // false (default) = a component ingredient like Dashi Stock.
+  isMealPrep?: boolean;
+
+  tags?: (string | SelectOption)[];
+
   isArchived?: boolean;
 
   createdAt?: string;
@@ -92,6 +107,11 @@ export interface CreateIngredientInput {
   defaultExpiryDurationUnit?: DurationUnit | null;
 
   unitConversions?: CustomUnitConversion[];
+
+  productionRecipe?: string | null;
+  isMealPrep?: boolean;
+
+  tags?: string[];
 
   isArchived?: boolean;
 }

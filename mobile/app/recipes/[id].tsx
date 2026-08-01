@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
@@ -16,16 +19,43 @@ import {
   addRecipeScore,
   deleteRecipeScore,
   getRecipeById,
+  getRecipes,
   type PopulatedIngredient,
   type Recipe,
 } from "@/src/services/recipeApi";
-import { getPantryItems } from "@/src/services/pantryApi";
+import {
+  addIngredientToPantry,
+  getPantryItems,
+  // Aliased — a plain REST call (POST /api/pantry/:id/use), not a React
+  // Hook, but its "use..." name trips the hooks linter's naming heuristic
+  // when called in a loop inside a regular async function.
+  usePantryItem as deductFromPantryItem,
+} from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import {
+  createStorageLocation,
+  getStorageLocations,
+  type SelectOption,
+} from "@/src/services/optionsApi";
 import { loadSettings } from "@/src/services/settingsService";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 import { getIngredientStockInUnit } from "@/src/utils/ingredientStock";
 import { RateRecipeModal } from "@/src/components/recipes/RateRecipeModal";
+import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
+import { DateTextInput, DurationExpiryInput, FieldLabel, FormInput, SearchableObjectDropdown } from "@/src/components/forms";
+import type { MealPlanEntry } from "@/src/services/mealPlanApi";
+import {
+  buildIngredientRequirements,
+  getDefaultDeductionInstructions,
+  getResolvedDeductionInstructions,
+  hasAmbiguity,
+  type DeductionInstruction,
+  type IngredientRequirement,
+} from "@/src/utils/pantryDeduction";
+import { referenceId, referenceName } from "@/src/utils/pantryDefaults";
+import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
+import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 
 const MEAL_CATEGORY_LABEL: Record<string, string> = {
   breakfast: "Breakfast",
@@ -50,6 +80,7 @@ export default function RecipeDetailPage() {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
+  const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
   const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,37 +89,75 @@ export default function RecipeDetailPage() {
   const [savingScore, setSavingScore] = useState(false);
   const [showAllScores, setShowAllScores] = useState(false);
 
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
+  // "Cook now" — see recipes/add.tsx for the full produces-an-ingredient
+  // rationale. Purely a pantry operation, not tied to the meal planner:
+  // deducts this recipe's own ingredients (reusing the same
+  // deduction/substitution/ambiguity-resolution pipeline the planner uses)
+  // and, once the amount/location/expiry are confirmed in the small card
+  // below, creates a normal pantry entry for the produced ingredient.
+  const [cooking, setCooking] = useState(false);
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [pendingRequirements, setPendingRequirements] = useState<IngredientRequirement[]>([]);
+  const [ambiguousRequirements, setAmbiguousRequirements] = useState<IngredientRequirement[]>([]);
+  const [showBatchCard, setShowBatchCard] = useState(false);
+  const [pendingInstructions, setPendingInstructions] = useState<DeductionInstruction[]>([]);
+  const [batchAmount, setBatchAmount] = useState("");
+  const [batchStorageLocationId, setBatchStorageLocationId] = useState("");
+  const [batchStorageLocationName, setBatchStorageLocationName] = useState("");
+  const [batchStorageLocationDraft, setBatchStorageLocationDraft] = useState("");
+  const [batchExpiryDate, setBatchExpiryDate] = useState("");
+  const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
 
-    async function load() {
-      setIsLoading(true);
-      try {
-        const [loaded, loadedPantry, loadedIngredients, loadedSettings] = await Promise.all([
-          getRecipeById(id),
-          getPantryItems(),
-          getIngredients(),
-          loadSettings(),
-        ]);
-        if (!cancelled) {
-          setRecipe(loaded);
-          setPantryItems(Array.isArray(loadedPantry) ? loadedPantry : []);
-          setAllIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
-          setCustomUnitConversions(loadedSettings.unitConversions ?? []);
+  const isFirstLoad = useRef(true);
+
+  // Refetches on every focus, not just mount — otherwise coming back from
+  // logging pantry stock (e.g. adding an entry from the ingredient's own
+  // screen) leaves this screen's stock bars stuck on whatever was loaded
+  // before that trip, still reading "insufficient" for stock that's since
+  // been added.
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      let cancelled = false;
+
+      const showSpinner = isFirstLoad.current;
+      if (showSpinner) setIsLoading(true);
+
+      async function load() {
+        try {
+          const [loaded, loadedPantry, loadedIngredients, loadedRecipes, loadedLocations, loadedSettings] =
+            await Promise.all([
+              getRecipeById(id),
+              getPantryItems(),
+              getIngredients(),
+              getRecipes(),
+              getStorageLocations(),
+              loadSettings(),
+            ]);
+          if (!cancelled) {
+            setRecipe(loaded);
+            setPantryItems(Array.isArray(loadedPantry) ? loadedPantry : []);
+            setAllIngredients(Array.isArray(loadedIngredients) ? loadedIngredients : []);
+            setAllRecipes(Array.isArray(loadedRecipes) ? loadedRecipes : []);
+            setStorageLocations(Array.isArray(loadedLocations) ? loadedLocations : []);
+            setCustomUnitConversions(loadedSettings.unitConversions ?? []);
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : "Failed to load recipe");
+          }
+        } finally {
+          if (!cancelled) {
+            isFirstLoad.current = false;
+            if (showSpinner) setIsLoading(false);
+          }
         }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load recipe");
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
       }
-    }
 
-    void load();
-    return () => { cancelled = true; };
-  }, [id]);
+      void load();
+      return () => { cancelled = true; };
+    }, [id]),
+  );
 
   // Calculate total nutrition from ingredient list (live, not stored value)
   const totalNutrition = useMemo(() => {
@@ -148,6 +217,160 @@ export default function RecipeDetailPage() {
     const sum = recentScores.reduce((acc, s) => acc + s.value, 0);
     return Math.round((sum / recentScores.length) * 10) / 10;
   }, [recentScores]);
+
+  const ingredientMap = useMemo(
+    () => new Map(allIngredients.map((i) => [i._id, i])),
+    [allIngredients],
+  );
+  const recipeMap = useMemo(
+    () => new Map(allRecipes.map((r) => [r._id, r])),
+    [allRecipes],
+  );
+
+  // Reverse lookup — the link lives on the Ingredient (productionRecipe),
+  // not the Recipe, same as recipes/edit/[id].tsx.
+  const producedIngredient = useMemo(
+    () => allIngredients.find((i) => referenceId(i.productionRecipe) === recipe?._id),
+    [allIngredients, recipe],
+  );
+
+  async function refreshPantry() {
+    try {
+      const loaded = await getPantryItems();
+      setPantryItems(Array.isArray(loaded) ? loaded : []);
+    } catch {
+      // non-fatal — stock bars just won't reflect the change until next load
+    }
+  }
+
+  // A throwaway, never-persisted MealPlanEntry — just enough of the real
+  // shape for buildIngredientRequirements's `entry.recipe` branch (it only
+  // reads entry.recipe.ingredientList). Nothing here ever hits the server;
+  // "cook now" is a pure pantry operation, not a meal-plan action.
+  function buildCookEntry(): MealPlanEntry | null {
+    if (!recipe) return null;
+    return {
+      _id: "cook-now",
+      date: todayDateInputString(),
+      slot: recipe.mealCategory[0] ?? "dinner",
+      status: "planned",
+      recipe,
+    };
+  }
+
+  function openBatchCard(instructions: DeductionInstruction[]) {
+    if (!recipe || !producedIngredient) return;
+    setPendingInstructions(instructions);
+
+    const amount = (recipe.servings ?? 1) * (producedIngredient.defaultPortionAmount ?? 1);
+    setBatchAmount(String(round1(amount)));
+
+    setBatchStorageLocationId(referenceId(producedIngredient.defaultStorageLocation));
+    const locationName = referenceName(producedIngredient.defaultStorageLocation);
+    setBatchStorageLocationName(locationName);
+    setBatchStorageLocationDraft(locationName);
+
+    const durationAmount = producedIngredient.defaultExpiryDurationAmount;
+    const durationUnit = producedIngredient.defaultExpiryDurationUnit;
+    setBatchExpiryDate(
+      durationAmount != null && durationUnit
+        ? addDurationToDate(todayDateInputString(), durationAmount, durationUnit)
+        : "",
+    );
+
+    setShowBatchCard(true);
+  }
+
+  function handleCook() {
+    if (!recipe || !producedIngredient || cooking) return;
+    const entry = buildCookEntry();
+    if (!entry) return;
+
+    const requirements = buildIngredientRequirements(
+      entry,
+      recipeMap,
+      ingredientMap,
+      allIngredients,
+      pantryItems,
+      customUnitConversions,
+    );
+
+    if (hasAmbiguity(requirements)) {
+      setPendingRequirements(requirements);
+      setAmbiguousRequirements(requirements.filter((r) => r.groups.length > 1));
+      setShowResolveModal(true);
+      return;
+    }
+
+    openBatchCard(getDefaultDeductionInstructions(requirements));
+  }
+
+  function handleResolvedConfirm(selections: Record<string, string[]>) {
+    const instructions = getResolvedDeductionInstructions(pendingRequirements, selections);
+    setShowResolveModal(false);
+    setPendingRequirements([]);
+    openBatchCard(instructions);
+  }
+
+  function handleCancelResolve() {
+    setShowResolveModal(false);
+    setPendingRequirements([]);
+  }
+
+  async function handleConfirmBatch() {
+    if (!recipe || !producedIngredient || cooking) return;
+
+    const parsedAmount = Number(batchAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      Alert.alert("Enter an amount", "How much did this batch make?");
+      return;
+    }
+    if (!batchStorageLocationId && !batchStorageLocationDraft.trim()) {
+      Alert.alert("Choose a storage location", "Pick or type where this batch will be stored.");
+      return;
+    }
+
+    setCooking(true);
+    try {
+      const storageLocation = await resolveOrCreateOption(
+        storageLocations,
+        batchStorageLocationId,
+        batchStorageLocationDraft,
+        createStorageLocation,
+      );
+      if (!storageLocation) {
+        Alert.alert("Choose a storage location", "Pick or type where this batch will be stored.");
+        return;
+      }
+
+      for (const instruction of pendingInstructions) {
+        await deductFromPantryItem(instruction.pantryItemId, instruction.amount);
+      }
+
+      await addIngredientToPantry({
+        ingredient: producedIngredient._id,
+        storageLocation: storageLocation._id,
+        quantityAvailable: parsedAmount,
+        quantityUnit: producedIngredient.defaultPortionUnit || "serving",
+        purchaseDate: todayDateInputString(),
+        expiryDate: batchExpiryDate || undefined,
+      });
+
+      setShowBatchCard(false);
+      setPendingInstructions([]);
+      await refreshPantry();
+      Alert.alert("Batch made", `${recipe.name} was cooked and added to your pantry.`);
+    } catch (err) {
+      Alert.alert("Could not save batch", err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setCooking(false);
+    }
+  }
+
+  function handleCancelBatch() {
+    setShowBatchCard(false);
+    setPendingInstructions([]);
+  }
 
   async function handleAddScore(value: number) {
     if (!recipe) return;
@@ -322,6 +545,35 @@ export default function RecipeDetailPage() {
             </Text>
           ) : null}
         </View>
+
+        {/* Prepares an ingredient */}
+        {producedIngredient && (
+          <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+            <View className="flex-row items-center">
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
+                <Ionicons name="flask-outline" size={20} color="#2563EB" />
+              </View>
+              <View className="ml-3 flex-1">
+                <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+                  Prepares
+                </Text>
+                <Text className="mt-0.5 text-base font-semibold text-slate-900">
+                  {producedIngredient.name}
+                </Text>
+              </View>
+            </View>
+
+            <Pressable
+              disabled={cooking}
+              className={`mt-4 items-center rounded-2xl py-3.5 ${
+                cooking ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
+              }`}
+              onPress={handleCook}
+            >
+              <Text className="text-sm font-semibold text-white">Cook & make a batch</Text>
+            </Pressable>
+          </View>
+        )}
 
         {/* Rating */}
         <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
@@ -570,6 +822,100 @@ export default function RecipeDetailPage() {
       onClose={() => setShowRateModal(false)}
       onSubmit={(value) => void handleAddScore(value)}
     />
+
+    <ResolveIngredientSourcesModal
+      visible={showResolveModal}
+      requirements={ambiguousRequirements}
+      onCancel={handleCancelResolve}
+      onConfirm={handleResolvedConfirm}
+    />
+
+    <Modal visible={showBatchCard} transparent animationType="fade" onRequestClose={handleCancelBatch}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        className="flex-1 items-center justify-center bg-black/40 px-6"
+      >
+        <Pressable className="absolute inset-0" onPress={handleCancelBatch} />
+
+        <View className="w-full rounded-3xl bg-white p-5">
+          <Text className="text-lg font-bold text-slate-950">Make a batch</Text>
+          <Text className="mt-0.5 mb-5 text-sm text-slate-400">
+            {producedIngredient?.name ?? "This ingredient"} will be added to your pantry.
+          </Text>
+
+          <FieldLabel text="Amount made" required />
+          <View className="flex-row items-center">
+            <FormInput
+              value={batchAmount}
+              onChangeText={setBatchAmount}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              style={{ height: 56 }}
+              className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+            />
+            <Text className="ml-3 text-base font-semibold text-slate-500">
+              {producedIngredient?.defaultPortionUnit || "serving"}
+            </Text>
+          </View>
+
+          <View className="mt-4">
+            <FieldLabel text="Storage location" required />
+            <SearchableObjectDropdown<SelectOption>
+              options={storageLocations}
+              selectedId={batchStorageLocationId}
+              selectedName={batchStorageLocationName}
+              placeholder="Search or type a new storage location"
+              onTextChange={(value) => {
+                if (value !== batchStorageLocationName) setBatchStorageLocationId("");
+                setBatchStorageLocationDraft(value);
+              }}
+              onSelect={(option) => {
+                setBatchStorageLocationId(option._id);
+                setBatchStorageLocationName(option.name);
+                setBatchStorageLocationDraft(option.name);
+              }}
+            />
+          </View>
+
+          <View className="mt-4">
+            <FieldLabel text="Expiry date" />
+            <DateTextInput
+              value={batchExpiryDate}
+              style={{ height: 56 }}
+              className="rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+              onChangeText={setBatchExpiryDate}
+            />
+          </View>
+
+          <View className="mt-2">
+            <DurationExpiryInput
+              purchaseDate={todayDateInputString()}
+              onApply={setBatchExpiryDate}
+            />
+          </View>
+
+          <View className="mt-5 flex-row gap-3">
+            <Pressable
+              className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+              onPress={handleCancelBatch}
+            >
+              <Text className="text-sm font-semibold text-slate-700">Cancel</Text>
+            </Pressable>
+            <Pressable
+              disabled={cooking}
+              className={`flex-1 items-center rounded-2xl py-3.5 ${
+                cooking ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
+              }`}
+              onPress={() => void handleConfirmBatch()}
+            >
+              <Text className="text-sm font-semibold text-white">
+                {cooking ? "Saving..." : "Add to pantry"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
     </>
   );
 }

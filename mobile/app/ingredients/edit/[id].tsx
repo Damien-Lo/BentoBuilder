@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  CreatableMultiTagDropdown,
   CreatableStringDropdown,
   DateTextInput,
   DurationExpiryInput,
@@ -34,11 +35,13 @@ import {
   getCategories,
   getStorageLocations,
   getStores,
+  getTags,
   getUnitSuggestions,
   createBrand,
   createCategory,
   createStorageLocation,
   createStore,
+  createTag,
   type SelectOption,
 } from "@/src/services/optionsApi";
 
@@ -213,6 +216,8 @@ export default function IngredientDetailScreen() {
   const [stores, setStores] = useState<SelectOption[]>([]);
   const [brands, setBrands] = useState<SelectOption[]>([]);
   const [categories, setCategories] = useState<SelectOption[]>([]);
+  const [allTags, setAllTags] = useState<SelectOption[]>([]);
+  const [selectedTags, setSelectedTags] = useState<SelectOption[]>([]);
   const [units, setUnits] = useState<string[]>([]);
   const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
 
@@ -267,6 +272,7 @@ export default function IngredientDetailScreen() {
           loadedStores,
           loadedBrands,
           loadedCategories,
+          loadedTags,
           loadedUnits,
           loadedSettings,
         ] = await Promise.all([
@@ -276,6 +282,7 @@ export default function IngredientDetailScreen() {
           getStores(),
           getBrands(),
           getCategories(),
+          getTags(),
           getUnitSuggestions(),
           loadSettings(),
         ]);
@@ -320,6 +327,14 @@ export default function IngredientDetailScreen() {
         setStores(Array.isArray(loadedStores) ? loadedStores : []);
         setBrands(Array.isArray(loadedBrands) ? loadedBrands : []);
         setCategories(Array.isArray(loadedCategories) ? loadedCategories : []);
+        setAllTags(Array.isArray(loadedTags) ? loadedTags : []);
+        setSelectedTags(
+          Array.isArray(loadedIngredient.tags)
+            ? loadedIngredient.tags.filter(
+                (t): t is SelectOption => typeof t === "object" && t !== null,
+              )
+            : [],
+        );
         setUnits(Array.isArray(loadedUnits) ? loadedUnits : []);
         setCustomUnitConversions(loadedSettings.unitConversions ?? []);
       } catch (err) {
@@ -585,6 +600,17 @@ export default function IngredientDetailScreen() {
         ? optionalNumber(form.defaultExpiryDurationAmount)
         : undefined;
 
+      // Tags typed but not yet matched to a real record (pending, no _id
+      // yet) get created here — no separate "create" tap was needed for them.
+      const resolvedTags = await Promise.all(
+        selectedTags.map((tag) =>
+          tag._id ? tag : resolveOrCreateOption(allTags, "", tag.name, handleCreateTag),
+        ),
+      );
+      const tagIds = resolvedTags
+        .filter((t): t is SelectOption => t != null)
+        .map((t) => t._id);
+
       const updated = await updateIngredient(id, {
         name: form.name.trim(),
         description: form.description.trim() || undefined,
@@ -611,6 +637,7 @@ export default function IngredientDetailScreen() {
           sodium: optionalNumber(form.sodium),
         },
         unitConversions: form.unitConversions,
+        tags: tagIds,
       });
 
       const updatedForm = ingredientToForm(updated);
@@ -624,6 +651,11 @@ export default function IngredientDetailScreen() {
       setNutritionExpanded(hasNutritionData(updatedForm));
       setSmartDefaultsExpanded(
         !!updatedForm.defaultStorageLocationId || !!updatedForm.defaultExpiryDurationAmount,
+      );
+      setSelectedTags(
+        Array.isArray(updated.tags)
+          ? updated.tags.filter((t): t is SelectOption => typeof t === "object" && t !== null)
+          : [],
       );
       setIsEditing(false);
     } catch (err) {
@@ -667,6 +699,14 @@ export default function IngredientDetailScreen() {
         : [...current, store].sort((a, b) => a.name.localeCompare(b.name)),
     );
     return store;
+  }
+
+  async function handleCreateTag(name: string): Promise<SelectOption> {
+    const tag = await createTag(name);
+    setAllTags((current) =>
+      current.some((t) => t._id === tag._id) ? current : [...current, tag],
+    );
+    return tag;
   }
 
   async function handleCreateCategory(name: string): Promise<SelectOption> {
@@ -752,20 +792,24 @@ export default function IngredientDetailScreen() {
   async function handleQuickAdd() {
     if (!currentIngredient) return;
 
+    // A prior entry (if any) is just a convenience default for unit/low-stock
+    // threshold below — this ingredient's own fields cover the same ground,
+    // so a never-yet-stocked ingredient (e.g. fresh off a recipe link) can
+    // still get its first entry added right here.
     const lastEntry = ingredientPantryItems[0];
-    if (!lastEntry) {
-      Alert.alert(
-        "No existing entry",
-        "Add your first entry via the Add Ingredient screen.",
-      );
-      return;
-    }
 
     if (!quickAddLocationId && !quickAddLocationDraft.trim()) {
       Alert.alert(
         "Missing storage location",
         "Search or type a storage location before adding an entry.",
       );
+      return;
+    }
+
+    const resolvedUnit =
+      quickAddQuantityUnit.trim() || lastEntry?.quantityUnit || currentIngredient.defaultPortionUnit || "";
+    if (!resolvedUnit) {
+      Alert.alert("Missing unit", "Choose a unit before adding an entry.");
       return;
     }
 
@@ -806,12 +850,12 @@ export default function IngredientDetailScreen() {
             ingredient: id,
             storageLocation: storageLocation._id,
             quantityAvailable: quickAddQuantity ? Number(quickAddQuantity) : 0,
-            quantityUnit: quickAddQuantityUnit.trim() || lastEntry.quantityUnit,
+            quantityUnit: resolvedUnit,
             purchaseDate: quickAddPurchaseDate || undefined,
             expiryDate: quickAddExpiryDate || undefined,
             purchasePrice: quickAddPrice.trim() ? Number(quickAddPrice) : undefined,
             store: store ? store._id : null,
-            lowStockThreshold: lastEntry.lowStockThreshold,
+            lowStockThreshold: lastEntry?.lowStockThreshold ?? currentIngredient.lowStockThreshold,
           }),
         );
       }
@@ -1031,6 +1075,15 @@ export default function IngredientDetailScreen() {
                   updateForm("categoryName", option.name);
                   setCategoryDraft(option.name);
                 }}
+              />
+
+              <FieldLabel text="Tags" />
+              <CreatableMultiTagDropdown
+                options={allTags}
+                selectedItems={selectedTags}
+                placeholder="Add a tag…"
+                onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
+                onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
               />
 
               <FieldLabel text="Description" />
@@ -1358,6 +1411,13 @@ export default function IngredientDetailScreen() {
                 </Text>
 
                 <View className="mt-3 flex-row flex-wrap justify-center">
+                  {ingredient.productionRecipe ? (
+                    <View className="mr-2 rounded-full bg-blue-50 px-3 py-1">
+                      <Text className="text-sm font-medium text-blue-600">
+                        Prepared
+                      </Text>
+                    </View>
+                  ) : null}
                   {ingredient.isGeneric ? (
                     <View className="mr-2 rounded-full bg-violet-50 px-3 py-1">
                       <Text className="text-sm font-medium text-violet-600">
@@ -1373,12 +1433,19 @@ export default function IngredientDetailScreen() {
                     </View>
                   ) : null}
                   {brandName ? (
-                    <View className="rounded-full bg-slate-100 px-3 py-1">
+                    <View className="mr-2 rounded-full bg-slate-100 px-3 py-1">
                       <Text className="text-sm font-medium text-slate-600">
                         {brandName}
                       </Text>
                     </View>
                   ) : null}
+                  {selectedTags.map((tag) => (
+                    <View key={tag._id} className="mr-2 mt-2 rounded-full bg-slate-100 px-3 py-1">
+                      <Text className="text-sm font-medium text-slate-600">
+                        #{tag.name}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
 
                 {ingredient.description ? (
@@ -1392,7 +1459,7 @@ export default function IngredientDetailScreen() {
               <View className="mb-4 flex-row rounded-2xl border border-slate-200 bg-white px-5 py-4">
                 <View className="flex-1 items-center">
                   <Text className="text-2xl font-bold text-slate-950">
-                    {totalQuantity}
+                    {Math.round(totalQuantity * 100) / 100}
                   </Text>
                   <Text className="mt-0.5 text-xs text-slate-500">
                     {ingredient.defaultPortionUnit || "units"} total
@@ -1677,6 +1744,39 @@ export default function IngredientDetailScreen() {
               )}
             </View>
           )}
+
+          {/* Made from a recipe — view mode only, display only. Set from
+              the recipe screens, not editable here (avoids two UIs
+              mutating the same relationship). */}
+          {!isEditing && ingredient.productionRecipe ? (
+            <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-6 py-6">
+              <View className="flex-row items-center">
+                <Ionicons name="flask-outline" size={22} color="#2563EB" />
+                <Text className="ml-2 flex-1 font-semibold text-slate-700">
+                  Made from {getReferenceName(ingredient.productionRecipe)}
+                </Text>
+                <View className="rounded-full bg-blue-50 px-2.5 py-1">
+                  <Text className="text-xs font-semibold text-blue-600">Recipe</Text>
+                </View>
+              </View>
+              <Text className="mt-2 text-sm leading-5 text-slate-500">
+                Cooking that recipe deposits a batch of this here — its nutrition stays in
+                sync with the recipe automatically.
+              </Text>
+              <Pressable
+                className="mt-4 flex-row items-center justify-center rounded-2xl bg-blue-600 py-3 active:bg-blue-700"
+                onPress={() =>
+                  router.push({
+                    pathname: "/recipes/[id]",
+                    params: { id: getReferenceId(ingredient.productionRecipe) },
+                  })
+                }
+              >
+                <Text className="mr-1.5 text-sm font-semibold text-white">Go to recipe</Text>
+                <Ionicons name="arrow-forward" size={16} color="white" />
+              </Pressable>
+            </View>
+          ) : null}
 
           {/* Pantry entries — view mode only */}
           {!isEditing && (

@@ -163,6 +163,42 @@ const ingredientSchema = new mongoose.Schema(
       default: [],
     },
 
+    // Optional link to the Recipe that produces this ingredient (e.g. a
+    // "Dashi Stock" ingredient made from a "Dashi Stock" recipe). Cooking
+    // that recipe (confirming a meal-plan entry for it) deposits pantry
+    // stock of this ingredient; any other recipe that calls for this
+    // ingredient will, if pantry stock is short, fall back to this
+    // ingredient's own recipe for the shortfall (recursively) — see
+    // pantryDeduction.ts's expandProducedIngredientRows.
+    //
+    // Whenever this is set (see RecipeRoutes.js/IngredientRoutes.js),
+    // defaultPortionAmount is forced to 1 and defaultPortionUnit is forced
+    // to match the recipe's own defaultPortionUnit ("serving" by default)
+    // — this is what lets "N servings cooked" equal "N units produced"
+    // exactly, so the recipe's own per-serving nutrition (already computed
+    // automatically) is directly this ingredient's per-unit nutrition with
+    // no conversion needed. See services/productionCycle.js for the cycle
+    // check that runs before this can be set.
+    productionRecipe: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Recipe",
+      default: null,
+    },
+
+    // Only meaningful when productionRecipe is set, and only ever set from
+    // the recipe's own "Prepares" section (same rule as productionRecipe
+    // itself). true = a finished meal you reheat/eat directly (e.g.
+    // Okonomiyaki) — excluded from other recipes' ingredient-list pickers
+    // and the "All Your Ingredients" list, since it's never a component of
+    // another recipe. false (default) = a component ingredient (e.g. Dashi
+    // Stock, Minced Garlic) usable like any store-bought ingredient.
+    isMealPrep: {
+      type: Boolean,
+      default: false,
+    },
+
+    tags: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tag" }],
+
     imageUrl: {
       type: String,
       trim: true,

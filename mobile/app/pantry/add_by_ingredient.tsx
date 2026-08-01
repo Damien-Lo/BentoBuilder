@@ -34,6 +34,7 @@ import {
   PriceInput,
   QuantityServingInput,
   SearchableObjectDropdown,
+  SegmentedToggle,
 } from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
@@ -123,6 +124,7 @@ export default function AddPantryItemByIngredientScreen() {
     useState<Ingredient | null>(null);
 
   const [searchText, setSearchText] = useState("");
+  const [browseKind, setBrowseKind] = useState<"ingredient" | "mealPrep">("ingredient");
   const [showCreateIngredient, setShowCreateIngredient] = useState(false);
   const [quantity, setQuantity] = useState("1");
   const [quantityUnit, setQuantityUnit] = useState("item");
@@ -216,7 +218,9 @@ export default function AddPantryItemByIngredientScreen() {
     const query = searchText.trim().toLowerCase();
 
     const activeIngredients = ingredients.filter(
-      (ingredient) => !ingredient.isArchived,
+      (ingredient) =>
+        !ingredient.isArchived &&
+        Boolean(ingredient.isMealPrep) === (browseKind === "mealPrep"),
     );
 
     if (!query) {
@@ -239,7 +243,7 @@ export default function AddPantryItemByIngredientScreen() {
         value.toLowerCase().includes(query),
       );
     });
-  }, [ingredients, searchText]);
+  }, [ingredients, searchText, browseKind]);
 
   const selectedStorageLocation = useMemo(
     () =>
@@ -492,14 +496,25 @@ export default function AddPantryItemByIngredientScreen() {
 
         {!selectedIngredient ? (
           <View className="flex-1 px-5 pt-5">
+            <SegmentedToggle<"ingredient" | "mealPrep">
+              options={[
+                { value: "ingredient", label: "Ingredients" },
+                { value: "mealPrep", label: "Meal preps" },
+              ]}
+              value={browseKind}
+              onChange={setBrowseKind}
+            />
+
             {/* Search */}
-            <View className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
+            <View className="mt-4 h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
               <Ionicons name="search-outline" size={21} color="#64748B" />
 
               <TextInput
                 value={searchText}
                 onChangeText={setSearchText}
-                placeholder="Search all ingredients"
+                placeholder={
+                  browseKind === "mealPrep" ? "Search meal preps" : "Search all ingredients"
+                }
                 placeholderTextColor="#94A3B8"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -514,7 +529,7 @@ export default function AddPantryItemByIngredientScreen() {
             </View>
 
             <Text className="mb-3 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500">
-              Ingredients
+              {browseKind === "mealPrep" ? "Meal Preps" : "Ingredients"}
             </Text>
 
             <FlatList
@@ -570,22 +585,26 @@ export default function AddPantryItemByIngredientScreen() {
                   <Ionicons name="search-outline" size={44} color="#94A3B8" />
 
                   <Text className="mt-4 text-lg font-bold text-slate-950">
-                    No ingredients found
+                    {browseKind === "mealPrep" ? "No meal preps found" : "No ingredients found"}
                   </Text>
 
                   <Text className="mt-2 text-center text-slate-500">
-                    Try another search, or create a new ingredient below.
+                    {browseKind === "mealPrep"
+                      ? "Meal preps come from a recipe's \"Prepares\" section, not created here — try another search, or check the Meal Preps tab on the pantry page."
+                      : "Try another search, or create a new ingredient below."}
                   </Text>
 
-                  <Pressable
-                    className="mt-5 flex-row items-center rounded-2xl bg-blue-600 px-5 py-3 active:bg-blue-700"
-                    onPress={() => setShowCreateIngredient(true)}
-                  >
-                    <Ionicons name="add-circle-outline" size={18} color="white" />
-                    <Text className="ml-2 font-semibold text-white">
-                      Create &quot;{searchText.trim()}&quot;
-                    </Text>
-                  </Pressable>
+                  {browseKind === "ingredient" && (
+                    <Pressable
+                      className="mt-5 flex-row items-center rounded-2xl bg-blue-600 px-5 py-3 active:bg-blue-700"
+                      onPress={() => setShowCreateIngredient(true)}
+                    >
+                      <Ionicons name="add-circle-outline" size={18} color="white" />
+                      <Text className="ml-2 font-semibold text-white">
+                        Create &quot;{searchText.trim()}&quot;
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
               }
             />
