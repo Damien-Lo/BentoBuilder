@@ -28,7 +28,6 @@ async function resolveGenericParent({
   defaultPortionAmount,
   defaultPortionUnit,
   nutrition,
-  nutritionBasis,
 }) {
   if (genericParent) {
     const parent = await Ingredient.findById(genericParent);
@@ -56,19 +55,19 @@ async function resolveGenericParent({
     defaultPortionAmount,
     defaultPortionUnit,
     nutrition,
-    nutritionBasis,
   });
   return created._id;
 }
 
 /**
  * GET /api/ingredients
- * Return all non-archived ingredients.
+ * Return all non-archived ingredients. Pass ?archived=true to list only
+ * archived ones instead (the Archive view's recovery list).
  */
 router.get("/", async (req, res) => {
   try {
     const ingredients = await Ingredient.find({
-      isArchived: false,
+      isArchived: req.query.archived === "true",
     })
       .populate("category")
       .populate("brand")
@@ -176,7 +175,6 @@ router.post("/", async (req, res) => {
         defaultPortionAmount: ingredientData.defaultPortionAmount,
         defaultPortionUnit: ingredientData.defaultPortionUnit,
         nutrition: ingredientData.nutrition,
-        nutritionBasis: ingredientData.nutritionBasis,
       });
     }
 

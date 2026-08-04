@@ -10,18 +10,26 @@ import {
   View,
 } from "react-native";
 
+import { CreatableMultiTagDropdown } from "./CreatableMultiTagDropdown";
 import { CreatableStringDropdown } from "./CreatableStringDropdown";
+import { DurationValueInput } from "./DurationValueInput";
 import { FieldLabel } from "./FieldLabel";
 import { FormInput } from "./FormInput";
 import { SearchableObjectDropdown } from "./SearchableObjectDropdown";
+import { ToggleRow } from "./ToggleRow";
 
 import { createIngredient, type Ingredient } from "@/src/services/ingredientApi";
 import {
   createCategory,
+  createStorageLocation,
+  createTag,
   getCategories,
+  getStorageLocations,
+  getTags,
   getUnitSuggestions,
   type SelectOption,
 } from "@/src/services/optionsApi";
+import type { DurationUnit } from "@/src/utils/date";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 
 interface CreateGenericIngredientModalProps {
@@ -56,6 +64,21 @@ export function CreateGenericIngredientModal({
   const [categoryDraft, setCategoryDraft] = useState("");
   const [units, setUnits] = useState<string[]>([]);
   const [unit, setUnit] = useState("");
+  const [lowStockThreshold, setLowStockThreshold] = useState("");
+
+  const [allTags, setAllTags] = useState<SelectOption[]>([]);
+  const [selectedTags, setSelectedTags] = useState<SelectOption[]>([]);
+
+  const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
+  const [wantsDefaultLocation, setWantsDefaultLocation] = useState(false);
+  const [defaultLocationId, setDefaultLocationId] = useState("");
+  const [defaultLocationName, setDefaultLocationName] = useState("");
+  const [defaultLocationDraft, setDefaultLocationDraft] = useState("");
+
+  const [wantsDefaultExpiry, setWantsDefaultExpiry] = useState(false);
+  const [defaultExpiryAmount, setDefaultExpiryAmount] = useState("1");
+  const [defaultExpiryUnit, setDefaultExpiryUnit] = useState<DurationUnit>("week");
+
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -65,13 +88,34 @@ export function CreateGenericIngredientModal({
     setCategoryName("");
     setCategoryDraft("");
     setUnit("");
+    setLowStockThreshold("");
+    setSelectedTags([]);
+    setWantsDefaultLocation(false);
+    setDefaultLocationId("");
+    setDefaultLocationName("");
+    setDefaultLocationDraft("");
+    setWantsDefaultExpiry(false);
+    setDefaultExpiryAmount("1");
+    setDefaultExpiryUnit("week");
     getCategories()
       .then((loaded) => setCategories(Array.isArray(loaded) ? loaded : []))
       .catch(() => setCategories([]));
     getUnitSuggestions()
       .then((loaded) => setUnits(Array.isArray(loaded) ? loaded : []))
       .catch(() => setUnits([]));
+    getTags()
+      .then((loaded) => setAllTags(Array.isArray(loaded) ? loaded : []))
+      .catch(() => setAllTags([]));
+    getStorageLocations()
+      .then((loaded) => setStorageLocations(Array.isArray(loaded) ? loaded : []))
+      .catch(() => setStorageLocations([]));
   }, [visible, initialName]);
+
+  async function handleCreateTag(tagName: string): Promise<SelectOption> {
+    const tag = await createTag(tagName);
+    setAllTags((prev) => (prev.some((t) => t._id === tag._id) ? prev : [...prev, tag]));
+    return tag;
+  }
 
   async function handleCreate() {
     const trimmedName = name.trim();
@@ -93,11 +137,38 @@ export function CreateGenericIngredientModal({
         return;
       }
 
+      const resolvedTags = await Promise.all(
+        selectedTags.map((tag) =>
+          tag._id ? tag : resolveOrCreateOption(allTags, "", tag.name, handleCreateTag),
+        ),
+      );
+      const tagIds = resolvedTags.filter((t): t is SelectOption => t != null).map((t) => t._id);
+
+      const defaultStorageLocation = wantsDefaultLocation
+        ? await resolveOrCreateOption(
+            storageLocations,
+            defaultLocationId,
+            defaultLocationDraft,
+            createStorageLocation,
+          )
+        : null;
+
+      const parsedThreshold = lowStockThreshold.trim() ? Number(lowStockThreshold) : undefined;
+      if (parsedThreshold !== undefined && (!Number.isFinite(parsedThreshold) || parsedThreshold < 0)) {
+        Alert.alert("Invalid threshold", "Enter a low-stock threshold of zero or greater.");
+        return;
+      }
+
       const ingredient = await createIngredient({
         name: trimmedName,
         isGeneric: true,
         category: category._id,
         defaultPortionUnit: unit.trim() || undefined,
+        tags: tagIds,
+        lowStockThreshold: parsedThreshold,
+        defaultStorageLocation: defaultStorageLocation?._id || null,
+        defaultExpiryDurationAmount: wantsDefaultExpiry ? Number(defaultExpiryAmount) : null,
+        defaultExpiryDurationUnit: wantsDefaultExpiry ? defaultExpiryUnit : null,
       });
       onCreated(ingredient);
     } catch (error) {
@@ -157,6 +228,66 @@ export function CreateGenericIngredientModal({
                 placeholder="e.g. g, mL, cup — defaults to serving"
                 onSelect={setUnit}
               />
+
+              <FieldLabel text="Tags" />
+              <CreatableMultiTagDropdown
+                options={allTags}
+                selectedItems={selectedTags}
+                placeholder="Add a tag…"
+                onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
+                onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
+              />
+
+              <FieldLabel text="Low-stock threshold (optional)" />
+              <FormInput
+                value={lowStockThreshold}
+                placeholder="0"
+                keyboardType="decimal-pad"
+                onChangeText={setLowStockThreshold}
+              />
+
+              <View className="mt-1">
+                <ToggleRow
+                  label="Set a default storage location"
+                  description="Prefills the location when logging a purchase of this ingredient."
+                  value={wantsDefaultLocation}
+                  onChange={setWantsDefaultLocation}
+                />
+                {wantsDefaultLocation && (
+                  <SearchableObjectDropdown<SelectOption>
+                    options={storageLocations}
+                    selectedId={defaultLocationId}
+                    selectedName={defaultLocationName}
+                    placeholder="Search or type a location"
+                    onTextChange={(value) => {
+                      if (value !== defaultLocationName) setDefaultLocationId("");
+                      setDefaultLocationDraft(value);
+                    }}
+                    onSelect={(option) => {
+                      setDefaultLocationId(option._id);
+                      setDefaultLocationName(option.name);
+                      setDefaultLocationDraft(option.name);
+                    }}
+                  />
+                )}
+              </View>
+
+              <View className="mt-1">
+                <ToggleRow
+                  label="Set a default expiry duration"
+                  description="Prefills the expiry date when logging a purchase of this ingredient."
+                  value={wantsDefaultExpiry}
+                  onChange={setWantsDefaultExpiry}
+                />
+                {wantsDefaultExpiry && (
+                  <DurationValueInput
+                    amount={defaultExpiryAmount}
+                    unit={defaultExpiryUnit}
+                    onChangeAmount={setDefaultExpiryAmount}
+                    onChangeUnit={setDefaultExpiryUnit}
+                  />
+                )}
+              </View>
 
               <View className="mt-5 flex-row gap-3">
                 <Pressable

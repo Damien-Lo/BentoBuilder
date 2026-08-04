@@ -15,11 +15,6 @@ const ingredientCategorySchema = new mongoose.Schema(
       lowercase: true,
     },
 
-    icon: {
-      type: String,
-      default: "nutrition-outline",
-    },
-
     isDefault: {
       type: Boolean,
       default: false,

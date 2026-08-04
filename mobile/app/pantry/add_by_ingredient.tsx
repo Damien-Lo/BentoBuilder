@@ -142,8 +142,10 @@ export default function AddPantryItemByIngredientScreen() {
   const [storeName, setStoreName] = useState("");
   const [storeDraft, setStoreDraft] = useState("");
   const [storeTouched, setStoreTouched] = useState(false);
+  const [notes, setNotes] = useState("");
 
   const [showLocationOptions, setShowLocationOptions] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -352,6 +354,8 @@ export default function AddPantryItemByIngredientScreen() {
     setStoreName("");
     setStoreDraft("");
     setStoreTouched(false);
+    setNotes("");
+    setShowMoreDetails(false);
   }
 
   async function handleCreateStore(name: string): Promise<SelectOption> {
@@ -424,6 +428,7 @@ export default function AddPantryItemByIngredientScreen() {
           expiryDate: expiryDate.trim() || undefined,
           purchasePrice: purchasePrice.trim() ? Number(purchasePrice) : undefined,
           store: store ? store._id : null,
+          notes: notes.trim() || undefined,
         });
       }
 
@@ -773,36 +778,63 @@ export default function AddPantryItemByIngredientScreen() {
               }}
             />
 
-            <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
-              Store (optional)
-            </Text>
-            {suggestedStore && !storeTouched ? (
-              <Text className="mb-2 text-xs leading-4 text-slate-500">
-                Auto-filled from recent purchase history.
-              </Text>
-            ) : null}
-            <SearchableObjectDropdown<SelectOption>
-              options={stores}
-              selectedId={storeId}
-              selectedName={storeName}
-              placeholder="Search or type a new store"
-              onTextChange={(value) => {
-                if (value !== storeName) setStoreId("");
-                setStoreDraft(value);
-                setStoreTouched(true);
-              }}
-              onSelect={(option) => {
-                setStoreId(option._id);
-                setStoreName(option.name);
-                setStoreDraft(option.name);
-                setStoreTouched(true);
-              }}
-            />
+            {showMoreDetails || storeId || storeDraft.trim() || purchasePrice.trim() ? (
+              <>
+                <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
+                  Store (optional)
+                </Text>
+                {suggestedStore && !storeTouched ? (
+                  <Text className="mb-2 text-xs leading-4 text-slate-500">
+                    Auto-filled from recent purchase history.
+                  </Text>
+                ) : null}
+                <SearchableObjectDropdown<SelectOption>
+                  options={stores}
+                  selectedId={storeId}
+                  selectedName={storeName}
+                  placeholder="Search or type a new store"
+                  onTextChange={(value) => {
+                    if (value !== storeName) setStoreId("");
+                    setStoreDraft(value);
+                    setStoreTouched(true);
+                  }}
+                  onSelect={(option) => {
+                    setStoreId(option._id);
+                    setStoreName(option.name);
+                    setStoreDraft(option.name);
+                    setStoreTouched(true);
+                  }}
+                />
+
+                <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
+                  Price paid (optional)
+                </Text>
+                <PriceInput value={purchasePrice} onChangeText={setPurchasePrice} />
+              </>
+            ) : (
+              <Pressable
+                className="mt-4 flex-row items-center self-start active:opacity-60"
+                onPress={() => setShowMoreDetails(true)}
+              >
+                <Ionicons name="add-circle-outline" size={16} color="#2563EB" />
+                <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+                  Add store or price
+                </Text>
+              </Pressable>
+            )}
 
             <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
-              Price paid (optional)
+              Notes (optional)
             </Text>
-            <PriceInput value={purchasePrice} onChangeText={setPurchasePrice} />
+            <TextInput
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="e.g. Half-used, keep away from the window"
+              placeholderTextColor="#94A3B8"
+              multiline
+              textAlignVertical="top"
+              className="min-h-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
+            />
           </ScrollView>
 
             <View className="pb-6 pt-4">

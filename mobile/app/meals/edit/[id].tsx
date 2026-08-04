@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { CreatableMultiTagDropdown } from "@/src/components/forms";
+import { CreatableMultiTagDropdown, FieldLabel, FormInput, SectionTitle } from "@/src/components/forms";
 import {
   getMealById,
   updateMeal,
@@ -267,10 +267,15 @@ export default function EditMealScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <SectionTitle
+            first
+            icon="restaurant-outline"
+            title="Meal details"
+            description="Give your meal a name and pick what it's made of."
+          />
+
           {/* Meal type dropdown */}
-          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-            Meal type
-          </Text>
+          <FieldLabel text="Meal type" required />
           <View className="relative mb-5">
             <Pressable
               className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
@@ -300,16 +305,15 @@ export default function EditMealScreen() {
                 className="absolute left-0 right-0 top-16 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
                 style={{ elevation: 20 }}
               >
-                {MEAL_TYPE_OPTIONS.map((option, i) => (
+                {MEAL_TYPE_OPTIONS.filter((option) => option.available).map((option, i, visible) => (
                   <Pressable
                     key={option.value}
                     className={`flex-row items-center px-4 py-3.5 ${
-                      i < MEAL_TYPE_OPTIONS.length - 1
+                      i < visible.length - 1
                         ? "border-b border-slate-100"
                         : ""
-                    } ${!option.available ? "opacity-40" : "active:bg-slate-50"}`}
+                    } active:bg-slate-50`}
                     onPress={() => {
-                      if (!option.available) return;
                       setMealType(option.value);
                       setShowTypePicker(false);
                     }}
@@ -322,10 +326,7 @@ export default function EditMealScreen() {
                     <Text className="ml-3 flex-1 text-base text-slate-800">
                       {option.label}
                     </Text>
-                    {!option.available && (
-                      <Text className="text-xs text-slate-400">Coming soon</Text>
-                    )}
-                    {option.value === mealType && option.available && (
+                    {option.value === mealType && (
                       <Ionicons name="checkmark" size={18} color="#2563EB" />
                     )}
                   </Pressable>
@@ -335,38 +336,26 @@ export default function EditMealScreen() {
           </View>
 
           {/* Meal name */}
-          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-            Meal name
-          </Text>
-          <TextInput
+          <FieldLabel text="Meal name" required />
+          <FormInput
             value={name}
             onChangeText={setName}
             placeholder="e.g. Sunday Dinner"
-            placeholderTextColor="#94A3B8"
-            className="mb-5 h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+            className="mb-5"
           />
 
           {/* Notes */}
-          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-            Notes{" "}
-            <Text className="font-normal text-slate-400">(optional)</Text>
-          </Text>
-          <TextInput
+          <FieldLabel text="Notes (optional)" />
+          <FormInput
             value={notes}
             onChangeText={setNotes}
             placeholder="Any notes about this meal"
-            placeholderTextColor="#94A3B8"
             multiline
-            numberOfLines={2}
-            textAlignVertical="top"
-            className="mb-6 min-h-[64px] rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
+            className="mb-6"
           />
 
           {/* Tags */}
-          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-            Tags{" "}
-            <Text className="font-normal text-slate-400">(optional)</Text>
-          </Text>
+          <FieldLabel text="Tags (optional)" />
           <View className="mb-5">
             <CreatableMultiTagDropdown
               options={allTags}
@@ -390,10 +379,12 @@ export default function EditMealScreen() {
           </View>
 
           {/* Nutrition summary */}
+          <SectionTitle
+            icon="flame-outline"
+            title="Nutrition"
+            description="Totalled automatically from each course's recipe and servings."
+          />
           <View className="mb-6">
-            <Text className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
-              Meal nutrition
-            </Text>
             <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
               {(
                 [
@@ -421,9 +412,11 @@ export default function EditMealScreen() {
           </View>
 
           {/* Courses */}
-          <Text className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
-            Courses ({courses.length})
-          </Text>
+          <SectionTitle
+            icon="list-outline"
+            title="Courses"
+            description={`${courses.length} ${courses.length === 1 ? "course" : "courses"} in this meal.`}
+          />
 
           {courses.map((course, index) => (
             <View

@@ -116,12 +116,6 @@ const ingredientSchema = new mongoose.Schema(
       default: () => ({}),
     },
 
-    nutritionBasis: {
-      type: String,
-      enum: ["per-serving", "per-100g"],
-      default: "per-serving",
-    },
-
     lowStockThreshold: {
       type: Number,
       min: 0,

@@ -32,7 +32,6 @@ export interface Ingredient {
   defaultPortionAmount?: number;
   defaultPortionUnit?: string;
 
-  nutritionBasis?: string;
   nutrition?: IngredientNutrition;
 
   lowStockThreshold?: number;
@@ -95,7 +94,6 @@ export interface CreateIngredientInput {
   defaultPortionAmount?: number;
   defaultPortionUnit?: string;
 
-  nutritionBasis?: string;
   nutrition?: IngredientNutrition;
 
   lowStockThreshold?: number;
@@ -173,6 +171,14 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
 export async function getIngredients(): Promise<Ingredient[]> {
   const response = await fetch(`${API_BASE_URL}/api/ingredients`);
+
+  const result = await parseResponse<IngredientListResponse>(response);
+
+  return Array.isArray(result.data) ? result.data : [];
+}
+
+export async function getArchivedIngredients(): Promise<Ingredient[]> {
+  const response = await fetch(`${API_BASE_URL}/api/ingredients?archived=true`);
 
   const result = await parseResponse<IngredientListResponse>(response);
 
@@ -334,6 +340,17 @@ export async function restoreIngredient(
 export async function deleteIngredient(ingredientId: string): Promise<void> {
   const response = await fetch(
     `${API_BASE_URL}/api/ingredients/${ingredientId}`,
+    { method: "DELETE" },
+  );
+
+  await parseResponse<{ success: boolean; message: string }>(response);
+}
+
+// Only meaningful from the Archive view — an already-archived ingredient
+// deleted permanently, with no restore path back.
+export async function deleteIngredientPermanently(ingredientId: string): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/ingredients/${ingredientId}?permanent=true`,
     { method: "DELETE" },
   );
 

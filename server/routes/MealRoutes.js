@@ -12,11 +12,13 @@ function populateMeal(query) {
 
 /**
  * GET /api/meals
+ * Pass ?archived=true to list only archived ones instead (the Archive
+ * view's recovery list).
  */
 router.get("/", async (req, res) => {
   try {
     const meals = await populateMeal(
-      Meal.find({ isArchived: false }).sort({ createdAt: -1 }),
+      Meal.find({ isArchived: req.query.archived === "true" }).sort({ createdAt: -1 }),
     );
 
     return res.status(200).json({
@@ -83,21 +85,27 @@ router.patch("/:id", async (req, res) => {
 
 /**
  * DELETE /api/meals/:id
- * Soft archive.
+ * Pass ?permanent=true to hard-delete. Default: soft archive.
  */
 router.delete("/:id", async (req, res) => {
   try {
-    const meal = await Meal.findByIdAndUpdate(
-      req.params.id,
-      { isArchived: true },
-      { new: true },
-    );
+    const meal =
+      req.query.permanent === "true"
+        ? await Meal.findByIdAndDelete(req.params.id)
+        : await Meal.findByIdAndUpdate(
+            req.params.id,
+            { isArchived: true },
+            { new: true },
+          );
 
     if (!meal) {
       return res.status(404).json({ success: false, message: "Meal not found" });
     }
 
-    return res.status(200).json({ success: true, message: "Meal deleted" });
+    return res.status(200).json({
+      success: true,
+      message: req.query.permanent === "true" ? "Meal deleted" : "Meal archived",
+    });
   } catch (error) {
     return res.status(400).json({ success: false, message: "Invalid meal ID" });
   }

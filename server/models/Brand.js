@@ -16,16 +16,6 @@ const brandSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
-
-    icon: {
-      type: String,
-      default: null,
-    },
-
-    isDefault: {
-      type: Boolean,
-      default: false,
-    },
   },
   {
     timestamps: true,

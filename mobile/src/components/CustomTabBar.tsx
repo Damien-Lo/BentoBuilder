@@ -14,7 +14,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const HIDDEN   = new Set(["sever_test_page", "explore"]);
 const TAB_H    = 56;   // tab row height
 const FAB_D    = 48;   // FAB diameter
 const SUB_D    = 40;   // sub-option button diameter
@@ -58,25 +57,31 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
     }).start();
   }
 
-  function closeMenu(goHome = false) {
+  function closeMenu(after?: () => void) {
     Animated.timing(anim, {
       toValue: 0,
       duration: 200,
       useNativeDriver: true,
     }).start(() => {
       setIsOpen(false);
-      if (goHome) router.push("/");
+      after?.();
     });
   }
 
   function handleFab() {
-    if (isOpen) closeMenu(true);
+    if (isOpen) closeMenu(() => router.push("/"));
     else openMenu();
+  }
+
+  function handleSubOption(opt: (typeof SUB_OPTIONS)[number]) {
+    closeMenu(() =>
+      router.push({ pathname: "/coming-soon", params: { feature: opt.label, icon: opt.icon } }),
+    );
   }
 
   // ── Tab helpers ──────────────────────────────────────────────────────────
 
-  const visible     = state.routes.filter(r => !HIDDEN.has(r.name));
+  const visible     = state.routes;
   const leftRoutes  = visible.slice(0, 2);
   const rightRoutes = visible.slice(2);
 
@@ -89,7 +94,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
       <Pressable
         key={route.key}
         onPress={() => {
-          if (isOpen) closeMenu(false);
+          if (isOpen) closeMenu();
           const evt = navigation.emit({
             type: "tabPress",
             target: route.key,
@@ -137,7 +142,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
         visible={isOpen}
         transparent
         animationType="none"
-        onRequestClose={() => closeMenu(false)}
+        onRequestClose={() => closeMenu()}
       >
         {/* Dimmed backdrop — tap anywhere to close */}
         <Animated.View
@@ -148,7 +153,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
             opacity: anim,
           }}
         >
-          <Pressable style={{ flex: 1 }} onPress={() => closeMenu(false)} />
+          <Pressable style={{ flex: 1 }} onPress={() => closeMenu()} />
         </Animated.View>
 
         {/* Sub-option buttons, anchored at FAB centre */}
@@ -190,7 +195,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
               }}
             >
               <Pressable
-                onPress={() => closeMenu(false)}
+                onPress={() => handleSubOption(opt)}
                 style={{
                   width: SUB_D,
                   height: SUB_D,
@@ -225,7 +230,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
         {/* FAB inside Modal — same position as real FAB; tap → close + go home */}
         <Pressable
-          onPress={() => closeMenu(true)}
+          onPress={() => closeMenu(() => router.push("/"))}
           style={[fabStyle, {
             position: "absolute",
             left: fabCX - FAB_D / 2,

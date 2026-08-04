@@ -223,7 +223,6 @@ export function SplitPantryItemModal({
         quantityUnit: item.quantityUnit,
         purchaseDate: item.purchaseDate || undefined,
         expiryDate: rightExpiryDate || undefined,
-        lowStockThreshold: item.lowStockThreshold,
       });
 
       onSplit(updatedOriginal, newEntry);

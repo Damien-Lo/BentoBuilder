@@ -77,6 +77,27 @@ export async function createCategory(
   return result.data;
 }
 
+export async function renameCategory(id: string, name: string): Promise<SelectOption> {
+  const response = await fetch(`${API_BASE_URL}/api/categories/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name.trim() }),
+  });
+
+  const result = await parseResponse<OptionResponse>(response);
+  return result.data;
+}
+
+// Ingredients still pointing at a deleted category move to "Uncategorized"
+// (auto-created server-side) — category is a required field on Ingredient.
+export async function deleteCategory(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/categories/${id}`, {
+    method: "DELETE",
+  });
+
+  await parseResponse<{ success: boolean; message: string }>(response);
+}
+
 /* -------------------------------------------------------------------------- */
 /*                              Storage Locations                             */
 /* -------------------------------------------------------------------------- */
@@ -115,6 +136,17 @@ export async function createStorageLocation(
 
   const result = await parseResponse<OptionResponse>(response);
 
+  return result.data;
+}
+
+export async function renameStorageLocation(id: string, name: string): Promise<SelectOption> {
+  const response = await fetch(`${API_BASE_URL}/api/storage-locations/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name.trim() }),
+  });
+
+  const result = await parseResponse<OptionResponse>(response);
   return result.data;
 }
 
@@ -162,6 +194,27 @@ export async function createBrand(
   return result.data;
 }
 
+export async function renameBrand(id: string, name: string): Promise<SelectOption> {
+  const response = await fetch(`${API_BASE_URL}/api/brands/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name.trim() }),
+  });
+
+  const result = await parseResponse<OptionResponse>(response);
+  return result.data;
+}
+
+// Ingredients still pointing at a deleted brand just lose the brand — it's
+// optional on Ingredient, no fallback needed.
+export async function deleteBrand(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/brands/${id}`, {
+    method: "DELETE",
+  });
+
+  await parseResponse<{ success: boolean; message: string }>(response);
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                    Stores                                  */
 /* -------------------------------------------------------------------------- */
@@ -194,6 +247,27 @@ export async function createStore(name: string): Promise<SelectOption> {
   const result = await parseResponse<OptionResponse>(response);
 
   return result.data;
+}
+
+export async function renameStore(id: string, name: string): Promise<SelectOption> {
+  const response = await fetch(`${API_BASE_URL}/api/stores/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name.trim() }),
+  });
+
+  const result = await parseResponse<OptionResponse>(response);
+  return result.data;
+}
+
+// Pantry entries still pointing at a deleted store just lose the store —
+// it's optional on PantryItem, no fallback needed.
+export async function deleteStore(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/stores/${id}`, {
+    method: "DELETE",
+  });
+
+  await parseResponse<{ success: boolean; message: string }>(response);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -230,6 +304,27 @@ export async function createTag(name: string): Promise<SelectOption> {
   const result = await parseResponse<OptionResponse>(response);
 
   return result.data;
+}
+
+export async function renameTag(id: string, name: string): Promise<SelectOption> {
+  const response = await fetch(`${API_BASE_URL}/api/tags/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name.trim() }),
+  });
+
+  const result = await parseResponse<OptionResponse>(response);
+  return result.data;
+}
+
+// Pulled out of every Ingredient/Recipe/Meal that had it applied — tags is
+// a many-to-many list, no fallback needed.
+export async function deleteTag(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/tags/${id}`, {
+    method: "DELETE",
+  });
+
+  await parseResponse<{ success: boolean; message: string }>(response);
 }
 
 /* -------------------------------------------------------------------------- */

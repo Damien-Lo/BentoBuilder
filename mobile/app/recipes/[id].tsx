@@ -537,6 +537,14 @@ export default function RecipeDetailPage() {
                 {servings} {servings === 1 ? "serving" : "servings"}
               </Text>
             </View>
+
+            {(recipe.tags ?? [])
+              .filter((tag): tag is SelectOption => typeof tag !== "string")
+              .map((tag) => (
+                <View key={tag._id} className="rounded-full bg-emerald-100 px-3 py-1">
+                  <Text className="text-xs font-semibold text-emerald-700">{tag.name}</Text>
+                </View>
+              ))}
           </View>
 
           {recipe.description ? (

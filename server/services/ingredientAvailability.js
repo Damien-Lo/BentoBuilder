@@ -83,30 +83,3 @@ export async function getAvailableStock(ingredientId) {
     byUnit,
   };
 }
-
-/**
- * Whether a recipe ingredient line (quantity + unit) is covered by current
- * pantry stock, including generic variant aggregation. The recipe line's
- * unit doesn't have to match how the stock is recorded (e.g. a recipe
- * calling for "2 cups" soy sauce checked against pantry stock in mL) —
- * whatever's convertible into the recipe's unit counts toward the total.
- */
-export async function isRecipeIngredientAvailable({ ingredient: ingredientId, quantity, unit }) {
-  const stock = await getAvailableStock(ingredientId);
-  if (!stock) return false;
-  if (stock.isAlwaysAvailable) return true;
-
-  const ingredient = await Ingredient.findById(ingredientId).populate("genericParent");
-  const variants = stock.isGeneric
-    ? await Ingredient.find({ genericParent: ingredientId, isArchived: false }).select("unitConversions")
-    : [];
-  const globalConversions = await getGlobalUnitConversions();
-  const customConversions = [
-    ...getIngredientConversions(ingredient, []),
-    ...variants.flatMap((v) => v.unitConversions ?? []),
-    ...globalConversions,
-  ];
-
-  const available = convertibleTotal(stock.byUnit, unit, customConversions);
-  return available >= quantity;
-}

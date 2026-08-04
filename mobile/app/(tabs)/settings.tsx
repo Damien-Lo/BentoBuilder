@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useRouter } from "expo-router";
+
 import { loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
 import { getUnitSuggestions } from "@/src/services/optionsApi";
 import { DAY_ABBREVS } from "@/src/utils/mealPlan";
@@ -126,6 +128,7 @@ const pickerStyles = StyleSheet.create({
 });
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [settings, setSettings] = useState<AppSettings>({
@@ -215,7 +218,7 @@ export default function SettingsScreen() {
                 <Text className="font-semibold text-slate-900">
                   {settings.displayName || "Your name"}
                 </Text>
-                <Text className="mt-0.5 text-sm text-slate-400">How we'll greet you in the app</Text>
+                <Text className="mt-0.5 text-sm text-slate-400">How we&apos;ll greet you in the app</Text>
               </View>
             </View>
           </View>
@@ -305,6 +308,35 @@ export default function SettingsScreen() {
               </Text>
             </View>
           )}
+
+          {/* ── Manage lists ── */}
+          <SectionHeader title="Lists" />
+          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <Pressable
+              className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3.5 active:bg-slate-50"
+              onPress={() => router.push("/manage-lists")}
+            >
+              <View className="flex-row items-center">
+                <Ionicons name="pricetag-outline" size={18} color="#475569" />
+                <Text className="ml-3 text-base text-slate-700">
+                  Manage tags, categories, brands &amp; stores
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </Pressable>
+            <Pressable
+              className="flex-row items-center justify-between px-4 py-3.5 active:bg-slate-50"
+              onPress={() => router.push("/archive")}
+            >
+              <View className="flex-row items-center">
+                <Ionicons name="archive-outline" size={18} color="#475569" />
+                <Text className="ml-3 text-base text-slate-700">
+                  Archived ingredients, recipes &amp; meals
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </Pressable>
+          </View>
 
           {/* ── About ── */}
           <SectionHeader title="About" />

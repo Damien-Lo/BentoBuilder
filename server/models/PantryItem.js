@@ -43,12 +43,6 @@ const pantryItemSchema = new mongoose.Schema(
       default: null,
     },
 
-    lowStockThreshold: {
-      type: Number,
-      min: 0,
-      default: 0,
-    },
-
     purchasePrice: {
       type: Number,
       min: 0,

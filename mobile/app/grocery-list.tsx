@@ -121,6 +121,8 @@ export default function GroceryListScreen() {
   const [logStoreName, setLogStoreName] = useState("");
   const [logStoreDraft, setLogStoreDraft] = useState("");
   const [logStoreTouched, setLogStoreTouched] = useState(false);
+  const [logNotes, setLogNotes] = useState("");
+  const [logShowMoreDetails, setLogShowMoreDetails] = useState(false);
   const [logSaving, setLogSaving] = useState(false);
   const [logLocationTouched, setLogLocationTouched] = useState(false);
   const [logExpiryTouched, setLogExpiryTouched] = useState(false);
@@ -133,6 +135,12 @@ export default function GroceryListScreen() {
     generic: GroceryItemIngredientRef;
     variants: Ingredient[];
   } | null>(null);
+
+  // Link/relink modal — lets any non-completed item be matched to a catalog
+  // ingredient after the fact, whether it started unlinked or just needs a
+  // different match.
+  const [linkingItem, setLinkingItem] = useState<GroceryItem | null>(null);
+  const [linkQuery, setLinkQuery] = useState("");
 
   // Refetches every time this screen regains focus — e.g. coming back from
   // resolving a grocery item via the add-ingredient screen, which updates
@@ -232,14 +240,14 @@ export default function GroceryListScreen() {
     setUnit(ingredient.defaultPortionUnit || unit);
   }
 
-  async function handleAddItem() {
+  async function submitAddItem(ingredientId: string | null) {
     const name = nameInput.trim();
-    if (!name || adding) return;
+    if (!name) return;
 
     try {
       setAdding(true);
       const created = await createGroceryItem({
-        ingredient: selectedIngredientId || null,
+        ingredient: ingredientId,
         name,
         quantity: quantity.trim() ? Number(quantity) : null,
         unit: unit.trim(),
@@ -257,6 +265,38 @@ export default function GroceryListScreen() {
     } finally {
       setAdding(false);
     }
+  }
+
+  // A typed name that exactly matches an existing ingredient but was never
+  // tapped from the suggestions list is ambiguous — ask instead of silently
+  // creating an unlinked item that shadows a real catalog entry.
+  function handleAddItem() {
+    const name = nameInput.trim();
+    if (!name || adding) return;
+
+    if (selectedIngredientId) {
+      void submitAddItem(selectedIngredientId);
+      return;
+    }
+
+    const exactMatch = ingredients.find(
+      (i) => i.name.trim().toLowerCase() === name.toLowerCase(),
+    );
+
+    if (exactMatch) {
+      Alert.alert(
+        "Matches an existing ingredient",
+        `"${exactMatch.name}" is already in your catalog. Link this item to it, or add it as a separate one-off entry?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Add as one-off", onPress: () => void submitAddItem(null) },
+          { text: `Use "${exactMatch.name}"`, onPress: () => void submitAddItem(exactMatch._id) },
+        ],
+      );
+      return;
+    }
+
+    void submitAddItem(null);
   }
 
   // toBuy -> pendingLog is the "checked off at the store" step. pendingLog
@@ -374,6 +414,8 @@ export default function GroceryListScreen() {
     setLogStoreName("");
     setLogStoreDraft("");
     setLogStoreTouched(false);
+    setLogNotes("");
+    setLogShowMoreDetails(false);
   }
 
   function handleTapPendingItem(item: GroceryItem) {
@@ -382,12 +424,13 @@ export default function GroceryListScreen() {
 
     if (!linkedIngredient) {
       Alert.alert(
-        "Add as a new ingredient?",
-        `"${item.name}" isn't linked to a catalog ingredient yet. Add it so you can log it to your pantry.`,
+        "Not linked to an ingredient",
+        `"${item.name}" isn't linked to a catalog ingredient yet. Link it to an existing one, or add it as new so you can log it to your pantry.`,
         [
           { text: "Cancel", style: "cancel" },
+          { text: "Link existing", onPress: () => openLinkModal(item) },
           {
-            text: "Add ingredient",
+            text: "Add new",
             onPress: () =>
               router.push({
                 pathname: "/ingredients/add_manual",
@@ -419,6 +462,52 @@ export default function GroceryListScreen() {
     setLogTargetIngredientId(null);
     setLogTargetIngredientName("");
   }
+
+  function openLinkModal(item: GroceryItem) {
+    setLinkingItem(item);
+    setLinkQuery("");
+  }
+
+  function closeLinkModal() {
+    setLinkingItem(null);
+    setLinkQuery("");
+  }
+
+  async function handleLinkIngredient(ingredientId: string) {
+    if (!linkingItem) return;
+    try {
+      const updated = await updateGroceryItem(linkingItem._id, { ingredient: ingredientId });
+      setGroceryItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
+      closeLinkModal();
+    } catch (err) {
+      Alert.alert(
+        "Could not link ingredient",
+        err instanceof Error ? err.message : "Failed to link the ingredient.",
+      );
+    }
+  }
+
+  async function handleUnlinkIngredient() {
+    if (!linkingItem) return;
+    try {
+      const updated = await updateGroceryItem(linkingItem._id, { ingredient: null });
+      setGroceryItems((prev) => prev.map((i) => (i._id === updated._id ? updated : i)));
+      closeLinkModal();
+    } catch (err) {
+      Alert.alert(
+        "Could not unlink ingredient",
+        err instanceof Error ? err.message : "Failed to unlink the ingredient.",
+      );
+    }
+  }
+
+  const linkingItemIngredientId = linkingItem ? referenceId(linkingItem.ingredient) : "";
+
+  const linkModalOptions = useMemo(() => {
+    const q = linkQuery.trim().toLowerCase();
+    if (!q) return ingredients.slice(0, 30);
+    return ingredients.filter((i) => i.name.toLowerCase().includes(q)).slice(0, 30);
+  }, [ingredients, linkQuery]);
 
   // The grocery item's populated ingredient is a thin projection — look up
   // the full record (with defaultStorageLocation/defaultExpiryDuration...)
@@ -565,6 +654,7 @@ export default function GroceryListScreen() {
           expiryDate: logExpiryDate || undefined,
           purchasePrice: logPrice.trim() ? Number(logPrice) : undefined,
           store: store ? store._id : null,
+          notes: logNotes.trim() || undefined,
         });
       }
 
@@ -622,44 +712,59 @@ export default function GroceryListScreen() {
             : undefined
         }
       >
-        <Pressable
-          onPress={() =>
-            isPending ? handleTapPendingItem(item) : void handleAdvanceItem(item)
-          }
-          className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-        >
-          <View className={`h-6 w-6 items-center justify-center rounded-full border-2 ${circleClassName}`}>
-            {isCompleted && <Ionicons name="checkmark" size={14} color="white" />}
-            {isPending && <Ionicons name="time-outline" size={13} color="white" />}
-          </View>
-          <View className="ml-4 flex-1">
-            <Text
-              className={`text-base ${
-                isCompleted ? "text-slate-400 line-through" : "font-medium text-slate-900"
-              }`}
-            >
-              {item.name}
-            </Text>
-            {isPending ? (
-              <Text className="mt-0.5 text-xs text-amber-600">
-                {isLinkedToIngredient(item) ? "Tap to log to pantry" : "Tap for more info"}
+        <View className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4">
+          <Pressable
+            onPress={() =>
+              isPending ? handleTapPendingItem(item) : void handleAdvanceItem(item)
+            }
+            className="flex-1 flex-row items-center active:opacity-70"
+          >
+            <View className={`h-6 w-6 items-center justify-center rounded-full border-2 ${circleClassName}`}>
+              {isCompleted && <Ionicons name="checkmark" size={14} color="white" />}
+              {isPending && <Ionicons name="time-outline" size={13} color="white" />}
+            </View>
+            <View className="ml-4 flex-1">
+              <Text
+                className={`text-base ${
+                  isCompleted ? "text-slate-400 line-through" : "font-medium text-slate-900"
+                }`}
+              >
+                {item.name}
               </Text>
-            ) : (
-              !isCompleted &&
-              typeof item.ingredient === "object" &&
-              item.ingredient && (
-                <Text className="mt-0.5 text-xs text-blue-500">
-                  {item.ingredient.isGeneric ? "Generic ingredient" : "Linked ingredient"}
+              {isPending ? (
+                <Text className="mt-0.5 text-xs text-amber-600">
+                  {isLinkedToIngredient(item) ? "Tap to log to pantry" : "Tap for more info"}
                 </Text>
-              )
+              ) : (
+                !isCompleted &&
+                typeof item.ingredient === "object" &&
+                item.ingredient && (
+                  <Text className="mt-0.5 text-xs text-blue-500">
+                    {item.ingredient.isGeneric ? "Generic ingredient" : "Linked ingredient"}
+                  </Text>
+                )
+              )}
+            </View>
+            {(item.quantity != null || item.unit) && (
+              <Text className="ml-2 text-sm text-slate-400">
+                {item.quantity ?? ""} {item.unit ?? ""}
+              </Text>
             )}
-          </View>
-          {(item.quantity != null || item.unit) && (
-            <Text className="ml-2 text-sm text-slate-400">
-              {item.quantity ?? ""} {item.unit ?? ""}
-            </Text>
+          </Pressable>
+          {!isCompleted && (
+            <Pressable
+              hitSlop={10}
+              onPress={() => openLinkModal(item)}
+              className="ml-2 h-9 w-9 items-center justify-center rounded-full active:bg-slate-100"
+            >
+              <Ionicons
+                name={isLinkedToIngredient(item) ? "link" : "link-outline"}
+                size={18}
+                color={isLinkedToIngredient(item) ? "#2563EB" : "#94A3B8"}
+              />
+            </Pressable>
           )}
-        </Pressable>
+        </View>
       </ReanimatedSwipeable>
     );
   }
@@ -1026,36 +1131,63 @@ export default function GroceryListScreen() {
                 )}
               </View>
 
-              <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">
-                Store (optional)
-              </Text>
-              <SearchableObjectDropdown<SelectOption>
-                options={stores}
-                selectedId={logStoreId}
-                selectedName={logStoreName}
-                placeholder="Search or type a new store"
-                onTextChange={(value) => {
-                  if (value !== logStoreName) setLogStoreId("");
-                  setLogStoreDraft(value);
-                  setLogStoreTouched(true);
-                }}
-                onSelect={(option) => {
-                  setLogStoreId(option._id);
-                  setLogStoreName(option.name);
-                  setLogStoreDraft(option.name);
-                  setLogStoreTouched(true);
-                }}
-              />
-              {suggestedLogStore && !logStoreTouched ? (
-                <Text className="mt-1.5 text-xs leading-4 text-slate-400">
-                  Auto-filled from recent purchase history.
-                </Text>
-              ) : null}
+              {logShowMoreDetails || logStoreId || logStoreDraft.trim() || logPrice.trim() ? (
+                <>
+                  <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">
+                    Store (optional)
+                  </Text>
+                  <SearchableObjectDropdown<SelectOption>
+                    options={stores}
+                    selectedId={logStoreId}
+                    selectedName={logStoreName}
+                    placeholder="Search or type a new store"
+                    onTextChange={(value) => {
+                      if (value !== logStoreName) setLogStoreId("");
+                      setLogStoreDraft(value);
+                      setLogStoreTouched(true);
+                    }}
+                    onSelect={(option) => {
+                      setLogStoreId(option._id);
+                      setLogStoreName(option.name);
+                      setLogStoreDraft(option.name);
+                      setLogStoreTouched(true);
+                    }}
+                  />
+                  {suggestedLogStore && !logStoreTouched ? (
+                    <Text className="mt-1.5 text-xs leading-4 text-slate-400">
+                      Auto-filled from recent purchase history.
+                    </Text>
+                  ) : null}
+
+                  <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">
+                    Price paid (optional)
+                  </Text>
+                  <PriceInput value={logPrice} onChangeText={setLogPrice} />
+                </>
+              ) : (
+                <Pressable
+                  className="mt-3 flex-row items-center self-start active:opacity-60"
+                  onPress={() => setLogShowMoreDetails(true)}
+                >
+                  <Ionicons name="add-circle-outline" size={16} color="#2563EB" />
+                  <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+                    Add store or price
+                  </Text>
+                </Pressable>
+              )}
 
               <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">
-                Price paid (optional)
+                Notes (optional)
               </Text>
-              <PriceInput value={logPrice} onChangeText={setLogPrice} />
+              <TextInput
+                value={logNotes}
+                onChangeText={setLogNotes}
+                placeholder="e.g. Half-used, keep away from the window"
+                placeholderTextColor="#94A3B8"
+                multiline
+                textAlignVertical="top"
+                className="min-h-20 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
+              />
 
               <View className="mt-5 flex-row gap-3">
                 <Pressable
@@ -1075,6 +1207,83 @@ export default function GroceryListScreen() {
                   <Text className="text-sm font-semibold text-white">
                     {logSaving ? "Adding..." : "Add"}
                   </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Link/relink to a catalog ingredient — the recovery path for any
+          non-completed item, whether it started unlinked or just needs a
+          different match. */}
+      <Modal visible={!!linkingItem} transparent animationType="fade" onRequestClose={closeLinkModal}>
+        <KeyboardAvoidingView
+          className="flex-1"
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View className="flex-1 items-center justify-center bg-black/40 px-6">
+            <Pressable className="absolute inset-0" onPress={closeLinkModal} />
+
+            <View className="max-h-[80%] w-full rounded-3xl bg-white p-5">
+              <Text className="text-lg font-bold text-slate-950">Link ingredient</Text>
+              <Text className="mt-0.5 mb-4 text-sm text-slate-400">
+                Match &quot;{linkingItem?.name}&quot; to a catalog ingredient so it can be logged to
+                your pantry.
+              </Text>
+
+              <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
+                <Ionicons name="search" size={18} color="#94A3B8" />
+                <TextInput
+                  value={linkQuery}
+                  onChangeText={setLinkQuery}
+                  placeholder="Search ingredients…"
+                  placeholderTextColor="#94A3B8"
+                  className="ml-3 flex-1 text-base text-slate-900"
+                  autoFocus
+                />
+              </View>
+
+              <ScrollView
+                className="mt-3"
+                style={{ maxHeight: 320 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {linkModalOptions.map((ing) => (
+                  <Pressable
+                    key={ing._id}
+                    onPress={() => void handleLinkIngredient(ing._id)}
+                    className="flex-row items-center border-b border-slate-100 px-1 py-3 active:bg-slate-50"
+                  >
+                    <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
+                      <Ionicons name="nutrition-outline" size={16} color="#2563EB" />
+                    </View>
+                    <Text className="ml-3 flex-1 font-medium text-slate-900">{ing.name}</Text>
+                    {linkingItemIngredientId === ing._id && (
+                      <Ionicons name="checkmark-circle" size={18} color="#2563EB" />
+                    )}
+                  </Pressable>
+                ))}
+                {linkModalOptions.length === 0 && (
+                  <Text className="py-6 text-center text-sm text-slate-400">No matches</Text>
+                )}
+              </ScrollView>
+
+              <View className="mt-4 flex-row gap-3">
+                {linkingItemIngredientId ? (
+                  <Pressable
+                    onPress={() => void handleUnlinkIngredient()}
+                    className="flex-1 items-center rounded-2xl bg-red-50 py-3.5 active:bg-red-100"
+                  >
+                    <Text className="text-sm font-semibold text-red-600">Unlink</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  onPress={closeLinkModal}
+                  className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+                >
+                  <Text className="text-sm font-semibold text-slate-600">Close</Text>
                 </Pressable>
               </View>
             </View>

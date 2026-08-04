@@ -56,7 +56,6 @@ export interface Recipe {
   servings?: number;
   defaultPortionUnit?: string;
   nutrition?: RecipeNutrition;
-  nutritionBasis?: string;
   imageUrl?: string;
   notes?: string;
   isArchived?: boolean;
@@ -89,10 +88,10 @@ export interface CreateRecipeInput {
   servings?: number;
   defaultPortionUnit?: string;
   nutrition?: RecipeNutrition;
-  nutritionBasis?: string;
   imageUrl?: string;
   notes?: string;
   isConfirmed?: boolean;
+  isArchived?: boolean;
   ingredientList?: RecipeIngredientInput[];
   instructions?: string[];
 }
@@ -135,6 +134,12 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
 export async function getRecipes(): Promise<Recipe[]> {
   const response = await fetch(`${API_BASE_URL}/api/recipes`);
+  const result = await parseResponse<RecipeListResponse>(response);
+  return Array.isArray(result.data) ? result.data : [];
+}
+
+export async function getArchivedRecipes(): Promise<Recipe[]> {
+  const response = await fetch(`${API_BASE_URL}/api/recipes?archived=true`);
   const result = await parseResponse<RecipeListResponse>(response);
   return Array.isArray(result.data) ? result.data : [];
 }
@@ -198,8 +203,42 @@ export async function createRecipeCategory(name: string): Promise<RecipeCategory
   return result.data;
 }
 
+export async function renameRecipeCategory(id: string, name: string): Promise<RecipeCategory> {
+  const response = await fetch(`${API_BASE_URL}/api/recipe-categories/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name.trim() }),
+  });
+
+  const result = await parseResponse<{ success: boolean; data: RecipeCategory }>(response);
+  return result.data;
+}
+
+// Recipes still pointing at a deleted category just lose the category —
+// it's optional on Recipe, no fallback needed.
+export async function deleteRecipeCategory(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/recipe-categories/${id}`, {
+    method: "DELETE",
+  });
+
+  await parseResponse<{ success: boolean; message: string }>(response);
+}
+
 export async function deleteRecipe(recipeId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/recipes/${recipeId}`, {
+    method: "DELETE",
+  });
+  await parseResponse<{ success: boolean; message: string }>(response);
+}
+
+export async function restoreRecipe(recipeId: string): Promise<Recipe> {
+  return updateRecipe(recipeId, { isArchived: false });
+}
+
+// Only meaningful from the Archive view — an already-archived recipe
+// deleted permanently, with no restore path back.
+export async function deleteRecipePermanently(recipeId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/recipes/${recipeId}?permanent=true`, {
     method: "DELETE",
   });
   await parseResponse<{ success: boolean; message: string }>(response);

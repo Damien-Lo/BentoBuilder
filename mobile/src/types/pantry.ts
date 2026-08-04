@@ -21,12 +21,10 @@ export interface Ingredient {
   defaultPortionAmount: number;
   defaultPortionUnit: string;
   nutrition: Nutrition;
-  nutritionBasis: "per-serving" | "per-100g";
   lowStockThreshold?: number | null;
   isAlwaysAvailable?: boolean;
   unitConversions?: CustomUnitConversion[];
   imageUrl: string;
-  notes: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,7 +48,6 @@ export interface PantryItem {
   purchaseDate: string;
   openedDate: string | null;
   expiryDate: string | null;
-  lowStockThreshold: number;
   purchasePrice: number | null;
   store: string | StoreOption | null;
   notes: string;

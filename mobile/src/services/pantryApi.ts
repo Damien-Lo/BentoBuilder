@@ -20,7 +20,6 @@ export interface CreatePantryItemInput {
   purchasePrice?: number | null;
   // Same null-to-clear/undefined-to-omit convention as expiryDate.
   store?: string | null;
-  lowStockThreshold?: number;
   notes?: string;
 
   nutrition?: {
@@ -31,8 +30,6 @@ export interface CreatePantryItemInput {
     fiber?: number;
     sodium?: number;
   };
-
-  nutritionBasis?: "per-serving" | "per-100g";
 }
 
 interface PantryListResponse {
@@ -104,7 +101,7 @@ export interface AddIngredientToPantryInput {
   expiryDate?: string;
   purchasePrice?: number;
   store?: string | null;
-  lowStockThreshold?: number;
+  notes?: string;
 }
 
 export async function addIngredientToPantry(
@@ -113,22 +110,6 @@ export async function addIngredientToPantry(
   const response = await fetch(`${API_BASE_URL}/api/pantry`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-
-  const result = await parseResponse<PantryItemResponse>(response);
-
-  return result.data;
-}
-
-export async function createPantryItem(
-  input: CreatePantryItemInput,
-): Promise<PantryItem> {
-  const response = await fetch(`${API_BASE_URL}/api/pantry/create`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(input),
   });
 

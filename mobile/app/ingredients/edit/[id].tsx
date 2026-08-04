@@ -251,6 +251,8 @@ export default function IngredientDetailScreen() {
   const [quickAddQuantityUnit, setQuickAddQuantityUnit] = useState("");
   const [quickAddEntryCount, setQuickAddEntryCount] = useState("1");
   const [quickAddPrice, setQuickAddPrice] = useState("");
+  const [quickAddNotes, setQuickAddNotes] = useState("");
+  const [quickAddShowMoreDetails, setQuickAddShowMoreDetails] = useState(false);
   const [savingEntry, setSavingEntry] = useState(false);
 
   const [genericAvailability, setGenericAvailability] =
@@ -855,7 +857,7 @@ export default function IngredientDetailScreen() {
             expiryDate: quickAddExpiryDate || undefined,
             purchasePrice: quickAddPrice.trim() ? Number(quickAddPrice) : undefined,
             store: store ? store._id : null,
-            lowStockThreshold: lastEntry?.lowStockThreshold ?? currentIngredient.lowStockThreshold,
+            notes: quickAddNotes.trim() || undefined,
           }),
         );
       }
@@ -865,6 +867,8 @@ export default function IngredientDetailScreen() {
       setQuickAddExpiryDate("");
       setQuickAddExpiryTouched(false);
       setQuickAddPrice("");
+      setQuickAddNotes("");
+      setQuickAddShowMoreDetails(false);
       setQuickAddLocationTouched(false);
       setQuickAddStoreTouched(false);
       setQuickAddQuantity("");
@@ -1646,10 +1650,7 @@ export default function IngredientDetailScreen() {
                     Nutrition
                   </Text>
                   <Text className="mb-3 text-xs text-slate-400">
-                    Per{" "}
-                    {ingredient.nutritionBasis === "per-100g"
-                      ? "100g"
-                      : "serving"}
+                    Per {ingredient.defaultPortionAmount ?? 1} {ingredient.defaultPortionUnit || "serving"}
                   </Text>
 
                   <View className="mb-3 items-center rounded-2xl bg-blue-50 py-3">
@@ -2053,37 +2054,64 @@ export default function IngredientDetailScreen() {
                   />
                 </View>
 
-                <View className="mt-2">
-                  <FieldLabel text="Store (optional)" />
-                  <SearchableObjectDropdown<SelectOption>
-                    options={stores}
-                    selectedId={quickAddStoreId}
-                    selectedName={quickAddStoreName}
-                    placeholder="Search or type a new store"
-                    onTextChange={(value) => {
-                      if (value !== quickAddStoreName) {
-                        setQuickAddStoreId("");
-                      }
-                      setQuickAddStoreDraft(value);
-                      setQuickAddStoreTouched(true);
-                    }}
-                    onSelect={(option) => {
-                      setQuickAddStoreId(option._id);
-                      setQuickAddStoreName(option.name);
-                      setQuickAddStoreDraft(option.name);
-                      setQuickAddStoreTouched(true);
-                    }}
-                  />
-                  {suggestedStore && !quickAddStoreTouched ? (
-                    <Text className="mt-1.5 text-xs leading-4 text-slate-400">
-                      Auto-filled from recent purchase history.
+                {quickAddShowMoreDetails ||
+                quickAddStoreId ||
+                quickAddStoreDraft.trim() ||
+                quickAddPrice.trim() ? (
+                  <>
+                    <View className="mt-2">
+                      <FieldLabel text="Store (optional)" />
+                      <SearchableObjectDropdown<SelectOption>
+                        options={stores}
+                        selectedId={quickAddStoreId}
+                        selectedName={quickAddStoreName}
+                        placeholder="Search or type a new store"
+                        onTextChange={(value) => {
+                          if (value !== quickAddStoreName) {
+                            setQuickAddStoreId("");
+                          }
+                          setQuickAddStoreDraft(value);
+                          setQuickAddStoreTouched(true);
+                        }}
+                        onSelect={(option) => {
+                          setQuickAddStoreId(option._id);
+                          setQuickAddStoreName(option.name);
+                          setQuickAddStoreDraft(option.name);
+                          setQuickAddStoreTouched(true);
+                        }}
+                      />
+                      {suggestedStore && !quickAddStoreTouched ? (
+                        <Text className="mt-1.5 text-xs leading-4 text-slate-400">
+                          Auto-filled from recent purchase history.
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    <View className="mt-2">
+                      <FieldLabel text="Price paid (optional)" />
+                      <PriceInput value={quickAddPrice} onChangeText={setQuickAddPrice} />
+                    </View>
+                  </>
+                ) : (
+                  <Pressable
+                    className="mt-2 flex-row items-center self-start active:opacity-60"
+                    onPress={() => setQuickAddShowMoreDetails(true)}
+                  >
+                    <Ionicons name="add-circle-outline" size={16} color="#2563EB" />
+                    <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+                      Add store or price
                     </Text>
-                  ) : null}
-                </View>
+                  </Pressable>
+                )}
 
                 <View className="mt-2">
-                  <FieldLabel text="Price paid (optional)" />
-                  <PriceInput value={quickAddPrice} onChangeText={setQuickAddPrice} />
+                  <FieldLabel text="Notes (optional)" />
+                  <FormInput
+                    value={quickAddNotes}
+                    placeholder="e.g. Half-used, keep away from the window"
+                    onChangeText={setQuickAddNotes}
+                    multiline
+                  />
                 </View>
 
                 <Pressable

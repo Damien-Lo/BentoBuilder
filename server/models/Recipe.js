@@ -98,12 +98,6 @@ const recipeSchema = new mongoose.Schema(
       default: () => ({}),
     },
 
-    nutritionBasis: {
-      type: String,
-      enum: ["per-serving", "per-100g"],
-      default: "per-serving",
-    },
-
     imageUrl: {
       type: String,
       trim: true,

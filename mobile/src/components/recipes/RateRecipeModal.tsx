@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 
+import { RateSlider } from "@/src/components/planner/RateSlider";
+
 interface RateRecipeModalProps {
   visible: boolean;
   saving?: boolean;
@@ -8,20 +10,17 @@ interface RateRecipeModalProps {
   onSubmit: (value: number) => void;
 }
 
-const VALUES = Array.from({ length: 10 }, (_, i) => i + 1);
-
-// A simple 1-10 tap-to-pick rating — discrete values don't benefit from a
-// drag slider's precision, so a grid of chips (matching the app's existing
-// pill-toggle style) is the clearest input.
+// Same drag-slider widget used everywhere else a 1-10 rating is collected
+// (RateAndConfirmModal in the planner) — kept in sync rather than each
+// screen rolling its own input.
 export function RateRecipeModal({ visible, saving = false, onClose, onSubmit }: RateRecipeModalProps) {
-  const [selected, setSelected] = useState<number | null>(null);
+  const [value, setValue] = useState(5);
 
   useEffect(() => {
-    if (visible) setSelected(null);
+    if (visible) setValue(5);
   }, [visible]);
 
   function handleClose() {
-    setSelected(null);
     onClose();
   }
 
@@ -32,29 +31,12 @@ export function RateRecipeModal({ visible, saving = false, onClose, onSubmit }: 
 
         <View className="w-full rounded-3xl bg-white p-5">
           <Text className="text-lg font-bold text-slate-950">Rate this recipe</Text>
-          <Text className="mt-0.5 mb-5 text-sm text-slate-400">How was it, out of 10?</Text>
+          <Text className="mt-0.5 mb-6 text-sm text-slate-400">How was it, out of 10?</Text>
 
-          <View className="flex-row flex-wrap gap-2">
-            {VALUES.map((value) => {
-              const isSelected = selected === value;
-              return (
-                <Pressable
-                  key={value}
-                  disabled={saving}
-                  onPress={() => setSelected(value)}
-                  className={`h-12 w-12 items-center justify-center rounded-2xl border ${
-                    isSelected ? "border-blue-600 bg-blue-600" : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <Text className={`text-base font-semibold ${isSelected ? "text-white" : "text-slate-700"}`}>
-                    {value}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <Text className="mb-3 text-center text-3xl font-bold text-blue-600">{value}</Text>
+          <RateSlider value={value} onChange={setValue} disabled={saving} />
 
-          <View className="mt-5 flex-row gap-3">
+          <View className="mt-6 flex-row gap-3">
             <Pressable
               disabled={saving}
               onPress={handleClose}
@@ -63,12 +45,10 @@ export function RateRecipeModal({ visible, saving = false, onClose, onSubmit }: 
               <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
             </Pressable>
             <Pressable
-              disabled={saving || selected == null}
-              onPress={() => {
-                if (selected != null) onSubmit(selected);
-              }}
+              disabled={saving}
+              onPress={() => onSubmit(value)}
               className={`flex-1 items-center rounded-2xl py-3.5 ${
-                saving || selected == null ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
+                saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
               }`}
             >
               <Text className="text-sm font-semibold text-white">

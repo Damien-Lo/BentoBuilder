@@ -41,22 +41,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="sever_test_page"
-        options={{ href: null }}
-      />
-      <Tabs.Screen
         name="settings"
         options={{
           title: "Settings",
           tabBarIcon: ({ color }) => (
             <Ionicons size={26} name="settings-outline" color={color} />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          href: null,
         }}
       />
     </Tabs>

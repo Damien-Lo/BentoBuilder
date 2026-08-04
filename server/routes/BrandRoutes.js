@@ -1,5 +1,6 @@
 import express from "express";
 import Brand from "../models/Brand.js";
+import Ingredient from "../models/Ingredient.js";
 
 const router = express.Router();
 
@@ -61,6 +62,55 @@ router.post("/", async (req, res) => {
       success: false,
       message: "Failed to create brand.",
     });
+  }
+});
+
+/**
+ * PATCH /api/brands/:id
+ * Rename — fixes a typo without needing to delete-and-recreate.
+ */
+router.patch("/:id", async (req, res) => {
+  try {
+    const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    if (!name) {
+      return res.status(400).json({ success: false, message: "Brand name is required." });
+    }
+
+    const brand = await Brand.findByIdAndUpdate(
+      req.params.id,
+      { name, normalizedName: name.toLowerCase() },
+      { new: true, runValidators: true },
+    );
+
+    if (!brand) {
+      return res.status(404).json({ success: false, message: "Brand not found." });
+    }
+
+    return res.status(200).json({ success: true, data: brand });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * DELETE /api/brands/:id
+ * brand is optional on Ingredient, so referencing ingredients just lose the
+ * brand rather than needing a fallback.
+ */
+router.delete("/:id", async (req, res) => {
+  try {
+    const brand = await Brand.findById(req.params.id);
+
+    if (!brand) {
+      return res.status(404).json({ success: false, message: "Brand not found." });
+    }
+
+    await Ingredient.updateMany({ brand: brand._id }, { brand: null });
+    await Brand.findByIdAndDelete(req.params.id);
+
+    return res.status(200).json({ success: true, message: "Brand deleted" });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: "Invalid brand ID" });
   }
 });
 

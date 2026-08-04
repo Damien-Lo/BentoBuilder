@@ -2,7 +2,6 @@ import express from "express";
 import Recipe from "../models/Recipe.js";
 import Ingredient from "../models/Ingredient.js";
 import UserProfile from "../models/UserProfile.js";
-import { isRecipeIngredientAvailable } from "../services/ingredientAvailability.js";
 import { convertUnits, getIngredientConversions } from "../services/unitConversion.js";
 import { wouldCreateCycle } from "../services/productionCycle.js";
 
@@ -11,10 +10,12 @@ const router = express.Router();
 /**
  * GET /api/recipes
  * Return all non-archived recipes (ingredientList not populated on list).
+ * Pass ?archived=true to list only archived ones instead (the Archive
+ * view's recovery list).
  */
 router.get("/", async (req, res) => {
   try {
-    const recipes = await Recipe.find({ isArchived: false })
+    const recipes = await Recipe.find({ isArchived: req.query.archived === "true" })
       .populate("recipeCategory")
       .populate("tags")
       .sort({ name: 1 });
@@ -58,47 +59,6 @@ router.get("/:id", async (req, res) => {
     return res.status(200).json({
       success: true,
       data: recipe,
-    });
-  } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid recipe ID",
-    });
-  }
-});
-
-/**
- * GET /api/recipes/:id/availability
- * Per-ingredient pantry stock check — generic ingredients aggregate stock
- * across all branded/specific variants — plus whether every ingredient in
- * the recipe is currently covered.
- */
-router.get("/:id/availability", async (req, res) => {
-  try {
-    const recipe = await Recipe.findById(req.params.id);
-
-    if (!recipe) {
-      return res.status(404).json({
-        success: false,
-        message: "Recipe not found",
-      });
-    }
-
-    const ingredients = await Promise.all(
-      recipe.ingredientList.map(async (entry) => ({
-        ingredient: entry.ingredient,
-        quantity: entry.quantity,
-        unit: entry.unit,
-        available: await isRecipeIngredientAvailable(entry),
-      })),
-    );
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        canMake: ingredients.every((entry) => entry.available),
-        ingredients,
-      },
     });
   } catch (error) {
     return res.status(400).json({
@@ -351,15 +311,18 @@ router.patch("/:id", async (req, res) => {
 
 /**
  * DELETE /api/recipes/:id
- * Soft archive.
+ * Pass ?permanent=true to hard-delete. Default: soft archive.
  */
 router.delete("/:id", async (req, res) => {
   try {
-    const recipe = await Recipe.findByIdAndUpdate(
-      req.params.id,
-      { isArchived: true },
-      { new: true },
-    );
+    const recipe =
+      req.query.permanent === "true"
+        ? await Recipe.findByIdAndDelete(req.params.id)
+        : await Recipe.findByIdAndUpdate(
+            req.params.id,
+            { isArchived: true },
+            { new: true },
+          );
 
     if (!recipe) {
       return res.status(404).json({
@@ -370,7 +333,7 @@ router.delete("/:id", async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Recipe deleted",
+      message: req.query.permanent === "true" ? "Recipe deleted" : "Recipe archived",
     });
   } catch (error) {
     return res.status(400).json({

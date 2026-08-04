@@ -44,6 +44,14 @@ export function CreatableMultiTagDropdown({
     );
   }, [safeOptions, selectedIds, normalizedQuery]);
 
+  // Shown before any tap, so existing tags (e.g. a near-duplicate you're
+  // about to accidentally retype) are visible at a glance, not just once
+  // the dropdown is opened.
+  const suggestedOptions = useMemo(
+    () => safeOptions.filter((o) => !selectedIds.has(o._id)).slice(0, 8),
+    [safeOptions, selectedIds],
+  );
+
   function handleTextChange(value: string) {
     setQuery(value);
     if (!disabled) setOpen(true);
@@ -146,6 +154,21 @@ export function CreatableMultiTagDropdown({
           </Pressable>
         )}
       </View>
+
+      {/* Suggested existing tags — visible without tapping in */}
+      {!open && !disabled && !query && suggestedOptions.length > 0 && (
+        <View className="mt-2 flex-row flex-wrap gap-2">
+          {suggestedOptions.map((option) => (
+            <Pressable
+              key={option._id}
+              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 active:bg-slate-100"
+              onPress={() => onAdd(option)}
+            >
+              <Text className="text-sm text-slate-600">{option.name}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       {/* Dropdown list */}
       {open && !disabled && (

@@ -84,6 +84,7 @@ export interface CreateMealInput {
   type: MealType;
   tags?: string[];
   notes?: string;
+  isArchived?: boolean;
   courses?: CourseInput[];
   bentoLayout?: BentoLayoutInput | null;
 }
@@ -128,6 +129,12 @@ export async function getMeals(): Promise<Meal[]> {
   return Array.isArray(result.data) ? result.data : [];
 }
 
+export async function getArchivedMeals(): Promise<Meal[]> {
+  const res = await fetch(`${API_BASE_URL}/api/meals?archived=true`);
+  const result = await parseResponse<MealListResponse>(res);
+  return Array.isArray(result.data) ? result.data : [];
+}
+
 export async function getMealById(mealId: string): Promise<Meal> {
   const id = mealId.trim();
   if (!id) throw new Error("Meal ID is required");
@@ -162,5 +169,16 @@ export async function updateMeal(mealId: string, input: UpdateMealInput): Promis
 
 export async function deleteMeal(mealId: string): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/api/meals/${mealId}`, { method: "DELETE" });
+  await parseResponse<{ success: boolean; message: string }>(res);
+}
+
+export async function restoreMeal(mealId: string): Promise<Meal> {
+  return updateMeal(mealId, { isArchived: false });
+}
+
+// Only meaningful from the Archive view — an already-archived meal deleted
+// permanently, with no restore path back.
+export async function deleteMealPermanently(mealId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/meals/${mealId}?permanent=true`, { method: "DELETE" });
   await parseResponse<{ success: boolean; message: string }>(res);
 }

@@ -33,8 +33,9 @@ import type { PantryItem } from "@/src/types/pantry";
 import { loadSettings } from "@/src/services/settingsService";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 import { getIngredientStockInUnit } from "@/src/utils/ingredientStock";
+import { referenceId } from "@/src/utils/pantryDefaults";
 
-type SortMode = "category" | "meal";
+type SortMode = "category" | "meal" | "mealPrep";
 
 type RecipeGroup = {
   key: string;
@@ -144,7 +145,6 @@ export default function RecipesMainPage() {
   const scrollRef = useRef<ScrollView>(null);
   const [mealSearchText, setMealSearchText] = useState("");
   const [isMealSearchActive, setIsMealSearchActive] = useState(false);
-  const [mealSearchMode, setMealSearchMode] = useState<"name" | "tag">("name");
   const [meals, setMeals] = useState<Meal[]>([]);
 
   const isFirstLoad = useRef(true);
@@ -236,7 +236,26 @@ export default function RecipesMainPage() {
     });
   }, [recipes, searchText, statusFilter]);
 
+  // Recipes whose produced ingredient is flagged isMealPrep — a finished
+  // dish you reheat/eat directly (e.g. Okonomiyaki), as opposed to a
+  // component ingredient like Dashi Stock. The link lives on the
+  // Ingredient (productionRecipe), not the Recipe.
+  const mealPrepRecipeIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const ingredient of ingredients) {
+      if (!ingredient.isMealPrep) continue;
+      const recipeId = referenceId(ingredient.productionRecipe);
+      if (recipeId) ids.add(recipeId);
+    }
+    return ids;
+  }, [ingredients]);
+
   const groupedRecipes = useMemo<RecipeGroup[]>(() => {
+    if (sortMode === "mealPrep") {
+      const items = filteredRecipes.filter((recipe) => mealPrepRecipeIds.has(recipe._id));
+      return [{ key: "mealPrep", label: "Meal Preps", items }];
+    }
+
     if (sortMode === "meal") {
       const groups = new Map<MealCategory, Recipe[]>();
       for (const recipe of filteredRecipes) {
@@ -272,7 +291,7 @@ export default function RecipesMainPage() {
         return a.localeCompare(b);
       })
       .map(([cat, items]) => ({ key: cat, label: cat, items }));
-  }, [filteredRecipes, sortMode]);
+  }, [filteredRecipes, sortMode, mealPrepRecipeIds]);
 
   const closeSearch = () => {
     Keyboard.dismiss();
@@ -322,13 +341,11 @@ export default function RecipesMainPage() {
   const filteredMeals = useMemo(() => {
     const query = mealSearchText.trim().toLowerCase();
     if (!query) return meals;
-    if (mealSearchMode === "tag") {
-      return meals.filter(m =>
-        (m.tags ?? []).some(t => t.name.toLowerCase().includes(query)),
-      );
-    }
-    return meals.filter(m => m.name.toLowerCase().includes(query));
-  }, [meals, mealSearchText, mealSearchMode]);
+    return meals.filter(m => {
+      const tagNames = (m.tags ?? []).map(t => t.name);
+      return [m.name, ...tagNames].some(v => v.toLowerCase().includes(query));
+    });
+  }, [meals, mealSearchText]);
 
   const handleDeleteMeal = (id: string, name: string) => {
     Alert.alert("Delete meal", `Delete "${name}"? This cannot be undone.`, [
@@ -602,6 +619,14 @@ export default function RecipesMainPage() {
                           Meal
                         </Text>
                       </Pressable>
+                      <Pressable
+                        className={`border-l border-slate-200 px-3 py-1.5 ${sortMode === "mealPrep" ? "bg-blue-600" : "bg-white"}`}
+                        onPress={() => handleSortMode("mealPrep")}
+                      >
+                        <Text className={`text-xs font-semibold ${sortMode === "mealPrep" ? "text-white" : "text-slate-600"}`}>
+                          Meal Prep
+                        </Text>
+                      </Pressable>
                     </View>
                   </View>
                   <View className="mt-3 flex-row overflow-hidden rounded-xl border border-slate-200">
@@ -618,7 +643,7 @@ export default function RecipesMainPage() {
                       onPress={() => setStatusFilter("confirmed")}
                     >
                       <Text className={`text-xs font-semibold ${statusFilter === "confirmed" ? "text-white" : "text-slate-600"}`}>
-                        Tried!
+                        Confirmed
                       </Text>
                     </Pressable>
                     <Pressable
@@ -784,7 +809,7 @@ export default function RecipesMainPage() {
                   value={mealSearchText}
                   onChangeText={setMealSearchText}
                   onFocus={() => setIsMealSearchActive(true)}
-                  placeholder={mealSearchMode === "tag" ? "Search by tag…" : "Search meals"}
+                  placeholder="Search meals or tags"
                   placeholderTextColor="#94a3b8"
                   className="ml-3 flex-1 text-base text-slate-900"
                 />
@@ -807,24 +832,6 @@ export default function RecipesMainPage() {
                 <View className="flex-row items-center justify-between py-3">
                   <Text className="text-lg font-bold text-slate-900">Meals</Text>
                   <View className="flex-row items-center gap-3">
-                    <View className="flex-row overflow-hidden rounded-xl border border-slate-200">
-                      <Pressable
-                        className={`px-3 py-1.5 ${mealSearchMode === "name" ? "bg-blue-600" : "bg-white"}`}
-                        onPress={() => setMealSearchMode("name")}
-                      >
-                        <Text className={`text-xs font-semibold ${mealSearchMode === "name" ? "text-white" : "text-slate-600"}`}>
-                          Meal
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        className={`border-l border-slate-200 px-3 py-1.5 ${mealSearchMode === "tag" ? "bg-blue-600" : "bg-white"}`}
-                        onPress={() => setMealSearchMode("tag")}
-                      >
-                        <Text className={`text-xs font-semibold ${mealSearchMode === "tag" ? "text-white" : "text-slate-600"}`}>
-                          Tag
-                        </Text>
-                      </Pressable>
-                    </View>
                     <Pressable
                       onPress={() => {
                         setIsMealSearchActive(false);

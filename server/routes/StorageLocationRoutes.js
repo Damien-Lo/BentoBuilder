@@ -66,6 +66,33 @@ router.post("/", async (req, res) => {
 });
 
 /**
+ * PATCH /api/storage-locations/:id
+ * Rename — fixes a typo without needing to delete-and-recreate.
+ */
+router.patch("/:id", async (req, res) => {
+  try {
+    const name = req.body.name?.trim();
+    if (!name) {
+      return res.status(400).json({ success: false, message: "Storage location name is required" });
+    }
+
+    const location = await StorageLocation.findByIdAndUpdate(
+      req.params.id,
+      { name, normalizedName: name.toLowerCase() },
+      { new: true, runValidators: true },
+    );
+
+    if (!location) {
+      return res.status(404).json({ success: false, message: "Storage location not found" });
+    }
+
+    return res.status(200).json({ success: true, data: location });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * DELETE /api/storage-locations/:id
  * Default locations (the ones that existed before user-created ones) can't
  * be deleted. Any pantry items still stored here are moved to "Other"

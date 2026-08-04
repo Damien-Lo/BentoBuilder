@@ -215,6 +215,21 @@ export default function PantryMainPage() {
     });
   };
 
+  // Switches to the location-grouped list and expands every location that
+  // has an expired item, so tapping the expired banner actually surfaces
+  // them instead of just hinting they exist.
+  function revealExpiredItems() {
+    setPantryViewMode("list");
+    setLocationEditMode(false);
+    setExpandedLocations((prev) => {
+      const next = new Set(prev);
+      for (const item of expiredPantryItems) {
+        next.add(getReferenceId(item.storageLocation as unknown) || "other");
+      }
+      return next;
+    });
+  }
+
   const toggleCategory = (category: string) => {
     setExpandedCategories((prev) => {
       const next = new Set(prev);
@@ -370,6 +385,18 @@ export default function PantryMainPage() {
       );
     });
   }, [pantryItems, searchText, storageLocationById]);
+
+  // Past their expiry date, regardless of search/location — the basis for
+  // the proactive banner below, since nothing else on this page surfaces
+  // them without digging into every location one at a time.
+  const expiredPantryItems = useMemo(
+    () =>
+      pantryItems.filter((item) => {
+        const days = daysUntil(item.expiryDate);
+        return days != null && days < 0;
+      }),
+    [pantryItems],
+  );
 
   // A meal-prep item (a finished dish you reheat/eat directly, e.g.
   // Okonomiyaki) isn't something you'd browse as a recipe component —
@@ -967,6 +994,20 @@ export default function PantryMainPage() {
                   Swipe left for ingredients
                 </Text>
               </View>
+
+              {expiredPantryItems.length > 0 && (
+                <Pressable
+                  className="mt-3 flex-row items-center rounded-2xl bg-red-50 px-4 py-3 active:bg-red-100"
+                  onPress={revealExpiredItems}
+                >
+                  <Ionicons name="alert-circle" size={18} color="#DC2626" />
+                  <Text className="ml-2.5 flex-1 text-sm font-semibold text-red-700">
+                    {expiredPantryItems.length} {expiredPantryItems.length === 1 ? "item" : "items"}{" "}
+                    expired
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color="#DC2626" />
+                </Pressable>
+              )}
             </View>
 
             {pantryViewMode === "locations" ? (
