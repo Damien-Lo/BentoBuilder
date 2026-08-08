@@ -1,0 +1,102 @@
+[
+  {
+    "_id": "6a4dc38cf8d89f9a72f510c9",
+    "name": "Protein",
+    "normalizedName": "protein",
+    "isDefault": false,
+    "isArchived": false,
+    "createdAt": "2026-07-08T03:27:08.972Z",
+    "updatedAt": "2026-07-08T03:27:08.972Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6681c21211fa2ec98bf3ba",
+    "name": "Soup",
+    "normalizedName": "soup",
+    "isDefault": false,
+    "isArchived": false,
+    "createdAt": "2026-07-26T21:53:06.017Z",
+    "updatedAt": "2026-07-26T21:53:06.017Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6a7031e3f09c8c316d9647",
+    "name": "Rice",
+    "normalizedName": "rice",
+    "isDefault": false,
+    "isArchived": false,
+    "createdAt": "2026-07-29T21:27:13.298Z",
+    "updatedAt": "2026-07-29T21:27:13.298Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6a73f5e3f09c8c316d9649",
+    "name": "Eggs",
+    "normalizedName": "eggs",
+    "isDefault": false,
+    "isArchived": false,
+    "createdAt": "2026-07-29T21:43:17.960Z",
+    "updatedAt": "2026-07-29T21:43:17.960Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6cc5c7445c83265713961e",
+    "name": "Stock",
+    "normalizedName": "stock",
+    "isDefault": false,
+    "isArchived": false,
+    "createdAt": "2026-07-31T15:56:55.693Z",
+    "updatedAt": "2026-07-31T15:56:55.693Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6e69cafa8c3c8fdc9a30bb",
+    "name": "Pancake",
+    "normalizedName": "pancake",
+    "isDefault": false,
+    "isArchived": false,
+    "createdAt": "2026-08-01T21:48:58.284Z",
+    "updatedAt": "2026-08-01T21:48:58.284Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a7684cc612bf1394ddf19c7",
+    "name": "Noodles",
+    "normalizedName": "noodles",
+    "isDefault": false,
+    "isArchived": false,
+    "createdAt": "2026-08-08T01:22:20.398Z",
+    "updatedAt": "2026-08-08T01:22:20.398Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a7694198522558a6b0cfe41",
+    "name": "Stir-Fry",
+    "normalizedName": "stir-fry",
+    "isDefault": false,
+    "isArchived": false,
+    "createdAt": "2026-08-08T02:27:37.787Z",
+    "updatedAt": "2026-08-08T02:27:37.787Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a76a40e8522558a6b0cfea3",
+    "name": "Salad",
+    "normalizedName": "salad",
+    "isDefault": false,
+    "isArchived": false,
+    "createdAt": "2026-08-08T03:35:42.343Z",
+    "updatedAt": "2026-08-08T03:35:42.343Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a76b92cffb789a862879828",
+    "name": "Prep",
+    "normalizedName": "prep",
+    "isDefault": false,
+    "isArchived": false,
+    "createdAt": "2026-08-08T05:05:48.352Z",
+    "updatedAt": "2026-08-08T05:05:48.352Z",
+    "__v": 0
+  }
+]

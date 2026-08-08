@@ -134,12 +134,29 @@ export function getRecipeKcal(recipe: Recipe, servings: number): number | null {
 // ── Ingredient nutrition scaling ────────────────────────────────────────────────
 // Ingredient nutrition is stored per `defaultPortionAmount` of `defaultPortionUnit`
 // (e.g. "per 100g" is just defaultPortionAmount=100, defaultPortionUnit="g").
-// Scaling to an actually-planned quantity is quantity / defaultPortionAmount —
-// the same formula the server already uses in RecipeRoutes.js's calcNutrition().
-
-export function scaleIngredientNutrition(ingredient: Ingredient, quantity: number): ScaledNutrition {
+// A quantity given in some other unit (e.g. the user typed "100 g" for an
+// ingredient whose own portion is "1 package") has to be converted into the
+// ingredient's native unit first — the same thing RecipeRoutes.js's
+// calcNutrition() and the recipe screen's own totalNutrition already do.
+// Omitting `unit` skips conversion (treats quantity as already-native),
+// same as the old behavior, for callers that already guarantee that.
+export function scaleIngredientNutrition(
+  ingredient: Ingredient,
+  quantity: number,
+  unit?: string,
+  conversions: CustomUnitConversion[] = [],
+): ScaledNutrition {
   const n = ingredient.nutrition ?? {};
-  const multiplier = quantity / (ingredient.defaultPortionAmount || 1);
+
+  const quantityInNativeUnit = unit
+    ? convertUnits(quantity, unit, ingredient.defaultPortionUnit ?? "", conversions)
+    : quantity;
+
+  if (quantityInNativeUnit == null) {
+    return { calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null };
+  }
+
+  const multiplier = quantityInNativeUnit / (ingredient.defaultPortionAmount || 1);
   const scale = (v?: number | null) => (v == null ? null : v * multiplier);
   return {
     calories: scale(n.calories),
@@ -151,8 +168,13 @@ export function scaleIngredientNutrition(ingredient: Ingredient, quantity: numbe
   };
 }
 
-export function getIngredientKcal(ingredient: Ingredient, quantity: number): number | null {
-  const cal = scaleIngredientNutrition(ingredient, quantity).calories;
+export function getIngredientKcal(
+  ingredient: Ingredient,
+  quantity: number,
+  unit?: string,
+  conversions: CustomUnitConversion[] = [],
+): number | null {
+  const cal = scaleIngredientNutrition(ingredient, quantity, unit, conversions).calories;
   return cal == null ? null : Math.round(cal);
 }
 

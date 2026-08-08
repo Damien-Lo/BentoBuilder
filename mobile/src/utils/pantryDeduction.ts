@@ -61,13 +61,24 @@ interface RawRow {
   unit: string;
 }
 
+// A recipe's ingredientList is authored for its own `servings` — actually
+// consuming a different number of servings scales every line by
+// consumed/authored, so e.g. cooking 1 serving of a 2-serving recipe only
+// deducts half the ingredients.
+function servingsRatio(authoredServings: number | undefined, consumedServings: number | undefined): number {
+  const authored = authoredServings ?? 1;
+  const consumed = consumedServings ?? authored;
+  return authored > 0 ? consumed / authored : 1;
+}
+
 function gatherRows(entry: MealPlanEntry, recipeMap: Map<string, Recipe>): RawRow[] {
   const rows: RawRow[] = [];
 
   if (entry.recipe) {
+    const ratio = servingsRatio(entry.recipe.servings, entry.recipeServings);
     for (const line of entry.recipe.ingredientList) {
       const id = extractId(line.ingredient);
-      if (id) rows.push({ ingredientId: id, quantity: line.quantity, unit: line.unit });
+      if (id) rows.push({ ingredientId: id, quantity: line.quantity * ratio, unit: line.unit });
     }
     return rows;
   }
@@ -89,9 +100,10 @@ function gatherRows(entry: MealPlanEntry, recipeMap: Map<string, Recipe>): RawRo
       // ingredientList — the real one comes from the full recipe list.
       const fullRecipe = recipeMap.get(ref._id);
       if (!fullRecipe) continue;
+      const ratio = servingsRatio(fullRecipe.servings, course.servings);
       for (const line of fullRecipe.ingredientList) {
         const id = extractId(line.ingredient);
-        if (id) rows.push({ ingredientId: id, quantity: line.quantity, unit: line.unit });
+        if (id) rows.push({ ingredientId: id, quantity: line.quantity * ratio, unit: line.unit });
       }
     }
   }

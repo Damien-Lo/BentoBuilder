@@ -1,9 +1,8 @@
 import express from "express";
 import Recipe from "../models/Recipe.js";
 import Ingredient from "../models/Ingredient.js";
-import UserProfile from "../models/UserProfile.js";
-import { convertUnits, getIngredientConversions } from "../services/unitConversion.js";
 import { wouldCreateCycle } from "../services/productionCycle.js";
+import { calcNutrition, nutritionChanged, syncProducedIngredientNutrition } from "../services/recipeNutrition.js";
 
 const router = express.Router();
 
@@ -37,7 +36,9 @@ router.get("/", async (req, res) => {
 
 /**
  * GET /api/recipes/:id
- * Full detail with ingredient list populated.
+ * Full detail with ingredient list populated. Self-heals stale nutrition —
+ * an ingredient's own nutrition can change after this recipe was last
+ * saved, so the stored total is recomputed here and re-saved if it drifted.
  */
 router.get("/:id", async (req, res) => {
   try {
@@ -54,6 +55,13 @@ router.get("/:id", async (req, res) => {
         success: false,
         message: "Recipe not found",
       });
+    }
+
+    const nutrition = await calcNutrition(recipe);
+    if (nutritionChanged(recipe.nutrition, nutrition)) {
+      recipe.nutrition = nutrition;
+      await recipe.save();
+      await syncProducedIngredientNutrition(recipe, nutrition);
     }
 
     return res.status(200).json({
@@ -156,60 +164,6 @@ function normalizeMealCategory(body) {
       : [body.mealCategory];
   }
   return body;
-}
-
-// Calculate per-serving nutrition from a populated recipe document. A
-// recipe line's unit doesn't have to match the ingredient's own unit (e.g.
-// "2 cups" soy sauce where the ingredient's serving is defined in mL) — it's
-// converted before applying the per-serving nutrition multiplier.
-// Returns null if no ingredient has nutrition data.
-async function calcNutrition(recipe) {
-  const profile = await UserProfile.findOne().select("unitConversions").lean();
-  const globalConversions = profile?.unitConversions ?? [];
-
-  const servings = Math.max(1, recipe.servings || 1);
-  let calories = 0, protein = 0, carbs = 0, fats = 0, fiber = 0, sodium = 0;
-  let hasData = false;
-
-  for (const entry of recipe.ingredientList) {
-    const ing = entry.ingredient;
-    if (!ing || typeof ing !== "object" || !ing.nutrition) continue;
-
-    const quantityInNativeUnit = convertUnits(
-      entry.quantity,
-      entry.unit,
-      ing.defaultPortionUnit,
-      getIngredientConversions(ing, globalConversions),
-    );
-    if (quantityInNativeUnit == null) continue;
-
-    const multiplier = quantityInNativeUnit / (ing.defaultPortionAmount || 1);
-    calories += (ing.nutrition.calories || 0) * multiplier;
-    protein  += (ing.nutrition.protein  || 0) * multiplier;
-    carbs    += (ing.nutrition.carbs    || 0) * multiplier;
-    fats     += (ing.nutrition.fats     || 0) * multiplier;
-    fiber    += (ing.nutrition.fiber    || 0) * multiplier;
-    sodium   += (ing.nutrition.sodium   || 0) * multiplier;
-    hasData = true;
-  }
-
-  if (!hasData) return null;
-  const r = (n) => Math.round(n / servings * 10) / 10;
-  return { calories: r(calories), protein: r(protein), carbs: r(carbs), fats: r(fats), fiber: r(fiber), sodium: r(sodium) };
-}
-
-// A produced ingredient's nutrition is a derived value, not something
-// manually edited once linked — keep it permanently in sync with whatever
-// this recipe's own (already-automatic) nutrition computes to, every time
-// the recipe is saved.
-async function syncProducedIngredientNutrition(recipe, nutrition) {
-  if (!nutrition) return;
-
-  const producedIngredient = await Ingredient.findOne({ productionRecipe: recipe._id });
-  if (!producedIngredient) return;
-
-  producedIngredient.nutrition = nutrition;
-  await producedIngredient.save();
 }
 
 /**

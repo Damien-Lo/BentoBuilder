@@ -1,0 +1,552 @@
+[
+  {
+    "_id": "6a3cab11cab2e801c4f75602",
+    "name": "Kirkland Signature",
+    "normalizedName": "kirkland signature",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-06-25T04:14:09.682Z",
+    "updatedAt": "2026-06-25T04:14:09.682Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3cab11cab2e801c4f75603",
+    "name": "Great Value",
+    "normalizedName": "great value",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-06-25T04:14:09.839Z",
+    "updatedAt": "2026-06-25T04:14:09.839Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3cab12cab2e801c4f75604",
+    "name": "Kroger",
+    "normalizedName": "kroger",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-06-25T04:14:10.006Z",
+    "updatedAt": "2026-06-25T04:14:10.006Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3cab12cab2e801c4f75605",
+    "name": "Publix",
+    "normalizedName": "publix",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-06-25T04:14:10.171Z",
+    "updatedAt": "2026-06-25T04:14:10.171Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3cab12cab2e801c4f75606",
+    "name": "Trader Joe's",
+    "normalizedName": "trader joe's",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-06-25T04:14:10.329Z",
+    "updatedAt": "2026-06-25T04:14:10.329Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3cab12cab2e801c4f75607",
+    "name": "Chobani",
+    "normalizedName": "chobani",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-06-25T04:14:10.481Z",
+    "updatedAt": "2026-06-25T04:14:10.481Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3cab12cab2e801c4f75608",
+    "name": "Horizon Organic",
+    "normalizedName": "horizon organic",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-06-25T04:14:10.626Z",
+    "updatedAt": "2026-06-25T04:14:10.626Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3cab12cab2e801c4f75609",
+    "name": "Barilla",
+    "normalizedName": "barilla",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-06-25T04:14:10.784Z",
+    "updatedAt": "2026-06-25T04:14:10.784Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3cab12cab2e801c4f7560a",
+    "name": "Heinz",
+    "normalizedName": "heinz",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-06-25T04:14:10.935Z",
+    "updatedAt": "2026-06-25T04:14:10.935Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3cab13cab2e801c4f7560b",
+    "name": "Other",
+    "normalizedName": "other",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-06-25T04:14:11.104Z",
+    "updatedAt": "2026-06-25T04:14:11.104Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3cae46f36a77822a5b4c62",
+    "name": "Costco",
+    "normalizedName": "costco",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-06-25T04:27:50.894Z",
+    "updatedAt": "2026-06-25T04:27:50.894Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a4db79a6119f051d5d2deb1",
+    "name": "Generic",
+    "normalizedName": "generic",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-08T02:36:10.809Z",
+    "updatedAt": "2026-07-08T02:36:10.809Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a65727c44c74c50a5ecaef7",
+    "name": "Wise Wife",
+    "normalizedName": "wise wife",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T02:35:40.984Z",
+    "updatedAt": "2026-07-26T02:35:40.984Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a65784344c74c50a5ecaf09",
+    "name": "Simply Organic",
+    "normalizedName": "simply organic",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:00:19.193Z",
+    "updatedAt": "2026-07-26T03:00:19.193Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a65795644c74c50a5ecaf17",
+    "name": "Spice Islands",
+    "normalizedName": "spice islands",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:04:54.915Z",
+    "updatedAt": "2026-07-26T03:04:54.915Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a657df2af76383bd3b0dca5",
+    "name": "Kikkoman",
+    "normalizedName": "kikkoman",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:24:34.713Z",
+    "updatedAt": "2026-07-26T03:24:34.713Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a657e12af76383bd3b0dca6",
+    "name": "Totole",
+    "normalizedName": "totole",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:25:06.662Z",
+    "updatedAt": "2026-07-26T03:25:06.662Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a657e54af76383bd3b0dca7",
+    "name": "TUFF",
+    "normalizedName": "tuff",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:26:12.584Z",
+    "updatedAt": "2026-07-26T03:26:12.584Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a657e96af76383bd3b0dca8",
+    "name": "Takaokaya",
+    "normalizedName": "takaokaya",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:27:18.768Z",
+    "updatedAt": "2026-07-26T03:27:18.768Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a657eb0af76383bd3b0dca9",
+    "name": "Surasang",
+    "normalizedName": "surasang",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:27:44.863Z",
+    "updatedAt": "2026-07-26T03:27:44.863Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a657ecdaf76383bd3b0dcaa",
+    "name": "Cavender",
+    "normalizedName": "cavender",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:28:13.174Z",
+    "updatedAt": "2026-07-26T03:28:13.174Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a657f42af76383bd3b0dcab",
+    "name": "Walmart",
+    "normalizedName": "walmart",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:30:10.098Z",
+    "updatedAt": "2026-07-26T03:30:10.098Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a657f50af76383bd3b0dcac",
+    "name": "Katsuo",
+    "normalizedName": "katsuo",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:30:24.430Z",
+    "updatedAt": "2026-07-26T03:30:24.430Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a657f73af76383bd3b0dcad",
+    "name": "Smpi",
+    "normalizedName": "smpi",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:30:59.292Z",
+    "updatedAt": "2026-07-26T03:30:59.292Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a657fcaaf76383bd3b0dcae",
+    "name": "Lee Kum Kee",
+    "normalizedName": "lee kum kee",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T03:32:26.922Z",
+    "updatedAt": "2026-07-26T03:32:26.922Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a66695d1211fa2ec98bf388",
+    "name": "Mizkan",
+    "normalizedName": "mizkan",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T20:09:01.928Z",
+    "updatedAt": "2026-07-26T20:09:01.928Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6678a31211fa2ec98bf38c",
+    "name": "Jin Shan",
+    "normalizedName": "jin shan",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T21:14:11.386Z",
+    "updatedAt": "2026-07-26T21:14:11.386Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6679091211fa2ec98bf390",
+    "name": "Marukan",
+    "normalizedName": "marukan",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T21:15:53.571Z",
+    "updatedAt": "2026-07-26T21:15:53.571Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a667c5f1211fa2ec98bf39b",
+    "name": "Ajinomoto",
+    "normalizedName": "ajinomoto",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T21:30:07.890Z",
+    "updatedAt": "2026-07-26T21:30:07.890Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a667cff1211fa2ec98bf3a0",
+    "name": "Argo",
+    "normalizedName": "argo",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T21:32:47.694Z",
+    "updatedAt": "2026-07-26T21:32:47.694Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a667ddc1211fa2ec98bf3a4",
+    "name": "Huawq",
+    "normalizedName": "huawq",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T21:36:28.102Z",
+    "updatedAt": "2026-07-26T21:36:28.102Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a667f611211fa2ec98bf3ac",
+    "name": "Wel-Pac",
+    "normalizedName": "wel-pac",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T21:42:57.185Z",
+    "updatedAt": "2026-07-26T21:42:57.185Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a667fed1211fa2ec98bf3b0",
+    "name": "Squid",
+    "normalizedName": "squid",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T21:45:17.082Z",
+    "updatedAt": "2026-07-26T21:45:17.082Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a66812c1211fa2ec98bf3b6",
+    "name": "Hikari Miso Co. Ltd.",
+    "normalizedName": "hikari miso co. ltd.",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-26T21:50:36.965Z",
+    "updatedAt": "2026-08-08T05:01:32.324Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6806bb321e34540b333843",
+    "name": "H Mart",
+    "normalizedName": "h mart",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T01:32:43.219Z",
+    "updatedAt": "2026-08-08T05:01:32.157Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a68131b25be1fa8f5001708",
+    "name": "Morton & Bassett Spices",
+    "normalizedName": "morton & bassett spices",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T02:25:31.650Z",
+    "updatedAt": "2026-07-28T02:25:31.650Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a68155f25be1fa8f5001716",
+    "name": "TRUFF",
+    "normalizedName": "truff",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T02:35:11.964Z",
+    "updatedAt": "2026-07-28T02:35:11.964Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6817c525be1fa8f5001724",
+    "name": "Wang Globalnet",
+    "normalizedName": "wang globalnet",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T02:45:25.507Z",
+    "updatedAt": "2026-08-08T05:01:32.240Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a681d1825be1fa8f5001729",
+    "name": "Wismettac",
+    "normalizedName": "wismettac",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T03:08:08.709Z",
+    "updatedAt": "2026-07-28T03:08:08.709Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a681db425be1fa8f500172d",
+    "name": "Golden Elephant Brand",
+    "normalizedName": "golden elephant brand",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T03:10:44.315Z",
+    "updatedAt": "2026-07-28T03:10:44.315Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a681e8e25be1fa8f5001734",
+    "name": "Ninben",
+    "normalizedName": "ninben",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T03:14:22.989Z",
+    "updatedAt": "2026-07-28T03:14:22.989Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a681eca25be1fa8f5001738",
+    "name": "Jfc International Inc.",
+    "normalizedName": "jfc international inc.",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T03:15:22.390Z",
+    "updatedAt": "2026-07-28T03:15:22.390Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a68fe354e0143a111475300",
+    "name": "Pulmuone",
+    "normalizedName": "pulmuone",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T19:08:37.793Z",
+    "updatedAt": "2026-07-28T19:08:37.793Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6900a04e0143a11147530e",
+    "name": "Phillips",
+    "normalizedName": "phillips",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T19:18:56.468Z",
+    "updatedAt": "2026-07-28T19:18:56.468Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6901854e0143a111475312",
+    "name": "Amylu",
+    "normalizedName": "amylu",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T19:22:45.923Z",
+    "updatedAt": "2026-07-28T19:22:45.923Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a690e7b0f94cb20253ba6da",
+    "name": "Hanakatsuo",
+    "normalizedName": "hanakatsuo",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T20:18:03.532Z",
+    "updatedAt": "2026-07-28T20:18:03.532Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6912d90f94cb20253ba6e4",
+    "name": "Otafuku",
+    "normalizedName": "otafuku",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T20:36:41.021Z",
+    "updatedAt": "2026-07-28T20:36:41.021Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a691d930f94cb20253ba708",
+    "name": "Lao Gan Ma",
+    "normalizedName": "lao gan ma",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T21:22:27.101Z",
+    "updatedAt": "2026-07-28T21:22:27.101Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a691e9b0f94cb20253ba711",
+    "name": "Haio",
+    "normalizedName": "haio",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T21:26:51.131Z",
+    "updatedAt": "2026-07-28T21:26:51.131Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6920da0f94cb20253ba715",
+    "name": "Choripdong",
+    "normalizedName": "choripdong",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T21:36:26.176Z",
+    "updatedAt": "2026-07-28T21:36:26.176Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6921420f94cb20253ba719",
+    "name": "S&B",
+    "normalizedName": "s&b",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-28T21:38:10.372Z",
+    "updatedAt": "2026-07-28T21:38:10.372Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a695d5aa2aa8e9521e5f03d",
+    "name": "Kerrygold",
+    "normalizedName": "kerrygold",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-29T01:54:34.832Z",
+    "updatedAt": "2026-07-29T01:54:34.832Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a696cb7e3f09c8c316d9643",
+    "name": "Shirakiku",
+    "normalizedName": "shirakiku",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-29T03:00:07.758Z",
+    "updatedAt": "2026-07-29T03:00:07.758Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6b918dbed510a8ab40a24c",
+    "name": "Sargento",
+    "normalizedName": "sargento",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-07-30T18:01:49.894Z",
+    "updatedAt": "2026-07-30T18:01:49.894Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a6e3f336cb1f7b63316dedc",
+    "name": "Tiffany Food Corp",
+    "normalizedName": "tiffany food corp",
+    "icon": null,
+    "isDefault": false,
+    "createdAt": "2026-08-01T18:47:15.594Z",
+    "updatedAt": "2026-08-01T18:47:15.594Z",
+    "__v": 0
+  }
+]

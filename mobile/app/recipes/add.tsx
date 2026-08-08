@@ -113,6 +113,8 @@ export default function AddRecipePage() {
   const [recipeCategoryDraft, setRecipeCategoryDraft] = useState("");
   const [description, setDescription] = useState("");
   const [servings, setServings] = useState("1");
+  const [prepTimeMinutes, setPrepTimeMinutes] = useState("");
+  const [cookTimeMinutes, setCookTimeMinutes] = useState("");
   const [notes, setNotes] = useState("");
 
   // Ingredient rows
@@ -389,6 +391,14 @@ export default function AddRecipePage() {
       Alert.alert("Yield required", "Enter how much one serving makes (a positive amount and a unit).");
       return;
     }
+    if (prepTimeMinutes.trim() && (!Number.isFinite(Number(prepTimeMinutes)) || Number(prepTimeMinutes) < 0)) {
+      Alert.alert("Invalid prep time", "Enter a prep time of zero or more minutes.");
+      return;
+    }
+    if (cookTimeMinutes.trim() && (!Number.isFinite(Number(cookTimeMinutes)) || Number(cookTimeMinutes) < 0)) {
+      Alert.alert("Invalid cook time", "Enter a cook time of zero or more minutes.");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -413,6 +423,8 @@ export default function AddRecipePage() {
         tags: tagIds,
         description: description.trim() || undefined,
         servings: numServings,
+        prepTimeMinutes: prepTimeMinutes.trim() ? Number(prepTimeMinutes) : null,
+        cookTimeMinutes: cookTimeMinutes.trim() ? Number(cookTimeMinutes) : null,
         notes: notes.trim() || undefined,
         ingredientList: ingredientRows.map((row) => ({
           ingredient: row.ingredientId,
@@ -633,6 +645,27 @@ export default function AddRecipePage() {
             keyboardType="number-pad"
             onChangeText={setServings}
           />
+
+          <View className="mt-4 flex-row gap-3">
+            <View className="flex-1">
+              <FieldLabel text="Prep time (min)" />
+              <FormInput
+                value={prepTimeMinutes}
+                placeholder="e.g. 15"
+                keyboardType="number-pad"
+                onChangeText={setPrepTimeMinutes}
+              />
+            </View>
+            <View className="flex-1">
+              <FieldLabel text="Cook time (min)" />
+              <FormInput
+                value={cookTimeMinutes}
+                placeholder="e.g. 20"
+                keyboardType="number-pad"
+                onChangeText={setCookTimeMinutes}
+              />
+            </View>
+          </View>
 
           <ToggleRow
             label="This recipe prepares something"

@@ -87,6 +87,18 @@ const recipeSchema = new mongoose.Schema(
       default: 1,
     },
 
+    prepTimeMinutes: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+
+    cookTimeMinutes: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+
     defaultPortionUnit: {
       type: String,
       trim: true,

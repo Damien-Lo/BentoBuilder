@@ -343,8 +343,14 @@ export default function RecipeDetailPage() {
         return;
       }
 
+      // pendingInstructions were computed against the recipe's default
+      // yield (recipe.servings worth) — scale them to whatever batch size
+      // was actually entered, so doubling the batch doubles the deduction.
+      const baseYield = (recipe.servings ?? 1) * (producedIngredient.defaultPortionAmount ?? 1);
+      const ratio = baseYield > 0 ? parsedAmount / baseYield : 1;
+
       for (const instruction of pendingInstructions) {
-        await deductFromPantryItem(instruction.pantryItemId, instruction.amount);
+        await deductFromPantryItem(instruction.pantryItemId, round1(instruction.amount * ratio));
       }
 
       await addIngredientToPantry({
@@ -537,6 +543,24 @@ export default function RecipeDetailPage() {
                 {servings} {servings === 1 ? "serving" : "servings"}
               </Text>
             </View>
+
+            {recipe.prepTimeMinutes != null && (
+              <View className="flex-row items-center rounded-full bg-slate-100 px-3 py-1">
+                <Ionicons name="cut-outline" size={12} color="#475569" />
+                <Text className="ml-1 text-xs font-semibold text-slate-600">
+                  {recipe.prepTimeMinutes} min prep
+                </Text>
+              </View>
+            )}
+
+            {recipe.cookTimeMinutes != null && (
+              <View className="flex-row items-center rounded-full bg-slate-100 px-3 py-1">
+                <Ionicons name="flame-outline" size={12} color="#475569" />
+                <Text className="ml-1 text-xs font-semibold text-slate-600">
+                  {recipe.cookTimeMinutes} min cook
+                </Text>
+              </View>
+            )}
 
             {(recipe.tags ?? [])
               .filter((tag): tag is SelectOption => typeof tag !== "string")
@@ -737,11 +761,26 @@ export default function RecipeDetailPage() {
                           {displayQty}
                           {entry.unit ? ` × ${entry.unit}` : ""}
                         </Text>
-                        {ing?.nutrition?.calories != null && (
-                          <Text className="mt-0.5 text-xs text-slate-400">
-                            {Math.round(ing.nutrition.calories * (displayQty / (ing.defaultPortionAmount ?? 1)))} kcal
-                          </Text>
-                        )}
+                        {ing?.nutrition?.calories != null && (() => {
+                          // displayQty is in entry.unit, not necessarily the
+                          // ingredient's own defaultPortionUnit (e.g. a
+                          // recipe using grams for an ingredient portioned
+                          // in packages) — has to convert before scaling,
+                          // same as the total nutrition sum above.
+                          const qtyInNativeUnit = convertUnits(
+                            displayQty,
+                            entry.unit,
+                            ing.defaultPortionUnit ?? "",
+                            getIngredientConversions(ing, customUnitConversions, allIngredients),
+                          );
+                          if (qtyInNativeUnit == null) return null;
+                          const kcal = Math.round(
+                            ing.nutrition.calories * (qtyInNativeUnit / (ing.defaultPortionAmount ?? 1)),
+                          );
+                          return (
+                            <Text className="mt-0.5 text-xs text-slate-400">{kcal} kcal</Text>
+                          );
+                        })()}
                       </View>
                     </View>
 

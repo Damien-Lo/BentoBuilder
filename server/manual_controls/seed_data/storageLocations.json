@@ -1,0 +1,79 @@
+[
+  {
+    "_id": "6a3ca04504f26ff1191471c4",
+    "name": "Refrigerator",
+    "normalizedName": "refrigerator",
+    "icon": "file-tray-stacked-outline",
+    "isDefault": true,
+    "isArchived": false,
+    "createdAt": "2026-06-25T03:28:05.781Z",
+    "updatedAt": "2026-06-25T03:28:05.781Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3ca04504f26ff1191471c5",
+    "name": "Freezer",
+    "normalizedName": "freezer",
+    "icon": "file-tray-stacked-outline",
+    "isDefault": true,
+    "isArchived": false,
+    "createdAt": "2026-06-25T03:28:05.932Z",
+    "updatedAt": "2026-06-25T03:28:05.932Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3ca04604f26ff1191471c6",
+    "name": "Pantry",
+    "normalizedName": "pantry",
+    "icon": "file-tray-stacked-outline",
+    "isDefault": true,
+    "isArchived": false,
+    "createdAt": "2026-06-25T03:28:06.104Z",
+    "updatedAt": "2026-06-25T03:28:06.104Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3ca04604f26ff1191471c7",
+    "name": "Cabinet",
+    "normalizedName": "cabinet",
+    "icon": "file-tray-stacked-outline",
+    "isDefault": true,
+    "isArchived": false,
+    "createdAt": "2026-06-25T03:28:06.262Z",
+    "updatedAt": "2026-06-25T03:28:06.262Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3ca04604f26ff1191471c8",
+    "name": "Counter",
+    "normalizedName": "counter",
+    "icon": "file-tray-stacked-outline",
+    "isDefault": true,
+    "isArchived": false,
+    "createdAt": "2026-06-25T03:28:06.419Z",
+    "updatedAt": "2026-06-25T03:28:06.419Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3ca04604f26ff1191471c9",
+    "name": "Spice Rack",
+    "normalizedName": "spice rack",
+    "icon": "file-tray-stacked-outline",
+    "isDefault": true,
+    "isArchived": false,
+    "createdAt": "2026-06-25T03:28:06.571Z",
+    "updatedAt": "2026-06-25T03:28:06.571Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a3ca04604f26ff1191471ca",
+    "name": "Other",
+    "normalizedName": "other",
+    "icon": "file-tray-stacked-outline",
+    "isDefault": true,
+    "isArchived": false,
+    "createdAt": "2026-06-25T03:28:06.718Z",
+    "updatedAt": "2026-06-25T03:28:06.718Z",
+    "__v": 0
+  }
+]

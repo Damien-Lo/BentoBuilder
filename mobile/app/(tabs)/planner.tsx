@@ -59,6 +59,7 @@ import {
   type DeductionInstruction,
   type IngredientRequirement,
 } from "@/src/utils/pantryDeduction";
+import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -86,7 +87,7 @@ function addScaled(totals: { calories: number; protein: number; carbs: number; f
   if (n.sodium)   totals.sodium   += n.sodium;
 }
 
-function computeDayNutrition(entries: MealPlanEntry[]): DayNutrition {
+function computeDayNutrition(entries: MealPlanEntry[], conversions: CustomUnitConversion[] = []): DayNutrition {
   const totals = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
   for (const entry of entries) {
     if (entry.recipe) {
@@ -94,7 +95,12 @@ function computeDayNutrition(entries: MealPlanEntry[]): DayNutrition {
       continue;
     }
     if (entry.ingredient) {
-      addScaled(totals, scaleIngredientNutrition(entry.ingredient, entry.ingredientQuantity ?? 0));
+      addScaled(totals, scaleIngredientNutrition(
+        entry.ingredient,
+        entry.ingredientQuantity ?? 0,
+        entry.ingredientUnit,
+        getIngredientConversions(entry.ingredient, conversions),
+      ));
       continue;
     }
     for (const course of entry.meal?.courses ?? []) {
@@ -183,6 +189,9 @@ export default function HomeScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [addSlot, setAddSlot] = useState<MealSlot>("breakfast");
   const [addStatus, setAddStatus] = useState<MealPlanEntryStatus>("planned");
+  // Per-recipe "servings to add" overrides for the recipe picker below —
+  // keyed by recipe id so scrolling/re-rendering the list doesn't lose them.
+  const [addRecipeServingsById, setAddRecipeServingsById] = useState<Record<string, number>>({});
   const [addMode, setAddMode] = useState<"meal" | "recipe" | "ingredient">("meal");
   const [mealSearch, setMealSearch] = useState("");
   const [recipeSearch, setRecipeSearch] = useState("");
@@ -276,20 +285,20 @@ export default function HomeScreen() {
   const selectedMonthLabel = `${MONTH_NAMES[selectedD.getMonth()]} ${selectedD.getFullYear()}`;
   const isToday = selectedDate === today;
   const confirmedNutrition = useMemo(
-    () => computeDayNutrition(entries.filter(e => e.status === "confirmed")),
-    [entries],
+    () => computeDayNutrition(entries.filter(e => e.status === "confirmed"), appSettings?.unitConversions ?? []),
+    [entries, appSettings],
   );
   const plannedNutrition = useMemo(
-    () => computeDayNutrition(entries.filter(e => e.status === "planned")),
-    [entries],
+    () => computeDayNutrition(entries.filter(e => e.status === "planned"), appSettings?.unitConversions ?? []),
+    [entries, appSettings],
   );
   const weeklyConfirmedNutrition = useMemo(
-    () => computeDayNutrition(weekEntries.flat().filter(e => e.status === "confirmed")),
-    [weekEntries],
+    () => computeDayNutrition(weekEntries.flat().filter(e => e.status === "confirmed"), appSettings?.unitConversions ?? []),
+    [weekEntries, appSettings],
   );
   const weeklyPlannedNutrition = useMemo(
-    () => computeDayNutrition(weekEntries.flat().filter(e => e.status === "planned")),
-    [weekEntries],
+    () => computeDayNutrition(weekEntries.flat().filter(e => e.status === "planned"), appSettings?.unitConversions ?? []),
+    [weekEntries, appSettings],
   );
 
   const entriesBySlot = useMemo(() => {
@@ -373,7 +382,21 @@ export default function HomeScreen() {
     }
   }
 
-  async function handleAddRecipeEntry(recipe: Recipe) {
+  // Defaults to 1 serving regardless of how many servings the recipe itself
+  // makes — adjustable per-row in the add sheet via adjustAddServings
+  // before tapping to add.
+  function getAddServings(recipe: Recipe): number {
+    return addRecipeServingsById[recipe._id] ?? 1;
+  }
+
+  function adjustAddServings(recipe: Recipe, delta: number) {
+    setAddRecipeServingsById(prev => {
+      const current = prev[recipe._id] ?? 1;
+      return { ...prev, [recipe._id]: Math.max(1, current + delta) };
+    });
+  }
+
+  async function handleAddRecipeEntry(recipe: Recipe, servings: number) {
     if (saving) return;
     try {
       setSaving(true);
@@ -382,7 +405,7 @@ export default function HomeScreen() {
         slot: addSlot,
         status: addStatus,
         recipe: recipe._id,
-        recipeServings: 1,
+        recipeServings: servings,
       });
       setEntries(prev => [...prev, entry]);
       setShowAdd(false);
@@ -600,7 +623,12 @@ export default function HomeScreen() {
       const qty = entry.ingredientQuantity ?? 0;
       title = entry.ingredient.name;
       subtitle = `Ingredient · ${qty}${entry.ingredientUnit ? ` ${entry.ingredientUnit}` : ""}`;
-      kcal = getIngredientKcal(entry.ingredient, qty);
+      kcal = getIngredientKcal(
+        entry.ingredient,
+        qty,
+        entry.ingredientUnit,
+        getIngredientConversions(entry.ingredient, appSettings?.unitConversions ?? []),
+      );
     } else {
       const courseCount = entry.meal?.courses?.length ?? 0;
       title = entry.meal?.name ?? "";
@@ -1278,7 +1306,14 @@ export default function HomeScreen() {
               {(() => {
                 const q = Number(pendingQuantity);
                 const valid = Number.isFinite(q) && q > 0;
-                const n = valid ? scaleIngredientNutrition(pendingIngredient, q) : null;
+                const n = valid
+                  ? scaleIngredientNutrition(
+                      pendingIngredient,
+                      q,
+                      pendingUnit,
+                      getIngredientConversions(pendingIngredient, appSettings?.unitConversions ?? []),
+                    )
+                  : null;
                 const rows: [string, number | null | undefined, string][] = [
                   ["Calories", n?.calories, "kcal"],
                   ["Protein",  n?.protein,  "g"],
@@ -1491,36 +1526,62 @@ export default function HomeScreen() {
                   keyboardShouldPersistTaps="handled"
                   contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 }}
                   renderItem={({ item: recipe }) => {
-                    const kcal = getRecipeKcal(recipe, 1);
+                    const addServings = getAddServings(recipe);
+                    const kcal = getRecipeKcal(recipe, addServings);
                     const slotCfg = SLOT_MAP[addSlot];
                     return (
-                      <Pressable
-                        className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-                        disabled={saving}
-                        onPress={() => void handleAddRecipeEntry(recipe)}
-                      >
-                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
-                          <Ionicons name="book-outline" size={18} color={slotCfg.iconColor} />
-                        </View>
-                        <View className="ml-3 flex-1">
-                          <Text className="font-semibold text-slate-900">{recipe.name}</Text>
-                          <Text className="mt-0.5 text-sm text-slate-400">
-                            {recipe.mealCategory?.join(", ") ?? "Recipe"}
-                            {recipe.servings != null && ` · ${recipe.servings} servings`}
-                          </Text>
-                        </View>
-                        {kcal != null && (
-                          <Text className="mr-2 text-sm font-semibold text-slate-500">{kcal} kcal</Text>
-                        )}
+                      <View className="mb-2 rounded-2xl border border-slate-200 bg-white p-4">
                         <Pressable
-                          hitSlop={8}
-                          onPress={() => void openRecipeInfo(recipe)}
-                          className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+                          className="flex-row items-center active:opacity-70"
+                          disabled={saving}
+                          onPress={() => void handleAddRecipeEntry(recipe, addServings)}
                         >
-                          <Ionicons name="information-circle-outline" size={20} color="#94A3B8" />
+                          <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
+                            <Ionicons name="book-outline" size={18} color={slotCfg.iconColor} />
+                          </View>
+                          <View className="ml-3 flex-1">
+                            <Text className="font-semibold text-slate-900">{recipe.name}</Text>
+                            <Text className="mt-0.5 text-sm text-slate-400">
+                              {recipe.mealCategory?.join(", ") ?? "Recipe"}
+                              {recipe.servings != null && ` · makes ${recipe.servings} servings`}
+                            </Text>
+                          </View>
+                          {kcal != null && (
+                            <Text className="mr-2 text-sm font-semibold text-slate-500">{kcal} kcal</Text>
+                          )}
+                          <Pressable
+                            hitSlop={8}
+                            onPress={() => void openRecipeInfo(recipe)}
+                            className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+                          >
+                            <Ionicons name="information-circle-outline" size={20} color="#94A3B8" />
+                          </Pressable>
+                          <Ionicons name="add-circle-outline" size={22} color="#2563EB" />
                         </Pressable>
-                        <Ionicons name="add-circle-outline" size={22} color="#2563EB" />
-                      </Pressable>
+
+                        <View className="mt-2 flex-row items-center justify-end border-t border-slate-100 pt-2">
+                          <Text className="mr-2 text-xs font-medium text-slate-400">Add as</Text>
+                          <Pressable
+                            hitSlop={8}
+                            disabled={saving}
+                            onPress={() => adjustAddServings(recipe, -1)}
+                            className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                          >
+                            <Ionicons name="remove" size={14} color="#475569" />
+                          </Pressable>
+                          <Text className="mx-2 text-sm font-semibold text-slate-700">
+                            {addServings} {addServings === 1 ? "serving" : "servings"}
+                          </Text>
+                          <Pressable
+                            hitSlop={8}
+                            disabled={saving}
+                            onPress={() => adjustAddServings(recipe, 1)}
+                            className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                          >
+                            <Ionicons name="add" size={14} color="#475569" />
+                          </Pressable>
+                        </View>
+                      </View>
                     );
                   }}
                   ListEmptyComponent={
@@ -1543,7 +1604,7 @@ export default function HomeScreen() {
                   contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 }}
                   renderItem={({ item: ingredient }) => {
                     const portion = ingredient.defaultPortionAmount ?? 1;
-                    const kcal = getIngredientKcal(ingredient, portion);
+                    const kcal = getIngredientKcal(ingredient, portion, ingredient.defaultPortionUnit);
                     const slotCfg = SLOT_MAP[addSlot];
                     return (
                       <Pressable

@@ -41,6 +41,15 @@ const pantryItemSchema = new mongoose.Schema(
     expiryDate: {
       type: Date,
       default: null,
+      validate: {
+        // Skips the check entirely when either date is missing — plenty of
+        // items are logged without an expiry at all.
+        validator: function (value) {
+          if (!value || !this.purchaseDate) return true;
+          return value >= this.purchaseDate;
+        },
+        message: "Expiry date can't be before the purchase date",
+      },
     },
 
     purchasePrice: {

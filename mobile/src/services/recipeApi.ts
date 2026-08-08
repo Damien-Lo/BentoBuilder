@@ -55,6 +55,8 @@ export interface Recipe {
   mealCategory: MealCategory[];
   servings?: number;
   defaultPortionUnit?: string;
+  prepTimeMinutes?: number | null;
+  cookTimeMinutes?: number | null;
   nutrition?: RecipeNutrition;
   imageUrl?: string;
   notes?: string;
@@ -87,6 +89,8 @@ export interface CreateRecipeInput {
   tags?: string[];
   servings?: number;
   defaultPortionUnit?: string;
+  prepTimeMinutes?: number | null;
+  cookTimeMinutes?: number | null;
   nutrition?: RecipeNutrition;
   imageUrl?: string;
   notes?: string;
