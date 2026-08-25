@@ -3,11 +3,11 @@ import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 
-import ingredientRoutes from "./routes/ingredientRoutes.js";
-import pantryRoutes from "./routes/pantryRoutes.js";
-import categoryRoutes from "./routes/categoryRoutes.js";
-import storageLocationRoutes from "./routes/storageLocationRoutes.js";
-import brandRoutes from "./routes/brandRoutes.js";
+import ingredientRoutes from "./routes/IngredientRoutes.js";
+import pantryRoutes from "./routes/PantryRoutes.js";
+import categoryRoutes from "./routes/CategoryRoutes.js";
+import storageLocationRoutes from "./routes/StorageLocationRoutes.js";
+import brandRoutes from "./routes/BrandRoutes.js";
 import storeRoutes from "./routes/StoreRoutes.js";
 import recipeRoutes from "./routes/RecipeRoutes.js";
 import recipeCategoryRoutes from "./routes/RecipeCategoryRoutes.js";
