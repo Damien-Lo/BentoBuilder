@@ -6,6 +6,8 @@ import { RateSlider } from "@/src/components/planner/RateSlider";
 interface RateRecipeModalProps {
   visible: boolean;
   saving?: boolean;
+  title?: string;
+  subtitle?: string;
   onClose: () => void;
   onSubmit: (value: number) => void;
 }
@@ -13,7 +15,14 @@ interface RateRecipeModalProps {
 // Same drag-slider widget used everywhere else a 1-10 rating is collected
 // (RateAndConfirmModal in the planner) — kept in sync rather than each
 // screen rolling its own input.
-export function RateRecipeModal({ visible, saving = false, onClose, onSubmit }: RateRecipeModalProps) {
+export function RateRecipeModal({
+  visible,
+  saving = false,
+  title = "Rate this recipe",
+  subtitle = "How was it, out of 10?",
+  onClose,
+  onSubmit,
+}: RateRecipeModalProps) {
   const [value, setValue] = useState(5);
 
   useEffect(() => {
@@ -30,8 +39,8 @@ export function RateRecipeModal({ visible, saving = false, onClose, onSubmit }: 
         <Pressable className="absolute inset-0" onPress={handleClose} />
 
         <View className="w-full rounded-3xl bg-white p-5">
-          <Text className="text-lg font-bold text-slate-950">Rate this recipe</Text>
-          <Text className="mt-0.5 mb-6 text-sm text-slate-400">How was it, out of 10?</Text>
+          <Text className="text-lg font-bold text-slate-950">{title}</Text>
+          <Text className="mt-0.5 mb-6 text-sm text-slate-400">{subtitle}</Text>
 
           <Text className="mb-3 text-center text-3xl font-bold text-blue-600">{value}</Text>
           <RateSlider value={value} onChange={setValue} disabled={saving} />

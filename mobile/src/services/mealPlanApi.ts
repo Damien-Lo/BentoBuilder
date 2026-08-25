@@ -2,6 +2,7 @@ import { API_BASE_URL } from "@/src/config/api";
 import type { Meal } from "./mealApi";
 import type { Recipe } from "./recipeApi";
 import type { Ingredient } from "./ingredientApi";
+import type { RestaurantMeal } from "./restaurantMealApi";
 
 export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 
@@ -28,6 +29,9 @@ export interface MealPlanEntry {
   ingredientQuantity?: number;
   ingredientUnit?: string;
 
+  // A restaurant/eating-out visit — no ingredients, no pantry deduction.
+  restaurantMeal?: RestaurantMeal;
+
   // Exactly what confirming this entry deducted from the pantry — replayed
   // in reverse on unconfirm/delete. Empty while planned.
   stockDeductions?: StockDeduction[];
@@ -49,6 +53,8 @@ export interface CreateMealPlanEntryInput {
   ingredient?: string; // ingredient _id
   ingredientQuantity?: number;
   ingredientUnit?: string;
+
+  restaurantMeal?: string; // restaurant meal _id
 
   notes?: string;
 }

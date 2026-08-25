@@ -178,7 +178,8 @@ export default function RecipeDetailPage() {
       );
       if (qtyInNativeUnit == null) continue;
 
-      const multiplier = qtyInNativeUnit / (ing.defaultPortionAmount ?? 1);
+      const multiplier =
+        (qtyInNativeUnit / (ing.defaultPortionAmount ?? 1)) * (entry.nutritionFactor ?? 1);
       calories += (ing.nutrition.calories ?? 0) * multiplier;
       protein  += (ing.nutrition.protein  ?? 0) * multiplier;
       carbs    += (ing.nutrition.carbs    ?? 0) * multiplier;
@@ -760,6 +761,9 @@ export default function RecipeDetailPage() {
                         <Text className="text-sm font-semibold text-slate-500">
                           {displayQty}
                           {entry.unit ? ` × ${entry.unit}` : ""}
+                          {entry.nutritionFactor != null && entry.nutritionFactor !== 1
+                            ? ` · ${Math.round(entry.nutritionFactor * 100)}% counted`
+                            : ""}
                         </Text>
                         {ing?.nutrition?.calories != null && (() => {
                           // displayQty is in entry.unit, not necessarily the
@@ -775,7 +779,9 @@ export default function RecipeDetailPage() {
                           );
                           if (qtyInNativeUnit == null) return null;
                           const kcal = Math.round(
-                            ing.nutrition.calories * (qtyInNativeUnit / (ing.defaultPortionAmount ?? 1)),
+                            ing.nutrition.calories *
+                              (qtyInNativeUnit / (ing.defaultPortionAmount ?? 1)) *
+                              (entry.nutritionFactor ?? 1),
                           );
                           return (
                             <Text className="mt-0.5 text-xs text-slate-400">{kcal} kcal</Text>

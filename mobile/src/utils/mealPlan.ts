@@ -4,6 +4,7 @@ import type { Meal, MealRecipeRef } from "@/src/services/mealApi";
 import type { MealPlanEntry, MealSlot } from "@/src/services/mealPlanApi";
 import type { Recipe } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
+import type { RestaurantMeal } from "@/src/services/restaurantMealApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { getIngredientStockInUnit } from "./ingredientStock";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
@@ -96,6 +97,22 @@ export function getMealKcal(meal: Meal): number | null {
     const cal = (recipe as MealRecipeRef).nutrition?.calories;
     if (cal != null) {
       total += cal * course.servings;
+      hasAny = true;
+    }
+  }
+  return hasAny ? Math.round(total) : null;
+}
+
+// A restaurant visit has no "servings" to scale — each dish's manual
+// nutrition estimate is summed flat, as eaten.
+export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal): number | null {
+  if (!restaurantMeal.dishes?.length) return null;
+  let total = 0;
+  let hasAny = false;
+  for (const dish of restaurantMeal.dishes) {
+    const cal = dish.nutrition?.calories;
+    if (cal != null) {
+      total += cal;
       hasAny = true;
     }
   }

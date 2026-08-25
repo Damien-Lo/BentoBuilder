@@ -14,6 +14,7 @@ import recipeCategoryRoutes from "./routes/RecipeCategoryRoutes.js";
 import mealRoutes from "./routes/MealRoutes.js";
 import tagRoutes from "./routes/TagRoutes.js";
 import mealPlanRoutes from "./routes/MealPlanRoutes.js";
+import restaurantMealRoutes from "./routes/RestaurantMealRoutes.js";
 import userProfileRoutes from "./routes/UserProfileRoutes.js";
 import groceryListRoutes from "./routes/GroceryListRoutes.js";
 
@@ -56,6 +57,7 @@ app.use("/api/recipe-categories", recipeCategoryRoutes);
 app.use("/api/meals", mealRoutes);
 app.use("/api/tags", tagRoutes);
 app.use("/api/meal-plan", mealPlanRoutes);
+app.use("/api/restaurant-meals", restaurantMealRoutes);
 app.use("/api/profile", userProfileRoutes);
 app.use("/api/grocery-list", groceryListRoutes);
 

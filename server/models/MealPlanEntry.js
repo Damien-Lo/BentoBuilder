@@ -25,6 +25,9 @@ const mealPlanEntrySchema = new mongoose.Schema(
     ingredientQuantity: { type: Number, min: 0 },
     ingredientUnit:     { type: String, trim: true, default: "" },
 
+    // A restaurant/eating-out visit — no ingredients, no pantry deduction.
+    restaurantMeal:     { type: mongoose.Schema.Types.ObjectId, ref: "RestaurantMeal" },
+
     // "planned" = tentative, not yet eaten; "confirmed" = logged as actually eaten
     status: {
       type: String,
@@ -46,9 +49,9 @@ const mealPlanEntrySchema = new mongoose.Schema(
 );
 
 mealPlanEntrySchema.pre("validate", function () {
-  const count = [this.meal, this.recipe, this.ingredient].filter(Boolean).length;
+  const count = [this.meal, this.recipe, this.ingredient, this.restaurantMeal].filter(Boolean).length;
   if (count !== 1) {
-    throw new Error("Exactly one of meal, recipe, or ingredient is required");
+    throw new Error("Exactly one of meal, recipe, ingredient, or restaurantMeal is required");
   }
 });
 

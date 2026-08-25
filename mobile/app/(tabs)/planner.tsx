@@ -20,6 +20,8 @@ import { getMeals, type Meal, type MealRecipeRef } from "@/src/services/mealApi"
 import { addRecipeScore, getRecipeById, getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
+import { getRestaurantMeals, type RestaurantMeal } from "@/src/services/restaurantMealApi";
+import type { SelectOption } from "@/src/services/optionsApi";
 import type { PantryItem } from "@/src/types/pantry";
 import {
   confirmMealPlanEntry,
@@ -40,6 +42,7 @@ import {
   getIngredientKcal,
   getMealKcal,
   getRecipeKcal,
+  getRestaurantMealKcal,
   getWeekDates,
   parseLocalDate,
   scaleIngredientNutrition,
@@ -101,6 +104,21 @@ function computeDayNutrition(entries: MealPlanEntry[], conversions: CustomUnitCo
         entry.ingredientUnit,
         getIngredientConversions(entry.ingredient, conversions),
       ));
+      continue;
+    }
+    if (entry.restaurantMeal) {
+      for (const dish of entry.restaurantMeal.dishes ?? []) {
+        const n = dish.nutrition;
+        if (!n) continue;
+        addScaled(totals, {
+          calories: n.calories ?? null,
+          protein: n.protein ?? null,
+          carbs: n.carbs ?? null,
+          fats: n.fats ?? null,
+          fiber: n.fiber ?? null,
+          sodium: n.sodium ?? null,
+        });
+      }
       continue;
     }
     for (const course of entry.meal?.courses ?? []) {
@@ -177,6 +195,7 @@ export default function HomeScreen() {
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
   const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
+  const [allRestaurantMeals, setAllRestaurantMeals] = useState<RestaurantMeal[]>([]);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
@@ -192,10 +211,11 @@ export default function HomeScreen() {
   // Per-recipe "servings to add" overrides for the recipe picker below —
   // keyed by recipe id so scrolling/re-rendering the list doesn't lose them.
   const [addRecipeServingsById, setAddRecipeServingsById] = useState<Record<string, number>>({});
-  const [addMode, setAddMode] = useState<"meal" | "recipe" | "ingredient">("meal");
+  const [addMode, setAddMode] = useState<"meal" | "recipe" | "ingredient" | "restaurant">("meal");
   const [mealSearch, setMealSearch] = useState("");
   const [recipeSearch, setRecipeSearch] = useState("");
   const [ingredientSearch, setIngredientSearch] = useState("");
+  const [restaurantSearch, setRestaurantSearch] = useState("");
   const [saving, setSaving] = useState(false);
 
   // Ingredient quantity-entry step — set once a user picks an ingredient,
@@ -209,6 +229,7 @@ export default function HomeScreen() {
     | { type: "meal"; data: Meal }
     | { type: "recipe"; data: Recipe }
     | { type: "ingredient"; data: Ingredient }
+    | { type: "restaurant"; data: RestaurantMeal }
     | null
   >(null);
   const [infoLoading, setInfoLoading] = useState(false);
@@ -237,6 +258,7 @@ export default function HomeScreen() {
     getRecipes().then(setAllRecipes).catch(() => {});
     getIngredients().then(setAllIngredients).catch(() => {});
     getPantryItems().then(setPantryItems).catch(() => {});
+    getRestaurantMeals().then(setAllRestaurantMeals).catch(() => {});
   }, []);
 
   // Load plan for the selected date
@@ -328,6 +350,16 @@ export default function HomeScreen() {
     return allIngredients.filter(i => i.name.toLowerCase().includes(q));
   }, [allIngredients, ingredientSearch]);
 
+  const filteredRestaurantMeals = useMemo(() => {
+    const q = restaurantSearch.trim().toLowerCase();
+    if (!q) return allRestaurantMeals;
+    return allRestaurantMeals.filter(
+      r =>
+        r.restaurantName.toLowerCase().includes(q) ||
+        r.dishes.some(d => d.name.toLowerCase().includes(q)),
+    );
+  }, [allRestaurantMeals, restaurantSearch]);
+
   function openAdd(slot: MealSlot) {
     setAddSlot(slot);
     setAddStatus("planned");
@@ -335,6 +367,7 @@ export default function HomeScreen() {
     setMealSearch("");
     setRecipeSearch("");
     setIngredientSearch("");
+    setRestaurantSearch("");
     setPendingIngredient(null);
     setShowAdd(true);
   }
@@ -351,6 +384,10 @@ export default function HomeScreen() {
 
   function openIngredientInfo(ingredient: Ingredient) {
     setInfoItem({ type: "ingredient", data: ingredient });
+  }
+
+  function openRestaurantInfo(restaurantMeal: RestaurantMeal) {
+    setInfoItem({ type: "restaurant", data: restaurantMeal });
   }
 
   async function openRecipeInfo(recipe: Recipe) {
@@ -411,6 +448,25 @@ export default function HomeScreen() {
       setShowAdd(false);
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not add recipe.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAddRestaurantEntry(restaurantMeal: RestaurantMeal) {
+    if (saving) return;
+    try {
+      setSaving(true);
+      const entry = await createMealPlanEntry({
+        date: selectedDate,
+        slot: addSlot,
+        status: addStatus,
+        restaurantMeal: restaurantMeal._id,
+      });
+      setEntries(prev => [...prev, entry]);
+      setShowAdd(false);
+    } catch (err) {
+      Alert.alert("Error", err instanceof Error ? err.message : "Could not add restaurant meal.");
     } finally {
       setSaving(false);
     }
@@ -605,6 +661,8 @@ export default function HomeScreen() {
       router.push({ pathname: "/ingredients/edit/[id]", params: { id: entry.ingredient._id } });
     } else if (entry.meal) {
       router.push({ pathname: "/meals/[id]", params: { id: entry.meal._id } });
+    } else if (entry.restaurantMeal) {
+      router.push({ pathname: "/restaurant-meals/[id]", params: { id: entry.restaurantMeal._id } });
     }
   }
 
@@ -629,6 +687,11 @@ export default function HomeScreen() {
         entry.ingredientUnit,
         getIngredientConversions(entry.ingredient, appSettings?.unitConversions ?? []),
       );
+    } else if (entry.restaurantMeal) {
+      const dishCount = entry.restaurantMeal.dishes?.length ?? 0;
+      title = entry.restaurantMeal.restaurantName;
+      subtitle = `Eating out · ${dishCount} ${dishCount === 1 ? "dish" : "dishes"}`;
+      kcal = getRestaurantMealKcal(entry.restaurantMeal);
     } else {
       const courseCount = entry.meal?.courses?.length ?? 0;
       title = entry.meal?.name ?? "";
@@ -1034,12 +1097,50 @@ export default function HomeScreen() {
     );
   }
 
+  function renderRestaurantMealInfo(restaurantMeal: RestaurantMeal) {
+    const kcal = getRestaurantMealKcal(restaurantMeal);
+    const tags = (restaurantMeal.tags ?? []).filter((t): t is SelectOption => typeof t !== "string");
+    return (
+      <View>
+        {tags.length > 0 && (
+          <View className="mb-4 flex-row flex-wrap gap-1.5">
+            {tags.map(tag => (
+              <View key={tag._id} className="rounded-full bg-emerald-50 px-2.5 py-1">
+                <Text className="text-xs font-semibold text-emerald-700">{tag.name}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {!!restaurantMeal.notes && (
+          <Text className="mb-4 text-sm leading-5 text-slate-600">{restaurantMeal.notes}</Text>
+        )}
+
+        {infoRow("Total calories", kcal, kcal != null ? " kcal" : "")}
+
+        <Text className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">
+          Dishes ({restaurantMeal.dishes.length})
+        </Text>
+        {restaurantMeal.dishes.map(dish => (
+          <View key={dish._id} className="mb-2 rounded-2xl bg-slate-50 px-4 py-3">
+            <Text className="text-sm font-semibold text-slate-900">{dish.name}</Text>
+            {dish.nutrition?.calories != null && (
+              <Text className="mt-0.5 text-xs text-slate-500">{dish.nutrition.calories} kcal</Text>
+            )}
+          </View>
+        ))}
+      </View>
+    );
+  }
+
   function renderInfoOverlay() {
     if (!infoItem) return null;
     const icon =
       infoItem.type === "meal" ? "restaurant-outline"
       : infoItem.type === "recipe" ? "book-outline"
+      : infoItem.type === "restaurant" ? "restaurant-outline"
       : "nutrition-outline";
+    const title = infoItem.type === "restaurant" ? infoItem.data.restaurantName : infoItem.data.name;
 
     return (
       <View className="absolute inset-0">
@@ -1056,7 +1157,7 @@ export default function HomeScreen() {
               <Ionicons name={icon} size={20} color="#2563EB" />
             </View>
             <Text className="ml-3 flex-1 text-lg font-bold text-slate-950" numberOfLines={2}>
-              {infoItem.data.name}
+              {title}
             </Text>
             <Pressable
               hitSlop={10}
@@ -1070,6 +1171,7 @@ export default function HomeScreen() {
             {infoItem.type === "meal" && renderMealInfo(infoItem.data)}
             {infoItem.type === "recipe" && renderRecipeInfo(infoItem.data)}
             {infoItem.type === "ingredient" && renderIngredientInfo(infoItem.data)}
+            {infoItem.type === "restaurant" && renderRestaurantMealInfo(infoItem.data)}
             {infoLoading && (
               <View className="mt-3 flex-row items-center justify-center">
                 <ActivityIndicator size="small" color="#2563EB" />
@@ -1415,7 +1517,7 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {/* Meals / Recipes / Ingredients toggle */}
+              {/* Meals / Recipes / Ingredients / Eating Out toggle */}
               <View className="border-b border-slate-100 bg-white px-4 pb-3">
                 <View className="flex-row rounded-xl bg-slate-100 p-1">
                   {(
@@ -1423,6 +1525,7 @@ export default function HomeScreen() {
                       ["meal", "Meals"],
                       ["recipe", "Recipes"],
                       ["ingredient", "Ingredients"],
+                      ["restaurant", "Eating Out"],
                     ] as const
                   ).map(([mode, label]) => (
                     <Pressable
@@ -1447,18 +1550,39 @@ export default function HomeScreen() {
                 <View className="h-11 flex-row items-center rounded-2xl bg-slate-100 px-4">
                   <Ionicons name="search-outline" size={18} color="#64748B" />
                   <TextInput
-                    value={addMode === "meal" ? mealSearch : addMode === "recipe" ? recipeSearch : ingredientSearch}
-                    onChangeText={addMode === "meal" ? setMealSearch : addMode === "recipe" ? setRecipeSearch : setIngredientSearch}
-                    placeholder={addMode === "meal" ? "Search meals…" : addMode === "recipe" ? "Search recipes…" : "Search ingredients…"}
+                    value={
+                      addMode === "meal" ? mealSearch
+                      : addMode === "recipe" ? recipeSearch
+                      : addMode === "ingredient" ? ingredientSearch
+                      : restaurantSearch
+                    }
+                    onChangeText={
+                      addMode === "meal" ? setMealSearch
+                      : addMode === "recipe" ? setRecipeSearch
+                      : addMode === "ingredient" ? setIngredientSearch
+                      : setRestaurantSearch
+                    }
+                    placeholder={
+                      addMode === "meal" ? "Search meals…"
+                      : addMode === "recipe" ? "Search recipes…"
+                      : addMode === "ingredient" ? "Search ingredients…"
+                      : "Search restaurants or dishes…"
+                    }
                     placeholderTextColor="#94A3B8"
                     className="ml-3 flex-1 text-base text-slate-900"
                   />
-                  {(addMode === "meal" ? mealSearch : addMode === "recipe" ? recipeSearch : ingredientSearch).length > 0 && (
+                  {(
+                    addMode === "meal" ? mealSearch
+                    : addMode === "recipe" ? recipeSearch
+                    : addMode === "ingredient" ? ingredientSearch
+                    : restaurantSearch
+                  ).length > 0 && (
                     <Pressable
                       onPress={() => {
                         if (addMode === "meal") setMealSearch("");
                         else if (addMode === "recipe") setRecipeSearch("");
-                        else setIngredientSearch("");
+                        else if (addMode === "ingredient") setIngredientSearch("");
+                        else setRestaurantSearch("");
                       }}
                     >
                       <Ionicons name="close-circle" size={18} color="#94A3B8" />
@@ -1641,6 +1765,68 @@ export default function HomeScreen() {
                       <Text className="mt-4 text-lg font-bold text-slate-900">No ingredients found</Text>
                       <Text className="mt-2 text-center text-slate-500">
                         {ingredientSearch ? "Try a different search." : "Create ingredients in the Pantry tab first."}
+                      </Text>
+                    </View>
+                  }
+                />
+              )}
+
+              {addMode === "restaurant" && (
+                <FlatList
+                  data={filteredRestaurantMeals}
+                  keyExtractor={r => r._id}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 }}
+                  ListHeaderComponent={
+                    <Pressable
+                      className="mb-2 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3.5 active:bg-slate-100"
+                      onPress={() => {
+                        setShowAdd(false);
+                        router.push("/restaurant-meals/add");
+                      }}
+                    >
+                      <Ionicons name="add" size={18} color="#2563EB" />
+                      <Text className="ml-2 font-semibold text-blue-700">Log a new visit</Text>
+                    </Pressable>
+                  }
+                  renderItem={({ item: restaurantMeal }) => {
+                    const kcal = getRestaurantMealKcal(restaurantMeal);
+                    const slotCfg = SLOT_MAP[addSlot];
+                    return (
+                      <Pressable
+                        className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+                        disabled={saving}
+                        onPress={() => void handleAddRestaurantEntry(restaurantMeal)}
+                      >
+                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
+                          <Ionicons name="restaurant-outline" size={18} color={slotCfg.iconColor} />
+                        </View>
+                        <View className="ml-3 flex-1">
+                          <Text className="font-semibold text-slate-900">{restaurantMeal.restaurantName}</Text>
+                          <Text className="mt-0.5 text-sm text-slate-400" numberOfLines={1}>
+                            {restaurantMeal.dishes.map(d => d.name).join(", ") || "No dishes yet"}
+                          </Text>
+                        </View>
+                        {kcal != null && (
+                          <Text className="mr-2 text-sm font-semibold text-slate-500">{kcal} kcal</Text>
+                        )}
+                        <Pressable
+                          hitSlop={8}
+                          onPress={() => openRestaurantInfo(restaurantMeal)}
+                          className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+                        >
+                          <Ionicons name="information-circle-outline" size={20} color="#94A3B8" />
+                        </Pressable>
+                        <Ionicons name="add-circle-outline" size={22} color="#2563EB" />
+                      </Pressable>
+                    );
+                  }}
+                  ListEmptyComponent={
+                    <View className="items-center py-16">
+                      <Ionicons name="restaurant-outline" size={42} color="#94A3B8" />
+                      <Text className="mt-4 text-lg font-bold text-slate-900">No restaurant meals yet</Text>
+                      <Text className="mt-2 text-center text-slate-500">
+                        {restaurantSearch ? "Try a different search." : "Log a visit above to see it here next time."}
                       </Text>
                     </View>
                   }

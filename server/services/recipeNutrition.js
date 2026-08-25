@@ -28,7 +28,9 @@ export async function calcNutrition(recipe) {
     );
     if (quantityInNativeUnit == null) continue;
 
-    const multiplier = quantityInNativeUnit / (ing.defaultPortionAmount || 1);
+    const multiplier =
+      (quantityInNativeUnit / (ing.defaultPortionAmount || 1)) *
+      (entry.nutritionFactor ?? 1);
     calories += (ing.nutrition.calories || 0) * multiplier;
     protein  += (ing.nutrition.protein  || 0) * multiplier;
     carbs    += (ing.nutrition.carbs    || 0) * multiplier;

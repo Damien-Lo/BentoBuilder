@@ -35,6 +35,11 @@ export interface RecipeIngredientEntry {
   ingredient: string | PopulatedIngredient;
   quantity: number;
   unit: string;
+  // How much of this line's nutrition actually ends up in the dish — 1
+  // (default, may be omitted) counts it in full, 0 omits it, and a fraction
+  // covers ingredients that are mostly rinsed off or discarded rather than
+  // eaten (e.g. the baking soda used to soften kelp noodles).
+  nutritionFactor?: number;
 }
 
 export interface RecipeScore {
@@ -79,6 +84,7 @@ export interface RecipeIngredientInput {
   ingredient: string;
   quantity: number;
   unit: string;
+  nutritionFactor?: number;
 }
 
 export interface CreateRecipeInput {

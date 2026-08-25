@@ -27,8 +27,13 @@ import {
   getArchivedMeals,
   restoreMeal,
 } from "@/src/services/mealApi";
+import {
+  deleteRestaurantMealPermanently,
+  getArchivedRestaurantMeals,
+  restoreRestaurantMeal,
+} from "@/src/services/restaurantMealApi";
 
-type ArchiveKind = "ingredients" | "recipes" | "meals";
+type ArchiveKind = "ingredients" | "recipes" | "meals" | "restaurantMeals";
 
 type ArchiveItem = { _id: string; name: string; subtitle?: string };
 
@@ -71,9 +76,19 @@ const ARCHIVE_CONFIG: Record<ArchiveKind, ArchiveConfig> = {
     restore: restoreMeal,
     removePermanently: deleteMealPermanently,
   },
+  restaurantMeals: {
+    label: "Eating Out",
+    singular: "restaurant meal",
+    get: async () => {
+      const items = await getArchivedRestaurantMeals();
+      return items.map((r) => ({ _id: r._id, name: r.restaurantName }));
+    },
+    restore: restoreRestaurantMeal,
+    removePermanently: deleteRestaurantMealPermanently,
+  },
 };
 
-const KIND_ORDER: ArchiveKind[] = ["ingredients", "recipes", "meals"];
+const KIND_ORDER: ArchiveKind[] = ["ingredients", "recipes", "meals", "restaurantMeals"];
 
 export default function ArchiveScreen() {
   const router = useRouter();

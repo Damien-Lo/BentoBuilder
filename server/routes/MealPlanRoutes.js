@@ -41,6 +41,10 @@ function populateEntry(query) {
     .populate({
       path: "ingredient",
       populate: [{ path: "category" }, { path: "brand" }],
+    })
+    .populate({
+      path: "restaurantMeal",
+      populate: [{ path: "tags" }],
     });
 }
 

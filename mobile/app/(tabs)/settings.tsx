@@ -325,6 +325,18 @@ export default function SettingsScreen() {
               <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </Pressable>
             <Pressable
+              className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3.5 active:bg-slate-50"
+              onPress={() => router.push("/restaurant-meals")}
+            >
+              <View className="flex-row items-center">
+                <Ionicons name="restaurant-outline" size={18} color="#475569" />
+                <Text className="ml-3 text-base text-slate-700">
+                  Manage eating-out visits
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </Pressable>
+            <Pressable
               className="flex-row items-center justify-between px-4 py-3.5 active:bg-slate-50"
               onPress={() => router.push("/archive")}
             >

@@ -66,6 +66,10 @@ type IngredientRow = {
   // ingredient whose native unit is mL. Nutrition math needs this.
   nativeUnit: string;
   portionAmount: number;
+  // How much of this line's nutrition actually ends up in the dish — 1
+  // (the common case) counts it in full; lower values cover ingredients
+  // mostly rinsed off or discarded rather than eaten.
+  nutritionFactor: number;
   calories?: number | null;
   protein?: number | null;
   carbs?: number | null;
@@ -128,6 +132,11 @@ export default function AddRecipePage() {
   const [pickerIngredientName, setPickerIngredientName] = useState("");
   const [pickerQuantity, setPickerQuantity] = useState("1");
   const [pickerUnit, setPickerUnit] = useState("");
+  // Percent (0-100) of this line's nutrition that counts toward the
+  // recipe total — kept collapsed unless the user opts in, since almost
+  // every ingredient counts in full.
+  const [pickerNutritionPercent, setPickerNutritionPercent] = useState("100");
+  const [showNutritionFactor, setShowNutritionFactor] = useState(false);
   const [pickerSelected, setPickerSelected] =
     useState<IngredientOption | null>(null);
   const [customUnitConversions, setCustomUnitConversions] = useState<
@@ -219,7 +228,9 @@ export default function AddRecipePage() {
           getIngredientConversions(rowIngredient, customUnitConversions),
         );
         const multiplier =
-          qtyInNativeUnit != null ? qtyInNativeUnit / (row.portionAmount || 1) : 0;
+          qtyInNativeUnit != null
+            ? (qtyInNativeUnit / (row.portionAmount || 1)) * row.nutritionFactor
+            : 0;
         return {
           calories: (acc.calories ?? 0) + (row.calories ?? 0) * multiplier,
           protein: (acc.protein ?? 0) + (row.protein ?? 0) * multiplier,
@@ -286,6 +297,11 @@ export default function AddRecipePage() {
     const nativeUnit = pickerSelected?.unit ?? "serving";
     const unit = pickerUnit || nativeUnit;
 
+    const parsedPercent = Number(pickerNutritionPercent);
+    const nutritionFactor = Number.isFinite(parsedPercent)
+      ? Math.min(1, Math.max(0, parsedPercent / 100))
+      : 1;
+
     const row: IngredientRow = {
       key: editingRowKey ?? `${pickerIngredientId}-${Date.now()}`,
       ingredientId: pickerIngredientId,
@@ -295,6 +311,7 @@ export default function AddRecipePage() {
       unit,
       nativeUnit,
       portionAmount: pickerSelected?.portionAmount ?? 1,
+      nutritionFactor,
       calories: pickerSelected?.calories ?? null,
       protein: pickerSelected?.protein ?? null,
       carbs: pickerSelected?.carbs ?? null,
@@ -314,6 +331,8 @@ export default function AddRecipePage() {
     setPickerIngredientName("");
     setPickerQuantity("1");
     setPickerUnit("");
+    setPickerNutritionPercent("100");
+    setShowNutritionFactor(false);
     setPickerSelected(null);
   }
 
@@ -324,6 +343,8 @@ export default function AddRecipePage() {
     setPickerIngredientName(row.ingredientName);
     setPickerQuantity(row.quantity);
     setPickerUnit(row.unit);
+    setPickerNutritionPercent(String(Math.round(row.nutritionFactor * 100)));
+    setShowNutritionFactor(row.nutritionFactor !== 1);
     setPickerSelected(option);
   }
 
@@ -333,6 +354,8 @@ export default function AddRecipePage() {
     setPickerIngredientName("");
     setPickerQuantity("1");
     setPickerUnit("");
+    setPickerNutritionPercent("100");
+    setShowNutritionFactor(false);
     setPickerSelected(null);
   }
 
@@ -430,6 +453,7 @@ export default function AddRecipePage() {
           ingredient: row.ingredientId,
           quantity: Number(row.quantity),
           unit: row.unit,
+          nutritionFactor: row.nutritionFactor,
         })),
         instructions: steps
           .map((s) => s.trim())
@@ -844,6 +868,35 @@ export default function AddRecipePage() {
                 })()}
               </Text>
             ) : null}
+
+            <Pressable
+              className="mt-3 self-start"
+              onPress={() => setShowNutritionFactor((prev) => !prev)}
+            >
+              <Text className="text-xs font-semibold text-blue-600">
+                {pickerNutritionPercent !== "100"
+                  ? `Counts ${pickerNutritionPercent}% toward nutrition`
+                  : "Not fully eaten? Adjust nutrition %"}
+              </Text>
+            </Pressable>
+
+            {showNutritionFactor && (
+              <View className="mt-2 flex-row items-center">
+                <View style={{ width: 80 }}>
+                  <FormInput
+                    value={pickerNutritionPercent}
+                    placeholder="100"
+                    keyboardType="number-pad"
+                    onChangeText={setPickerNutritionPercent}
+                  />
+                </View>
+                <Text className="ml-1 text-sm text-slate-500">%</Text>
+                <Text className="ml-2 flex-1 text-xs leading-4 text-slate-400">
+                  of this line&apos;s nutrition counts toward the recipe — e.g. 10% for
+                  something mostly rinsed or drained off
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Added ingredient rows */}
@@ -881,6 +934,9 @@ export default function AddRecipePage() {
                       {row.unit
                         ? `× ${row.unit}`
                         : `serving${Number(row.quantity) !== 1 ? "s" : ""}`}
+                      {row.nutritionFactor !== 1
+                        ? ` · ${Math.round(row.nutritionFactor * 100)}% counted`
+                        : ""}
                     </Text>
                   </View>
 

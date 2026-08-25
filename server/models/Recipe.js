@@ -21,6 +21,13 @@ const ingredientEntrySchema = new mongoose.Schema(
     },
     quantity: { type: Number, min: 0, default: 1 },
     unit: { type: String, trim: true, default: "" },
+
+    // How much of this line's nutrition actually ends up in the dish —
+    // 1 (default) counts it in full, 0 omits it entirely, and a fraction
+    // like 0.1 covers cases where most of the ingredient is rinsed off or
+    // discarded (e.g. baking soda used to soften kelp noodles) rather than
+    // eaten. Multiplies straight into calcNutrition's per-line contribution.
+    nutritionFactor: { type: Number, min: 0, max: 1, default: 1 },
   },
   { _id: false },
 );
