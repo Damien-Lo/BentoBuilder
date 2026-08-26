@@ -6,7 +6,9 @@ module.exports = {
     slug: "mobile",
     version: "1.0.0",
     orientation: "portrait",
-    icon: "./assets/images/icon.png",
+    icon: IS_DEV
+      ? "./assets/images/BentoBox_Beta_App_Icon.png"
+      : "./assets/images/BentoBox_App_Icon.png",
     scheme: "mobile",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
