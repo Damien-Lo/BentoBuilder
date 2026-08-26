@@ -115,7 +115,8 @@ export function ReceiptScannerModal({ visible, onClose, onCaptured }: Props) {
 
           {!previewUri && (
             <Text className="mb-3 text-center text-sm text-white/70">
-              Fit the whole receipt in frame, then capture.
+              Fit the itemized list in frame — feel free to leave out the payment/card
+              details section if there is one, it isn't needed.
             </Text>
           )}
 

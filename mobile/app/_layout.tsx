@@ -106,6 +106,14 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
+
+        {/* Review a scanned receipt before its items are added to the pantry */}
+        <Stack.Screen
+          name="receipts/review"
+          options={{
+            headerShown: false,
+          }}
+        />
       </Stack>
 
       <StatusBar style="auto" />

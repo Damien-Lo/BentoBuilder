@@ -17,6 +17,7 @@ import mealPlanRoutes from "./routes/MealPlanRoutes.js";
 import restaurantMealRoutes from "./routes/RestaurantMealRoutes.js";
 import userProfileRoutes from "./routes/UserProfileRoutes.js";
 import groceryListRoutes from "./routes/GroceryListRoutes.js";
+import receiptRoutes from "./routes/ReceiptRoutes.js";
 
 
 
@@ -26,7 +27,10 @@ const app = express();
 const PORT = Number(process.env.PORT) || 5050;
 
 app.use(cors());
-app.use(express.json());
+// Default express.json() limit (~100kb) is too small for a base64-encoded
+// receipt photo (a few MB) — raised here since the global parser runs
+// before any route-level override would ever see the request.
+app.use(express.json({ limit: "15mb" }));
 
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
@@ -60,6 +64,7 @@ app.use("/api/meal-plan", mealPlanRoutes);
 app.use("/api/restaurant-meals", restaurantMealRoutes);
 app.use("/api/profile", userProfileRoutes);
 app.use("/api/grocery-list", groceryListRoutes);
+app.use("/api/receipts", receiptRoutes);
 
 
 app.use((req, res) => {

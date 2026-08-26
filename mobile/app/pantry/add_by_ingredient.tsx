@@ -42,9 +42,8 @@ import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
   recentPantryEntries,
   referenceId,
-  referenceName,
-  suggestExpiryDuration,
-  suggestStorageLocation,
+  resolveEffectiveExpiryDuration,
+  resolveEffectiveStorageLocation,
   suggestStore,
 } from "@/src/utils/pantryDefaults";
 import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
@@ -262,42 +261,27 @@ export default function AddPantryItemByIngredientScreen() {
     );
   }, [pantryItems, selectedIngredient]);
 
-  const suggestedLocation = useMemo(
-    () => suggestStorageLocation(recentIngredientHistory),
-    [recentIngredientHistory],
-  );
-
-  const suggestedExpiryDuration = useMemo(
-    () => suggestExpiryDuration(recentIngredientHistory),
-    [recentIngredientHistory],
-  );
-
   // What actually drives the auto-fills below: the ingredient's own saved
   // default if it has one, otherwise the live suggestion from history.
-  const effectiveLocation = useMemo(() => {
-    const savedId = referenceId(selectedIngredient?.defaultStorageLocation);
-    if (savedId) {
-      const name =
-        referenceName(selectedIngredient?.defaultStorageLocation) ||
-        storageLocations.find((location) => location._id === savedId)?.name ||
-        "";
-      return { id: savedId, name };
-    }
-    return suggestedLocation;
-  }, [selectedIngredient, suggestedLocation, storageLocations]);
+  const effectiveLocation = useMemo(
+    () =>
+      resolveEffectiveStorageLocation(
+        selectedIngredient?.defaultStorageLocation,
+        storageLocations,
+        recentIngredientHistory,
+      ),
+    [selectedIngredient, storageLocations, recentIngredientHistory],
+  );
 
-  const effectiveExpiryDuration = useMemo(() => {
-    if (
-      selectedIngredient?.defaultExpiryDurationAmount != null &&
-      selectedIngredient.defaultExpiryDurationUnit
-    ) {
-      return {
-        amount: selectedIngredient.defaultExpiryDurationAmount,
-        unit: selectedIngredient.defaultExpiryDurationUnit,
-      };
-    }
-    return suggestedExpiryDuration;
-  }, [selectedIngredient, suggestedExpiryDuration]);
+  const effectiveExpiryDuration = useMemo(
+    () =>
+      resolveEffectiveExpiryDuration(
+        selectedIngredient?.defaultExpiryDurationAmount,
+        selectedIngredient?.defaultExpiryDurationUnit,
+        recentIngredientHistory,
+      ),
+    [selectedIngredient, recentIngredientHistory],
+  );
 
   useEffect(() => {
     if (storageLocationTouched || !effectiveLocation) return;

@@ -103,6 +103,29 @@ export function suggestStore(entries: PantryItem[]): SuggestedStore | null {
 }
 
 /**
+ * What should actually drive a storage-location auto-fill: the ingredient's
+ * own saved default if it has one, otherwise the live suggestion from its
+ * recent pantry history. Shared by every screen that logs a new pantry
+ * entry (add-to-pantry, the receipt-scanner review screen) so they stay
+ * consistent instead of each re-deriving this independently.
+ */
+export function resolveEffectiveStorageLocation(
+  ingredientDefaultStorageLocation: unknown,
+  storageLocations: { _id: string; name: string }[],
+  recentHistory: PantryItem[],
+): SuggestedStorageLocation | null {
+  const savedId = referenceId(ingredientDefaultStorageLocation);
+  if (savedId) {
+    const name =
+      referenceName(ingredientDefaultStorageLocation) ||
+      storageLocations.find((location) => location._id === savedId)?.name ||
+      "";
+    return { id: savedId, name };
+  }
+  return suggestStorageLocation(recentHistory);
+}
+
+/**
  * Average expiry duration (purchaseDate -> expiryDate) across the given
  * entries that have both dates set, rounded to the nearest whole unit.
  */
@@ -117,4 +140,24 @@ export function suggestExpiryDuration(
 
   const avgDays = days.reduce((sum, value) => sum + value, 0) / days.length;
   return daysToNiceDuration(avgDays);
+}
+
+/**
+ * What should actually drive an expiry-date auto-fill: the ingredient's own
+ * saved default duration if it has one, otherwise the live suggestion from
+ * its recent pantry history. Mirrors resolveEffectiveStorageLocation above —
+ * shared by every screen that logs a new pantry entry.
+ */
+export function resolveEffectiveExpiryDuration(
+  ingredientDefaultExpiryDurationAmount: number | null | undefined,
+  ingredientDefaultExpiryDurationUnit: DurationUnit | null | undefined,
+  recentHistory: PantryItem[],
+): SuggestedExpiryDuration | null {
+  if (ingredientDefaultExpiryDurationAmount != null && ingredientDefaultExpiryDurationUnit) {
+    return {
+      amount: ingredientDefaultExpiryDurationAmount,
+      unit: ingredientDefaultExpiryDurationUnit,
+    };
+  }
+  return suggestExpiryDuration(recentHistory);
 }

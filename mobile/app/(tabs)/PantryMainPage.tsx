@@ -4,6 +4,8 @@ import {
   type ScannedProduct,
 } from "@/src/components/BarcodeScannerModal";
 import { ReceiptScannerModal } from "@/src/components/ReceiptScannerModal";
+import { parseReceipt } from "@/src/services/receiptApi";
+import { setPendingReceipt } from "@/src/utils/receiptReviewStore";
 import {
   ActivityIndicator,
   Alert,
@@ -187,6 +189,7 @@ export default function PantryMainPage() {
   const [scannerVisible, setScannerVisible] = useState(false);
   const [scanContext, setScanContext] = useState<"ingredient" | "pantry">("ingredient");
   const [receiptScannerVisible, setReceiptScannerVisible] = useState(false);
+  const [parsingReceipt, setParsingReceipt] = useState(false);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
@@ -1765,7 +1768,7 @@ export default function PantryMainPage() {
               <View className="ml-4 flex-1">
                 <Text className="text-lg font-bold text-slate-900">Scan receipt</Text>
                 <Text className="mt-1 text-sm leading-5 text-slate-500">
-                  Beta — photograph a receipt. Auto-fill isn&apos;t built yet, this just captures the photo.
+                  Photograph a receipt to auto-match or add ingredients and pantry items.
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
@@ -1853,14 +1856,35 @@ export default function PantryMainPage() {
       <ReceiptScannerModal
         visible={receiptScannerVisible}
         onClose={() => setReceiptScannerVisible(false)}
-        onCaptured={() => {
+        onCaptured={(photoUri) => {
           setReceiptScannerVisible(false);
-          Alert.alert(
-            "Receipt captured",
-            "Saved for now — automatic parsing (matching items, prices, and store) isn't wired up yet. This step is just testing the capture flow.",
-          );
+          setParsingReceipt(true);
+
+          parseReceipt(photoUri)
+            .then((result) => {
+              setPendingReceipt(result);
+              router.push("/receipts/review");
+            })
+            .catch((error) => {
+              Alert.alert(
+                "Couldn't read receipt",
+                error instanceof Error ? error.message : "Something went wrong parsing the receipt.",
+              );
+            })
+            .finally(() => setParsingReceipt(false));
         }}
       />
+
+      <Modal visible={parsingReceipt} transparent animationType="fade">
+        <View className="flex-1 items-center justify-center bg-black/50">
+          <View className="items-center rounded-3xl bg-white px-8 py-6">
+            <ActivityIndicator size="large" />
+            <Text className="mt-3 text-base font-semibold text-slate-700">
+              Reading receipt...
+            </Text>
+          </View>
+        </View>
+      </Modal>
 
       <SplitPantryItemModal
         visible={!!splittingItem}

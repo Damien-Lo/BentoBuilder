@@ -4,6 +4,10 @@ node_modules/
 .env.*
 !.env.example
 
+# Dev-only fixture (may contain real personal receipt data) — see
+# server/routes/ReceiptRoutes.js's GET/POST /api/receipts/* handling.
+server/tmp/
+
 .expo/
 dist/
 web-build/
