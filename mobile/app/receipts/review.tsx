@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -58,12 +58,21 @@ import {
 } from "@/src/utils/pantryDefaults";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
-import { takePendingReceipt } from "@/src/utils/receiptReviewStore";
+import {
+  clearReviewDraft,
+  loadReviewDraft,
+  saveReviewDraft,
+  takePendingReceipt,
+} from "@/src/utils/receiptReviewStore";
 
 interface ReviewRow {
   key: string;
   lineItem: ReceiptLineItem;
   checked: boolean;
+  // Set once this row has actually been added to the pantry — keeps a retry
+  // after a partial failure from reprocessing (and duplicating) rows that
+  // already succeeded.
+  submitted: boolean;
   matchedIngredientId: string | null;
   name: string;
   quantity: string;
@@ -127,45 +136,64 @@ export default function ReceiptReviewPage() {
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
+  // Guards against the debounced auto-save below firing *after* the draft
+  // was just intentionally cleared (discard, or a successful confirm) — a
+  // save already in flight when that happens would otherwise silently
+  // resurrect the draft right after it was wiped.
+  const draftClearedRef = useRef(false);
 
   const genericIngredients = ingredients.filter((ingredient) => ingredient.isGeneric);
 
   useEffect(() => {
     let cancelled = false;
+    setLoadError(null);
+
+    // Shared by a fresh parse and a resumed draft — the dropdown option
+    // lists (ingredient catalog, storage locations, etc.) are always loaded
+    // fresh from the server either way; only row-building differs.
+    async function loadOptionLists() {
+      const [
+        loadedIngredients,
+        loadedStorageLocations,
+        loadedStores,
+        loadedBrands,
+        loadedCategories,
+        loadedPantryItems,
+      ] = await Promise.all([
+        getIngredients(),
+        getStorageLocations(),
+        getStores(),
+        getBrands(),
+        getCategories(),
+        getPantryItems(),
+      ]);
+
+      if (cancelled) return null;
+
+      const ingredientList = Array.isArray(loadedIngredients) ? loadedIngredients : [];
+      const locationList = Array.isArray(loadedStorageLocations) ? loadedStorageLocations : [];
+      const storeList = Array.isArray(loadedStores) ? loadedStores : [];
+      const brandList = Array.isArray(loadedBrands) ? loadedBrands : [];
+      const categoryList = Array.isArray(loadedCategories) ? loadedCategories : [];
+      const pantryList = Array.isArray(loadedPantryItems) ? loadedPantryItems : [];
+
+      setIngredients(ingredientList);
+      setStorageLocations(locationList);
+      setStores(storeList);
+      setBrands(brandList);
+      setCategories(categoryList);
+      setPantryItems(pantryList);
+
+      return { ingredientList, locationList, storeList, brandList, categoryList, pantryList };
+    }
 
     async function loadReferenceData(pending: ReceiptParseResult) {
       try {
-        const [
-          loadedIngredients,
-          loadedStorageLocations,
-          loadedStores,
-          loadedBrands,
-          loadedCategories,
-          loadedPantryItems,
-        ] = await Promise.all([
-          getIngredients(),
-          getStorageLocations(),
-          getStores(),
-          getBrands(),
-          getCategories(),
-          getPantryItems(),
-        ]);
-
-        if (cancelled) return;
-
-        const ingredientList = Array.isArray(loadedIngredients) ? loadedIngredients : [];
-        const locationList = Array.isArray(loadedStorageLocations) ? loadedStorageLocations : [];
-        const storeList = Array.isArray(loadedStores) ? loadedStores : [];
-        const brandList = Array.isArray(loadedBrands) ? loadedBrands : [];
-        const categoryList = Array.isArray(loadedCategories) ? loadedCategories : [];
-        const pantryList = Array.isArray(loadedPantryItems) ? loadedPantryItems : [];
-
-        setIngredients(ingredientList);
-        setStorageLocations(locationList);
-        setStores(storeList);
-        setBrands(brandList);
-        setCategories(categoryList);
-        setPantryItems(pantryList);
+        const lists = await loadOptionLists();
+        if (!lists) return;
+        const { ingredientList, locationList, storeList, brandList, categoryList, pantryList } = lists;
 
         const existingStore = pending.storeName
           ? storeList.find(
@@ -245,54 +273,93 @@ export default function ReceiptReviewPage() {
                   },
               defaultPortionAmount: matched?.defaultPortionAmount ?? proposal?.defaultPortionAmount ?? 1,
               defaultPortionUnit: matched?.defaultPortionUnit ?? proposal?.defaultPortionUnit ?? "item",
+              submitted: false,
             };
           }),
         );
       } catch (error) {
-        Alert.alert(
-          "Couldn't load pantry data",
-          error instanceof Error ? error.message : "Something went wrong.",
-        );
+        const message = error instanceof Error ? error.message : "Something went wrong.";
+        setLoadError(message);
+        Alert.alert("Couldn't load pantry data", message);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
     async function init() {
-      let pending = takePendingReceipt();
+      // A fresh scan (just captured, still in the in-memory hand-off) always
+      // wins over a previously-saved draft — otherwise a new scan would be
+      // silently ignored in favor of resuming stale, unfinished work.
+      const pending = takePendingReceipt();
 
-      if (!pending) {
-        // Dev convenience — falls back to the last real scan saved
-        // server-side, so the review screen can be reworked/reloaded
-        // without re-scanning a receipt each time.
+      if (pending) {
+        setReceipt(pending);
+        setStoreName(pending.storeName ?? "");
+        setStoreDraft(pending.storeName ?? "");
+        if (pending.purchaseDate) setPurchaseDate(pending.purchaseDate);
+        await loadReferenceData(pending);
+        return;
+      }
+
+      const draft = await loadReviewDraft();
+      if (cancelled) return;
+
+      if (draft && draft.rows.length > 0) {
         try {
-          pending = await getLastParsedReceipt();
-        } catch {
-          // fall through to the "nothing to review" case below
+          const draftRows = draft.rows as ReviewRow[];
+          setRows(draftRows);
+          setStoreId(draft.storeId);
+          setStoreName(draft.storeName);
+          setStoreDraft(draft.storeDraft);
+          setPurchaseDate(draft.purchaseDate || todayDateInputString());
+          setReceipt({
+            storeName: draft.storeName || null,
+            purchaseDate: draft.purchaseDate || null,
+            lineItems: draftRows.map((row) => row.lineItem),
+          });
+
+          await loadOptionLists();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Something went wrong.";
+          setLoadError(message);
+          Alert.alert("Couldn't load pantry data", message);
+        } finally {
+          if (!cancelled) setLoading(false);
         }
+        return;
+      }
+
+      // Dev convenience — falls back to the last real scan saved
+      // server-side, so the review screen can be reworked/reloaded without
+      // re-scanning a receipt each time.
+      let lastParsed: ReceiptParseResult | null = null;
+      try {
+        lastParsed = await getLastParsedReceipt();
+      } catch {
+        // fall through to the "nothing to review" case below
       }
 
       if (cancelled) return;
 
-      if (!pending) {
+      if (!lastParsed) {
         Alert.alert("No receipt to review", "Scan a receipt first.");
         router.back();
         return;
       }
 
-      setReceipt(pending);
-      setStoreName(pending.storeName ?? "");
-      setStoreDraft(pending.storeName ?? "");
-      if (pending.purchaseDate) setPurchaseDate(pending.purchaseDate);
+      setReceipt(lastParsed);
+      setStoreName(lastParsed.storeName ?? "");
+      setStoreDraft(lastParsed.storeName ?? "");
+      if (lastParsed.purchaseDate) setPurchaseDate(lastParsed.purchaseDate);
 
-      await loadReferenceData(pending);
+      await loadReferenceData(lastParsed);
     }
 
     void init();
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, retryToken]);
 
   function updateRow(key: string, updates: Partial<ReviewRow>) {
     setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...updates } : row)));
@@ -317,6 +384,20 @@ export default function ReceiptReviewPage() {
       ),
     );
   }, [purchaseDate]);
+
+  // Persists every edit (debounced) so closing and reopening the app resumes
+  // this exact review instead of losing it — only once the initial load (a
+  // fresh parse or a resumed draft) has actually populated some rows.
+  useEffect(() => {
+    if (loading || rows.length === 0) return;
+
+    const timeout = setTimeout(() => {
+      if (draftClearedRef.current) return;
+      void saveReviewDraft({ rows, storeId, storeName, storeDraft, purchaseDate });
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [rows, storeId, storeName, storeDraft, purchaseDate, loading]);
 
   async function handleCreateStore(name: string): Promise<SelectOption> {
     const store = await createStore(name);
@@ -495,6 +576,88 @@ export default function ReceiptReviewPage() {
     });
   }
 
+  // A blank starting point for an item Gemini missed entirely — the name
+  // field's existing exact-match/search behavior is what lets the user turn
+  // this into either a real match or a new-ingredient proposal, same as any
+  // parsed row.
+  function createBlankRow(): ReviewRow {
+    return {
+      key: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      lineItem: {
+        rawText: "Added manually",
+        matchedIngredientId: null,
+        proposedIngredient: null,
+        quantity: 1,
+        unit: "item",
+        price: null,
+        confidence: "high",
+      },
+      checked: true,
+      submitted: false,
+      matchedIngredientId: null,
+      name: "",
+      quantity: "1",
+      unit: "item",
+      price: "",
+      storageLocationId: "",
+      storageLocationName: "",
+      expiryDate: "",
+      expiryTouched: false,
+      expirySuggestion: null,
+      isGeneric: true,
+      brandId: "",
+      brandName: "",
+      categoryId: "",
+      categoryName: "",
+      genericParentId: "",
+      genericName: "",
+      barcode: null,
+      nutrition: { calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null },
+      defaultPortionAmount: 1,
+      defaultPortionUnit: "item",
+    };
+  }
+
+  function handleAddManualRow() {
+    const row = createBlankRow();
+    setRows((prev) => [...prev, row]);
+    setExpandedKey(row.key);
+  }
+
+  function handleDeleteRow(rowKey: string, rowName: string) {
+    Alert.alert(
+      rowName ? `Remove "${rowName}"?` : "Remove this item?",
+      "It'll be taken off this review. You can add it back manually if needed.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => setRows((prev) => prev.filter((r) => r.key !== rowKey)),
+        },
+      ],
+    );
+  }
+
+  function handleDiscardReceipt() {
+    Alert.alert(
+      "Discard this receipt?",
+      "All progress on this review will be lost.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Discard",
+          style: "destructive",
+          onPress: () => {
+            draftClearedRef.current = true;
+            void clearReviewDraft();
+            router.back();
+          },
+        },
+      ],
+    );
+  }
+
   async function handleConfirm() {
     const checkedRows = rows.filter((row) => row.checked);
     if (checkedRows.length === 0) {
@@ -515,12 +678,38 @@ export default function ReceiptReviewPage() {
       const failures: string[] = [];
 
       for (const row of rows) {
-        if (!row.checked) continue;
+        // submitted rows are skipped even if still (or again) checked — a
+        // retry after a partial failure must never reprocess a row that
+        // already made it into the pantry, or it'll create a duplicate.
+        if (!row.checked || row.submitted) continue;
+
+        if (!row.name.trim()) {
+          failures.push("(unnamed item): missing a name");
+          updateRow(row.key, { error: "Enter a name" });
+          continue;
+        }
 
         if (!row.storageLocationId) {
           failures.push(`${row.name}: no storage location selected`);
           updateRow(row.key, { error: "Pick a storage location" });
           continue;
+        }
+
+        const parsedQuantity = Number(row.quantity);
+        if (row.quantity.trim() === "" || !Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
+          failures.push(`${row.name}: invalid quantity`);
+          updateRow(row.key, { error: "Enter a valid quantity" });
+          continue;
+        }
+
+        let parsedPrice: number | undefined;
+        if (row.price.trim()) {
+          parsedPrice = Number(row.price);
+          if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+            failures.push(`${row.name}: invalid price`);
+            updateRow(row.key, { error: "Enter a valid price" });
+            continue;
+          }
         }
 
         try {
@@ -571,15 +760,26 @@ export default function ReceiptReviewPage() {
           await addIngredientToPantry({
             ingredient: ingredientId,
             storageLocation: row.storageLocationId,
-            quantityAvailable: Number(row.quantity) || 0,
+            quantityAvailable: parsedQuantity,
             quantityUnit: row.unit || "item",
-            purchasePrice: row.price ? Number(row.price) : undefined,
+            purchasePrice: parsedPrice,
             store: resolvedStore?._id ?? null,
             purchaseDate: purchaseDate || undefined,
             expiryDate: row.expiryDate || undefined,
           });
 
           successCount += 1;
+          // Uncheck + mark done rather than removing the row, so the
+          // summary line and a re-expand both still show what happened;
+          // matchedIngredientId now points at the real (possibly
+          // just-created) ingredient so this can never be re-submitted as
+          // a duplicate "new ingredient" proposal either.
+          updateRow(row.key, {
+            checked: false,
+            submitted: true,
+            matchedIngredientId: ingredientId,
+            error: undefined,
+          });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Failed to add";
           failures.push(`${row.name}: ${message}`);
@@ -588,6 +788,8 @@ export default function ReceiptReviewPage() {
       }
 
       if (failures.length === 0) {
+        draftClearedRef.current = true;
+        await clearReviewDraft();
         router.back();
       } else {
         Alert.alert(
@@ -598,6 +800,24 @@ export default function ReceiptReviewPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (loadError) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-8">
+        <Ionicons name="cloud-offline-outline" size={40} color="#94A3B8" />
+        <Text className="mt-3 text-center text-base font-semibold text-slate-700">
+          Couldn't load this receipt
+        </Text>
+        <Text className="mt-1 text-center text-sm text-slate-500">{loadError}</Text>
+        <Pressable
+          className="mt-5 rounded-xl bg-blue-600 px-5 py-3 active:bg-blue-700"
+          onPress={() => setRetryToken((token) => token + 1)}
+        >
+          <Text className="font-semibold text-white">Try again</Text>
+        </Pressable>
+      </SafeAreaView>
+    );
   }
 
   if (loading || !receipt) {
@@ -621,6 +841,13 @@ export default function ReceiptReviewPage() {
             <Ionicons name="chevron-back" size={26} color="#0F172A" />
           </Pressable>
           <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Review Receipt</Text>
+          <Pressable
+            disabled={submitting}
+            className="mr-1 h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
+            onPress={handleDiscardReceipt}
+          >
+            <Ionicons name="trash-outline" size={20} color="#DC2626" />
+          </Pressable>
           <Pressable
             disabled={submitting}
             className={`rounded-xl px-4 py-2 ${submitting ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
@@ -662,9 +889,28 @@ export default function ReceiptReviewPage() {
             style={{ height: 56 }}
           />
 
-          <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500">
-            {rows.length} item{rows.length === 1 ? "" : "s"} · {rows.filter((r) => r.checked).length} selected
-          </Text>
+          <View className="mb-2 mt-6 flex-row items-center justify-between">
+            <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+              {rows.length} item{rows.length === 1 ? "" : "s"} ·{" "}
+              {rows.filter((r) => r.checked && !r.submitted).length} selected
+              {rows.some((r) => r.submitted)
+                ? ` · ${rows.filter((r) => r.submitted).length} added`
+                : ""}
+            </Text>
+            <Pressable
+              onPress={() => {
+                const selectable = rows.filter((r) => !r.submitted);
+                const allChecked = selectable.length > 0 && selectable.every((r) => r.checked);
+                setRows((prev) =>
+                  prev.map((r) => (r.submitted ? r : { ...r, checked: !allChecked })),
+                );
+              }}
+            >
+              <Text className="text-xs font-semibold text-blue-600">
+                {rows.filter((r) => !r.submitted).every((r) => r.checked) ? "Deselect all" : "Select all"}
+              </Text>
+            </Pressable>
+          </View>
 
           {rows.map((row) => {
             const isNew = !row.matchedIngredientId;
@@ -675,17 +921,22 @@ export default function ReceiptReviewPage() {
                 key={row.key}
                 className={`mb-2 rounded-2xl border bg-white ${
                   row.error ? "border-red-300" : "border-slate-200"
-                }`}
+                } ${row.submitted ? "opacity-50" : ""}`}
               >
                 <Pressable
                   className="flex-row items-center p-3 active:bg-slate-50"
                   onPress={() => setExpandedKey(isExpanded ? null : row.key)}
                 >
                   <Pressable
-                    className="mr-3 h-6 w-6 items-center justify-center rounded-md border-2 border-blue-500"
+                    disabled={row.submitted}
+                    className={`mr-3 h-6 w-6 items-center justify-center rounded-md border-2 ${
+                      row.submitted ? "border-emerald-500 bg-emerald-500" : "border-blue-500"
+                    }`}
                     onPress={() => updateRow(row.key, { checked: !row.checked, error: undefined })}
                   >
-                    {row.checked && <Ionicons name="checkmark" size={16} color="#2563EB" />}
+                    {(row.checked || row.submitted) && (
+                      <Ionicons name="checkmark" size={16} color={row.submitted ? "white" : "#2563EB"} />
+                    )}
                   </Pressable>
 
                   <View className="flex-1">
@@ -694,12 +945,20 @@ export default function ReceiptReviewPage() {
                         {row.name}
                       </Text>
                       <View
-                        className={`ml-2 rounded-full px-2 py-0.5 ${isNew ? "bg-violet-50" : "bg-emerald-50"}`}
+                        className={`ml-2 rounded-full px-2 py-0.5 ${
+                          row.submitted ? "bg-slate-100" : isNew ? "bg-violet-50" : "bg-emerald-50"
+                        }`}
                       >
                         <Text
-                          className={`text-xs font-medium ${isNew ? "text-violet-700" : "text-emerald-700"}`}
+                          className={`text-xs font-medium ${
+                            row.submitted
+                              ? "text-slate-500"
+                              : isNew
+                                ? "text-violet-700"
+                                : "text-emerald-700"
+                          }`}
                         >
-                          {isNew ? "New" : "Matched"}
+                          {row.submitted ? "Added" : isNew ? "New" : "Matched"}
                         </Text>
                       </View>
                     </View>
@@ -732,6 +991,12 @@ export default function ReceiptReviewPage() {
                         <Text className="ml-1.5 text-xs font-medium text-slate-700">
                           {row.barcode ? "Rescan" : "Scan barcode"}
                         </Text>
+                      </Pressable>
+                      <Pressable
+                        className="h-8 w-8 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                        onPress={() => handleDeleteRow(row.key, row.name)}
+                      >
+                        <Ionicons name="trash-outline" size={16} color="#DC2626" />
                       </Pressable>
                     </View>
 
@@ -965,6 +1230,16 @@ export default function ReceiptReviewPage() {
               </View>
             );
           })}
+
+          <Pressable
+            className="mt-1 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3 active:bg-slate-100"
+            onPress={handleAddManualRow}
+          >
+            <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+            <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+              Add an item the receipt missed
+            </Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
 

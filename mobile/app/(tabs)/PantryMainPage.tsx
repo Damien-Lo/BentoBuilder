@@ -5,7 +5,7 @@ import {
 } from "@/src/components/BarcodeScannerModal";
 import { ReceiptScannerModal } from "@/src/components/ReceiptScannerModal";
 import { parseReceipt } from "@/src/services/receiptApi";
-import { setPendingReceipt } from "@/src/utils/receiptReviewStore";
+import { clearReviewDraft, setPendingReceipt } from "@/src/utils/receiptReviewStore";
 import {
   ActivityIndicator,
   Alert,
@@ -1862,6 +1862,10 @@ export default function PantryMainPage() {
 
           parseReceipt(photoUri)
             .then((result) => {
+              // A fresh scan supersedes any unfinished review still saved on
+              // disk — otherwise the review screen would ignore this new
+              // result and resume the stale draft instead.
+              void clearReviewDraft();
               setPendingReceipt(result);
               router.push("/receipts/review");
             })
