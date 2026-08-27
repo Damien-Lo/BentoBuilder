@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,7 +20,6 @@ import { BarcodeScannerModal, type ScannedProduct } from "@/src/components/Barco
 import {
   DateTextInput,
   DurationExpiryInput,
-  FieldLabel,
   PriceInput,
   SearchableObjectDropdown,
   SegmentedToggle,
@@ -59,6 +60,12 @@ import {
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
+  convertUnits,
+  getIngredientConversions,
+  isConvertible,
+  type CustomUnitConversion,
+} from "@/src/utils/unitConversion";
+import {
   clearReviewDraft,
   loadReviewDraft,
   saveReviewDraft,
@@ -98,6 +105,15 @@ interface ReviewRow {
   nutrition: ReceiptNutrition;
   defaultPortionAmount: number;
   defaultPortionUnit: string;
+
+  // The nutrition-per-portion basis before any quantity/unit-driven
+  // rescaling — Gemini's estimate, the matched ingredient's own record, or a
+  // scanned barcode's per-serving values. Reset whenever the match itself
+  // changes, but never touched by quantity/unit edits, so repeated edits
+  // rescale from one stable reference instead of compounding rounding drift.
+  baseNutrition: ReceiptNutrition;
+  baseNutritionAmount: number;
+  baseNutritionUnit: string;
 }
 
 // Ingredient.nutrition uses optional numbers; ReviewRow.nutrition uses
@@ -112,6 +128,66 @@ function toReceiptNutrition(nutrition?: IngredientNutrition): ReceiptNutrition {
     fiber: nutrition?.fiber ?? null,
     sodium: nutrition?.sodium ?? null,
   };
+}
+
+// Scales `base` (nutrition per baseAmount/baseUnit) onto quantity/unit —
+// e.g. base "250 cal per 100g" scaled to quantity=250, unit="g" becomes
+// "625 cal". Returns null when the two units aren't convertible (different
+// unit families, or no matching custom conversion), so the caller can leave
+// the row's current nutrition untouched rather than produce nonsense.
+function scaleNutritionToQuantity(
+  base: ReceiptNutrition,
+  baseAmount: number,
+  baseUnit: string,
+  quantity: number,
+  unit: string,
+  customConversions: CustomUnitConversion[] = [],
+): ReceiptNutrition | null {
+  if (!Number.isFinite(quantity) || quantity <= 0 || !(baseAmount > 0)) return null;
+
+  const inBaseUnit = convertUnits(quantity, unit, baseUnit, customConversions);
+  if (inBaseUnit == null) return null;
+
+  const factor = inBaseUnit / baseAmount;
+  const scale = (value: number | null) => (value == null ? null : Math.round(value * factor * 10) / 10);
+
+  return {
+    calories: scale(base.calories),
+    protein: scale(base.protein),
+    carbs: scale(base.carbs),
+    fats: scale(base.fats),
+    fiber: scale(base.fiber),
+    sodium: scale(base.sodium),
+  };
+}
+
+// What a row's quantity/unit and nutrition should actually be, reconciled
+// against a newly-established nutrition basis (initial parse, a fresh
+// ingredient match, or a barcode scan): if the receipt's own unit can't be
+// related to the nutrition's unit (e.g. "item" vs. "g") there's nothing to
+// scale by, so the nutrition's own portion becomes the tracked quantity
+// outright; otherwise the receipt's quantity/unit is kept and the nutrition
+// is rescaled to match it instead.
+function reconcileQuantityWithNutrition(
+  quantity: number,
+  unit: string,
+  baseNutrition: ReceiptNutrition,
+  baseNutritionAmount: number,
+  baseNutritionUnit: string,
+  customConversions: CustomUnitConversion[] = [],
+): { quantity: number; unit: string; nutrition: ReceiptNutrition } {
+  if (isConvertible(unit, baseNutritionUnit, customConversions)) {
+    const scaled = scaleNutritionToQuantity(
+      baseNutrition,
+      baseNutritionAmount,
+      baseNutritionUnit,
+      quantity,
+      unit,
+      customConversions,
+    );
+    if (scaled) return { quantity, unit, nutrition: scaled };
+  }
+  return { quantity: baseNutritionAmount, unit: baseNutritionUnit, nutrition: baseNutrition };
 }
 
 // What handleConfirm actually requires before this row can become a real
@@ -144,8 +220,460 @@ function getMissingFields(row: ReviewRow): string[] {
   return missing;
 }
 
+// How much of a neighboring card peeks in from each side of the top pager,
+// and the empty gap between cards — both a fixed visual hint that the
+// section scrolls horizontally.
+const CARD_PEEK = 18;
+const CARD_GAP = 12;
+
+// The New/Matched/Added status pill, reused by both the full-detail card and
+// the compact summary row so the two stay visually consistent.
+function StatusBadge({ row, isNew }: { row: ReviewRow; isNew: boolean }) {
+  return (
+    <View
+      className={`rounded-full px-2 py-0.5 ${
+        row.submitted ? "bg-slate-100" : isNew ? "bg-violet-50" : "bg-emerald-50"
+      }`}
+    >
+      <Text
+        className={`text-xs font-medium ${
+          row.submitted ? "text-slate-500" : isNew ? "text-violet-700" : "text-emerald-700"
+        }`}
+      >
+        {row.submitted ? "Added" : isNew ? "New" : "Matched"}
+      </Text>
+    </View>
+  );
+}
+
+interface RowCallbacks {
+  ingredients: Ingredient[];
+  storageLocations: SelectOption[];
+  categories: SelectOption[];
+  brands: SelectOption[];
+  genericIngredients: Ingredient[];
+  purchaseDate: string;
+  updateRow: (key: string, updates: Partial<ReviewRow>) => void;
+  applyIngredientMatch: (rowKey: string, ingredient: Ingredient) => void;
+  handleNameChange: (rowKey: string, value: string) => void;
+  onScanBarcode: (rowKey: string) => void;
+  onDeleteRow: (rowKey: string, rowName: string) => void;
+}
+
+// The full editable detail view for one item — shown, always expanded, for
+// whichever item is currently focused in the swipeable top section.
+function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCallbacks }) {
+  const {
+    ingredients,
+    storageLocations,
+    categories,
+    brands,
+    genericIngredients,
+    purchaseDate,
+    updateRow,
+    applyIngredientMatch,
+    handleNameChange,
+    onScanBarcode,
+    onDeleteRow,
+  } = callbacks;
+
+  const [showDurationPicker, setShowDurationPicker] = useState(false);
+
+  const isNew = !row.matchedIngredientId;
+  const missingFields = row.submitted ? [] : getMissingFields(row);
+  const isRowComplete = missingFields.length === 0;
+
+  // The matched ingredient's own unit conversions (e.g. "1 box = 340g")
+  // apply on every quantity/unit edit, not just at match time — otherwise a
+  // real conversion the ingredient actually has would be missed and treated
+  // as an unrelated unit.
+  const matchedIngredient = row.matchedIngredientId
+    ? ingredients.find((ing) => ing._id === row.matchedIngredientId)
+    : null;
+  const customConversions = getIngredientConversions(matchedIngredient, [], ingredients);
+
+  return (
+    <View
+      className={`flex-1 rounded-2xl border bg-white p-3 ${row.error ? "border-red-300" : "border-slate-200"} ${row.submitted ? "opacity-50" : ""}`}
+    >
+      <View className="flex-row items-center justify-between gap-2">
+        <Pressable
+          disabled={row.submitted}
+          className={`h-6 w-6 items-center justify-center rounded-md border-2 ${
+            row.submitted ? "border-emerald-500 bg-emerald-500" : "border-blue-500"
+          }`}
+          onPress={() => updateRow(row.key, { checked: !row.checked, error: undefined })}
+        >
+          {(row.checked || row.submitted) && (
+            <Ionicons name="checkmark" size={16} color={row.submitted ? "white" : "#2563EB"} />
+          )}
+        </Pressable>
+
+        <Text className="flex-1 text-[11px] text-slate-400" numberOfLines={1}>
+          {row.lineItem.rawText}
+          {row.barcode ? ` · ${row.barcode}` : ""}
+        </Text>
+
+        {!row.submitted && (
+          <Ionicons
+            name={isRowComplete ? "checkmark-circle" : "alert-circle"}
+            size={16}
+            color={isRowComplete ? "#10B981" : "#F59E0B"}
+          />
+        )}
+        <StatusBadge row={row} isNew={isNew} />
+      </View>
+
+      {!row.submitted && !isRowComplete && (
+        <Text className="mt-1 text-[11px] font-medium text-amber-600">
+          Missing: {missingFields.join(", ")}
+        </Text>
+      )}
+
+      <View className="mt-2 flex-row items-center gap-2">
+        <View className="flex-1">
+          <SearchableObjectDropdown<Ingredient>
+            options={ingredients}
+            selectedId={row.matchedIngredientId ?? ""}
+            selectedName={row.name}
+            showAllWhenEmpty={false}
+            compact
+            placeholder="Ingredient name"
+            onTextChange={(value) => handleNameChange(row.key, value)}
+            onSelect={(option) => applyIngredientMatch(row.key, option)}
+            renderSubtitle={(option) => (
+              <Text className="mt-0.5 text-xs text-slate-500">
+                {option.isGeneric ? "Generic" : referenceName(option.brand) || "Specific"}
+                {referenceName(option.category) ? ` · ${referenceName(option.category)}` : ""}
+              </Text>
+            )}
+          />
+        </View>
+        <Pressable
+          className="h-11 w-11 items-center justify-center rounded-xl bg-slate-100 active:bg-slate-200"
+          onPress={() => onScanBarcode(row.key)}
+        >
+          <Ionicons name="barcode-outline" size={18} color="#334155" />
+        </Pressable>
+        <Pressable
+          className="h-11 w-11 items-center justify-center rounded-xl bg-slate-100 active:bg-slate-200"
+          onPress={() => onDeleteRow(row.key, row.name)}
+        >
+          <Ionicons name="trash-outline" size={18} color="#DC2626" />
+        </Pressable>
+      </View>
+
+      <View className="mt-2 flex-row gap-2">
+        <View className="w-12">
+          <TextInput
+            value={row.quantity}
+            onChangeText={(value) => {
+              const updates: Partial<ReviewRow> = { quantity: value };
+              const parsedQuantity = Number(value);
+              if (value.trim() !== "" && Number.isFinite(parsedQuantity) && parsedQuantity > 0) {
+                const scaled = scaleNutritionToQuantity(
+                  row.baseNutrition,
+                  row.baseNutritionAmount,
+                  row.baseNutritionUnit,
+                  parsedQuantity,
+                  row.unit,
+                  customConversions,
+                );
+                if (scaled) {
+                  updates.nutrition = scaled;
+                  updates.defaultPortionAmount = parsedQuantity;
+                  updates.defaultPortionUnit = row.unit;
+                }
+              }
+              updateRow(row.key, updates);
+            }}
+            keyboardType="decimal-pad"
+            placeholder="Qty"
+            placeholderTextColor="#94A3B8"
+            className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
+            style={{ height: 40 }}
+          />
+        </View>
+        <View className="w-12">
+          <TextInput
+            value={row.unit}
+            onChangeText={(value) => {
+              const updates: Partial<ReviewRow> = { unit: value };
+              const parsedQuantity = Number(row.quantity);
+              if (Number.isFinite(parsedQuantity) && parsedQuantity > 0) {
+                const scaled = scaleNutritionToQuantity(
+                  row.baseNutrition,
+                  row.baseNutritionAmount,
+                  row.baseNutritionUnit,
+                  parsedQuantity,
+                  value,
+                  customConversions,
+                );
+                if (scaled) {
+                  updates.nutrition = scaled;
+                  updates.defaultPortionAmount = parsedQuantity;
+                  updates.defaultPortionUnit = value;
+                }
+              }
+              updateRow(row.key, updates);
+            }}
+            placeholder="Unit"
+            placeholderTextColor="#94A3B8"
+            className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
+            style={{ height: 40 }}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <PriceInput compact value={row.price} onChangeText={(value) => updateRow(row.key, { price: value })} />
+        </View>
+        <View style={{ flex: 1.4 }}>
+          <SearchableObjectDropdown<SelectOption>
+            options={storageLocations}
+            selectedId={row.storageLocationId}
+            selectedName={row.storageLocationName}
+            compact
+            placeholder="Location"
+            onTextChange={(value) => updateRow(row.key, { storageLocationName: value })}
+            onSelect={(option) =>
+              updateRow(row.key, { storageLocationId: option._id, storageLocationName: option.name })
+            }
+          />
+        </View>
+      </View>
+
+      {isNew && (
+        <View className="mt-2 border-t border-slate-100 pt-2">
+          <SegmentedToggle<boolean>
+            compact
+            value={row.isGeneric}
+            options={[
+              { value: false, label: "Specific / Branded" },
+              { value: true, label: "Generic" },
+            ] as const}
+            onChange={(isGeneric) =>
+              updateRow(row.key, {
+                isGeneric,
+                ...(isGeneric
+                  ? { brandId: "", brandName: "", barcode: null, genericParentId: "", genericName: "" }
+                  : {}),
+              })
+            }
+          />
+
+          <View className="mt-1.5 flex-row gap-2">
+            <View className="flex-1">
+              <SearchableObjectDropdown<SelectOption>
+                options={categories}
+                selectedId={row.categoryId}
+                selectedName={row.categoryName}
+                compact
+                placeholder="Category"
+                onTextChange={(value) => {
+                  if (value !== row.categoryName) updateRow(row.key, { categoryId: "" });
+                  updateRow(row.key, { categoryName: value });
+                }}
+                onSelect={(option) =>
+                  updateRow(row.key, { categoryId: option._id, categoryName: option.name })
+                }
+              />
+            </View>
+            {!row.isGeneric && (
+              <View className="flex-1">
+                <SearchableObjectDropdown<SelectOption>
+                  options={brands}
+                  selectedId={row.brandId}
+                  selectedName={row.brandName}
+                  compact
+                  placeholder="Brand"
+                  onTextChange={(value) => {
+                    if (value !== row.brandName) updateRow(row.key, { brandId: "" });
+                    updateRow(row.key, { brandName: value });
+                  }}
+                  onSelect={(option) =>
+                    updateRow(row.key, { brandId: option._id, brandName: option.name })
+                  }
+                />
+              </View>
+            )}
+            {!row.isGeneric && (
+              <View className="flex-1">
+                <SearchableObjectDropdown<Ingredient>
+                  options={genericIngredients}
+                  selectedId={row.genericParentId}
+                  selectedName={row.genericName}
+                  compact
+                  placeholder="Generic"
+                  onTextChange={(value) => {
+                    if (value !== row.genericName) updateRow(row.key, { genericParentId: "" });
+                    updateRow(row.key, { genericName: value });
+                  }}
+                  onSelect={(option) =>
+                    updateRow(row.key, { genericParentId: option._id, genericName: option.name })
+                  }
+                />
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
+      <Text className="mt-2 text-[10px] text-slate-400">
+        Nutrition / {row.defaultPortionAmount} {row.defaultPortionUnit}
+      </Text>
+      <View className="mt-1 flex-row gap-1">
+        {(
+          [
+            ["calories", "Cal"],
+            ["protein", "Prot"],
+            ["carbs", "Carb"],
+            ["fats", "Fat"],
+            ["fiber", "Fib"],
+            ["sodium", "Na"],
+          ] as [keyof ReceiptNutrition, string][]
+        ).map(([field, label]) => (
+          <View key={field} className="flex-1">
+            <Text className="mb-0.5 text-[9px] text-slate-400">{label}</Text>
+            <TextInput
+              value={row.nutrition[field] != null ? String(row.nutrition[field]) : ""}
+              onChangeText={(value) => {
+                const parsed = value.trim() === "" ? null : Number(value);
+                const nextNutrition = {
+                  ...row.nutrition,
+                  [field]: parsed != null && Number.isNaN(parsed) ? row.nutrition[field] : parsed,
+                };
+                updateRow(row.key, {
+                  nutrition: nextNutrition,
+                  // A manual correction re-baselines nutrition at the
+                  // *current* quantity/unit — otherwise a later quantity
+                  // edit would rescale from the original (possibly wrong)
+                  // estimate and silently undo this fix.
+                  baseNutrition: nextNutrition,
+                  baseNutritionAmount: row.defaultPortionAmount,
+                  baseNutritionUnit: row.defaultPortionUnit,
+                });
+              }}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor="#94A3B8"
+              className="rounded-lg border border-slate-200 bg-white px-1 py-1 text-center text-[11px] text-slate-950"
+            />
+          </View>
+        ))}
+      </View>
+
+      <View className="mt-2 flex-row items-end gap-2">
+        <View className="flex-1">
+          <View className="mb-1 flex-row items-center justify-between">
+            <Text className="text-xs font-semibold text-slate-600">Expiry date</Text>
+            {row.expirySuggestion && !row.expiryTouched ? (
+              <Text className="text-[10px] text-slate-400">auto-filled</Text>
+            ) : null}
+          </View>
+          <DateTextInput
+            value={row.expiryDate}
+            onChangeText={(value) => updateRow(row.key, { expiryDate: value, expiryTouched: true })}
+            placeholder="YYYY-MM-DD"
+            className="rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950"
+            style={{ height: 40 }}
+          />
+        </View>
+        <Pressable
+          className="h-10 items-center justify-center rounded-xl bg-slate-100 px-2.5 active:bg-slate-200"
+          onPress={() => setShowDurationPicker((current) => !current)}
+        >
+          <Text className="text-[11px] font-medium text-slate-600">
+            {showDurationPicker ? "Hide duration" : "Use duration"}
+          </Text>
+        </Pressable>
+      </View>
+
+      {showDurationPicker && (
+        <View className="mt-1.5">
+          <DurationExpiryInput
+            purchaseDate={purchaseDate}
+            initialAmount={row.expirySuggestion ? String(row.expirySuggestion.amount) : undefined}
+            initialUnit={row.expirySuggestion?.unit}
+            onApply={(value) => updateRow(row.key, { expiryDate: value, expiryTouched: true })}
+          />
+        </View>
+      )}
+
+      {row.error && <Text className="mt-2 text-xs text-red-600">{row.error}</Text>}
+    </View>
+  );
+}
+
+// The compact bottom-list row — same information as before, minus the
+// chevron/expand affordance, since tapping it now jumps the top section to
+// this item instead of expanding inline.
+function ReceiptRowSummary({
+  row,
+  isFocused,
+  onPress,
+  onToggleChecked,
+}: {
+  row: ReviewRow;
+  isFocused: boolean;
+  onPress: () => void;
+  onToggleChecked: () => void;
+}) {
+  const isNew = !row.matchedIngredientId;
+  const missingFields = row.submitted ? [] : getMissingFields(row);
+  const isRowComplete = missingFields.length === 0;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      className={`mb-2 flex-row items-center rounded-2xl border p-3 ${
+        row.error ? "border-red-300" : isFocused ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white"
+      } ${row.submitted ? "opacity-50" : ""}`}
+    >
+      <Pressable
+        disabled={row.submitted}
+        className={`mr-3 h-6 w-6 items-center justify-center rounded-md border-2 ${
+          row.submitted ? "border-emerald-500 bg-emerald-500" : "border-blue-500"
+        }`}
+        onPress={onToggleChecked}
+      >
+        {(row.checked || row.submitted) && (
+          <Ionicons name="checkmark" size={16} color={row.submitted ? "white" : "#2563EB"} />
+        )}
+      </Pressable>
+
+      <View className="flex-1">
+        <Text className="text-base font-semibold text-slate-900" numberOfLines={1}>
+          {row.name}
+        </Text>
+        <Text className="mt-0.5 text-xs text-slate-500">
+          {row.quantity} {row.unit}
+          {row.price ? `  ·  $${row.price}` : ""}
+        </Text>
+        {!row.submitted && !isRowComplete && (
+          <Text className="mt-0.5 text-xs font-medium text-amber-600">
+            Missing: {missingFields.join(", ")}
+          </Text>
+        )}
+      </View>
+
+      <View className="ml-2 items-end">
+        <StatusBadge row={row} isNew={isNew} />
+        {!row.submitted && (
+          <Ionicons
+            name={isRowComplete ? "checkmark-circle" : "alert-circle"}
+            size={18}
+            color={isRowComplete ? "#10B981" : "#F59E0B"}
+            style={{ marginTop: 6 }}
+          />
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
 export default function ReceiptReviewPage() {
   const router = useRouter();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const pagerRef = useRef<FlatList<ReviewRow>>(null);
 
   // Captured exactly once (lazy initializer, not re-run on re-render) —
   // takePendingReceipt() has read-and-clear semantics, so calling it again
@@ -157,7 +685,7 @@ export default function ReceiptReviewPage() {
   const [receipt, setReceipt] = useState<ReceiptParseResult | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [barcodeScanRowKey, setBarcodeScanRowKey] = useState<string | null>(null);
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [focusedIndex, setFocusedIndex] = useState(0);
 
   const [storeId, setStoreId] = useState("");
   const [storeName, setStoreName] = useState("");
@@ -289,14 +817,36 @@ export default function ReceiptReviewPage() {
                 )
               : undefined;
 
+            const baseNutrition = matched
+              ? toReceiptNutrition(matched.nutrition)
+              : proposal?.estimatedNutrition ?? {
+                  calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null,
+                };
+            const baseNutritionAmount = matched?.defaultPortionAmount ?? proposal?.defaultPortionAmount ?? 1;
+            const baseNutritionUnit = matched?.defaultPortionUnit ?? proposal?.defaultPortionUnit ?? "item";
+            const matchedConversions = matched ? getIngredientConversions(matched, [], ingredientList) : [];
+
+            // The receipt's own quantity/unit is often just a generic count
+            // ("1 item") unrelated to whatever portion the nutrition is
+            // actually denominated in — reconcile the two so what's tracked
+            // and what's nutritionally described always agree.
+            const reconciled = reconcileQuantityWithNutrition(
+              lineItem.quantity,
+              lineItem.unit,
+              baseNutrition,
+              baseNutritionAmount,
+              baseNutritionUnit,
+              matchedConversions,
+            );
+
             return {
               key: `${index}-${lineItem.rawText}`,
               lineItem,
               checked: lineItem.confidence !== "low",
               matchedIngredientId: matched?._id ?? null,
               name: matched?.name ?? proposal?.name ?? lineItem.rawText,
-              quantity: String(lineItem.quantity),
-              unit: lineItem.unit,
+              quantity: String(reconciled.quantity),
+              unit: reconciled.unit,
               price: lineItem.price != null ? String(lineItem.price) : "",
               storageLocationId: suggestedLocation?.id ?? "",
               storageLocationName: suggestedLocation?.name ?? "",
@@ -314,13 +864,12 @@ export default function ReceiptReviewPage() {
               genericParentId: proposedGenericParent?._id ?? "",
               genericName: proposedGenericParent?.name ?? proposal?.genericName ?? "",
               barcode: null,
-              nutrition: matched
-                ? toReceiptNutrition(matched.nutrition)
-                : proposal?.estimatedNutrition ?? {
-                    calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null,
-                  },
-              defaultPortionAmount: matched?.defaultPortionAmount ?? proposal?.defaultPortionAmount ?? 1,
-              defaultPortionUnit: matched?.defaultPortionUnit ?? proposal?.defaultPortionUnit ?? "item",
+              nutrition: reconciled.nutrition,
+              defaultPortionAmount: reconciled.quantity,
+              defaultPortionUnit: reconciled.unit,
+              baseNutrition,
+              baseNutritionAmount,
+              baseNutritionUnit,
               submitted: false,
             };
           }),
@@ -450,6 +999,24 @@ export default function ReceiptReviewPage() {
     return () => clearTimeout(timeout);
   }, [rows, storeId, storeName, storeDraft, purchaseDate, loading]);
 
+  // Keeps focusedIndex in range whenever rows are added/removed (deleting
+  // the last item, etc.) so the pager and bottom list never point past the
+  // end of the array.
+  useEffect(() => {
+    if (rows.length === 0) {
+      if (focusedIndex !== 0) setFocusedIndex(0);
+      return;
+    }
+    if (focusedIndex > rows.length - 1) {
+      setFocusedIndex(rows.length - 1);
+    }
+  }, [rows.length, focusedIndex]);
+
+  function goToIndex(index: number) {
+    setFocusedIndex(index);
+    pagerRef.current?.scrollToIndex({ index, animated: true });
+  }
+
   async function handleCreateStore(name: string): Promise<SelectOption> {
     const store = await createStore(name);
     setStores((prev) => (prev.some((s) => s._id === store._id) ? prev : [...prev, store]));
@@ -459,6 +1026,7 @@ export default function ReceiptReviewPage() {
   // Shared by both the exact-match-while-typing case and explicitly tapping
   // a suggestion from the name dropdown — snaps a row onto a real ingredient.
   function applyIngredientMatch(rowKey: string, ingredient: Ingredient) {
+    const row = rows.find((r) => r.key === rowKey);
     const history = recentPantryEntries(
       pantryItems.filter((item) => referenceId(item.ingredient) === ingredient._id),
     );
@@ -472,9 +1040,26 @@ export default function ReceiptReviewPage() {
       ingredient.defaultExpiryDurationUnit,
       history,
     );
+
+    const baseNutrition = toReceiptNutrition(ingredient.nutrition);
+    const baseNutritionAmount = ingredient.defaultPortionAmount ?? 1;
+    const baseNutritionUnit = ingredient.defaultPortionUnit ?? "item";
+    const customConversions = getIngredientConversions(ingredient, [], ingredients);
+    const currentQuantity = Number(row?.quantity);
+    const reconciled = reconcileQuantityWithNutrition(
+      Number.isFinite(currentQuantity) && currentQuantity > 0 ? currentQuantity : baseNutritionAmount,
+      row?.unit ?? baseNutritionUnit,
+      baseNutrition,
+      baseNutritionAmount,
+      baseNutritionUnit,
+      customConversions,
+    );
+
     updateRow(rowKey, {
       name: ingredient.name,
       matchedIngredientId: ingredient._id,
+      quantity: String(reconciled.quantity),
+      unit: reconciled.unit,
       storageLocationId: suggestedLocation?.id ?? "",
       storageLocationName: suggestedLocation?.name ?? "",
       expiryDate: suggestedExpiry
@@ -482,9 +1067,12 @@ export default function ReceiptReviewPage() {
         : "",
       expiryTouched: false,
       expirySuggestion: suggestedExpiry,
-      nutrition: toReceiptNutrition(ingredient.nutrition),
-      defaultPortionAmount: ingredient.defaultPortionAmount ?? 1,
-      defaultPortionUnit: ingredient.defaultPortionUnit ?? "item",
+      nutrition: reconciled.nutrition,
+      defaultPortionAmount: reconciled.quantity,
+      defaultPortionUnit: reconciled.unit,
+      baseNutrition,
+      baseNutritionAmount,
+      baseNutritionUnit,
       error: undefined,
     });
   }
@@ -530,6 +1118,11 @@ export default function ReceiptReviewPage() {
             },
             defaultPortionAmount: 1,
             defaultPortionUnit: "item",
+            baseNutrition: {
+              calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null,
+            },
+            baseNutritionAmount: 1,
+            baseNutritionUnit: "item",
             expirySuggestion: null,
           }
         : {}),
@@ -565,9 +1158,26 @@ export default function ReceiptReviewPage() {
         existingMatch.defaultExpiryDurationUnit,
         history,
       );
+
+      const baseNutrition = toReceiptNutrition(existingMatch.nutrition);
+      const baseNutritionAmount = existingMatch.defaultPortionAmount ?? 1;
+      const baseNutritionUnit = existingMatch.defaultPortionUnit ?? "item";
+      const customConversions = getIngredientConversions(existingMatch, [], ingredients);
+      const currentQuantity = Number(row.quantity);
+      const reconciled = reconcileQuantityWithNutrition(
+        Number.isFinite(currentQuantity) && currentQuantity > 0 ? currentQuantity : baseNutritionAmount,
+        row.unit,
+        baseNutrition,
+        baseNutritionAmount,
+        baseNutritionUnit,
+        customConversions,
+      );
+
       updateRow(rowKey, {
         matchedIngredientId: existingMatch._id,
         name: existingMatch.name,
+        quantity: String(reconciled.quantity),
+        unit: reconciled.unit,
         storageLocationId: suggestedLocation?.id ?? "",
         storageLocationName: suggestedLocation?.name ?? "",
         expiryDate: suggestedExpiry
@@ -575,6 +1185,12 @@ export default function ReceiptReviewPage() {
           : "",
         expiryTouched: false,
         expirySuggestion: suggestedExpiry,
+        nutrition: reconciled.nutrition,
+        defaultPortionAmount: reconciled.quantity,
+        defaultPortionUnit: reconciled.unit,
+        baseNutrition,
+        baseNutritionAmount,
+        baseNutritionUnit,
         error: undefined,
       });
       return;
@@ -603,6 +1219,25 @@ export default function ReceiptReviewPage() {
       }
     }
 
+    const baseNutrition = {
+      calories: product.calories ?? null,
+      protein: product.protein ?? null,
+      carbs: product.carbs ?? null,
+      fats: product.fats ?? null,
+      fiber: product.fiber ?? null,
+      sodium: product.sodium ?? null,
+    };
+    const baseNutritionAmount = product.servingSize;
+    const baseNutritionUnit = product.servingUnit;
+    const currentQuantity = Number(row.quantity);
+    const reconciled = reconcileQuantityWithNutrition(
+      Number.isFinite(currentQuantity) && currentQuantity > 0 ? currentQuantity : baseNutritionAmount,
+      row.unit,
+      baseNutrition,
+      baseNutritionAmount,
+      baseNutritionUnit,
+    );
+
     updateRow(rowKey, {
       matchedIngredientId: null,
       name: product.name,
@@ -612,16 +1247,14 @@ export default function ReceiptReviewPage() {
       genericParentId,
       genericName,
       barcode: product.barcode,
-      defaultPortionAmount: product.servingSize,
-      defaultPortionUnit: product.servingUnit,
-      nutrition: {
-        calories: product.calories ?? null,
-        protein: product.protein ?? null,
-        carbs: product.carbs ?? null,
-        fats: product.fats ?? null,
-        fiber: product.fiber ?? null,
-        sodium: product.sodium ?? null,
-      },
+      quantity: String(reconciled.quantity),
+      unit: reconciled.unit,
+      defaultPortionAmount: reconciled.quantity,
+      defaultPortionUnit: reconciled.unit,
+      nutrition: reconciled.nutrition,
+      baseNutrition,
+      baseNutritionAmount,
+      baseNutritionUnit,
       expirySuggestion: null,
       error: undefined,
     });
@@ -666,13 +1299,20 @@ export default function ReceiptReviewPage() {
       nutrition: { calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null },
       defaultPortionAmount: 1,
       defaultPortionUnit: "item",
+      baseNutrition: { calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null },
+      baseNutritionAmount: 1,
+      baseNutritionUnit: "item",
     };
   }
 
   function handleAddManualRow() {
     const row = createBlankRow();
+    const newIndex = rows.length;
     setRows((prev) => [...prev, row]);
-    setExpandedKey(row.key);
+    setFocusedIndex(newIndex);
+    requestAnimationFrame(() => {
+      pagerRef.current?.scrollToIndex({ index: newIndex, animated: true });
+    });
   }
 
   function handleDeleteRow(rowKey: string, rowName: string) {
@@ -684,7 +1324,23 @@ export default function ReceiptReviewPage() {
         {
           text: "Remove",
           style: "destructive",
-          onPress: () => setRows((prev) => prev.filter((r) => r.key !== rowKey)),
+          onPress: () => {
+            const removedIndex = rows.findIndex((r) => r.key === rowKey);
+            const correctedIndex =
+              removedIndex >= 0 && removedIndex <= focusedIndex
+                ? Math.max(0, focusedIndex - 1)
+                : focusedIndex;
+
+            setRows((prev) => prev.filter((r) => r.key !== rowKey));
+            setFocusedIndex(correctedIndex);
+            // Removing an item shifts every later page's on-screen position
+            // by one page-width without the pager's own scroll offset
+            // changing on its own — re-sync it to the corrected index once
+            // the shorter data array has re-rendered.
+            requestAnimationFrame(() => {
+              pagerRef.current?.scrollToIndex({ index: correctedIndex, animated: false });
+            });
+          },
         },
       ],
     );
@@ -869,6 +1525,34 @@ export default function ReceiptReviewPage() {
     );
   }
 
+  const rowCallbacks: RowCallbacks = {
+    ingredients,
+    storageLocations,
+    categories,
+    brands,
+    genericIngredients,
+    purchaseDate,
+    updateRow,
+    applyIngredientMatch,
+    handleNameChange,
+    onScanBarcode: setBarcodeScanRowKey,
+    onDeleteRow: handleDeleteRow,
+  };
+
+  const allSelectableChecked =
+    rows.filter((r) => !r.submitted).length > 0 && rows.filter((r) => !r.submitted).every((r) => r.checked);
+
+  // Roughly half the screen, with a floor so the detail card stays usable
+  // on smaller phones — the rest goes to the compact list below it.
+  const pagerHeight = Math.max(380, Math.round(windowHeight * 0.5));
+
+  // Card width leaves CARD_PEEK px of the neighboring card visible on each
+  // side (with CARD_GAP of empty space between cards) — a visual hint that
+  // this section scrolls horizontally, not just an isolated single card.
+  const cardWidth = windowWidth - 2 * (CARD_GAP + CARD_PEEK);
+  const cardStride = cardWidth + CARD_GAP;
+  const cardSidePadding = CARD_GAP + CARD_PEEK;
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -897,39 +1581,94 @@ export default function ReceiptReviewPage() {
           </Pressable>
         </View>
 
-        <ScrollView
-          className="flex-1"
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80, paddingTop: 16 }}
-          keyboardShouldPersistTaps="handled"
-        >
-          <FieldLabel text="Store" />
-          <SearchableObjectDropdown<SelectOption>
-            options={stores}
-            selectedId={storeId}
-            selectedName={storeName}
-            placeholder="Search or type a new store"
-            onTextChange={(value) => {
-              if (value !== storeName) setStoreId("");
-              setStoreDraft(value);
-              setStoreName(value);
-            }}
-            onSelect={(option) => {
-              setStoreId(option._id);
-              setStoreName(option.name);
-              setStoreDraft(option.name);
-            }}
-          />
+        <View className="flex-row gap-2 px-4 pt-3">
+          <View className="flex-1">
+            <Text className="mb-1 text-xs font-semibold text-slate-500">Store</Text>
+            <SearchableObjectDropdown<SelectOption>
+              compact
+              options={stores}
+              selectedId={storeId}
+              selectedName={storeName}
+              placeholder="Search or new"
+              onTextChange={(value) => {
+                if (value !== storeName) setStoreId("");
+                setStoreDraft(value);
+                setStoreName(value);
+              }}
+              onSelect={(option) => {
+                setStoreId(option._id);
+                setStoreName(option.name);
+                setStoreDraft(option.name);
+              }}
+            />
+          </View>
 
-          <FieldLabel text="Purchase date" />
-          <DateTextInput
-            value={purchaseDate}
-            onChangeText={setPurchaseDate}
-            placeholder="YYYY-MM-DD"
-            className="rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
-            style={{ height: 56 }}
-          />
+          <View className="flex-1">
+            <Text className="mb-1 text-xs font-semibold text-slate-500">Purchase date</Text>
+            <DateTextInput
+              value={purchaseDate}
+              onChangeText={setPurchaseDate}
+              placeholder="YYYY-MM-DD"
+              className="rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950"
+              style={{ height: 44 }}
+            />
+          </View>
+        </View>
 
-          <View className="mb-2 mt-6 flex-row items-center justify-between">
+        {rows.length === 0 ? (
+          <View className="flex-1 items-center justify-center px-8">
+            <Text className="text-center text-slate-500">
+              No items left on this receipt — add one below, or discard the receipt.
+            </Text>
+          </View>
+        ) : (
+          <View style={{ height: pagerHeight }} className="mt-3">
+            <Text className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Item {focusedIndex + 1} of {rows.length} · swipe for next
+            </Text>
+            <FlatList<ReviewRow>
+              ref={pagerRef}
+              data={rows}
+              keyExtractor={(row) => row.key}
+              horizontal
+              snapToInterval={cardStride}
+              decelerationRate="fast"
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: cardSidePadding }}
+              ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
+              initialScrollIndex={0}
+              getItemLayout={(_, index) => ({
+                length: cardStride,
+                offset: cardStride * index,
+                index,
+              })}
+              onScrollToIndexFailed={({ index }) => {
+                setTimeout(
+                  () => pagerRef.current?.scrollToIndex({ index, animated: false }),
+                  50,
+                );
+              }}
+              onMomentumScrollEnd={(event) => {
+                const index = Math.round(event.nativeEvent.contentOffset.x / cardStride);
+                setFocusedIndex(Math.max(0, Math.min(index, rows.length - 1)));
+              }}
+              renderItem={({ item: row }) => (
+                <View style={{ width: cardWidth }} className="flex-1">
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={{ flexGrow: 1 }}
+                  >
+                    <ReceiptRowDetail row={row} callbacks={rowCallbacks} />
+                  </ScrollView>
+                </View>
+              )}
+            />
+          </View>
+        )}
+
+        <View className="mt-2 flex-1 border-t border-slate-200 bg-white">
+          <View className="flex-row items-center justify-between px-4 pb-2 pt-3">
             <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
               {rows.length} item{rows.length === 1 ? "" : "s"} ·{" "}
               {rows.filter((r) => r.checked && !r.submitted).length} selected
@@ -942,365 +1681,43 @@ export default function ReceiptReviewPage() {
             </Text>
             <Pressable
               onPress={() => {
-                const selectable = rows.filter((r) => !r.submitted);
-                const allChecked = selectable.length > 0 && selectable.every((r) => r.checked);
                 setRows((prev) =>
-                  prev.map((r) => (r.submitted ? r : { ...r, checked: !allChecked })),
+                  prev.map((r) => (r.submitted ? r : { ...r, checked: !allSelectableChecked })),
                 );
               }}
             >
               <Text className="text-xs font-semibold text-blue-600">
-                {rows.filter((r) => !r.submitted).every((r) => r.checked) ? "Deselect all" : "Select all"}
+                {allSelectableChecked ? "Deselect all" : "Select all"}
               </Text>
             </Pressable>
           </View>
 
-          {rows.map((row) => {
-            const isNew = !row.matchedIngredientId;
-            const isExpanded = expandedKey === row.key;
-            const missingFields = row.submitted ? [] : getMissingFields(row);
-            const isRowComplete = missingFields.length === 0;
-
-            return (
-              <View
-                key={row.key}
-                className={`mb-2 rounded-2xl border bg-white ${
-                  row.error ? "border-red-300" : "border-slate-200"
-                } ${row.submitted ? "opacity-50" : ""}`}
-              >
-                <Pressable
-                  className="flex-row items-center p-3 active:bg-slate-50"
-                  onPress={() => setExpandedKey(isExpanded ? null : row.key)}
-                >
-                  <Pressable
-                    disabled={row.submitted}
-                    className={`mr-3 h-6 w-6 items-center justify-center rounded-md border-2 ${
-                      row.submitted ? "border-emerald-500 bg-emerald-500" : "border-blue-500"
-                    }`}
-                    onPress={() => updateRow(row.key, { checked: !row.checked, error: undefined })}
-                  >
-                    {(row.checked || row.submitted) && (
-                      <Ionicons name="checkmark" size={16} color={row.submitted ? "white" : "#2563EB"} />
-                    )}
-                  </Pressable>
-
-                  <View className="flex-1">
-                    <Text className="text-base font-semibold text-slate-900" numberOfLines={1}>
-                      {row.name}
-                    </Text>
-                    <Text className="mt-0.5 text-xs text-slate-500">
-                      {row.quantity} {row.unit}
-                      {row.price ? `  ·  $${row.price}` : ""}
-                    </Text>
-                    {!row.submitted && !isRowComplete && (
-                      <Text className="mt-0.5 text-xs font-medium text-amber-600">
-                        Missing: {missingFields.join(", ")}
-                      </Text>
-                    )}
-                  </View>
-
-                  <View className="ml-2 items-end">
-                    <View
-                      className={`rounded-full px-2 py-0.5 ${
-                        row.submitted ? "bg-slate-100" : isNew ? "bg-violet-50" : "bg-emerald-50"
-                      }`}
-                    >
-                      <Text
-                        className={`text-xs font-medium ${
-                          row.submitted
-                            ? "text-slate-500"
-                            : isNew
-                              ? "text-violet-700"
-                              : "text-emerald-700"
-                        }`}
-                      >
-                        {row.submitted ? "Added" : isNew ? "New" : "Matched"}
-                      </Text>
-                    </View>
-
-                    <View className="mt-1.5 flex-row items-center">
-                      {!row.submitted && (
-                        <Ionicons
-                          name={isRowComplete ? "checkmark-circle" : "alert-circle"}
-                          size={18}
-                          color={isRowComplete ? "#10B981" : "#F59E0B"}
-                        />
-                      )}
-                      <Ionicons
-                        name={isExpanded ? "chevron-up" : "chevron-down"}
-                        size={18}
-                        color="#94A3B8"
-                        style={{ marginLeft: 8 }}
-                      />
-                    </View>
-                  </View>
-                </Pressable>
-
-                {isExpanded && (
-                  <View className="border-t border-slate-100 p-4 pt-3">
-                    <View className="flex-row items-center justify-between gap-2">
-                      <Text className="flex-1 text-xs text-slate-400">
-                        {row.lineItem.rawText}
-                        {row.barcode ? ` · ${row.barcode}` : ""}
-                      </Text>
-                      <Pressable
-                        className="flex-row items-center rounded-full bg-slate-100 px-3 py-1.5 active:bg-slate-200"
-                        onPress={() => setBarcodeScanRowKey(row.key)}
-                      >
-                        <Ionicons name="barcode-outline" size={16} color="#334155" />
-                        <Text className="ml-1.5 text-xs font-medium text-slate-700">
-                          {row.barcode ? "Rescan" : "Scan barcode"}
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        className="h-8 w-8 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
-                        onPress={() => handleDeleteRow(row.key, row.name)}
-                      >
-                        <Ionicons name="trash-outline" size={16} color="#DC2626" />
-                      </Pressable>
-                    </View>
-
-                    <FieldLabel text="Name" />
-                    <SearchableObjectDropdown<Ingredient>
-                      options={ingredients}
-                      selectedId={row.matchedIngredientId ?? ""}
-                      selectedName={row.name}
-                      showAllWhenEmpty={false}
-                      placeholder="Ingredient name"
-                      onTextChange={(value) => handleNameChange(row.key, value)}
-                      onSelect={(option) => applyIngredientMatch(row.key, option)}
-                      renderSubtitle={(option) => (
-                        <Text className="mt-0.5 text-xs text-slate-500">
-                          {option.isGeneric ? "Generic" : referenceName(option.brand) || "Specific"}
-                          {referenceName(option.category) ? ` · ${referenceName(option.category)}` : ""}
-                        </Text>
-                      )}
-                    />
-
-                    <View className="mt-3 flex-row gap-2">
-                      <View className="w-20">
-                        <FieldLabel text="Qty" />
-                        <TextInput
-                          value={row.quantity}
-                          onChangeText={(value) => updateRow(row.key, { quantity: value })}
-                          keyboardType="decimal-pad"
-                          placeholder="Qty"
-                          placeholderTextColor="#94A3B8"
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950"
-                        />
-                      </View>
-                      <View className="w-20">
-                        <FieldLabel text="Unit" />
-                        <TextInput
-                          value={row.unit}
-                          onChangeText={(value) => updateRow(row.key, { unit: value })}
-                          placeholder="Unit"
-                          placeholderTextColor="#94A3B8"
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950"
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <FieldLabel text="Price" />
-                        <PriceInput
-                          value={row.price}
-                          onChangeText={(value) => updateRow(row.key, { price: value })}
-                        />
-                      </View>
-                    </View>
-
-                    {isNew && (
-                      <View className="mt-3 border-t border-slate-100 pt-3">
-                        <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                          New ingredient details
-                        </Text>
-
-                        <View className="mt-2">
-                          <SegmentedToggle<boolean>
-                            value={row.isGeneric}
-                            options={[
-                              { value: false, label: "Specific / Branded" },
-                              { value: true, label: "Generic" },
-                            ] as const}
-                            onChange={(isGeneric) =>
-                              updateRow(row.key, {
-                                isGeneric,
-                                ...(isGeneric
-                                  ? {
-                                      brandId: "",
-                                      brandName: "",
-                                      barcode: null,
-                                      genericParentId: "",
-                                      genericName: "",
-                                    }
-                                  : {}),
-                              })
-                            }
-                          />
-                        </View>
-
-                        <View className="mt-2 flex-row gap-2">
-                          <View className="flex-1">
-                            <SearchableObjectDropdown<SelectOption>
-                              options={categories}
-                              selectedId={row.categoryId}
-                              selectedName={row.categoryName}
-                              placeholder="Category"
-                              onTextChange={(value) => {
-                                if (value !== row.categoryName) updateRow(row.key, { categoryId: "" });
-                                updateRow(row.key, { categoryName: value });
-                              }}
-                              onSelect={(option) =>
-                                updateRow(row.key, { categoryId: option._id, categoryName: option.name })
-                              }
-                            />
-                          </View>
-                          {!row.isGeneric && (
-                            <View className="flex-1">
-                              <SearchableObjectDropdown<SelectOption>
-                                options={brands}
-                                selectedId={row.brandId}
-                                selectedName={row.brandName}
-                                placeholder="Brand"
-                                onTextChange={(value) => {
-                                  if (value !== row.brandName) updateRow(row.key, { brandId: "" });
-                                  updateRow(row.key, { brandName: value });
-                                }}
-                                onSelect={(option) =>
-                                  updateRow(row.key, { brandId: option._id, brandName: option.name })
-                                }
-                              />
-                            </View>
-                          )}
-                        </View>
-
-                        {!row.isGeneric && (
-                          <View className="mt-2">
-                            <FieldLabel text="Generic ingredient" />
-                            <SearchableObjectDropdown<Ingredient>
-                              options={genericIngredients}
-                              selectedId={row.genericParentId}
-                              selectedName={row.genericName}
-                              placeholder="Search or new"
-                              onTextChange={(value) => {
-                                if (value !== row.genericName) updateRow(row.key, { genericParentId: "" });
-                                updateRow(row.key, { genericName: value });
-                              }}
-                              onSelect={(option) =>
-                                updateRow(row.key, { genericParentId: option._id, genericName: option.name })
-                              }
-                            />
-                          </View>
-                        )}
-                      </View>
-                    )}
-
-                    <View className="mt-3">
-                      <Text className="text-[11px] text-slate-400">
-                        Nutrition per {row.defaultPortionAmount} {row.defaultPortionUnit}
-                        {row.barcode
-                          ? " · from barcode"
-                          : isNew
-                            ? " · Gemini estimate, editable"
-                            : " · editable"}
-                      </Text>
-                      <View className="mt-1 flex-row flex-wrap gap-1">
-                        {(
-                          [
-                            ["calories", "Cal"],
-                            ["protein", "Protein (g)"],
-                            ["carbs", "Carbs (g)"],
-                            ["fats", "Fat (g)"],
-                            ["fiber", "Fiber (g)"],
-                            ["sodium", "Sodium (mg)"],
-                          ] as [keyof ReceiptNutrition, string][]
-                        ).map(([field, label]) => (
-                          <View key={field} style={{ width: "31%" }}>
-                            <Text className="mb-0.5 text-[9px] text-slate-400">{label}</Text>
-                            <TextInput
-                              value={row.nutrition[field] != null ? String(row.nutrition[field]) : ""}
-                              onChangeText={(value) => {
-                                const parsed = value.trim() === "" ? null : Number(value);
-                                updateRow(row.key, {
-                                  nutrition: {
-                                    ...row.nutrition,
-                                    [field]: parsed != null && Number.isNaN(parsed) ? row.nutrition[field] : parsed,
-                                  },
-                                });
-                              }}
-                              keyboardType="decimal-pad"
-                              placeholder="0"
-                              placeholderTextColor="#94A3B8"
-                              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-950"
-                            />
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-
-                    <View className="mt-3">
-                      <FieldLabel text="Storage location" />
-                      <SearchableObjectDropdown<SelectOption>
-                        options={storageLocations}
-                        selectedId={row.storageLocationId}
-                        selectedName={row.storageLocationName}
-                        placeholder="Storage location"
-                        onTextChange={(value) => updateRow(row.key, { storageLocationName: value })}
-                        onSelect={(option) =>
-                          updateRow(row.key, {
-                            storageLocationId: option._id,
-                            storageLocationName: option.name,
-                          })
-                        }
-                      />
-                    </View>
-
-                    <View className="mt-3">
-                      <FieldLabel text="Expiry date" />
-                      {row.expirySuggestion && !row.expiryTouched ? (
-                        <Text className="mb-1 text-[11px] leading-4 text-slate-400">
-                          Auto-filled from {isNew ? "recent purchase history" : "this ingredient's default"}.
-                        </Text>
-                      ) : null}
-                      <DateTextInput
-                        value={row.expiryDate}
-                        onChangeText={(value) =>
-                          updateRow(row.key, { expiryDate: value, expiryTouched: true })
-                        }
-                        placeholder="YYYY-MM-DD"
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950"
-                        style={{ height: 44 }}
-                      />
-
-                      <Text className="mb-1 mt-2 text-[11px] font-medium text-slate-500">
-                        Or set expiry from purchase date
-                      </Text>
-                      <DurationExpiryInput
-                        purchaseDate={purchaseDate}
-                        initialAmount={row.expirySuggestion ? String(row.expirySuggestion.amount) : undefined}
-                        initialUnit={row.expirySuggestion?.unit}
-                        onApply={(value) =>
-                          updateRow(row.key, { expiryDate: value, expiryTouched: true })
-                        }
-                      />
-                    </View>
-
-                    {row.error && <Text className="mt-2 text-xs text-red-600">{row.error}</Text>}
-                  </View>
-                )}
-              </View>
-            );
-          })}
-
-          <Pressable
-            className="mt-1 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3 active:bg-slate-100"
-            onPress={handleAddManualRow}
+          <ScrollView
+            className="flex-1"
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
+            keyboardShouldPersistTaps="handled"
           >
-            <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
-            <Text className="ml-1.5 text-sm font-semibold text-blue-600">
-              Add an item the receipt missed
-            </Text>
-          </Pressable>
-        </ScrollView>
+            {rows.map((row, index) => (
+              <ReceiptRowSummary
+                key={row.key}
+                row={row}
+                isFocused={index === focusedIndex}
+                onPress={() => goToIndex(index)}
+                onToggleChecked={() => updateRow(row.key, { checked: !row.checked, error: undefined })}
+              />
+            ))}
+
+            <Pressable
+              className="mt-1 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3 active:bg-slate-100"
+              onPress={handleAddManualRow}
+            >
+              <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+              <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+                Add an item the receipt missed
+              </Text>
+            </Pressable>
+          </ScrollView>
+        </View>
       </KeyboardAvoidingView>
 
       <BarcodeScannerModal

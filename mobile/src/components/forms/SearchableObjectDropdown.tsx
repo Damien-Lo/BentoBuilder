@@ -17,6 +17,10 @@ interface SearchableObjectDropdownProps<T extends BaseDropdownOption> {
   showAllWhenEmpty?: boolean;
   disabled?: boolean;
 
+  // A shorter, tighter rendering (44px vs. the default 56px, smaller icon
+  // and text) for cramped layouts — e.g. two fields sharing one row.
+  compact?: boolean;
+
   onSelect: (option: T) => void;
   onTextChange?: (value: string) => void;
 
@@ -37,6 +41,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
   placeholder,
   showAllWhenEmpty = true,
   disabled = false,
+  compact = false,
   onSelect,
   onTextChange,
   onCreateNew,
@@ -122,8 +127,8 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
       }}
     >
       <View
-        style={{ height: 56 }}
-        className={`flex-row items-center rounded-2xl border bg-white px-4 ${
+        style={{ height: compact ? 44 : 56 }}
+        className={`flex-row items-center rounded-2xl border bg-white ${compact ? "px-3" : "px-4"} ${
           disabled
             ? "border-slate-100 opacity-60"
             : open
@@ -131,7 +136,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
               : "border-slate-200"
         }`}
       >
-        <Ionicons name="search-outline" size={20} color="#64748B" />
+        <Ionicons name="search-outline" size={compact ? 16 : 20} color="#64748B" />
 
         <TextInput
           value={query}
@@ -140,7 +145,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
           placeholderTextColor="#94A3B8"
           autoCapitalize="words"
           autoCorrect={false}
-          className="ml-3 flex-1 text-base text-slate-950"
+          className={`flex-1 text-slate-950 ${compact ? "ml-2 text-sm" : "ml-3 text-base"}`}
           onFocus={openDropdown}
           onChangeText={handleTextChange}
           onSubmitEditing={closeDropdown}
@@ -148,7 +153,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
 
         {query.length > 0 && !disabled ? (
           <Pressable hitSlop={10} onPress={handleClear}>
-            <Ionicons name="close-circle" size={20} color="#94A3B8" />
+            <Ionicons name="close-circle" size={compact ? 16 : 20} color="#94A3B8" />
           </Pressable>
         ) : (
           <Pressable
@@ -164,7 +169,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
           >
             <Ionicons
               name={open ? "chevron-up" : "chevron-down"}
-              size={18}
+              size={compact ? 14 : 18}
               color="#64748B"
             />
           </Pressable>
@@ -175,7 +180,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
         <View
           className="absolute left-0 right-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
           style={{
-            top: 60,
+            top: compact ? 48 : 60,
             maxHeight: 260,
             zIndex: 1001,
             elevation: 20,

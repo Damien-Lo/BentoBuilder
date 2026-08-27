@@ -10,6 +10,9 @@ interface SegmentedToggleProps<T> {
   value: T;
   disabled?: boolean;
   onChange: (value: T) => void;
+  // A shorter rendering (tighter vertical padding, smaller text) for
+  // cramped layouts.
+  compact?: boolean;
 }
 
 export function SegmentedToggle<T extends string | boolean>({
@@ -17,6 +20,7 @@ export function SegmentedToggle<T extends string | boolean>({
   value,
   disabled = false,
   onChange,
+  compact = false,
 }: SegmentedToggleProps<T>) {
   return (
     <View className="flex-row rounded-2xl border border-slate-200 bg-white p-1">
@@ -28,12 +32,12 @@ export function SegmentedToggle<T extends string | boolean>({
             key={String(option.value)}
             disabled={disabled}
             onPress={() => onChange(option.value)}
-            className={`flex-1 items-center rounded-xl py-3 ${
+            className={`flex-1 items-center rounded-xl ${compact ? "py-1.5" : "py-3"} ${
               isActive ? "bg-blue-600" : ""
             } ${disabled && !isActive ? "opacity-50" : ""}`}
           >
             <Text
-              className={`text-sm font-semibold ${
+              className={`font-semibold ${compact ? "text-xs" : "text-sm"} ${
                 isActive ? "text-white" : "text-slate-600"
               }`}
             >
