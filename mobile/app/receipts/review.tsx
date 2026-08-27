@@ -114,8 +114,45 @@ function toReceiptNutrition(nutrition?: IngredientNutrition): ReceiptNutrition {
   };
 }
 
+// What handleConfirm actually requires before this row can become a real
+// pantry item — mirrors its validation exactly, computed live so the user
+// sees what's missing while editing instead of only after a failed submit.
+function getMissingFields(row: ReviewRow): string[] {
+  const missing: string[] = [];
+
+  if (!row.name.trim()) missing.push("name");
+
+  const parsedQuantity = Number(row.quantity);
+  if (row.quantity.trim() === "" || !Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
+    missing.push("quantity");
+  }
+
+  if (!row.storageLocationId) missing.push("storage location");
+
+  // Optional on the plain add-to-pantry form, but required here — a
+  // receipt scan is logging a fresh purchase, so an expiry estimate should
+  // always be available (from the ingredient's default, recent history, or
+  // a manual entry) and tracking it is the actual point of this flow.
+  if (!row.expiryDate.trim()) missing.push("expiry date");
+
+  // Only a brand-new ingredient needs a category — a matched ingredient
+  // already has one.
+  if (!row.matchedIngredientId && !row.categoryId && !row.categoryName.trim()) {
+    missing.push("category");
+  }
+
+  return missing;
+}
+
 export default function ReceiptReviewPage() {
   const router = useRouter();
+
+  // Captured exactly once (lazy initializer, not re-run on re-render) —
+  // takePendingReceipt() has read-and-clear semantics, so calling it again
+  // inside the retry-able load effect below would find nothing on a second
+  // attempt and silently fall through to the dev-fixture fallback instead of
+  // actually retrying the real pending scan.
+  const [capturedPending] = useState<ReceiptParseResult | null>(() => takePendingReceipt());
 
   const [receipt, setReceipt] = useState<ReceiptParseResult | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
@@ -154,6 +191,21 @@ export default function ReceiptReviewPage() {
     // lists (ingredient catalog, storage locations, etc.) are always loaded
     // fresh from the server either way; only row-building differs.
     async function loadOptionLists() {
+      // The phone's network just carried a multi-MB receipt photo upload —
+      // a follow-up batch of requests landing in that same brief window has
+      // shown up as a transient failure in practice. One silent retry after
+      // a short pause clears that up without ever bothering the user; only
+      // a second consecutive failure surfaces the retry screen.
+      const fetchAll = () =>
+        Promise.all([
+          getIngredients(),
+          getStorageLocations(),
+          getStores(),
+          getBrands(),
+          getCategories(),
+          getPantryItems(),
+        ]);
+
       const [
         loadedIngredients,
         loadedStorageLocations,
@@ -161,14 +213,10 @@ export default function ReceiptReviewPage() {
         loadedBrands,
         loadedCategories,
         loadedPantryItems,
-      ] = await Promise.all([
-        getIngredients(),
-        getStorageLocations(),
-        getStores(),
-        getBrands(),
-        getCategories(),
-        getPantryItems(),
-      ]);
+      ] = await fetchAll().catch(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return fetchAll();
+      });
 
       if (cancelled) return null;
 
@@ -289,8 +337,11 @@ export default function ReceiptReviewPage() {
     async function init() {
       // A fresh scan (just captured, still in the in-memory hand-off) always
       // wins over a previously-saved draft — otherwise a new scan would be
-      // silently ignored in favor of resuming stale, unfinished work.
-      const pending = takePendingReceipt();
+      // silently ignored in favor of resuming stale, unfinished work. Reuses
+      // the value captured once at mount (see capturedPending above) so a
+      // retry re-attempts the same pending receipt instead of finding it
+      // already consumed.
+      const pending = capturedPending;
 
       if (pending) {
         setReceipt(pending);
@@ -359,7 +410,7 @@ export default function ReceiptReviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, retryToken]);
+  }, [router, retryToken, capturedPending]);
 
   function updateRow(key: string, updates: Partial<ReviewRow>) {
     setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...updates } : row)));
@@ -683,25 +734,14 @@ export default function ReceiptReviewPage() {
         // already made it into the pantry, or it'll create a duplicate.
         if (!row.checked || row.submitted) continue;
 
-        if (!row.name.trim()) {
-          failures.push("(unnamed item): missing a name");
-          updateRow(row.key, { error: "Enter a name" });
-          continue;
-        }
-
-        if (!row.storageLocationId) {
-          failures.push(`${row.name}: no storage location selected`);
-          updateRow(row.key, { error: "Pick a storage location" });
+        const missing = getMissingFields(row);
+        if (missing.length > 0) {
+          failures.push(`${row.name || "(unnamed item)"}: missing ${missing.join(", ")}`);
+          updateRow(row.key, { error: `Missing: ${missing.join(", ")}` });
           continue;
         }
 
         const parsedQuantity = Number(row.quantity);
-        if (row.quantity.trim() === "" || !Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
-          failures.push(`${row.name}: invalid quantity`);
-          updateRow(row.key, { error: "Enter a valid quantity" });
-          continue;
-        }
-
         let parsedPrice: number | undefined;
         if (row.price.trim()) {
           parsedPrice = Number(row.price);
@@ -896,6 +936,9 @@ export default function ReceiptReviewPage() {
               {rows.some((r) => r.submitted)
                 ? ` · ${rows.filter((r) => r.submitted).length} added`
                 : ""}
+              {rows.some((r) => !r.submitted && getMissingFields(r).length > 0)
+                ? ` · ${rows.filter((r) => !r.submitted && getMissingFields(r).length > 0).length} incomplete`
+                : ""}
             </Text>
             <Pressable
               onPress={() => {
@@ -915,6 +958,8 @@ export default function ReceiptReviewPage() {
           {rows.map((row) => {
             const isNew = !row.matchedIngredientId;
             const isExpanded = expandedKey === row.key;
+            const missingFields = row.submitted ? [] : getMissingFields(row);
+            const isRowComplete = missingFields.length === 0;
 
             return (
               <View
@@ -940,40 +985,55 @@ export default function ReceiptReviewPage() {
                   </Pressable>
 
                   <View className="flex-1">
-                    <View className="flex-row items-center">
-                      <Text className="flex-1 text-base font-semibold text-slate-900" numberOfLines={1}>
-                        {row.name}
-                      </Text>
-                      <View
-                        className={`ml-2 rounded-full px-2 py-0.5 ${
-                          row.submitted ? "bg-slate-100" : isNew ? "bg-violet-50" : "bg-emerald-50"
-                        }`}
-                      >
-                        <Text
-                          className={`text-xs font-medium ${
-                            row.submitted
-                              ? "text-slate-500"
-                              : isNew
-                                ? "text-violet-700"
-                                : "text-emerald-700"
-                          }`}
-                        >
-                          {row.submitted ? "Added" : isNew ? "New" : "Matched"}
-                        </Text>
-                      </View>
-                    </View>
+                    <Text className="text-base font-semibold text-slate-900" numberOfLines={1}>
+                      {row.name}
+                    </Text>
                     <Text className="mt-0.5 text-xs text-slate-500">
                       {row.quantity} {row.unit}
                       {row.price ? `  ·  $${row.price}` : ""}
                     </Text>
+                    {!row.submitted && !isRowComplete && (
+                      <Text className="mt-0.5 text-xs font-medium text-amber-600">
+                        Missing: {missingFields.join(", ")}
+                      </Text>
+                    )}
                   </View>
 
-                  <Ionicons
-                    name={isExpanded ? "chevron-up" : "chevron-down"}
-                    size={18}
-                    color="#94A3B8"
-                    style={{ marginLeft: 8 }}
-                  />
+                  <View className="ml-2 items-end">
+                    <View
+                      className={`rounded-full px-2 py-0.5 ${
+                        row.submitted ? "bg-slate-100" : isNew ? "bg-violet-50" : "bg-emerald-50"
+                      }`}
+                    >
+                      <Text
+                        className={`text-xs font-medium ${
+                          row.submitted
+                            ? "text-slate-500"
+                            : isNew
+                              ? "text-violet-700"
+                              : "text-emerald-700"
+                        }`}
+                      >
+                        {row.submitted ? "Added" : isNew ? "New" : "Matched"}
+                      </Text>
+                    </View>
+
+                    <View className="mt-1.5 flex-row items-center">
+                      {!row.submitted && (
+                        <Ionicons
+                          name={isRowComplete ? "checkmark-circle" : "alert-circle"}
+                          size={18}
+                          color={isRowComplete ? "#10B981" : "#F59E0B"}
+                        />
+                      )}
+                      <Ionicons
+                        name={isExpanded ? "chevron-up" : "chevron-down"}
+                        size={18}
+                        color="#94A3B8"
+                        style={{ marginLeft: 8 }}
+                      />
+                    </View>
+                  </View>
                 </Pressable>
 
                 {isExpanded && (

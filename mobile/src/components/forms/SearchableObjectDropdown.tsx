@@ -58,21 +58,23 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
 
   const normalizedQuery = query.trim().toLowerCase();
 
-  const normalizedSelectedName = safeSelectedName.trim().toLowerCase();
-
+  // Only the empty-query case is special-cased (browse everything vs. show
+  // nothing until you type, per showAllWhenEmpty) — any actual typed text
+  // always filters. There used to also be a "query equals the current
+  // selection" branch that showed everything, meant to let re-tapping an
+  // untouched field browse again — but every caller echoes typed text
+  // straight back into the value bound to selectedName, so query and
+  // selectedName are equal after literally every keystroke, permanently
+  // short-circuiting the filter. Removed rather than patched per call site.
   const filteredOptions = useMemo(() => {
     if (!normalizedQuery) {
       return showAllWhenEmpty ? safeOptions : [];
     }
 
-    if (showAllWhenEmpty && normalizedQuery === normalizedSelectedName) {
-      return safeOptions;
-    }
-
     return safeOptions.filter((option) =>
       option.name.trim().toLowerCase().includes(normalizedQuery),
     );
-  }, [normalizedQuery, normalizedSelectedName, safeOptions, showAllWhenEmpty]);
+  }, [normalizedQuery, safeOptions, showAllWhenEmpty]);
 
   function openDropdown() {
     if (!disabled) {
