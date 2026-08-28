@@ -6,6 +6,7 @@ import {
   Alert,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -55,8 +56,14 @@ import {
   referenceName,
   resolveEffectiveExpiryDuration,
   resolveEffectiveStorageLocation,
+  suggestStore,
   type SuggestedExpiryDuration,
 } from "@/src/utils/pantryDefaults";
+import {
+  getGroceryItems,
+  updateGroceryItem,
+  type GroceryItem,
+} from "@/src/services/groceryListApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
@@ -81,6 +88,11 @@ interface ReviewRow {
   // already succeeded.
   submitted: boolean;
   matchedIngredientId: string | null;
+  // A pendingLog grocery-list item this row was matched against at scan
+  // time (by ingredient, then by exact name) — confirming this row also
+  // marks that grocery item completed. Computed once at row-build time, not
+  // re-evaluated on later edits within this review session.
+  matchedGroceryItemId: string | null;
   name: string;
   quantity: string;
   unit: string;
@@ -190,10 +202,62 @@ function reconcileQuantityWithNutrition(
   return { quantity: baseNutritionAmount, unit: baseNutritionUnit, nutrition: baseNutrition };
 }
 
+// Matches a receipt line against a "pendingLog" grocery-list item (checked
+// off during shopping, waiting to be logged to the pantry) — confirming the
+// row on this screen will also mark the match completed. Tries an
+// ingredient-ID match first (both resolve to the same catalog ingredient —
+// high confidence), then falls back to an exact normalized-name match
+// (matching this file's existing exact-match convention elsewhere, e.g.
+// handleNameChange — not fuzzy). Either tier disambiguates a tie using the
+// same live store-history heuristic Shopping Mode groups by; a genuine
+// unresolved tie matches nothing rather than guessing. `claimed` is shared
+// across the whole row-build pass so two receipt lines can never claim the
+// same grocery item.
+function matchPendingGroceryItem(
+  candidateName: string,
+  matchedIngredientId: string | null,
+  pendingItems: GroceryItem[],
+  pantryItems: PantryItem[],
+  receiptStoreId: string,
+  receiptStoreName: string,
+  claimed: Set<string>,
+): string | null {
+  function disambiguate(candidates: GroceryItem[]): string | null {
+    const unclaimed = candidates.filter((c) => !claimed.has(c._id));
+    if (unclaimed.length === 0) return null;
+    if (unclaimed.length === 1) return unclaimed[0]._id;
+
+    const byStore = unclaimed.filter((c) => {
+      const ingredientId = referenceId(c.ingredient);
+      if (!ingredientId) return false;
+      const suggested = suggestStore(
+        recentPantryEntries(pantryItems.filter((p) => referenceId(p.ingredient) === ingredientId)),
+      );
+      if (!suggested) return false;
+      return receiptStoreId
+        ? suggested.id === receiptStoreId
+        : suggested.name.trim().toLowerCase() === receiptStoreName.trim().toLowerCase();
+    });
+    return byStore.length === 1 ? byStore[0]._id : null;
+  }
+
+  if (matchedIngredientId) {
+    const byIngredient = pendingItems.filter((item) => referenceId(item.ingredient) === matchedIngredientId);
+    if (byIngredient.length > 0) return disambiguate(byIngredient);
+  }
+
+  const normalized = candidateName.trim().toLowerCase();
+  if (!normalized) return null;
+  const byName = pendingItems.filter((item) => item.name.trim().toLowerCase() === normalized);
+  return byName.length > 0 ? disambiguate(byName) : null;
+}
+
 // What handleConfirm actually requires before this row can become a real
-// pantry item — mirrors its validation exactly, computed live so the user
-// sees what's missing while editing instead of only after a failed submit.
-function getMissingFields(row: ReviewRow): string[] {
+// pantry item — mirrors its validation exactly. Kept separate from
+// getMissingFields below (which also surfaces non-blocking notes) so
+// handleConfirm's gate can never be tripped by something that's only
+// worth flagging, not actually required.
+function getRequiredMissingFields(row: ReviewRow): string[] {
   const missing: string[] = [];
 
   if (!row.name.trim()) missing.push("name");
@@ -217,6 +281,21 @@ function getMissingFields(row: ReviewRow): string[] {
     missing.push("category");
   }
 
+  return missing;
+}
+
+// Everything worth flagging on this row — the required fields above, plus
+// non-blocking notes. "Not linked to a grocery-list item" is the one
+// non-blocking case: worth a heads-up (maybe the auto-match missed it), but
+// never a reason to stop Confirm — the user may well have just bought
+// something extra that was never on the list. Only surfaced at all when
+// there's an actual shopping list with pendingLog items to check against;
+// with none, there's nothing to flag.
+function getMissingFields(row: ReviewRow, hasPendingGroceryItems: boolean): string[] {
+  const missing = getRequiredMissingFields(row);
+  if (hasPendingGroceryItems && !row.matchedGroceryItemId) {
+    missing.push("grocery list link");
+  }
   return missing;
 }
 
@@ -252,12 +331,14 @@ interface RowCallbacks {
   categories: SelectOption[];
   brands: SelectOption[];
   genericIngredients: Ingredient[];
+  pendingGroceryItems: GroceryItem[];
   purchaseDate: string;
   updateRow: (key: string, updates: Partial<ReviewRow>) => void;
   applyIngredientMatch: (rowKey: string, ingredient: Ingredient) => void;
   handleNameChange: (rowKey: string, value: string) => void;
   onScanBarcode: (rowKey: string) => void;
   onDeleteRow: (rowKey: string, rowName: string) => void;
+  onOpenGroceryLink: (rowKey: string) => void;
 }
 
 // The full editable detail view for one item — shown, always expanded, for
@@ -269,18 +350,24 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
     categories,
     brands,
     genericIngredients,
+    pendingGroceryItems,
     purchaseDate,
     updateRow,
     applyIngredientMatch,
     handleNameChange,
     onScanBarcode,
     onDeleteRow,
+    onOpenGroceryLink,
   } = callbacks;
 
   const [showDurationPicker, setShowDurationPicker] = useState(false);
 
   const isNew = !row.matchedIngredientId;
-  const missingFields = row.submitted ? [] : getMissingFields(row);
+  const hasPendingGroceryItems = pendingGroceryItems.length > 0;
+  const linkedGroceryItem = row.matchedGroceryItemId
+    ? pendingGroceryItems.find((item) => item._id === row.matchedGroceryItemId)
+    : undefined;
+  const missingFields = row.submitted ? [] : getMissingFields(row, hasPendingGroceryItems);
   const isRowComplete = missingFields.length === 0;
 
   // The matched ingredient's own unit conversions (e.g. "1 box = 340g")
@@ -328,6 +415,35 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         <Text className="mt-1 text-[11px] font-medium text-amber-600">
           Missing: {missingFields.join(", ")}
         </Text>
+      )}
+
+      {!row.submitted && (
+        <Pressable
+          className="mt-1 flex-row items-center self-start"
+          hitSlop={4}
+          onPress={() => onOpenGroceryLink(row.key)}
+        >
+          <Ionicons
+            name="cart-outline"
+            size={12}
+            color={linkedGroceryItem ? "#64748B" : hasPendingGroceryItems ? "#F59E0B" : "#94A3B8"}
+          />
+          <Text
+            className={`ml-1 text-[11px] font-medium ${
+              linkedGroceryItem
+                ? "text-slate-500"
+                : hasPendingGroceryItems
+                  ? "text-amber-600"
+                  : "text-slate-400"
+            }`}
+          >
+            {linkedGroceryItem
+              ? `Grocery list: ${linkedGroceryItem.name}`
+              : hasPendingGroceryItems
+                ? "Not on grocery list — tap to link"
+                : "Link to grocery list"}
+          </Text>
+        </Pressable>
       )}
 
       <View className="mt-2 flex-row items-center gap-2">
@@ -609,16 +725,18 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
 function ReceiptRowSummary({
   row,
   isFocused,
+  hasPendingGroceryItems,
   onPress,
   onToggleChecked,
 }: {
   row: ReviewRow;
   isFocused: boolean;
+  hasPendingGroceryItems: boolean;
   onPress: () => void;
   onToggleChecked: () => void;
 }) {
   const isNew = !row.matchedIngredientId;
-  const missingFields = row.submitted ? [] : getMissingFields(row);
+  const missingFields = row.submitted ? [] : getMissingFields(row, hasPendingGroceryItems);
   const isRowComplete = missingFields.length === 0;
 
   return (
@@ -698,6 +816,10 @@ export default function ReceiptReviewPage() {
   const [brands, setBrands] = useState<SelectOption[]>([]);
   const [categories, setCategories] = useState<SelectOption[]>([]);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
+  const [groceryItems, setGroceryItems] = useState<GroceryItem[]>([]);
+  // Which row is currently choosing a grocery-list link, if any — opens the
+  // link-picker modal below.
+  const [groceryLinkRowKey, setGroceryLinkRowKey] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -710,6 +832,7 @@ export default function ReceiptReviewPage() {
   const draftClearedRef = useRef(false);
 
   const genericIngredients = ingredients.filter((ingredient) => ingredient.isGeneric);
+  const pendingGroceryItems = groceryItems.filter((item) => item.status === "pendingLog");
 
   useEffect(() => {
     let cancelled = false;
@@ -732,6 +855,7 @@ export default function ReceiptReviewPage() {
           getBrands(),
           getCategories(),
           getPantryItems(),
+          getGroceryItems(),
         ]);
 
       const [
@@ -741,6 +865,7 @@ export default function ReceiptReviewPage() {
         loadedBrands,
         loadedCategories,
         loadedPantryItems,
+        loadedGroceryItems,
       ] = await fetchAll().catch(async () => {
         await new Promise((resolve) => setTimeout(resolve, 1500));
         return fetchAll();
@@ -754,6 +879,7 @@ export default function ReceiptReviewPage() {
       const brandList = Array.isArray(loadedBrands) ? loadedBrands : [];
       const categoryList = Array.isArray(loadedCategories) ? loadedCategories : [];
       const pantryList = Array.isArray(loadedPantryItems) ? loadedPantryItems : [];
+      const groceryItemList = Array.isArray(loadedGroceryItems) ? loadedGroceryItems : [];
 
       setIngredients(ingredientList);
       setStorageLocations(locationList);
@@ -761,15 +887,17 @@ export default function ReceiptReviewPage() {
       setBrands(brandList);
       setCategories(categoryList);
       setPantryItems(pantryList);
+      setGroceryItems(groceryItemList);
 
-      return { ingredientList, locationList, storeList, brandList, categoryList, pantryList };
+      return { ingredientList, locationList, storeList, brandList, categoryList, pantryList, groceryItemList };
     }
 
     async function loadReferenceData(pending: ReceiptParseResult) {
       try {
         const lists = await loadOptionLists();
         if (!lists) return;
-        const { ingredientList, locationList, storeList, brandList, categoryList, pantryList } = lists;
+        const { ingredientList, locationList, storeList, brandList, categoryList, pantryList, groceryItemList } =
+          lists;
 
         const existingStore = pending.storeName
           ? storeList.find(
@@ -780,12 +908,29 @@ export default function ReceiptReviewPage() {
 
         const effectivePurchaseDate = pending.purchaseDate || todayDateInputString();
 
+        const pendingItemsForMatching = groceryItemList.filter((item) => item.status === "pendingLog");
+        // Shared across every line item so two receipt rows never claim the
+        // same grocery item — .map() below runs its callback in order, so
+        // mutating this as we go is safe.
+        const claimedGroceryItemIds = new Set<string>();
+
         setRows(
           pending.lineItems.map((lineItem, index) => {
             const matched = lineItem.matchedIngredientId
               ? ingredientList.find((ing) => ing._id === lineItem.matchedIngredientId)
               : null;
             const proposal = lineItem.proposedIngredient;
+
+            const groceryMatch = matchPendingGroceryItem(
+              matched?.name ?? proposal?.name ?? lineItem.rawText,
+              matched?._id ?? null,
+              pendingItemsForMatching,
+              pantryList,
+              existingStore?._id ?? "",
+              pending.storeName ?? "",
+              claimedGroceryItemIds,
+            );
+            if (groceryMatch) claimedGroceryItemIds.add(groceryMatch);
 
             const history = matched
               ? recentPantryEntries(
@@ -844,6 +989,7 @@ export default function ReceiptReviewPage() {
               lineItem,
               checked: lineItem.confidence !== "low",
               matchedIngredientId: matched?._id ?? null,
+              matchedGroceryItemId: groceryMatch,
               name: matched?.name ?? proposal?.name ?? lineItem.rawText,
               quantity: String(reconciled.quantity),
               unit: reconciled.unit,
@@ -1279,6 +1425,7 @@ export default function ReceiptReviewPage() {
       checked: true,
       submitted: false,
       matchedIngredientId: null,
+      matchedGroceryItemId: null,
       name: "",
       quantity: "1",
       unit: "item",
@@ -1313,6 +1460,23 @@ export default function ReceiptReviewPage() {
     requestAnimationFrame(() => {
       pagerRef.current?.scrollToIndex({ index: newIndex, animated: true });
     });
+  }
+
+  // Manually (re)links a row to a pendingLog grocery-list item, or clears
+  // the link (groceryItemId === null) — corrects/overrides whatever the
+  // automatic name/ingredient match found at scan time. A grocery item can
+  // only ever be claimed by one row at a time, so linking it here strips it
+  // from whichever other row currently holds it.
+  function handleLinkGroceryItem(rowKey: string, groceryItemId: string | null) {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.key === rowKey) return { ...r, matchedGroceryItemId: groceryItemId };
+        if (groceryItemId && r.matchedGroceryItemId === groceryItemId) {
+          return { ...r, matchedGroceryItemId: null };
+        }
+        return r;
+      }),
+    );
   }
 
   function handleDeleteRow(rowKey: string, rowName: string) {
@@ -1390,7 +1554,7 @@ export default function ReceiptReviewPage() {
         // already made it into the pantry, or it'll create a duplicate.
         if (!row.checked || row.submitted) continue;
 
-        const missing = getMissingFields(row);
+        const missing = getRequiredMissingFields(row);
         if (missing.length > 0) {
           failures.push(`${row.name || "(unnamed item)"}: missing ${missing.join(", ")}`);
           updateRow(row.key, { error: `Missing: ${missing.join(", ")}` });
@@ -1453,7 +1617,7 @@ export default function ReceiptReviewPage() {
             ingredientId = newIngredient._id;
           }
 
-          await addIngredientToPantry({
+          const newPantryItem = await addIngredientToPantry({
             ingredient: ingredientId,
             storageLocation: row.storageLocationId,
             quantityAvailable: parsedQuantity,
@@ -1476,6 +1640,25 @@ export default function ReceiptReviewPage() {
             matchedIngredientId: ingredientId,
             error: undefined,
           });
+
+          if (row.matchedGroceryItemId) {
+            try {
+              await updateGroceryItem(row.matchedGroceryItemId, {
+                status: "completed",
+                pantryItem: newPantryItem._id,
+              });
+            } catch (groceryError) {
+              // The pantry item itself already exists — never fail or
+              // un-submit the row over this (retrying would risk a
+              // duplicate pantry item). The grocery item just stays
+              // pendingLog, reachable via its own manual log-to-pantry flow.
+              failures.push(
+                `${row.name}: added to pantry, but couldn't update the grocery list (${
+                  groceryError instanceof Error ? groceryError.message : "unknown error"
+                })`,
+              );
+            }
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : "Failed to add";
           failures.push(`${row.name}: ${message}`);
@@ -1503,7 +1686,7 @@ export default function ReceiptReviewPage() {
       <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-8">
         <Ionicons name="cloud-offline-outline" size={40} color="#94A3B8" />
         <Text className="mt-3 text-center text-base font-semibold text-slate-700">
-          Couldn't load this receipt
+          Couldn&apos;t load this receipt
         </Text>
         <Text className="mt-1 text-center text-sm text-slate-500">{loadError}</Text>
         <Pressable
@@ -1531,12 +1714,14 @@ export default function ReceiptReviewPage() {
     categories,
     brands,
     genericIngredients,
+    pendingGroceryItems,
     purchaseDate,
     updateRow,
     applyIngredientMatch,
     handleNameChange,
     onScanBarcode: setBarcodeScanRowKey,
     onDeleteRow: handleDeleteRow,
+    onOpenGroceryLink: setGroceryLinkRowKey,
   };
 
   const allSelectableChecked =
@@ -1675,8 +1860,11 @@ export default function ReceiptReviewPage() {
               {rows.some((r) => r.submitted)
                 ? ` · ${rows.filter((r) => r.submitted).length} added`
                 : ""}
-              {rows.some((r) => !r.submitted && getMissingFields(r).length > 0)
-                ? ` · ${rows.filter((r) => !r.submitted && getMissingFields(r).length > 0).length} incomplete`
+              {rows.some((r) => !r.submitted && getMissingFields(r, pendingGroceryItems.length > 0).length > 0)
+                ? ` · ${
+                    rows.filter((r) => !r.submitted && getMissingFields(r, pendingGroceryItems.length > 0).length > 0)
+                      .length
+                  } incomplete`
                 : ""}
             </Text>
             <Pressable
@@ -1702,6 +1890,7 @@ export default function ReceiptReviewPage() {
                 key={row.key}
                 row={row}
                 isFocused={index === focusedIndex}
+                hasPendingGroceryItems={pendingGroceryItems.length > 0}
                 onPress={() => goToIndex(index)}
                 onToggleChecked={() => updateRow(row.key, { checked: !row.checked, error: undefined })}
               />
@@ -1725,6 +1914,73 @@ export default function ReceiptReviewPage() {
         onClose={() => setBarcodeScanRowKey(null)}
         onProductFound={handleBarcodeScanned}
       />
+
+      <Modal
+        visible={!!groceryLinkRowKey}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGroceryLinkRowKey(null)}
+      >
+        <Pressable
+          className="flex-1 items-center justify-end bg-black/40"
+          onPress={() => setGroceryLinkRowKey(null)}
+        >
+          <Pressable
+            className="max-h-[70%] w-full rounded-t-3xl bg-white pb-6 pt-4"
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text className="px-5 pb-3 text-base font-bold text-slate-950">
+              Link to grocery list
+            </Text>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <Pressable
+                className="flex-row items-center border-t border-slate-100 px-5 py-4 active:bg-slate-50"
+                onPress={() => {
+                  if (groceryLinkRowKey) handleLinkGroceryItem(groceryLinkRowKey, null);
+                  setGroceryLinkRowKey(null);
+                }}
+              >
+                <Ionicons name="close-circle-outline" size={20} color="#64748B" />
+                <Text className="ml-2.5 text-sm font-medium text-slate-700">
+                  Not on my list (bought extra)
+                </Text>
+              </Pressable>
+              {pendingGroceryItems.length === 0 ? (
+                <Text className="px-5 py-4 text-sm text-slate-400">
+                  Nothing pending on your grocery list right now.
+                </Text>
+              ) : (
+                pendingGroceryItems.map((item) => {
+                  const currentRow = rows.find((r) => r.key === groceryLinkRowKey);
+                  const isSelected = currentRow?.matchedGroceryItemId === item._id;
+                  const claimedByOtherRow = rows.find(
+                    (r) => r.key !== groceryLinkRowKey && r.matchedGroceryItemId === item._id,
+                  );
+                  return (
+                    <Pressable
+                      key={item._id}
+                      className="flex-row items-center border-t border-slate-100 px-5 py-4 active:bg-slate-50"
+                      onPress={() => {
+                        if (groceryLinkRowKey) handleLinkGroceryItem(groceryLinkRowKey, item._id);
+                        setGroceryLinkRowKey(null);
+                      }}
+                    >
+                      <View className="flex-1">
+                        <Text className="text-sm font-medium text-slate-900">{item.name}</Text>
+                        <Text className="mt-0.5 text-xs text-slate-400">
+                          {item.quantity != null ? `${item.quantity} ${item.unit}`.trim() : "No quantity set"}
+                          {claimedByOtherRow ? " · currently linked to another item on this receipt" : ""}
+                        </Text>
+                      </View>
+                      {isSelected && <Ionicons name="checkmark-circle" size={20} color="#2563EB" />}
+                    </Pressable>
+                  );
+                })
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }

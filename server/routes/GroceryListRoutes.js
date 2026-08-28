@@ -1,5 +1,6 @@
 import express from "express";
 import GroceryItem from "../models/GroceryItem.js";
+import { upsertManualContribution, upsertMealPlanEntryContribution } from "../services/groceryContributions.js";
 
 const router = express.Router();
 
@@ -36,7 +37,11 @@ router.get("/", async (req, res) => {
 /**
  * POST /api/grocery-list
  * Add an item — either linked to a catalog ingredient (generic or
- * specific/branded) or a one-off free-text item.
+ * specific/branded) or a one-off free-text item. When linked and an
+ * existing toBuy item for that ingredient is already on the list, this
+ * merges into it (accumulating the manual contribution) rather than
+ * creating a duplicate row — the response may therefore be an existing,
+ * updated item rather than a freshly-created one.
  */
 router.post("/", async (req, res) => {
   try {
@@ -49,10 +54,10 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const item = await GroceryItem.create({
+    const item = await upsertManualContribution({
       ingredient: req.body.ingredient || null,
       name,
-      quantity:
+      amount:
         req.body.quantity === "" || req.body.quantity == null
           ? null
           : Number(req.body.quantity),
@@ -67,6 +72,49 @@ router.post("/", async (req, res) => {
     });
   } catch (error) {
     console.error("Create grocery item error:", error);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/grocery-list/contributions/meal-plan-entry
+ * Idempotent per (ingredient, mealPlanEntry) — finds or creates the toBuy
+ * item for `ingredient`, then upserts this entry's contribution amount.
+ * Re-calling for the same entry updates its contribution in place instead
+ * of duplicating (e.g. re-checking a shortfall closer to shopping day).
+ * Body: { mealPlanEntry, ingredient, name, amount, unit }
+ */
+router.post("/contributions/meal-plan-entry", async (req, res) => {
+  try {
+    const { mealPlanEntry, ingredient, name, amount, unit } = req.body;
+
+    if (!mealPlanEntry || !ingredient || !name) {
+      return res.status(400).json({
+        success: false,
+        message: "mealPlanEntry, ingredient, and name are required",
+      });
+    }
+
+    const item = await upsertMealPlanEntryContribution({
+      ingredient,
+      mealPlanEntry,
+      name,
+      amount: Number(amount),
+      unit: unit ?? "",
+    });
+
+    await item.populate(INGREDIENT_POPULATE);
+
+    return res.status(200).json({
+      success: true,
+      data: item,
+    });
+  } catch (error) {
+    console.error("Add meal-plan contribution error:", error);
 
     return res.status(400).json({
       success: false,

@@ -38,6 +38,7 @@ import {
   FieldLabel,
   PriceInput,
   SearchableObjectDropdown,
+  SegmentedToggle,
   UnitFamilyDropdown,
 } from "@/src/components/forms";
 import {
@@ -67,6 +68,10 @@ import {
   suggestStorageLocation,
   suggestStore,
 } from "@/src/utils/pantryDefaults";
+import { groupGroceryItemsByStore } from "@/src/utils/groceryGrouping";
+import { ReceiptScannerModal } from "@/src/components/ReceiptScannerModal";
+import { parseReceipt } from "@/src/services/receiptApi";
+import { clearReviewDraft, setPendingReceipt } from "@/src/utils/receiptReviewStore";
 
 // A pendingLog item can be logged to pantry (directly, or via a quick
 // choice for generics) as long as it's linked to a catalog ingredient —
@@ -94,6 +99,13 @@ export default function GroceryListScreen() {
   const [groceryItems, setGroceryItems] = useState<GroceryItem[]>([]);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Shopping Mode — a store-grouped view of the same list/data, for
+  // efficient in-store use, plus a way straight into the receipt scanner
+  // once shopping's done.
+  const [viewMode, setViewMode] = useState<"list" | "shopping">("list");
+  const [receiptScannerVisible, setReceiptScannerVisible] = useState(false);
+  const [parsingReceipt, setParsingReceipt] = useState(false);
 
   const [nameInput, setNameInput] = useState("");
   const [selectedIngredientId, setSelectedIngredientId] = useState("");
@@ -233,6 +245,10 @@ export default function GroceryListScreen() {
     () => groceryItems.filter((i) => i.status === "completed"),
     [groceryItems],
   );
+  const storeGroups = useMemo(
+    () => groupGroceryItemsByStore([...toBuyItems, ...pendingLogItems], pantryItems),
+    [toBuyItems, pendingLogItems, pantryItems],
+  );
 
   function selectSuggestion(ingredient: Ingredient) {
     setNameInput(ingredient.name);
@@ -252,7 +268,16 @@ export default function GroceryListScreen() {
         quantity: quantity.trim() ? Number(quantity) : null,
         unit: unit.trim(),
       });
-      setGroceryItems((prev) => [...prev, created]);
+      // A linked ingredient can merge into an already-existing toBuy item
+      // (accumulating the manual contribution) instead of creating a new
+      // one — this response may be that existing item, updated, not a
+      // fresh row, so upsert by id rather than always appending.
+      setGroceryItems((prev) => {
+        const index = prev.findIndex((item) => item._id === created._id);
+        return index >= 0
+          ? prev.map((item) => (item._id === created._id ? created : item))
+          : [...prev, created];
+      });
       setNameInput("");
       setSelectedIngredientId("");
       setQuantity("");
@@ -785,14 +810,34 @@ export default function GroceryListScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          <Pressable
-            className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-back" size={26} color="#0F172A" />
-          </Pressable>
-          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Grocery List</Text>
+        <View className="border-b border-slate-200 bg-white px-4 py-3">
+          <View className="flex-row items-center">
+            <Pressable
+              className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
+              onPress={() => router.back()}
+            >
+              <Ionicons name="chevron-back" size={26} color="#0F172A" />
+            </Pressable>
+            <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Grocery List</Text>
+            {viewMode === "shopping" && (
+              <Pressable
+                className="mr-2 h-11 w-11 items-center justify-center rounded-full bg-blue-50 active:bg-blue-100"
+                onPress={() => setReceiptScannerVisible(true)}
+              >
+                <Ionicons name="camera-outline" size={20} color="#2563EB" />
+              </Pressable>
+            )}
+          </View>
+          <View className="mt-3">
+            <SegmentedToggle<"list" | "shopping">
+              value={viewMode}
+              options={[
+                { value: "list", label: "List" },
+                { value: "shopping", label: "Shopping Mode" },
+              ]}
+              onChange={setViewMode}
+            />
+          </View>
         </View>
 
         {/* Add item row */}
@@ -917,6 +962,28 @@ export default function GroceryListScreen() {
                 Add items above to start your grocery list.
               </Text>
             </View>
+          ) : viewMode === "shopping" ? (
+            storeGroups.length === 0 ? (
+              <View className="mt-8 items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
+                <Ionicons name="checkmark-circle-outline" size={42} color="#94A3B8" />
+                <Text className="mt-4 text-lg font-bold text-slate-900">Nothing left to shop for</Text>
+                <Text className="mt-2 text-center text-slate-500">
+                  Everything&apos;s either logged or completed. Scan your receipts above to finish up.
+                </Text>
+              </View>
+            ) : (
+              <>
+                {storeGroups.map((group) => (
+                  <View key={group.storeId || "unknown"} className="mb-5">
+                    <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400">
+                      {group.storeName}{" "}
+                      <Text className="font-semibold text-slate-300">· {group.items.length}</Text>
+                    </Text>
+                    {group.items.map(renderGroceryRow)}
+                  </View>
+                ))}
+              </>
+            )
           ) : (
             <>
               {toBuyItems.length > 0 && (
@@ -1401,6 +1468,43 @@ export default function GroceryListScreen() {
             >
               <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <ReceiptScannerModal
+        visible={receiptScannerVisible}
+        onClose={() => setReceiptScannerVisible(false)}
+        onCaptured={(photoUri) => {
+          setReceiptScannerVisible(false);
+          setParsingReceipt(true);
+
+          parseReceipt(photoUri)
+            .then((result) => {
+              // A fresh scan supersedes any unfinished review still saved on
+              // disk — otherwise the review screen would ignore this new
+              // result and resume the stale draft instead.
+              void clearReviewDraft();
+              setPendingReceipt(result);
+              router.push("/receipts/review");
+            })
+            .catch((error) => {
+              Alert.alert(
+                "Couldn't read receipt",
+                error instanceof Error ? error.message : "Something went wrong parsing the receipt.",
+              );
+            })
+            .finally(() => setParsingReceipt(false));
+        }}
+      />
+
+      <Modal visible={parsingReceipt} transparent animationType="fade">
+        <View className="flex-1 items-center justify-center bg-black/50">
+          <View className="items-center rounded-3xl bg-white px-8 py-6">
+            <ActivityIndicator size="large" />
+            <Text className="mt-3 text-base font-semibold text-slate-700">
+              Reading receipt...
+            </Text>
           </View>
         </View>
       </Modal>

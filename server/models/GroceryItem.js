@@ -1,5 +1,38 @@
 import mongoose from "mongoose";
 
+// One demand source contributing to this item's quantity — either a specific
+// meal-plan entry's shortfall, or the user's own manual add. `amount` is
+// this source's own contribution, in the item's `unit`; the item's top-level
+// `quantity` is server-maintained as the sum of all contributions here, so
+// multiple meals needing the same ingredient merge into one line instead of
+// duplicating, and removing a source (a deleted meal-plan entry, or the user
+// deleting their manual add) cleanly decrements rather than requiring the
+// whole item to be recreated.
+const requestedBySchema = new mongoose.Schema(
+  {
+    source: {
+      type: String,
+      enum: ["mealPlanEntry", "manual"],
+      required: true,
+    },
+    // Only set when source === "mealPlanEntry" — which planner entry this
+    // contribution came from, so re-pressing "add missing" for the same
+    // entry updates its contribution in place instead of duplicating, and so
+    // deleting that entry can find and strip exactly this contribution.
+    mealPlanEntry: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MealPlanEntry",
+      default: null,
+    },
+    amount: {
+      type: Number,
+      min: 0,
+      required: true,
+    },
+  },
+  { _id: false },
+);
+
 const groceryItemSchema = new mongoose.Schema(
   {
     // Optional — a grocery item can be linked to a catalog ingredient
@@ -50,11 +83,21 @@ const groceryItemSchema = new mongoose.Schema(
       ref: "PantryItem",
       default: null,
     },
+
+    // What's actually driving `quantity` — see requestedBySchema above.
+    // Empty for legacy items created before this existed, or for one-off
+    // manual adds with no linked ingredient (nothing to dedupe/merge on).
+    requestedBy: {
+      type: [requestedBySchema],
+      default: [],
+    },
   },
   {
     timestamps: true,
   },
 );
+
+groceryItemSchema.index({ ingredient: 1, status: 1 });
 
 const GroceryItem = mongoose.model("GroceryItem", groceryItemSchema);
 

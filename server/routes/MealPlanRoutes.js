@@ -1,6 +1,7 @@
 import express from "express";
 import MealPlanEntry from "../models/MealPlanEntry.js";
 import PantryItem from "../models/PantryItem.js";
+import { removeMealPlanEntryContributions } from "../services/groceryContributions.js";
 
 const router = express.Router();
 
@@ -199,6 +200,16 @@ router.delete("/:id", async (req, res) => {
     }
     existing.isArchived = true;
     await existing.save();
+
+    // Best-effort — the entry is already archived either way. Strips this
+    // entry's contribution from any still-unpurchased (toBuy) grocery item;
+    // anything already checked off or logged to the pantry is real shopping
+    // progress and is never touched here.
+    try {
+      await removeMealPlanEntryContributions(existing._id);
+    } catch (cleanupError) {
+      console.error("Grocery contribution cleanup error:", cleanupError);
+    }
 
     return res.status(200).json({ success: true, message: "Entry removed" });
   } catch (error) {

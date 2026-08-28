@@ -21,6 +21,7 @@ import { addRecipeScore, getRecipeById, getRecipes, type Recipe } from "@/src/se
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import { getRestaurantMeals, type RestaurantMeal } from "@/src/services/restaurantMealApi";
+import { upsertMealPlanEntryContribution } from "@/src/services/groceryListApi";
 import type { SelectOption } from "@/src/services/optionsApi";
 import type { PantryItem } from "@/src/types/pantry";
 import {
@@ -540,6 +541,47 @@ export default function HomeScreen() {
     void performConfirm(entry, getDefaultDeductionInstructions(requirements));
   }
 
+  // Adds this entry's pantry shortfall to the grocery list — a manual,
+  // re-pressable check (current pantry vs. just this entry's need, no
+  // awareness of other entries' claims on the same stock). Idempotent per
+  // entry server-side, so re-pressing closer to shopping day just refreshes
+  // the amounts rather than duplicating them.
+  async function handleAddMissingToGroceryList(entry: MealPlanEntry) {
+    const conversions = appSettings?.unitConversions ?? [];
+    const requirements = buildIngredientRequirements(
+      entry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions,
+    );
+
+    const shortfalls = requirements
+      .map(r => ({
+        ...r,
+        shortfall: Math.max(0, r.neededQuantity - r.groups.reduce((sum, g) => sum + g.totalAvailable, 0)),
+      }))
+      .filter(r => r.shortfall > 0);
+
+    if (shortfalls.length === 0) {
+      Alert.alert("Nothing missing", "Everything needed for this is already in your pantry.");
+      return;
+    }
+
+    try {
+      await Promise.all(
+        shortfalls.map(r =>
+          upsertMealPlanEntryContribution({
+            mealPlanEntry: entry._id,
+            ingredient: r.ingredientId,
+            name: r.ingredientName,
+            amount: r.shortfall,
+            unit: r.unit,
+          }),
+        ),
+      );
+      Alert.alert("Added to grocery list", `${shortfalls.length} item${shortfalls.length === 1 ? "" : "s"} added or updated.`);
+    } catch (err) {
+      Alert.alert("Could not update grocery list", err instanceof Error ? err.message : "Something went wrong.");
+    }
+  }
+
   function handleToggleEntryStatus(entry: MealPlanEntry) {
     if (entry.status === "planned") {
       handleConfirmEntry(entry);
@@ -792,6 +834,16 @@ export default function HomeScreen() {
             <Text className="mt-0.5 text-xs text-slate-400">
               {subtitle}{entry.status === "planned" ? " · Planned" : ""}
             </Text>
+            {entry.status === "planned" && (availability === "yellow" || availability === "red") && (
+              <Pressable
+                className="mt-1 flex-row items-center self-start"
+                hitSlop={6}
+                onPress={() => void handleAddMissingToGroceryList(entry)}
+              >
+                <Ionicons name="cart-outline" size={12} color="#2563EB" />
+                <Text className="ml-1 text-xs font-medium text-blue-600">Add missing to grocery list</Text>
+              </Pressable>
+            )}
           </View>
           {kcal != null && (
             <Text className="text-sm font-semibold text-slate-500">{kcal} kcal</Text>
