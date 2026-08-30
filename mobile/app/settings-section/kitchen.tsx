@@ -19,73 +19,7 @@ import { useRouter } from "expo-router";
 import { loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
 import { getUnitSuggestions } from "@/src/services/optionsApi";
 import { DAY_ABBREVS } from "@/src/utils/mealPlan";
-import { UnitConversionsEditor } from "@/src/components/forms";
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">
-      {title}
-    </Text>
-  );
-}
-
-function SettingRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3.5 last:border-b-0">
-      <Text className="text-base text-slate-700">{label}</Text>
-      <View className="ml-4 flex-1 items-end">{children}</View>
-    </View>
-  );
-}
-
-function NumericInput({
-  value,
-  onChange,
-  placeholder,
-  unit,
-}: {
-  value: number | null;
-  onChange: (v: number | null) => void;
-  placeholder: string;
-  unit?: string;
-}) {
-  const [text, setText] = useState(value != null ? String(value) : "");
-
-  useEffect(() => {
-    setText(value != null ? String(value) : "");
-  }, [value]);
-
-  function commit(raw: string) {
-    const trimmed = raw.trim();
-    if (!trimmed) { onChange(null); return; }
-    const n = Number(trimmed);
-    onChange(Number.isFinite(n) && n >= 0 ? n : value);
-  }
-
-  return (
-    <View className="flex-row items-center">
-      <TextInput
-        value={text}
-        onChangeText={setText}
-        onBlur={() => commit(text)}
-        placeholder={placeholder}
-        placeholderTextColor="#94A3B8"
-        keyboardType="numeric"
-        returnKeyType="done"
-        className="min-w-[72px] rounded-xl bg-slate-100 px-3 py-2 text-right text-base font-semibold text-slate-900"
-      />
-      {unit && (
-        <Text className="ml-1.5 text-sm text-slate-400">{unit}</Text>
-      )}
-    </View>
-  );
-}
+import { SettingsSectionHeader as SectionHeader, UnitConversionsEditor } from "@/src/components/forms";
 
 function WeekStartPicker({
   value,
@@ -141,6 +75,9 @@ export default function SettingsScreen() {
     dailySodiumLimit: null,
     weekStartDay: 1,
     unitConversions: [],
+    startingWeight: null,
+    startingWeightDate: null,
+    goalWeight: null,
   });
 
   const [units, setUnits] = useState<string[]>([]);
@@ -246,68 +183,6 @@ export default function SettingsScreen() {
             onChange={(conversions) => patch({ unitConversions: conversions })}
             unitOptions={units}
           />
-
-          {/* ── Daily nutrition goals ── */}
-          <SectionHeader title="Daily Nutrition Goals" />
-          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <SettingRow label="Calories">
-              <NumericInput
-                value={settings.dailyCalorieLimit}
-                onChange={v => patch({ dailyCalorieLimit: v })}
-                placeholder="2000"
-                unit="kcal"
-              />
-            </SettingRow>
-            <SettingRow label="Protein">
-              <NumericInput
-                value={settings.dailyProteinLimit}
-                onChange={v => patch({ dailyProteinLimit: v })}
-                placeholder="—"
-                unit="g"
-              />
-            </SettingRow>
-            <SettingRow label="Carbohydrates">
-              <NumericInput
-                value={settings.dailyCarbsLimit}
-                onChange={v => patch({ dailyCarbsLimit: v })}
-                placeholder="—"
-                unit="g"
-              />
-            </SettingRow>
-            <SettingRow label="Fats">
-              <NumericInput
-                value={settings.dailyFatsLimit}
-                onChange={v => patch({ dailyFatsLimit: v })}
-                placeholder="—"
-                unit="g"
-              />
-            </SettingRow>
-            <SettingRow label="Fiber">
-              <NumericInput
-                value={settings.dailyFiberLimit}
-                onChange={v => patch({ dailyFiberLimit: v })}
-                placeholder="—"
-                unit="g"
-              />
-            </SettingRow>
-            <SettingRow label="Sodium">
-              <NumericInput
-                value={settings.dailySodiumLimit}
-                onChange={v => patch({ dailySodiumLimit: v })}
-                placeholder="—"
-                unit="mg"
-              />
-            </SettingRow>
-          </View>
-
-          {settings.dailyCalorieLimit != null && (
-            <View className="mt-3 flex-row items-center rounded-2xl bg-blue-50 px-4 py-3">
-              <Ionicons name="flame-outline" size={18} color="#2563EB" />
-              <Text className="ml-2 text-sm text-blue-700">
-                Daily target: <Text className="font-bold">{settings.dailyCalorieLimit} kcal</Text>
-              </Text>
-            </View>
-          )}
 
           {/* ── Manage lists ── */}
           <SectionHeader title="Lists" />

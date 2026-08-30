@@ -60,6 +60,16 @@ const SECTIONS: Section[] = [
     iconBg: "#F8FAFC",
     active: false,
   },
+  {
+    id: "settings",
+    name: "Settings",
+    description: "Preferences for every section",
+    icon: "settings-outline",
+    iconColor: "#7C3AED",
+    iconBg: "#F5F3FF",
+    active: true,
+    route: "/settings-section/kitchen",
+  },
 ];
 
 export default function HomeScreen() {

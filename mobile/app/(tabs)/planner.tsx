@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 
-import { getMeals, type Meal, type MealRecipeRef } from "@/src/services/mealApi";
+import { getMeals, type Meal } from "@/src/services/mealApi";
 import { addRecipeScore, getRecipeById, getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
@@ -36,7 +36,9 @@ import {
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { RateAndConfirmModal } from "@/src/components/planner/RateAndConfirmModal";
 import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
+import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
 import {
+  computeDayNutrition,
   friendlyDayLabel,
   getEntryAvailability,
   getIngredientKcal,
@@ -46,13 +48,11 @@ import {
   getWeekDates,
   parseLocalDate,
   scaleIngredientNutrition,
-  scaleRecipeNutrition,
   SLOT_MAP,
   SLOTS,
   todayStr,
   toDateStr,
   weekRangeLabel,
-  type ScaledNutrition,
 } from "@/src/utils/mealPlan";
 import {
   buildIngredientRequirements,
@@ -62,104 +62,13 @@ import {
   type DeductionInstruction,
   type IngredientRequirement,
 } from "@/src/utils/pantryDeduction";
-import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import { getIngredientConversions } from "@/src/utils/unitConversion";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
 const DAY_ABBREVS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-// ── Nutrition helper ──────────────────────────────────────────────────────────
-
-interface DayNutrition {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fats: number;
-  fiber: number;
-  sodium: number;
-}
-
-function addScaled(totals: { calories: number; protein: number; carbs: number; fats: number; fiber: number; sodium: number }, n: ScaledNutrition) {
-  if (n.calories) totals.calories += n.calories;
-  if (n.protein)  totals.protein  += n.protein;
-  if (n.carbs)    totals.carbs    += n.carbs;
-  if (n.fats)     totals.fats     += n.fats;
-  if (n.fiber)    totals.fiber    += n.fiber;
-  if (n.sodium)   totals.sodium   += n.sodium;
-}
-
-function computeDayNutrition(entries: MealPlanEntry[], conversions: CustomUnitConversion[] = []): DayNutrition {
-  const totals = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
-  for (const entry of entries) {
-    if (entry.recipe) {
-      addScaled(totals, scaleRecipeNutrition(entry.recipe, entry.recipeServings ?? 1));
-      continue;
-    }
-    if (entry.ingredient) {
-      addScaled(totals, scaleIngredientNutrition(
-        entry.ingredient,
-        entry.ingredientQuantity ?? 0,
-        entry.ingredientUnit,
-        getIngredientConversions(entry.ingredient, conversions),
-      ));
-      continue;
-    }
-    if (entry.restaurantMeal) {
-      for (const dish of entry.restaurantMeal.dishes ?? []) {
-        const n = dish.nutrition;
-        if (!n) continue;
-        addScaled(totals, {
-          calories: n.calories ?? null,
-          protein: n.protein ?? null,
-          carbs: n.carbs ?? null,
-          fats: n.fats ?? null,
-          fiber: n.fiber ?? null,
-          sodium: n.sodium ?? null,
-        });
-      }
-      continue;
-    }
-    for (const course of entry.meal?.courses ?? []) {
-      const recipe = course.recipe;
-      if (!recipe || typeof recipe === "string") continue;
-      const n = (recipe as MealRecipeRef).nutrition;
-      if (!n) continue;
-      const s = course.servings ?? 1;
-      addScaled(totals, {
-        calories: n.calories != null ? n.calories * s : null,
-        protein:  n.protein  != null ? n.protein  * s : null,
-        carbs:    n.carbs    != null ? n.carbs    * s : null,
-        fats:     n.fats     != null ? n.fats     * s : null,
-        fiber:    n.fiber    != null ? n.fiber    * s : null,
-        sodium:   n.sodium   != null ? n.sodium   * s : null,
-      });
-    }
-  }
-  const { calories, protein, carbs, fats, fiber, sodium } = totals;
-  return {
-    calories: Math.round(calories),
-    protein:  Math.round(protein  * 10) / 10,
-    carbs:    Math.round(carbs    * 10) / 10,
-    fats:     Math.round(fats     * 10) / 10,
-    fiber:    Math.round(fiber    * 10) / 10,
-    sodium:   Math.round(sodium),
-  };
-}
-
-function pct(value: number, limit: number | null): number {
-  if (!limit || limit <= 0) return 0;
-  return Math.min(value / limit, 1);
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 // ── Date strip config ─────────────────────────────────────────────────────────
 
@@ -801,143 +710,6 @@ export default function HomeScreen() {
     );
   }
 
-  // ── Render a nutrition summary card (shared by the daily & weekly pages) ──
-  // Shows confirmed totals as the solid/main figure and bar segment, with
-  // planned totals appended as a lighter "+N" figure and a lighter bar
-  // segment continuing on from the confirmed portion.
-  function renderNutritionCard(opts: {
-    title: string;
-    subtitle?: string;
-    confirmed: DayNutrition;
-    planned: DayNutrition;
-    limits: {
-      calories: number | null;
-      protein: number | null;
-      carbs: number | null;
-      fats: number | null;
-      fiber: number | null;
-      sodium: number | null;
-    };
-  }) {
-    const { title, subtitle, confirmed, planned, limits } = opts;
-
-    const confirmedCalPct = pct(confirmed.calories, limits.calories);
-    const totalCalPct = pct(confirmed.calories + planned.calories, limits.calories);
-    const plannedCalSegment = Math.max(totalCalPct - confirmedCalPct, 0);
-    const calOverLimit = confirmedCalPct >= 1;
-
-    const macros = [
-      { label: "Protein", confirmedValue: confirmed.protein, plannedValue: planned.protein, unit: "g", limit: limits.protein, bar: "#3B82F6" },
-      { label: "Carbs",   confirmedValue: confirmed.carbs,   plannedValue: planned.carbs,   unit: "g", limit: limits.carbs,   bar: "#F59E0B" },
-      { label: "Fats",    confirmedValue: confirmed.fats,    plannedValue: planned.fats,    unit: "g", limit: limits.fats,    bar: "#F43F5E" },
-      { label: "Fiber",   confirmedValue: confirmed.fiber,   plannedValue: planned.fiber,   unit: "g", limit: limits.fiber,   bar: "#10B981" },
-    ] as const;
-
-    const hasSodiumData = confirmed.sodium > 0 || planned.sodium > 0 || limits.sodium != null;
-
-    return (
-      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        {/* Calories row */}
-        <View className="border-b border-slate-100 px-5 pb-4 pt-4">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-xs font-bold uppercase tracking-widest text-slate-400">
-              {title}
-            </Text>
-            {subtitle && (
-              <Text className="text-xs font-semibold text-slate-400">{subtitle}</Text>
-            )}
-          </View>
-          <View className="mt-2 flex-row items-end justify-between">
-            <View className="flex-row items-end">
-              <Text className="text-4xl font-bold text-slate-900">
-                {confirmed.calories}
-              </Text>
-              {planned.calories > 0 && (
-                <Text className="mb-1 ml-1 text-lg font-semibold text-slate-300">
-                  +{planned.calories}
-                </Text>
-              )}
-              <Text className="mb-1 ml-1.5 text-base text-slate-400">kcal</Text>
-            </View>
-            {limits.calories != null && (
-              <Text className="mb-1 text-sm text-slate-400">
-                / {limits.calories} kcal
-              </Text>
-            )}
-          </View>
-          {limits.calories != null && (
-            <View className="mt-2 h-2 w-full flex-row overflow-hidden rounded-full bg-slate-100">
-              <View style={{ width: `${confirmedCalPct * 100}%`, backgroundColor: calOverLimit ? "#F87171" : "#3B82F6" }} />
-              <View style={{ width: `${plannedCalSegment * 100}%`, backgroundColor: hexToRgba(calOverLimit ? "#F87171" : "#3B82F6", 0.35) }} />
-            </View>
-          )}
-        </View>
-
-        {/* Macro columns */}
-        <View className={`flex-row px-4 pt-4 ${hasSodiumData ? "border-b border-slate-100 pb-4" : "pb-4"}`}>
-          {macros.map(({ label, confirmedValue, plannedValue, unit, limit, bar }) => {
-            const confirmedF = pct(confirmedValue, limit);
-            const totalF = pct(confirmedValue + plannedValue, limit);
-            const plannedSegment = Math.max(totalF - confirmedF, 0);
-            const over = confirmedF >= 1;
-            return (
-              <View key={label} className="flex-1 items-center px-1">
-                <Text className="text-sm font-bold text-slate-800">
-                  {confirmedValue}{unit}
-                  {plannedValue > 0 && (
-                    <Text className="text-slate-300"> +{plannedValue}{unit}</Text>
-                  )}
-                </Text>
-                <Text className="mt-0.5 text-xs text-slate-400">{label}</Text>
-                {limit != null && (
-                  <View className="mt-2 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100">
-                    <View style={{ height: 6, width: `${confirmedF * 100}%`, backgroundColor: over ? "#F87171" : bar }} />
-                    <View style={{ height: 6, width: `${plannedSegment * 100}%`, backgroundColor: hexToRgba(over ? "#F87171" : bar, 0.35) }} />
-                  </View>
-                )}
-                {limit != null && (
-                  <Text className="mt-0.5 text-[10px] text-slate-300">
-                    /{limit}{unit}
-                  </Text>
-                )}
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Sodium row */}
-        {hasSodiumData && (
-          <View className="px-5 pb-4 pt-3">
-            {(() => {
-              const confirmedF = pct(confirmed.sodium, limits.sodium);
-              const totalF = pct(confirmed.sodium + planned.sodium, limits.sodium);
-              const plannedSegment = Math.max(totalF - confirmedF, 0);
-              const over = confirmedF >= 1;
-              return (
-                <>
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-xs font-semibold text-slate-500">Sodium</Text>
-                    <Text className="text-xs text-slate-400">
-                      {confirmed.sodium}
-                      {planned.sodium > 0 && ` +${planned.sodium}`} mg
-                      {limits.sodium != null && ` / ${limits.sodium} mg`}
-                    </Text>
-                  </View>
-                  {limits.sodium != null && (
-                    <View className="mt-1.5 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100">
-                      <View style={{ height: 6, width: `${confirmedF * 100}%`, backgroundColor: over ? "#F87171" : "#A855F7" }} />
-                      <View style={{ height: 6, width: `${plannedSegment * 100}%`, backgroundColor: hexToRgba(over ? "#F87171" : "#A855F7", 0.35) }} />
-                    </View>
-                  )}
-                </>
-              );
-            })()}
-          </View>
-        )}
-      </View>
-    );
-  }
-
   // ── Expanded info overlay (meal / recipe / ingredient) ──
   function infoRow(label: string, value: string | number | null | undefined, unit = "") {
     if (value == null || value === "") return null;
@@ -1289,35 +1061,35 @@ export default function HomeScreen() {
                 style={{ width: windowWidth - 32 }}
               >
                 <View style={{ width: windowWidth - 32 }}>
-                  {renderNutritionCard({
-                    title: "Daily nutrition",
-                    confirmed: confirmedNutrition,
-                    planned: plannedNutrition,
-                    limits: {
+                  <NutritionSummaryCard
+                    title="Daily nutrition"
+                    confirmed={confirmedNutrition}
+                    planned={plannedNutrition}
+                    limits={{
                       calories: appSettings?.dailyCalorieLimit ?? null,
                       protein:  appSettings?.dailyProteinLimit ?? null,
                       carbs:    appSettings?.dailyCarbsLimit   ?? null,
                       fats:     appSettings?.dailyFatsLimit    ?? null,
                       fiber:    appSettings?.dailyFiberLimit   ?? null,
                       sodium:   appSettings?.dailySodiumLimit  ?? null,
-                    },
-                  })}
+                    }}
+                  />
                 </View>
                 <View style={{ width: windowWidth - 32 }}>
-                  {renderNutritionCard({
-                    title: "Weekly nutrition",
-                    subtitle: weekRangeLabel(weekDates),
-                    confirmed: weeklyConfirmedNutrition,
-                    planned: weeklyPlannedNutrition,
-                    limits: {
+                  <NutritionSummaryCard
+                    title="Weekly nutrition"
+                    subtitle={weekRangeLabel(weekDates)}
+                    confirmed={weeklyConfirmedNutrition}
+                    planned={weeklyPlannedNutrition}
+                    limits={{
                       calories: appSettings?.dailyCalorieLimit != null ? appSettings.dailyCalorieLimit * 7 : null,
                       protein:  appSettings?.dailyProteinLimit != null ? appSettings.dailyProteinLimit * 7 : null,
                       carbs:    appSettings?.dailyCarbsLimit   != null ? appSettings.dailyCarbsLimit   * 7 : null,
                       fats:     appSettings?.dailyFatsLimit    != null ? appSettings.dailyFatsLimit    * 7 : null,
                       fiber:    appSettings?.dailyFiberLimit   != null ? appSettings.dailyFiberLimit   * 7 : null,
                       sodium:   appSettings?.dailySodiumLimit  != null ? appSettings.dailySodiumLimit  * 7 : null,
-                    },
-                  })}
+                    }}
+                  />
                 </View>
               </ScrollView>
 

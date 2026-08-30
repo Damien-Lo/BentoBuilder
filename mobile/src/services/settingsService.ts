@@ -13,6 +13,11 @@ export interface AppSettings {
   weekStartDay: number;
   // Custom conversions on top of the app's built-in mass/volume table.
   unitConversions: CustomUnitConversion[];
+  // Weight goal tracking — a single starting point and a target, not a full
+  // log of intermediate weigh-ins.
+  startingWeight: number | null;
+  startingWeightDate: string | null;
+  goalWeight: number | null;
 }
 
 const DEFAULTS: AppSettings = {
@@ -25,6 +30,9 @@ const DEFAULTS: AppSettings = {
   dailySodiumLimit: null,
   weekStartDay: 1,
   unitConversions: [],
+  startingWeight: null,
+  startingWeightDate: null,
+  goalWeight: null,
 };
 
 async function parseResponse<T>(res: Response): Promise<T> {
@@ -49,6 +57,9 @@ export async function loadSettings(): Promise<AppSettings> {
       dailySodiumLimit:  typeof d.dailySodiumLimit  === "number" ? d.dailySodiumLimit  : DEFAULTS.dailySodiumLimit,
       weekStartDay:      typeof d.weekStartDay      === "number" ? d.weekStartDay      : DEFAULTS.weekStartDay,
       unitConversions:   Array.isArray(d.unitConversions)        ? (d.unitConversions as CustomUnitConversion[]) : DEFAULTS.unitConversions,
+      startingWeight:     typeof d.startingWeight     === "number" ? d.startingWeight     : DEFAULTS.startingWeight,
+      startingWeightDate: typeof d.startingWeightDate === "string" ? d.startingWeightDate : DEFAULTS.startingWeightDate,
+      goalWeight:         typeof d.goalWeight         === "number" ? d.goalWeight         : DEFAULTS.goalWeight,
     };
   } catch {
     return { ...DEFAULTS };

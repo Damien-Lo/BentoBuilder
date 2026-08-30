@@ -18,6 +18,7 @@ import restaurantMealRoutes from "./routes/RestaurantMealRoutes.js";
 import userProfileRoutes from "./routes/UserProfileRoutes.js";
 import groceryListRoutes from "./routes/GroceryListRoutes.js";
 import receiptRoutes from "./routes/ReceiptRoutes.js";
+import weightEntryRoutes from "./routes/WeightEntryRoutes.js";
 
 
 
@@ -65,6 +66,7 @@ app.use("/api/restaurant-meals", restaurantMealRoutes);
 app.use("/api/profile", userProfileRoutes);
 app.use("/api/grocery-list", groceryListRoutes);
 app.use("/api/receipts", receiptRoutes);
+app.use("/api/weight-entries", weightEntryRoutes);
 
 
 app.use((req, res) => {

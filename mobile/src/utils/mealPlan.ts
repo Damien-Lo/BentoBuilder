@@ -195,6 +195,99 @@ export function getIngredientKcal(
   return cal == null ? null : Math.round(cal);
 }
 
+// ── Day-level nutrition totals (shared by the planner and Health pages) ────────
+
+export interface DayNutrition {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+  fiber: number;
+  sodium: number;
+}
+
+function addScaled(totals: DayNutrition, n: ScaledNutrition) {
+  if (n.calories) totals.calories += n.calories;
+  if (n.protein)  totals.protein  += n.protein;
+  if (n.carbs)    totals.carbs    += n.carbs;
+  if (n.fats)     totals.fats     += n.fats;
+  if (n.fiber)    totals.fiber    += n.fiber;
+  if (n.sodium)   totals.sodium   += n.sodium;
+}
+
+export function computeDayNutrition(entries: MealPlanEntry[], conversions: CustomUnitConversion[] = []): DayNutrition {
+  const totals: DayNutrition = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
+  for (const entry of entries) {
+    if (entry.recipe) {
+      addScaled(totals, scaleRecipeNutrition(entry.recipe, entry.recipeServings ?? 1));
+      continue;
+    }
+    if (entry.ingredient) {
+      addScaled(totals, scaleIngredientNutrition(
+        entry.ingredient,
+        entry.ingredientQuantity ?? 0,
+        entry.ingredientUnit,
+        getIngredientConversions(entry.ingredient, conversions),
+      ));
+      continue;
+    }
+    if (entry.restaurantMeal) {
+      for (const dish of entry.restaurantMeal.dishes ?? []) {
+        const n = dish.nutrition;
+        if (!n) continue;
+        addScaled(totals, {
+          calories: n.calories ?? null,
+          protein: n.protein ?? null,
+          carbs: n.carbs ?? null,
+          fats: n.fats ?? null,
+          fiber: n.fiber ?? null,
+          sodium: n.sodium ?? null,
+        });
+      }
+      continue;
+    }
+    for (const course of entry.meal?.courses ?? []) {
+      const recipe = course.recipe;
+      if (!recipe || typeof recipe === "string") continue;
+      const n = (recipe as MealRecipeRef).nutrition;
+      if (!n) continue;
+      const s = course.servings ?? 1;
+      addScaled(totals, {
+        calories: n.calories != null ? n.calories * s : null,
+        protein:  n.protein  != null ? n.protein  * s : null,
+        carbs:    n.carbs    != null ? n.carbs    * s : null,
+        fats:     n.fats     != null ? n.fats     * s : null,
+        fiber:    n.fiber    != null ? n.fiber    * s : null,
+        sodium:   n.sodium   != null ? n.sodium   * s : null,
+      });
+    }
+  }
+  const { calories, protein, carbs, fats, fiber, sodium } = totals;
+  return {
+    calories: Math.round(calories),
+    protein:  Math.round(protein  * 10) / 10,
+    carbs:    Math.round(carbs    * 10) / 10,
+    fats:     Math.round(fats     * 10) / 10,
+    fiber:    Math.round(fiber    * 10) / 10,
+    sodium:   Math.round(sodium),
+  };
+}
+
+// Fraction (0–1, clamped) of `limit` that `value` represents — 0 when there's
+// no limit set, so an unset goal never renders a bar as "full."
+export function pct(value: number, limit: number | null): number {
+  if (!limit || limit <= 0) return 0;
+  return Math.min(value / limit, 1);
+}
+
+export function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // ── Pantry availability (shared "can this be made from what's in stock"
 // check — same worst-ingredient-wins logic as the recipe list's dot and the
 // recipe detail page's per-ingredient bars, applied here to a meal-plan
