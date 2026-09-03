@@ -2,19 +2,13 @@
 
 Working notes on what's in progress and what's deferred. Update this as things get done or new things come up — it's meant to be read, not just written.
 
-## In progress: MyFitnessPal diary import (Aug 10–30)
+## Done: MyFitnessPal diary import (Aug 10–30)
 
-Going through the two-week diary one item/cluster at a time, adding whatever's missing as ingredients, recipes, or restaurant-meal entries. Currently on branch `ShoppingMode`.
+Went through the two-week diary item/cluster at a time, adding whatever was missing as ingredients, recipes, or restaurant-meal entries, on branch `ShoppingMode`. All items resolved (added or explicitly skipped) as of Sept 2.
 
-**Still unprocessed:**
-- Kite Hill Mushroom & Ricotta (Aug 25) — *next up*
-- Beef Tallow, Parmissimo Parmesan, Realgood Burrito, Wasabi (Aug 25)
-- Squid Sashimi — separate occurrences on Aug 25 (97g) and Aug 27 (45g), not part of the skipped Aug 19/22 sashimi platters
-- Aug 27 cluster: California sushi roll (4pc), Kantaro – Hamachi Nigiri, Aladdin – Grilled Salmon Fillets, Greenfield Beef Brisket Premium Shabu Shabu
-- Hong Kong takeout cluster (Aug 23–24): Foong's Kitchen Crispy Pork Belly, TruGourmet BBQ Pork Belly, Hong Kong Roast Goose, Taste of Hong Kong Beef Brisket, Wonton Noodles, "Soup, hot and sour, Chinese restaurant" (needs a restaurant name), Gejang (Korean spicy raw crab)
-- Aug 28: Solenzi Calabrian Chili Pesto, Goya White Cannellini Beans, Octopus (grilled), The Hustle Kitchen Tagliatelle Bolognese
+Last items added: Kite Hill Mushroom & Ricotta Ravioli, Real Good Foods Chicken & Pepper Jack Burrito, Squid Sashimi (generic), Pesto (generic, store-bought, Condiments & Sauces).
 
-**Explicitly skipped** (told to forget these, not oversights): Aug 22 sushi lunch cluster (generic Tuna nigiri, Japanese Sweet Shrimp Nigiri Sushi, Wasabi Sushi & Bento Yellow Tail Nigiri, Shushi Salmon Nigiri, Arashi Sushi House Hamachi Sashimi + that day's salmon/tuna sashimi), Aug 19 sashimi dinner cluster (Squid/Scallop/mixed sashimi + that day's salmon/tuna sashimi).
+**Explicitly skipped** (told to forget these, not oversights): Aug 22 sushi lunch cluster (generic Tuna nigiri, Japanese Sweet Shrimp Nigiri Sushi, Wasabi Sushi & Bento Yellow Tail Nigiri, Shushi Salmon Nigiri, Arashi Sushi House Hamachi Sashimi + that day's salmon/tuna sashimi), Aug 19 sashimi dinner cluster (Squid/Scallop/mixed sashimi + that day's salmon/tuna sashimi), Aug 25 Wasabi condiment entry (negligible, not worth tracking), Aug 27 cluster (California sushi roll 4pc, Kantaro Hamachi Nigiri, Aladdin Grilled Salmon Fillets, Greenfield Beef Brisket Premium Shabu Shabu), Aug 23–24 Hong Kong takeout cluster (Foong's Kitchen Crispy Pork Belly, TruGourmet BBQ Pork Belly, Hong Kong Roast Goose, Taste of Hong Kong Beef Brisket, Wonton Noodles, hot & sour soup, Gejang), Aug 28 Goya White Cannellini Beans, Aug 28 grilled Octopus, Aug 28 The Hustle Kitchen Tagliatelle Bolognese.
 
 ## Scoped but deferred features
 
