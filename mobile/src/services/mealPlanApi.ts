@@ -31,6 +31,11 @@ export interface MealPlanEntry {
 
   // A restaurant/eating-out visit — no ingredients, no pantry deduction.
   restaurantMeal?: RestaurantMeal;
+  // Which dish(es) from restaurantMeal.dishes were actually eaten — a
+  // restaurant can have several independent dishes, so nutrition is summed
+  // from just these, not the whole menu. Ids reference dish subdocument
+  // _ids within restaurantMeal.dishes.
+  restaurantDishIds?: string[];
 
   // Exactly what confirming this entry deducted from the pantry — replayed
   // in reverse on unconfirm/delete. Empty while planned.
@@ -55,6 +60,7 @@ export interface CreateMealPlanEntryInput {
   ingredientUnit?: string;
 
   restaurantMeal?: string; // restaurant meal _id
+  restaurantDishIds?: string[]; // which of restaurantMeal's dishes were eaten
 
   notes?: string;
 }
@@ -69,6 +75,25 @@ export async function getMealPlanForDate(date: string): Promise<MealPlanEntry[]>
   const res = await fetch(`${API_BASE_URL}/api/meal-plan?date=${encodeURIComponent(date)}`);
   const result = await parseResponse<{ success: boolean; data: MealPlanEntry[] }>(res);
   return Array.isArray(result.data) ? result.data : [];
+}
+
+// For each of the four plannable types, a map of id -> the most recent
+// "YYYY-MM-DD" date it was used in the meal plan (non-archived entries
+// only) — computed fresh from MealPlanEntry on every call, not cached on
+// the referenced document, so it can never go stale after a delete/archive.
+export interface LastUsedMap {
+  meal: Record<string, string>;
+  recipe: Record<string, string>;
+  ingredient: Record<string, string>;
+  restaurantMeal: Record<string, string>;
+}
+
+const EMPTY_LAST_USED: LastUsedMap = { meal: {}, recipe: {}, ingredient: {}, restaurantMeal: {} };
+
+export async function getLastUsedMap(): Promise<LastUsedMap> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/last-used`);
+  const result = await parseResponse<{ success: boolean; data: LastUsedMap }>(res);
+  return result.data ?? EMPTY_LAST_USED;
 }
 
 export async function createMealPlanEntry(input: CreateMealPlanEntryInput): Promise<MealPlanEntry> {

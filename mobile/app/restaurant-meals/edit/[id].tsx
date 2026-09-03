@@ -17,6 +17,7 @@ import {
   CreatableMultiTagDropdown,
   FieldLabel,
   FormInput,
+  PriceInput,
   SectionTitle,
 } from "@/src/components/forms";
 
@@ -32,6 +33,7 @@ type DishRow = {
   key: string;
   name: string;
   notes: string;
+  price: string;
   calories: string;
   protein: string;
   carbs: string;
@@ -45,6 +47,7 @@ function newDishRow(): DishRow {
     key: `dish-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: "",
     notes: "",
+    price: "",
     calories: "",
     protein: "",
     carbs: "",
@@ -107,6 +110,7 @@ export default function EditRestaurantMealPage() {
                 key: d._id,
                 name: d.name,
                 notes: d.notes ?? "",
+                price: numToText(d.price),
                 calories: numToText(d.nutrition?.calories),
                 protein: numToText(d.nutrition?.protein),
                 carbs: numToText(d.nutrition?.carbs),
@@ -178,6 +182,7 @@ export default function EditRestaurantMealPage() {
       const dishInputs: DishInput[] = trimmedDishes.map((d) => ({
         name: d.name,
         notes: d.notes.trim() || undefined,
+        price: parseOptionalNumber(d.price),
         nutrition: {
           calories: parseOptionalNumber(d.calories),
           protein: parseOptionalNumber(d.protein),
@@ -299,6 +304,12 @@ export default function EditRestaurantMealPage() {
                 value={dish.notes}
                 placeholder="e.g. Extra hot salsa, no rice…"
                 onChangeText={(text) => updateDish(dish.key, { notes: text })}
+              />
+
+              <FieldLabel text="Price" />
+              <PriceInput
+                value={dish.price}
+                onChangeText={(text) => updateDish(dish.key, { price: text })}
               />
 
               <FieldLabel text="Nutrition (optional estimate)" />

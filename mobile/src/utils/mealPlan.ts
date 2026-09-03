@@ -105,11 +105,17 @@ export function getMealKcal(meal: Meal): number | null {
 
 // A restaurant visit has no "servings" to scale — each dish's manual
 // nutrition estimate is summed flat, as eaten.
-export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal): number | null {
-  if (!restaurantMeal.dishes?.length) return null;
+// dishIds filters to just those dishes (e.g. what a specific meal-plan
+// entry actually logged) — omitted or empty means "every dish," used when
+// browsing a restaurant's full menu before picking anything.
+export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal, dishIds?: string[]): number | null {
+  const dishes = dishIds?.length
+    ? restaurantMeal.dishes?.filter(d => dishIds.includes(d._id))
+    : restaurantMeal.dishes;
+  if (!dishes?.length) return null;
   let total = 0;
   let hasAny = false;
-  for (const dish of restaurantMeal.dishes) {
+  for (const dish of dishes) {
     const cal = dish.nutrition?.calories;
     if (cal != null) {
       total += cal;

@@ -31,7 +31,7 @@ const SECTIONS: Section[] = [
     iconColor: "#2563EB",
     iconBg: "#EFF6FF",
     active: true,
-    route: "/RecipesMainPage",
+    route: "/planner",
   },
   {
     id: "scheduling",
@@ -59,6 +59,16 @@ const SECTIONS: Section[] = [
     iconColor: "#94A3B8",
     iconBg: "#F8FAFC",
     active: false,
+  },
+  {
+    id: "developer",
+    name: "Developer",
+    description: "Data quality & fixable items",
+    icon: "construct-outline",
+    iconColor: "#D97706",
+    iconBg: "#FFFBEB",
+    active: true,
+    route: "/developer/home",
   },
 ];
 
@@ -95,7 +105,11 @@ export default function HomeScreen() {
                 key={section.id}
                 onPress={() => {
                   if (section.active && section.route) {
-                    router.push(section.route as Parameters<typeof router.push>[0]);
+                    // navigate (not push) — Kitchen's tab navigator persists
+                    // whichever tab was last focused, so a plain push can
+                    // resurface a stale tab (e.g. Planner) instead of
+                    // re-targeting this section's actual landing screen.
+                    router.navigate(section.route as Parameters<typeof router.navigate>[0]);
                   }
                 }}
                 disabled={!section.active}

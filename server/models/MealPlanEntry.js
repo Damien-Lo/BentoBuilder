@@ -27,6 +27,15 @@ const mealPlanEntrySchema = new mongoose.Schema(
 
     // A restaurant/eating-out visit — no ingredients, no pantry deduction.
     restaurantMeal:     { type: mongoose.Schema.Types.ObjectId, ref: "RestaurantMeal" },
+    // Which dish(es) from that restaurant's dish list were actually eaten —
+    // a restaurant can have several independent dishes (e.g. two separate
+    // orders logged under the same visit), and without this, nutrition
+    // calculations would sum every dish on the restaurant's menu instead of
+    // just what this entry represents. IDs reference RestaurantMeal.dishes
+    // subdocuments (not their own collection, so no `ref`/populate here —
+    // the client already has the full dish list from populating
+    // restaurantMeal and just filters it by these ids).
+    restaurantDishIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
 
     // "planned" = tentative, not yet eaten; "confirmed" = logged as actually eaten
     status: {

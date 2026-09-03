@@ -68,6 +68,57 @@ router.get("/", async (req, res) => {
   }
 });
 
+// How far back "last used" looks — sorting priority only cares about
+// recent activity (something planned 3 years ago shouldn't outrank
+// something from last month just because it happens to have a date at
+// all), and bounding the match lets it use the existing `date` index
+// instead of scanning every entry ever created.
+const LAST_USED_WINDOW_DAYS = 180;
+
+function lastUsedCutoff() {
+  const d = new Date();
+  d.setDate(d.getDate() - LAST_USED_WINDOW_DAYS);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * GET /api/meal-plan/last-used
+ * For each of the four plannable types, the most recent date (YYYY-MM-DD)
+ * it was referenced by a non-archived meal-plan entry within the last
+ * LAST_USED_WINDOW_DAYS days — computed fresh from MealPlanEntry every
+ * call rather than cached on the referenced document, so a deleted/
+ * archived entry can never leave a stale "last used" behind. Anything
+ * used only outside the window simply doesn't appear in the map (callers
+ * already treat "no entry" as "sort alphabetically at the end").
+ * Registered before "/:id"-style routes so "last-used" isn't swallowed as
+ * an id.
+ */
+router.get("/last-used", async (req, res) => {
+  try {
+    const cutoff = lastUsedCutoff();
+
+    async function lastUsedByField(field) {
+      const rows = await MealPlanEntry.aggregate([
+        { $match: { date: { $gte: cutoff }, [field]: { $ne: null }, isArchived: false } },
+        { $group: { _id: `$${field}`, lastUsed: { $max: "$date" } } },
+      ]);
+      return Object.fromEntries(rows.map(r => [String(r._id), r.lastUsed]));
+    }
+
+    const [meal, recipe, ingredient, restaurantMeal] = await Promise.all([
+      lastUsedByField("meal"),
+      lastUsedByField("recipe"),
+      lastUsedByField("ingredient"),
+      lastUsedByField("restaurantMeal"),
+    ]);
+
+    return res.status(200).json({ success: true, data: { meal, recipe, ingredient, restaurantMeal } });
+  } catch (error) {
+    console.error("Get last-used meal plan map error:", error);
+    return res.status(500).json({ success: false, message: "Failed to compute last-used data" });
+  }
+});
+
 /**
  * POST /api/meal-plan
  */
