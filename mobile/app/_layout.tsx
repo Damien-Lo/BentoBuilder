@@ -38,6 +38,38 @@ export default function RootLayout() {
           }}
         />
 
+        {/* Settings section — its own tab group, one tab per app area */}
+        <Stack.Screen
+          name="settings-section"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        {/* Goals — starting/goal weight targets */}
+        <Stack.Screen
+          name="health/goals"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        {/* Weight & Measurements — weigh-in log and progress */}
+        <Stack.Screen
+          name="health/weight"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        {/* My Weekly Report — weekly nutrition & weight summary */}
+        <Stack.Screen
+          name="health/weekly-report"
+          options={{
+            headerShown: false,
+          }}
+        />
+
         {/* Storage location detail — lists all pantry items in that location */}
         <Stack.Screen
           name="pantry/location/[id]"

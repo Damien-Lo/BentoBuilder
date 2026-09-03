@@ -12,6 +12,12 @@ const userProfileSchema = new mongoose.Schema(
     // 0 = Sunday … 6 = Saturday, matching JS Date#getDay()
     weekStartDay:      { type: Number,  min: 0, max: 6, default: 1 },
 
+    // Weight goal tracking — a single starting point and a target, not a
+    // full log (there's no history of intermediate weigh-ins yet).
+    startingWeight:     { type: Number, default: null },
+    startingWeightDate: { type: String, default: null }, // YYYY-MM-DD
+    goalWeight:         { type: Number, default: null },
+
     // User-defined unit conversions on top of the app's built-in mass/volume
     // table, e.g. { unit: "packet", baseUnit: "g", factor: 340 } means
     // 1 packet = 340 g.

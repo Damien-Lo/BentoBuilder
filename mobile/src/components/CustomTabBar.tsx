@@ -24,7 +24,9 @@ const INACTIVE = "#94A3B8";
 // 5 options in a 120° arc centred on straight-up (0° = up, ±60° = sides)
 const ANGLES = [-60, -30, 0, 30, 60] as const;
 
-const SUB_OPTIONS = [
+// Default radial quick-action menu — universal across every tab bar in the
+// app (Kitchen, Settings, and any future section), not tied to Kitchen.
+const DEFAULT_SUB_OPTIONS = [
   { id: "scan",     label: "Scan",     icon: "scan-outline"         as const },
   { id: "timer",    label: "Timer",    icon: "timer-outline"        as const },
   { id: "notes",    label: "Notes",    icon: "create-outline"       as const },
@@ -32,14 +34,33 @@ const SUB_OPTIONS = [
   { id: "share",    label: "Share",    icon: "share-social-outline" as const },
 ];
 
+interface SubOption {
+  id: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}
+
+interface CustomTabBarProps extends BottomTabBarProps {
+  // Radial quick-action menu shown when the centre FAB is tapped. Defaults
+  // to the same universal menu on every screen; pass an empty array to make
+  // the FAB a plain single-tap "go home" button instead.
+  subOptions?: SubOption[];
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+export function CustomTabBar({
+  state,
+  descriptors,
+  navigation,
+  subOptions = DEFAULT_SUB_OPTIONS,
+}: CustomTabBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width: sw, height: sh } = useWindowDimensions();
   const [isOpen, setIsOpen] = useState(false);
   const anim = useRef(new Animated.Value(0)).current;
+  const hasSubOptions = subOptions.length > 0;
 
   // FAB is vertically centred within the tab row.
   // These are its screen-absolute centre coordinates, used to place the
@@ -69,11 +90,12 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   }
 
   function handleFab() {
+    if (!hasSubOptions) { router.push("/"); return; }
     if (isOpen) closeMenu(() => router.push("/"));
     else openMenu();
   }
 
-  function handleSubOption(opt: (typeof SUB_OPTIONS)[number]) {
+  function handleSubOption(opt: SubOption) {
     closeMenu(() =>
       router.push({ pathname: "/coming-soon", params: { feature: opt.label, icon: opt.icon } }),
     );
@@ -138,6 +160,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   return (
     <>
       {/* ── Backdrop + sub-options (Modal = full-screen touch capture) ───── */}
+      {hasSubOptions && (
       <Modal
         visible={isOpen}
         transparent
@@ -157,7 +180,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
         </Animated.View>
 
         {/* Sub-option buttons, anchored at FAB centre */}
-        {SUB_OPTIONS.map((opt, i) => {
+        {subOptions.map((opt, i) => {
           const rad  = (ANGLES[i] * Math.PI) / 180;
           const endX = Math.sin(rad) * RADIUS;
           const endY = Math.cos(rad) * RADIUS; // positive = up on screen
@@ -240,6 +263,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
           <Ionicons name={fabIcon} size={21} color="white" />
         </Pressable>
       </Modal>
+      )}
 
       {/* ── Tab bar ──────────────────────────────────────────────────────── */}
       <View
