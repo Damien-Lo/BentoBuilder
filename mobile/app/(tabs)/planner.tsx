@@ -1096,44 +1096,8 @@ export default function HomeScreen() {
           </View>
         ) : (
           <>
-            {/* Slots */}
-            {SLOTS.map(slot => {
-              const slotEntries = entriesBySlot.get(slot.id) ?? [];
-              return (
-                <View key={slot.id} className="mb-5">
-                  {/* Slot header */}
-                  <View className="mb-3 flex-row items-center justify-between">
-                    <View className="flex-row items-center gap-2">
-                      <Ionicons name={slot.icon} size={18} color={slot.iconColor} />
-                      <Text className="text-sm font-bold text-slate-700">{slot.label}</Text>
-                      <Text className="text-xs text-slate-400">{slot.time}</Text>
-                    </View>
-                    <Pressable
-                      onPress={() => openAdd(slot.id)}
-                      className="flex-row items-center rounded-xl bg-slate-100 px-3 py-1.5 active:bg-slate-200"
-                    >
-                      <Ionicons name="add" size={14} color="#2563EB" />
-                      <Text className="ml-1 text-xs font-semibold text-blue-600">Add</Text>
-                    </Pressable>
-                  </View>
-
-                  {/* Entries */}
-                  {slotEntries.length > 0 ? (
-                    slotEntries.map(renderEntry)
-                  ) : (
-                    <Pressable
-                      onPress={() => openAdd(slot.id)}
-                      className="items-center rounded-2xl border border-dashed border-slate-200 py-5 active:bg-slate-50"
-                    >
-                      <Text className="text-sm text-slate-400">No {slot.label.toLowerCase()} planned</Text>
-                    </Pressable>
-                  )}
-                </View>
-              );
-            })}
-
             {/* Daily / weekly nutrition — swipe to switch */}
-            <View className="mt-2">
+            <View className="mb-5">
               <ScrollView
                 horizontal
                 pagingEnabled
@@ -1189,6 +1153,42 @@ export default function HomeScreen() {
                 />
               </View>
             </View>
+
+            {/* Slots */}
+            {SLOTS.map(slot => {
+              const slotEntries = entriesBySlot.get(slot.id) ?? [];
+              return (
+                <View key={slot.id} className="mb-5">
+                  {/* Slot header */}
+                  <View className="mb-3 flex-row items-center justify-between">
+                    <View className="flex-row items-center gap-2">
+                      <Ionicons name={slot.icon} size={18} color={slot.iconColor} />
+                      <Text className="text-sm font-bold text-slate-700">{slot.label}</Text>
+                      <Text className="text-xs text-slate-400">{slot.time}</Text>
+                    </View>
+                    <Pressable
+                      onPress={() => openAdd(slot.id)}
+                      className="flex-row items-center rounded-xl bg-slate-100 px-3 py-1.5 active:bg-slate-200"
+                    >
+                      <Ionicons name="add" size={14} color="#2563EB" />
+                      <Text className="ml-1 text-xs font-semibold text-blue-600">Add</Text>
+                    </Pressable>
+                  </View>
+
+                  {/* Entries */}
+                  {slotEntries.length > 0 ? (
+                    slotEntries.map(renderEntry)
+                  ) : (
+                    <Pressable
+                      onPress={() => openAdd(slot.id)}
+                      className="items-center rounded-2xl border border-dashed border-slate-200 py-5 active:bg-slate-50"
+                    >
+                      <Text className="text-sm text-slate-400">No {slot.label.toLowerCase()} planned</Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })}
           </>
         )}
       </ScrollView>
