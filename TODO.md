@@ -17,8 +17,7 @@ Last items added: Kite Hill Mushroom & Ricotta Ravioli, Real Good Foods Chicken 
 ## Branch / deploy housekeeping
 
 - Two feature branches sitting unmerged in parallel: `ShoppingMode` (this session's work — data audit tools, Developer section, restaurant browsing + per-dish planner logging, plus the original shopping-list/store-grouping/receipt-reconciliation feature from before) and `NutritionTracker` (Settings section restructure, Health/Nutrition tab, weight tracking). Both branch off `WorkingSave`, which is the actual Render deploy source (not `main`).
-- The original Shopping Mode feature itself (grocery list from meal-plan shortfalls, store grouping, receipt-scan reconciliation) still hasn't been tested live on a real device end-to-end.
-- Eventually these branches need reconciling/merging into `WorkingSave` — worth deciding merge order given both have touched overlapping files (`planner.tsx` especially).
+- **Merge deliberately on hold**: the two branches conflict architecturally in `planner.tsx`/`mealPlan.ts` (NutritionTracker extracted `computeDayNutrition` into a shared util; ShoppingMode kept it local and extended it with restaurant-dish filtering + confirmed-entry exact nutrition) — real manual reconciliation needed, not an auto-merge. More importantly, the original Shopping Mode feature (grocery list from meal-plan shortfalls, store grouping, receipt-scan reconciliation) still hasn't been tested live on a real device end-to-end. Decision (Sept 3): wait to merge until after Damien tests Shopping Mode live over the weekend of Sept 5–6; then do the merge, run `tsc --noEmit` + a server boot check, and only push `WorkingSave` (a real Render deploy) once that's confirmed working.
 
 ## Open data-quality questions (not urgent)
 
