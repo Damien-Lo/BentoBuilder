@@ -12,14 +12,20 @@ Last items added: Kite Hill Mushroom & Ricotta Ravioli, Real Good Foods Chicken 
 
 **Caught after the fact (Sept 3):** Gejang (Spicy Raw Crab, from the Aug 23–24 cluster above) turned out to be home-eaten (H Mart, not a restaurant item) — added as a generic ingredient. Rice already existed. If anything else from that cluster turns out to also be home-eaten rather than restaurant, it can be pulled out and added the same way.
 
+**Backfilled into the meal planner (Sept 3):** the whole Aug 10–30 diary was replayed as real `MealPlanEntry` records (status `confirmed`, no pantry deduction — see `server/manual_controls/scripts/import_myfitnesspal_diary.js`), and the grocery list was wiped clean as a fresh start for real daily use. Also added along the way: generic `Pasta` and `Fish Cake` ingredients, and caught that Aug 15's "Eurest Fried Brussels Sprouts" + "Silverlake Ramen Tsukemen" diary lines were actually the Okiboru visit (exact calorie match on Shoyu Brussels/Paitan Tsukemen), not separate missing items.
+
+Still genuinely unresolved (nothing in the catalog to map to):
+- Starbucks Unsweetened Iced Coffee (Aug 15) — no coffee ingredient exists.
+- Aug 27 lunch remainder — a handful of individual nigiri/tempura pieces (~472cal) that don't match any restaurant dish or standalone ingredient.
+
 ## Scoped but deferred features
 
 - **Whole-unit pantry deduction** ("use 1 whole fillet, whatever size it is, without splitting across pantry items to hit an exact gram target") — see `[[whole-unit-deduction]]` in memory for the full writeup. Needs new logic in `pantryDeduction.ts`'s brother-grouping/ambiguity-resolution system; deliberately separated from the exact-nutrition-from-`stockDeductions` work (which is done).
 
 ## Branch / deploy housekeeping
 
-- Two feature branches sitting unmerged in parallel: `ShoppingMode` (this session's work — data audit tools, Developer section, restaurant browsing + per-dish planner logging, plus the original shopping-list/store-grouping/receipt-reconciliation feature from before) and `NutritionTracker` (Settings section restructure, Health/Nutrition tab, weight tracking). Both branch off `WorkingSave`, which is the actual Render deploy source (not `main`).
-- **Merge deliberately on hold**: the two branches conflict architecturally in `planner.tsx`/`mealPlan.ts` (NutritionTracker extracted `computeDayNutrition` into a shared util; ShoppingMode kept it local and extended it with restaurant-dish filtering + confirmed-entry exact nutrition) — real manual reconciliation needed, not an auto-merge. More importantly, the original Shopping Mode feature (grocery list from meal-plan shortfalls, store grouping, receipt-scan reconciliation) still hasn't been tested live on a real device end-to-end. Decision (Sept 3): wait to merge until after Damien tests Shopping Mode live over the weekend of Sept 5–6; then do the merge, run `tsc --noEmit` + a server boot check, and only push `WorkingSave` (a real Render deploy) once that's confirmed working.
+- `ShoppingMode` and `NutritionTracker` are merged into `WorkingSave` and pushed (Sept 3) — the `planner.tsx`/`mealPlan.ts` conflict (NutritionTracker's extracted `computeDayNutrition` vs ShoppingMode's local extension with restaurant-dish filtering + confirmed-entry exact nutrition) was resolved by porting ShoppingMode's logic into the shared `mealPlan.ts`. Verified: `tsc --noEmit` clean (one pre-existing, unrelated `SwipeableMethods` ref error on both source branches), server boot + route checks passed on both branches' endpoints. A new EAS `preview` build was cut from `WorkingSave` and installed over the real "BentoBuilder" app.
+- Shopping Mode (grocery list from meal-plan shortfalls, store grouping, receipt-scan reconciliation) is now live on the real app but still not live-device-tested end to end — that's the next thing to actually try.
 
 ## Open data-quality questions (not urgent)
 
