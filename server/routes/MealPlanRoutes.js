@@ -46,6 +46,13 @@ function populateEntry(query) {
     .populate({
       path: "restaurantMeal",
       populate: [{ path: "tags" }],
+    })
+    // So a confirmed entry's nutrition can be computed from exactly what
+    // was really deducted (see mobile's computeDayNutrition) instead of
+    // always falling back to the recipe's cached snapshot.
+    .populate({
+      path: "stockDeductions.pantryItem",
+      populate: { path: "ingredient" },
     });
 }
 

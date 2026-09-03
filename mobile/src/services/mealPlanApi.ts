@@ -9,8 +9,18 @@ export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 // "planned" = tentative, not yet eaten; "confirmed" = logged as actually eaten
 export type MealPlanEntryStatus = "planned" | "confirmed";
 
+// Only populated when the entry was fetched with the deep populate this app
+// uses everywhere (GET /api/meal-plan, /:id/confirm, /:id/unconfirm) — the
+// fields actually needed to compute a confirmed entry's real nutrition from
+// what was really deducted, not the full pantry item record.
+export interface StockDeductionPantryItem {
+  _id: string;
+  ingredient: Ingredient;
+  quantityUnit: string;
+}
+
 export interface StockDeduction {
-  pantryItem: string;
+  pantryItem: string | StockDeductionPantryItem;
   amount: number;
 }
 

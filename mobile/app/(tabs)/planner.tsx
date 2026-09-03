@@ -94,11 +94,47 @@ function addScaled(totals: { calories: number; protein: number; carbs: number; f
   if (n.sodium)   totals.sodium   += n.sodium;
 }
 
+// A confirmed recipe entry's nutrition, computed from exactly what was
+// really deducted from pantry stock (the specific ingredient and amount of
+// whichever real item(s) got used) instead of the recipe's cached
+// snapshot, which only ever reflects its declared/assumed quantities —
+// e.g. a "1 fillet" line always contributes the same assumed weight in the
+// snapshot, even though the real fillet you actually cooked might have
+// been smaller or larger. Returns null when there's nothing to compute
+// from (no deductions recorded, or none came back populated), so the
+// caller falls back to the snapshot exactly as before.
+function computeConfirmedRecipeNutrition(
+  entry: MealPlanEntry,
+  conversions: CustomUnitConversion[],
+): { calories: number; protein: number; carbs: number; fats: number; fiber: number; sodium: number } | null {
+  const deductions = entry.stockDeductions;
+  if (!deductions?.length) return null;
+
+  const totals = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
+  let hasAny = false;
+  for (const d of deductions) {
+    if (typeof d.pantryItem === "string") continue; // not populated — skip rather than guess
+    const ingredient = d.pantryItem.ingredient;
+    if (!ingredient) continue;
+    addScaled(totals, scaleIngredientNutrition(
+      ingredient,
+      d.amount,
+      d.pantryItem.quantityUnit,
+      getIngredientConversions(ingredient, conversions),
+    ));
+    hasAny = true;
+  }
+  return hasAny ? totals : null;
+}
+
 function computeDayNutrition(entries: MealPlanEntry[], conversions: CustomUnitConversion[] = []): DayNutrition {
   const totals = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
   for (const entry of entries) {
     if (entry.recipe) {
-      addScaled(totals, scaleRecipeNutrition(entry.recipe, entry.recipeServings ?? 1));
+      const confirmed = entry.status === "confirmed"
+        ? computeConfirmedRecipeNutrition(entry, conversions)
+        : null;
+      addScaled(totals, confirmed ?? scaleRecipeNutrition(entry.recipe, entry.recipeServings ?? 1));
       continue;
     }
     if (entry.ingredient) {
@@ -745,7 +781,12 @@ export default function HomeScreen() {
       const servings = entry.recipeServings ?? 1;
       title = entry.recipe.name;
       subtitle = `Recipe · ${servings} ${servings === 1 ? "serving" : "servings"}`;
-      kcal = getRecipeKcal(entry.recipe, servings);
+      // Same source as the day total — exact figure from what was really
+      // deducted once confirmed, the recipe's snapshot until then.
+      const confirmed = entry.status === "confirmed"
+        ? computeConfirmedRecipeNutrition(entry, appSettings?.unitConversions ?? [])
+        : null;
+      kcal = confirmed ? Math.round(confirmed.calories) : getRecipeKcal(entry.recipe, servings);
     } else if (entry.ingredient) {
       const qty = entry.ingredientQuantity ?? 0;
       title = entry.ingredient.name;
