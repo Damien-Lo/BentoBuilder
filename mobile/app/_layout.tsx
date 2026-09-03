@@ -146,6 +146,72 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
+
+        {/* Meals (course/bento composites) */}
+        <Stack.Screen
+          name="meals/add"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="meals/[id]"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="meals/edit/[id]"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        {/* Restaurant meals — logged eating-out visits */}
+        <Stack.Screen
+          name="restaurant-meals"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="restaurant-meals/add"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="restaurant-meals/[id]"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="restaurant-meals/edit/[id]"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        {/* Developer — data-quality reports for fixable-but-not-broken items */}
+        <Stack.Screen
+          name="developer/home"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="developer/ingredients"
+          options={{
+            headerShown: false,
+          }}
+        />
       </Stack>
 
       <StatusBar style="auto" />

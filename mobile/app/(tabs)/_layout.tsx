@@ -8,7 +8,7 @@ export default function TabLayout() {
   return (
     <Tabs
       tabBar={props => <CustomTabBar {...props} />}
-      initialRouteName="RecipesMainPage"
+      initialRouteName="planner"
       screenOptions={{
         headerShown: false,
       }}

@@ -21,23 +21,28 @@ import { addRecipeScore, getRecipeById, getRecipes, type Recipe } from "@/src/se
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import { getRestaurantMeals, type RestaurantMeal } from "@/src/services/restaurantMealApi";
+import { upsertMealPlanEntryContribution } from "@/src/services/groceryListApi";
 import type { SelectOption } from "@/src/services/optionsApi";
 import type { PantryItem } from "@/src/types/pantry";
 import {
   confirmMealPlanEntry,
   createMealPlanEntry,
   deleteMealPlanEntry,
+  getLastUsedMap,
   getMealPlanForDate,
   unconfirmMealPlanEntry,
+  type LastUsedMap,
   type MealPlanEntry,
   type MealPlanEntryStatus,
   type MealSlot,
 } from "@/src/services/mealPlanApi";
+import { sortAlphabetically, sortByLastUsed } from "@/src/utils/lastUsedSort";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { RateAndConfirmModal } from "@/src/components/planner/RateAndConfirmModal";
 import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
 import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
 import {
+  computeConfirmedRecipeNutrition,
   computeDayNutrition,
   friendlyDayLabel,
   getEntryAvailability,
@@ -105,6 +110,7 @@ export default function HomeScreen() {
   const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
   const [allRestaurantMeals, setAllRestaurantMeals] = useState<RestaurantMeal[]>([]);
+  const [lastUsed, setLastUsed] = useState<LastUsedMap>({ meal: {}, recipe: {}, ingredient: {}, restaurantMeal: {} });
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
@@ -132,6 +138,13 @@ export default function HomeScreen() {
   const [pendingIngredient, setPendingIngredient] = useState<Ingredient | null>(null);
   const [pendingQuantity, setPendingQuantity] = useState("1");
   const [pendingUnit, setPendingUnit] = useState("");
+
+  // Restaurant dish-selection step — set once a user picks a restaurant,
+  // cleared to go back to the restaurants list. Starts with nothing
+  // selected (not "all dishes") so logging a visit is always a deliberate
+  // choice of what was actually eaten, not an accidental full-menu count.
+  const [pendingRestaurantMeal, setPendingRestaurantMeal] = useState<RestaurantMeal | null>(null);
+  const [selectedDishIds, setSelectedDishIds] = useState<Set<string>>(new Set());
 
   // Expanded info overlay for a meal/recipe/ingredient row
   const [infoItem, setInfoItem] = useState<
@@ -168,6 +181,7 @@ export default function HomeScreen() {
     getIngredients().then(setAllIngredients).catch(() => {});
     getPantryItems().then(setPantryItems).catch(() => {});
     getRestaurantMeals().then(setAllRestaurantMeals).catch(() => {});
+    getLastUsedMap().then(setLastUsed).catch(() => {});
   }, []);
 
   // Load plan for the selected date
@@ -241,33 +255,39 @@ export default function HomeScreen() {
     return map;
   }, [entries]);
 
+  // Browsing (no search text) sorts by most-recently-used-in-the-planner;
+  // once you're actively searching, alphabetical is easier to scan for a
+  // known name.
   const filteredMeals = useMemo(() => {
     const q = mealSearch.trim().toLowerCase();
-    if (!q) return allMeals;
-    return allMeals.filter(m => m.name.toLowerCase().includes(q));
-  }, [allMeals, mealSearch]);
+    if (!q) return sortByLastUsed(allMeals, lastUsed.meal, m => m._id, m => m.name);
+    return sortAlphabetically(allMeals.filter(m => m.name.toLowerCase().includes(q)), m => m.name);
+  }, [allMeals, mealSearch, lastUsed.meal]);
 
   const filteredRecipes = useMemo(() => {
     const q = recipeSearch.trim().toLowerCase();
-    if (!q) return allRecipes;
-    return allRecipes.filter(r => r.name.toLowerCase().includes(q));
-  }, [allRecipes, recipeSearch]);
+    if (!q) return sortByLastUsed(allRecipes, lastUsed.recipe, r => r._id, r => r.name);
+    return sortAlphabetically(allRecipes.filter(r => r.name.toLowerCase().includes(q)), r => r.name);
+  }, [allRecipes, recipeSearch, lastUsed.recipe]);
 
   const filteredIngredients = useMemo(() => {
     const q = ingredientSearch.trim().toLowerCase();
-    if (!q) return allIngredients;
-    return allIngredients.filter(i => i.name.toLowerCase().includes(q));
-  }, [allIngredients, ingredientSearch]);
+    if (!q) return sortByLastUsed(allIngredients, lastUsed.ingredient, i => i._id, i => i.name);
+    return sortAlphabetically(allIngredients.filter(i => i.name.toLowerCase().includes(q)), i => i.name);
+  }, [allIngredients, ingredientSearch, lastUsed.ingredient]);
 
   const filteredRestaurantMeals = useMemo(() => {
     const q = restaurantSearch.trim().toLowerCase();
-    if (!q) return allRestaurantMeals;
-    return allRestaurantMeals.filter(
-      r =>
-        r.restaurantName.toLowerCase().includes(q) ||
-        r.dishes.some(d => d.name.toLowerCase().includes(q)),
+    if (!q) return sortByLastUsed(allRestaurantMeals, lastUsed.restaurantMeal, r => r._id, r => r.restaurantName);
+    return sortAlphabetically(
+      allRestaurantMeals.filter(
+        r =>
+          r.restaurantName.toLowerCase().includes(q) ||
+          r.dishes.some(d => d.name.toLowerCase().includes(q)),
+      ),
+      r => r.restaurantName,
     );
-  }, [allRestaurantMeals, restaurantSearch]);
+  }, [allRestaurantMeals, restaurantSearch, lastUsed.restaurantMeal]);
 
   function openAdd(slot: MealSlot) {
     setAddSlot(slot);
@@ -278,6 +298,8 @@ export default function HomeScreen() {
     setIngredientSearch("");
     setRestaurantSearch("");
     setPendingIngredient(null);
+    setPendingRestaurantMeal(null);
+    setSelectedDishIds(new Set());
     setShowAdd(true);
   }
 
@@ -362,8 +384,8 @@ export default function HomeScreen() {
     }
   }
 
-  async function handleAddRestaurantEntry(restaurantMeal: RestaurantMeal) {
-    if (saving) return;
+  async function handleAddRestaurantEntry(restaurantMeal: RestaurantMeal, dishIds: string[]) {
+    if (saving || dishIds.length === 0) return;
     try {
       setSaving(true);
       const entry = await createMealPlanEntry({
@@ -371,8 +393,11 @@ export default function HomeScreen() {
         slot: addSlot,
         status: addStatus,
         restaurantMeal: restaurantMeal._id,
+        restaurantDishIds: dishIds,
       });
       setEntries(prev => [...prev, entry]);
+      setPendingRestaurantMeal(null);
+      setSelectedDishIds(new Set());
       setShowAdd(false);
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not add restaurant meal.");
@@ -447,6 +472,47 @@ export default function HomeScreen() {
     }
 
     void performConfirm(entry, getDefaultDeductionInstructions(requirements));
+  }
+
+  // Adds this entry's pantry shortfall to the grocery list — a manual,
+  // re-pressable check (current pantry vs. just this entry's need, no
+  // awareness of other entries' claims on the same stock). Idempotent per
+  // entry server-side, so re-pressing closer to shopping day just refreshes
+  // the amounts rather than duplicating them.
+  async function handleAddMissingToGroceryList(entry: MealPlanEntry) {
+    const conversions = appSettings?.unitConversions ?? [];
+    const requirements = buildIngredientRequirements(
+      entry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions,
+    );
+
+    const shortfalls = requirements
+      .map(r => ({
+        ...r,
+        shortfall: Math.max(0, r.neededQuantity - r.groups.reduce((sum, g) => sum + g.totalAvailable, 0)),
+      }))
+      .filter(r => r.shortfall > 0);
+
+    if (shortfalls.length === 0) {
+      Alert.alert("Nothing missing", "Everything needed for this is already in your pantry.");
+      return;
+    }
+
+    try {
+      await Promise.all(
+        shortfalls.map(r =>
+          upsertMealPlanEntryContribution({
+            mealPlanEntry: entry._id,
+            ingredient: r.ingredientId,
+            name: r.ingredientName,
+            amount: r.shortfall,
+            unit: r.unit,
+          }),
+        ),
+      );
+      Alert.alert("Added to grocery list", `${shortfalls.length} item${shortfalls.length === 1 ? "" : "s"} added or updated.`);
+    } catch (err) {
+      Alert.alert("Could not update grocery list", err instanceof Error ? err.message : "Something went wrong.");
+    }
   }
 
   function handleToggleEntryStatus(entry: MealPlanEntry) {
@@ -585,7 +651,12 @@ export default function HomeScreen() {
       const servings = entry.recipeServings ?? 1;
       title = entry.recipe.name;
       subtitle = `Recipe · ${servings} ${servings === 1 ? "serving" : "servings"}`;
-      kcal = getRecipeKcal(entry.recipe, servings);
+      // Same source as the day total — exact figure from what was really
+      // deducted once confirmed, the recipe's snapshot until then.
+      const confirmed = entry.status === "confirmed"
+        ? computeConfirmedRecipeNutrition(entry, appSettings?.unitConversions ?? [])
+        : null;
+      kcal = confirmed ? Math.round(confirmed.calories) : getRecipeKcal(entry.recipe, servings);
     } else if (entry.ingredient) {
       const qty = entry.ingredientQuantity ?? 0;
       title = entry.ingredient.name;
@@ -597,10 +668,13 @@ export default function HomeScreen() {
         getIngredientConversions(entry.ingredient, appSettings?.unitConversions ?? []),
       );
     } else if (entry.restaurantMeal) {
-      const dishCount = entry.restaurantMeal.dishes?.length ?? 0;
+      const dishIds = entry.restaurantDishIds ?? [];
+      const eatenDishes = (entry.restaurantMeal.dishes ?? []).filter(d => dishIds.includes(d._id));
       title = entry.restaurantMeal.restaurantName;
-      subtitle = `Eating out · ${dishCount} ${dishCount === 1 ? "dish" : "dishes"}`;
-      kcal = getRestaurantMealKcal(entry.restaurantMeal);
+      subtitle = eatenDishes.length
+        ? `Eating out · ${eatenDishes.map(d => d.name).join(", ")}`
+        : "Eating out";
+      kcal = getRestaurantMealKcal(entry.restaurantMeal, dishIds);
     } else {
       const courseCount = entry.meal?.courses?.length ?? 0;
       title = entry.meal?.name ?? "";
@@ -701,6 +775,16 @@ export default function HomeScreen() {
             <Text className="mt-0.5 text-xs text-slate-400">
               {subtitle}{entry.status === "planned" ? " · Planned" : ""}
             </Text>
+            {entry.status === "planned" && (availability === "yellow" || availability === "red") && (
+              <Pressable
+                className="mt-1 flex-row items-center self-start"
+                hitSlop={6}
+                onPress={() => void handleAddMissingToGroceryList(entry)}
+              >
+                <Ionicons name="cart-outline" size={12} color="#2563EB" />
+                <Text className="ml-1 text-xs font-medium text-blue-600">Add missing to grocery list</Text>
+              </Pressable>
+            )}
           </View>
           {kcal != null && (
             <Text className="text-sm font-semibold text-slate-500">{kcal} kcal</Text>
@@ -1116,9 +1200,13 @@ export default function HomeScreen() {
         <SafeAreaView className="absolute inset-0 bg-slate-50" edges={["top", "left", "right"]}>
           {/* Header */}
           <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-            {pendingIngredient ? (
+            {pendingIngredient || pendingRestaurantMeal ? (
               <Pressable
-                onPress={() => setPendingIngredient(null)}
+                onPress={() => {
+                  setPendingIngredient(null);
+                  setPendingRestaurantMeal(null);
+                  setSelectedDishIds(new Set());
+                }}
                 hitSlop={10}
                 className="-ml-2 flex-1 flex-row items-center px-2 py-2"
               >
@@ -1221,6 +1309,108 @@ export default function HomeScreen() {
                 onPress={() => void handleAddIngredientEntry()}
               >
                 <Text className="font-semibold text-white">{saving ? "Adding…" : "Add to plan"}</Text>
+              </Pressable>
+            </ScrollView>
+          ) : pendingRestaurantMeal ? (
+            /* ── Restaurant dish-selection step ── which dish(es) from this
+               visit were actually eaten, so nutrition doesn't count the
+               whole menu. Starts empty; nothing pre-checked. */
+            <ScrollView
+              className="flex-1"
+              contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View className="mb-5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4">
+                <View className={`h-11 w-11 items-center justify-center rounded-full ${SLOT_MAP[addSlot].chipBg}`}>
+                  <Ionicons name="restaurant-outline" size={18} color={SLOT_MAP[addSlot].iconColor} />
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="font-semibold text-slate-900">{pendingRestaurantMeal.restaurantName}</Text>
+                  <Text className="mt-0.5 text-xs text-slate-400">Select what you actually ate</Text>
+                </View>
+              </View>
+
+              <Text className="mb-1.5 text-sm font-semibold text-slate-700">Dishes</Text>
+              <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                {pendingRestaurantMeal.dishes.map((dish, i) => {
+                  const checked = selectedDishIds.has(dish._id);
+                  return (
+                    <Pressable
+                      key={dish._id}
+                      className={`flex-row items-center justify-between px-4 py-3.5 active:bg-slate-50 ${
+                        i < pendingRestaurantMeal.dishes.length - 1 ? "border-b border-slate-100" : ""
+                      }`}
+                      onPress={() => {
+                        setSelectedDishIds(prev => {
+                          const next = new Set(prev);
+                          if (next.has(dish._id)) next.delete(dish._id);
+                          else next.add(dish._id);
+                          return next;
+                        });
+                      }}
+                    >
+                      <View className="flex-1 flex-row items-center">
+                        <Ionicons
+                          name={checked ? "checkbox" : "square-outline"}
+                          size={22}
+                          color={checked ? "#2563EB" : "#94A3B8"}
+                        />
+                        <View className="ml-3 flex-1">
+                          <Text className="font-semibold text-slate-900">{dish.name}</Text>
+                          {dish.nutrition?.calories != null && (
+                            <Text className="mt-0.5 text-xs text-slate-400">{dish.nutrition.calories} kcal</Text>
+                          )}
+                        </View>
+                      </View>
+                      {dish.price != null && (
+                        <Text className="text-sm font-semibold text-slate-500">${dish.price.toFixed(2)}</Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Live nutrition preview — sum of selected dishes only */}
+              {(() => {
+                const selected = pendingRestaurantMeal.dishes.filter(d => selectedDishIds.has(d._id));
+                const kcal = getRestaurantMealKcal(pendingRestaurantMeal, [...selectedDishIds]);
+                const rows: [string, number | null | undefined, string][] = [
+                  ["Calories", kcal, "kcal"],
+                  ["Protein",  selected.reduce((s, d) => s + (d.nutrition?.protein ?? 0), 0),  "g"],
+                  ["Carbs",    selected.reduce((s, d) => s + (d.nutrition?.carbs ?? 0), 0),    "g"],
+                  ["Fats",     selected.reduce((s, d) => s + (d.nutrition?.fats ?? 0), 0),     "g"],
+                  ["Fiber",    selected.reduce((s, d) => s + (d.nutrition?.fiber ?? 0), 0),    "g"],
+                  ["Sodium",   selected.reduce((s, d) => s + (d.nutrition?.sodium ?? 0), 0),   "mg"],
+                ];
+                return (
+                  <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    {rows.map(([label, value, unit], i) => (
+                      <View
+                        key={label}
+                        className={`flex-row items-center justify-between px-4 py-3 ${
+                          i < rows.length - 1 ? "border-b border-slate-100" : ""
+                        }`}
+                      >
+                        <Text className="text-base text-slate-600">{label}</Text>
+                        <Text className="text-base font-semibold text-slate-900">
+                          {selected.length && value != null ? `${Math.round(value * 10) / 10} ${unit}` : "—"}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
+
+              <Pressable
+                disabled={saving || selectedDishIds.size === 0}
+                className={`items-center rounded-2xl py-4 ${
+                  saving || selectedDishIds.size === 0 ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
+                }`}
+                onPress={() => void handleAddRestaurantEntry(pendingRestaurantMeal, [...selectedDishIds])}
+              >
+                <Text className="font-semibold text-white">
+                  {saving ? "Adding…" : selectedDishIds.size === 0 ? "Select at least one dish" : "Add to plan"}
+                </Text>
               </Pressable>
             </ScrollView>
           ) : (
@@ -1568,7 +1758,10 @@ export default function HomeScreen() {
                       <Pressable
                         className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
                         disabled={saving}
-                        onPress={() => void handleAddRestaurantEntry(restaurantMeal)}
+                        onPress={() => {
+                          setSelectedDishIds(new Set());
+                          setPendingRestaurantMeal(restaurantMeal);
+                        }}
                       >
                         <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
                           <Ionicons name="restaurant-outline" size={18} color={slotCfg.iconColor} />

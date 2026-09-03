@@ -105,11 +105,17 @@ export function getMealKcal(meal: Meal): number | null {
 
 // A restaurant visit has no "servings" to scale — each dish's manual
 // nutrition estimate is summed flat, as eaten.
-export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal): number | null {
-  if (!restaurantMeal.dishes?.length) return null;
+// dishIds filters to just those dishes (e.g. what a specific meal-plan
+// entry actually logged) — omitted or empty means "every dish," used when
+// browsing a restaurant's full menu before picking anything.
+export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal, dishIds?: string[]): number | null {
+  const dishes = dishIds?.length
+    ? restaurantMeal.dishes?.filter(d => dishIds.includes(d._id))
+    : restaurantMeal.dishes;
+  if (!dishes?.length) return null;
   let total = 0;
   let hasAny = false;
-  for (const dish of restaurantMeal.dishes) {
+  for (const dish of dishes) {
     const cal = dish.nutrition?.calories;
     if (cal != null) {
       total += cal;
@@ -215,11 +221,48 @@ function addScaled(totals: DayNutrition, n: ScaledNutrition) {
   if (n.sodium)   totals.sodium   += n.sodium;
 }
 
+// A confirmed recipe entry's nutrition, computed from exactly what was
+// really deducted from pantry stock (the specific ingredient and amount of
+// whichever real item(s) got used) instead of the recipe's cached
+// snapshot, which only ever reflects its declared/assumed quantities —
+// e.g. a "1 fillet" line always contributes the same assumed weight in the
+// snapshot, even though the real fillet you actually cooked might have
+// been smaller or larger. Returns null when there's nothing to compute
+// from (no deductions recorded, or none came back populated), so the
+// caller falls back to the snapshot exactly as before. Exported so the
+// planner's per-entry display can use the same figure as the day total.
+export function computeConfirmedRecipeNutrition(
+  entry: MealPlanEntry,
+  conversions: CustomUnitConversion[],
+): DayNutrition | null {
+  const deductions = entry.stockDeductions;
+  if (!deductions?.length) return null;
+
+  const totals: DayNutrition = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
+  let hasAny = false;
+  for (const d of deductions) {
+    if (typeof d.pantryItem === "string") continue; // not populated — skip rather than guess
+    const ingredient = d.pantryItem.ingredient;
+    if (!ingredient) continue;
+    addScaled(totals, scaleIngredientNutrition(
+      ingredient,
+      d.amount,
+      d.pantryItem.quantityUnit,
+      getIngredientConversions(ingredient, conversions),
+    ));
+    hasAny = true;
+  }
+  return hasAny ? totals : null;
+}
+
 export function computeDayNutrition(entries: MealPlanEntry[], conversions: CustomUnitConversion[] = []): DayNutrition {
   const totals: DayNutrition = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
   for (const entry of entries) {
     if (entry.recipe) {
-      addScaled(totals, scaleRecipeNutrition(entry.recipe, entry.recipeServings ?? 1));
+      const confirmed = entry.status === "confirmed"
+        ? computeConfirmedRecipeNutrition(entry, conversions)
+        : null;
+      addScaled(totals, confirmed ?? scaleRecipeNutrition(entry.recipe, entry.recipeServings ?? 1));
       continue;
     }
     if (entry.ingredient) {
@@ -232,7 +275,11 @@ export function computeDayNutrition(entries: MealPlanEntry[], conversions: Custo
       continue;
     }
     if (entry.restaurantMeal) {
-      for (const dish of entry.restaurantMeal.dishes ?? []) {
+      const dishIds = entry.restaurantDishIds;
+      const dishes = dishIds?.length
+        ? entry.restaurantMeal.dishes?.filter(d => dishIds.includes(d._id))
+        : entry.restaurantMeal.dishes;
+      for (const dish of dishes ?? []) {
         const n = dish.nutrition;
         if (!n) continue;
         addScaled(totals, {

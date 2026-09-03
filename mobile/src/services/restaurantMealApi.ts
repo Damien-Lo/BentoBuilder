@@ -23,6 +23,8 @@ export interface Dish {
   _id: string;
   name: string;
   notes?: string;
+  // What this dish cost, if known — optional, purely for price tracking.
+  price?: number | null;
   nutrition?: DishNutrition;
   // Raw rating history, most-recent last — same convention as Recipe.scores.
   scores?: DishScore[];
@@ -42,6 +44,7 @@ export interface RestaurantMeal {
 export interface DishInput {
   name: string;
   notes?: string;
+  price?: number | null;
   nutrition?: DishNutrition;
 }
 

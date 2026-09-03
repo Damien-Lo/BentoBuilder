@@ -39,6 +39,9 @@ const dishSchema = new mongoose.Schema(
   {
     name: { type: String, required: [true, "Dish name is required"], trim: true },
     notes: { type: String, trim: true, default: "" },
+    // What this dish cost, if known — optional, purely for price tracking
+    // (mirrors PantryItem.purchasePrice's role for pantry entries).
+    price: { type: Number, min: 0, default: null },
     // Manual estimate — restaurant nutrition is rarely known precisely, so
     // every field is optional and a missing value is skipped (not treated
     // as 0) when a meal-plan day's nutrition totals are summed.

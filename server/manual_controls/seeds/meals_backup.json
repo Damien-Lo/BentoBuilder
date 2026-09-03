@@ -1,0 +1,31 @@
+[
+  {
+    "_id": "6a514508888d8e0ab5690a16",
+    "name": "Chicken Karaage",
+    "type": "course",
+    "notes": "",
+    "isArchived": true,
+    "courses": [
+      {
+        "label": "Course 1",
+        "recipe": null,
+        "servings": 1,
+        "_id": "6a5148c76794037cf5090002"
+      }
+    ],
+    "bentoLayout": null,
+    "createdAt": "2026-07-10T19:16:24.502Z",
+    "updatedAt": "2026-07-26T19:01:02.564Z",
+    "__v": 0,
+    "tags": [
+      {
+        "_id": "6a5148c66794037cf5090001",
+        "name": "Japanese",
+        "normalizedName": "japanese",
+        "createdAt": "2026-07-10T19:32:22.189Z",
+        "updatedAt": "2026-07-10T19:32:22.189Z",
+        "__v": 0
+      }
+    ]
+  }
+]

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -28,6 +28,13 @@ import {
 } from "@/src/services/recipeApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { deleteMeal, getMeals, type Meal } from "@/src/services/mealApi";
+import {
+  deleteRestaurantMeal,
+  getRestaurantMeals,
+  type RestaurantMeal,
+} from "@/src/services/restaurantMealApi";
+import { getLastUsedMap, type LastUsedMap } from "@/src/services/mealPlanApi";
+import { sortAlphabetically, sortByLastUsed } from "@/src/utils/lastUsedSort";
 import { getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { loadSettings } from "@/src/services/settingsService";
@@ -141,13 +148,29 @@ export default function RecipesMainPage() {
   const [sortMode, setSortMode] = useState<SortMode>("category");
   const [statusFilter, setStatusFilter] = useState<"all" | "wantToTry" | "confirmed">("all");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [activePage, setActivePage] = useState<"meals" | "recipes">("meals");
+  const [activePage, setActivePage] = useState<"meals" | "recipes" | "restaurant">("meals");
   const scrollRef = useRef<ScrollView>(null);
   const [mealSearchText, setMealSearchText] = useState("");
   const [isMealSearchActive, setIsMealSearchActive] = useState(false);
   const [meals, setMeals] = useState<Meal[]>([]);
+  const [restaurantSearchText, setRestaurantSearchText] = useState("");
+  const [isRestaurantSearchActive, setIsRestaurantSearchActive] = useState(false);
+  const [restaurantMeals, setRestaurantMeals] = useState<RestaurantMeal[]>([]);
+  const [lastUsed, setLastUsed] = useState<LastUsedMap>({ meal: {}, recipe: {}, ingredient: {}, restaurantMeal: {} });
 
   const isFirstLoad = useRef(true);
+
+  // Meals is the default landing page, but it's the middle page now
+  // (Restaurants | Meals | Recipes) — scroll there once loading finishes,
+  // not on mount: while isLoading is true this screen renders a spinner
+  // with no ScrollView at all, so scrollRef isn't attached to anything yet
+  // and a mount-time scroll would silently no-op.
+  useEffect(() => {
+    if (isLoading) return;
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ x: screenWidth, animated: false });
+    }, 50);
+  }, [isLoading]);
 
   useFocusEffect(
     useCallback(() => {
@@ -305,12 +328,14 @@ export default function RecipesMainPage() {
     const pageIndex = Math.round(
       event.nativeEvent.contentOffset.x / screenWidth,
     );
-    setActivePage(pageIndex === 0 ? "meals" : "recipes");
+    setActivePage(pageIndex === 0 ? "restaurant" : pageIndex === 1 ? "meals" : "recipes");
     Keyboard.dismiss();
     setIsSearchActive(false);
     setSearchText("");
     setIsMealSearchActive(false);
     setMealSearchText("");
+    setIsRestaurantSearchActive(false);
+    setRestaurantSearchText("");
   };
 
   const handleDeleteRecipe = (id: string, name: string) => {
@@ -338,14 +363,57 @@ export default function RecipesMainPage() {
     }, []),
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      getRestaurantMeals()
+        .then(setRestaurantMeals)
+        .catch(() => {});
+    }, []),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      getLastUsedMap()
+        .then(setLastUsed)
+        .catch(() => {});
+    }, []),
+  );
+
+  // Browse view (the main swipeable page) sorts by most-recently-used-in-
+  // the-planner; the search overlay below stays alphabetical regardless of
+  // query text, since you're hunting for a known name there, not browsing.
+  const mealsForBrowse = useMemo(
+    () => sortByLastUsed(meals, lastUsed.meal, m => m._id, m => m.name),
+    [meals, lastUsed.meal],
+  );
+
   const filteredMeals = useMemo(() => {
     const query = mealSearchText.trim().toLowerCase();
-    if (!query) return meals;
-    return meals.filter(m => {
-      const tagNames = (m.tags ?? []).map(t => t.name);
-      return [m.name, ...tagNames].some(v => v.toLowerCase().includes(query));
-    });
+    const list = !query
+      ? meals
+      : meals.filter(m => {
+          const tagNames = (m.tags ?? []).map(t => t.name);
+          return [m.name, ...tagNames].some(v => v.toLowerCase().includes(query));
+        });
+    return sortAlphabetically(list, m => m.name);
   }, [meals, mealSearchText]);
+
+  const restaurantMealsForBrowse = useMemo(
+    () => sortByLastUsed(restaurantMeals, lastUsed.restaurantMeal, r => r._id, r => r.restaurantName),
+    [restaurantMeals, lastUsed.restaurantMeal],
+  );
+
+  const filteredRestaurantMeals = useMemo(() => {
+    const query = restaurantSearchText.trim().toLowerCase();
+    const list = !query
+      ? restaurantMeals
+      : restaurantMeals.filter(
+          r =>
+            r.restaurantName.toLowerCase().includes(query) ||
+            r.dishes.some(d => d.name.toLowerCase().includes(query)),
+        );
+    return sortAlphabetically(list, r => r.restaurantName);
+  }, [restaurantMeals, restaurantSearchText]);
 
   const handleDeleteMeal = (id: string, name: string) => {
     Alert.alert("Delete meal", `Delete "${name}"? This cannot be undone.`, [
@@ -358,6 +426,23 @@ export default function RecipesMainPage() {
             .then(() => setMeals(prev => prev.filter(m => m._id !== id)))
             .catch((err: unknown) => {
               Alert.alert("Error", err instanceof Error ? err.message : "Could not delete meal.");
+            });
+        },
+      },
+    ]);
+  };
+
+  const handleArchiveRestaurantMeal = (item: RestaurantMeal) => {
+    Alert.alert(`Archive "${item.restaurantName}"?`, "You can restore it later from Settings > Archive.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Archive",
+        style: "destructive",
+        onPress: () => {
+          void deleteRestaurantMeal(item._id)
+            .then(() => setRestaurantMeals(prev => prev.filter(r => r._id !== item._id)))
+            .catch((err: unknown) => {
+              Alert.alert("Error", err instanceof Error ? err.message : "Could not archive.");
             });
         },
       },
@@ -464,7 +549,7 @@ export default function RecipesMainPage() {
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
       <View className="flex-1">
-        {/* Horizontal paging scroll — Page 1: Meals, Page 2: Recipes */}
+        {/* Horizontal paging scroll — Page 1: Restaurants, Page 2: Meals, Page 3: Recipes */}
         <ScrollView
           ref={scrollRef}
           horizontal
@@ -475,10 +560,84 @@ export default function RecipesMainPage() {
           className="flex-1"
           onMomentumScrollEnd={handleHorizontalScrollEnd}
         >
-          {/* Page 1: Meals */}
+          {/* Page 1: Restaurant meals */}
           <View style={{ width: screenWidth }} className="flex-1">
             <FlatList
-              data={filteredMeals}
+              data={restaurantMealsForBrowse}
+              keyExtractor={(r) => r._id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingTop: 100,
+                paddingBottom: 120,
+              }}
+              ListHeaderComponent={
+                <View className="mb-4">
+                  <View>
+                    <Text className="text-3xl font-bold text-slate-950">Restaurants</Text>
+                    <Text className="mt-1 text-base text-slate-500">
+                      {restaurantMeals.length} {restaurantMeals.length === 1 ? "restaurant" : "restaurants"}
+                    </Text>
+                  </View>
+                  <View className="mt-3 flex-row items-center">
+                    <View className="h-2 w-6 rounded-full bg-blue-600" />
+                    <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
+                    <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
+                    <Text className="ml-3 text-xs font-medium text-slate-400">
+                      Swipe left for meals
+                    </Text>
+                  </View>
+                </View>
+              }
+              ListEmptyComponent={
+                <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
+                  <Ionicons name="storefront-outline" size={42} color="#94A3B8" />
+                  <Text className="mt-4 text-lg font-bold text-slate-900">
+                    {restaurantSearchText ? "No restaurants found" : "No restaurant meals yet"}
+                  </Text>
+                  <Text className="mt-2 text-center text-slate-500">
+                    {restaurantSearchText ? "Try a different search term." : "Tap + to log a visit."}
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <ReanimatedSwipeable
+                  key={item._id}
+                  friction={2}
+                  rightThreshold={40}
+                  renderLeftActions={() => (
+                    <Pressable
+                      className="mb-2.5 w-20 items-center justify-center rounded-2xl bg-red-500 active:bg-red-600"
+                      onPress={() => handleArchiveRestaurantMeal(item)}
+                    >
+                      <Ionicons name="archive-outline" size={22} color="white" />
+                    </Pressable>
+                  )}
+                >
+                  <Pressable
+                    className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+                    onPress={() => router.push({ pathname: "/restaurant-meals/[id]", params: { id: item._id } })}
+                  >
+                    <View className="h-10 w-10 items-center justify-center rounded-full bg-orange-50">
+                      <Ionicons name="storefront-outline" size={18} color="#EA580C" />
+                    </View>
+                    <View className="ml-4 flex-1">
+                      <Text className="text-base font-bold text-slate-900">{item.restaurantName}</Text>
+                      <Text className="mt-0.5 text-sm text-slate-500" numberOfLines={1}>
+                        {item.dishes.map((d) => d.name).join(", ") || "No dishes yet"}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+                  </Pressable>
+                </ReanimatedSwipeable>
+              )}
+            />
+          </View>
+
+          {/* Page 2: Meals */}
+          <View style={{ width: screenWidth }} className="flex-1">
+            <FlatList
+              data={mealsForBrowse}
               keyExtractor={m => m._id}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{
@@ -495,10 +654,11 @@ export default function RecipesMainPage() {
                     </Text>
                   </View>
                   <View className="mt-3 flex-row items-center">
-                    <View className="h-2 w-6 rounded-full bg-blue-600" />
+                    <View className="h-2 w-2 rounded-full bg-slate-300" />
+                    <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
                     <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
                     <Text className="ml-3 text-xs font-medium text-slate-400">
-                      Swipe left for all recipes
+                      Swipe for restaurants or recipes
                     </Text>
                   </View>
                 </View>
@@ -582,7 +742,7 @@ export default function RecipesMainPage() {
             />
           </View>
 
-          {/* Page 2: Recipes */}
+          {/* Page 3: Recipes */}
           <View style={{ width: screenWidth }} className="flex-1">
             <FlatList
               data={groupedRecipes}
@@ -657,6 +817,7 @@ export default function RecipesMainPage() {
                   </View>
                   <View className="mt-3 flex-row items-center">
                     <View className="h-2 w-2 rounded-full bg-slate-300" />
+                    <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
                     <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
                     <Text className="ml-3 text-xs font-medium text-slate-400">
                       Swipe right for meals
@@ -711,6 +872,17 @@ export default function RecipesMainPage() {
             onPress={() => {
               setIsMealSearchActive(false);
               setMealSearchText("");
+              Keyboard.dismiss();
+            }}
+          />
+        )}
+
+        {isRestaurantSearchActive && activePage === "restaurant" && (
+          <Pressable
+            className="absolute inset-0 z-10 bg-black/30"
+            onPress={() => {
+              setIsRestaurantSearchActive(false);
+              setRestaurantSearchText("");
               Keyboard.dismiss();
             }}
           />
@@ -879,6 +1051,93 @@ export default function RecipesMainPage() {
                     <View className="items-center px-6 py-16">
                       <Ionicons name="search-outline" size={42} color="#94a3b8" />
                       <Text className="mt-4 text-lg font-bold text-slate-900">No meals found</Text>
+                      <Text className="mt-2 text-center text-slate-500">
+                        Try searching with different keywords.
+                      </Text>
+                    </View>
+                  }
+                />
+              </View>
+            )}
+          </View>
+        )}
+
+        {activePage === "restaurant" && (
+          <View
+            className={`absolute left-4 right-4 top-3 z-20 overflow-hidden rounded-3xl bg-white shadow-lg ${
+              isRestaurantSearchActive ? "bottom-4" : ""
+            }`}
+          >
+            <View className="flex-row items-center p-3">
+              <View className="h-12 flex-1 flex-row items-center rounded-2xl bg-slate-100 px-4">
+                <Ionicons name="search-outline" size={21} color="#64748b" />
+                <TextInput
+                  value={restaurantSearchText}
+                  onChangeText={setRestaurantSearchText}
+                  onFocus={() => setIsRestaurantSearchActive(true)}
+                  placeholder="Search restaurants or dishes"
+                  placeholderTextColor="#94a3b8"
+                  className="ml-3 flex-1 text-base text-slate-900"
+                />
+                {restaurantSearchText.length > 0 && (
+                  <Pressable onPress={() => setRestaurantSearchText("")}>
+                    <Ionicons name="close-circle" size={21} color="#94a3b8" />
+                  </Pressable>
+                )}
+              </View>
+              <Pressable
+                className="ml-3 h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
+                onPress={() => router.push("/restaurant-meals/add")}
+              >
+                <Ionicons name="add" size={28} color="white" />
+              </Pressable>
+            </View>
+
+            {isRestaurantSearchActive && (
+              <View className="flex-1 border-t border-slate-100 px-4 pb-4">
+                <View className="flex-row items-center justify-between py-3">
+                  <Text className="text-lg font-bold text-slate-900">Restaurants</Text>
+                  <Pressable
+                    onPress={() => {
+                      setIsRestaurantSearchActive(false);
+                      setRestaurantSearchText("");
+                      Keyboard.dismiss();
+                    }}
+                  >
+                    <Text className="font-semibold text-blue-700">Cancel</Text>
+                  </Pressable>
+                </View>
+                <FlatList
+                  data={filteredRestaurantMeals}
+                  keyExtractor={(r) => r._id}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      className="mb-2 flex-row items-center rounded-2xl bg-slate-50 p-3"
+                      onPress={() => {
+                        setIsRestaurantSearchActive(false);
+                        setRestaurantSearchText("");
+                        Keyboard.dismiss();
+                        router.push({ pathname: "/restaurant-meals/[id]", params: { id: item._id } });
+                      }}
+                    >
+                      <View className="h-11 w-11 items-center justify-center rounded-full bg-orange-50">
+                        <Ionicons name="storefront-outline" size={21} color="#EA580C" />
+                      </View>
+                      <View className="ml-3 flex-1">
+                        <Text className="font-semibold text-slate-900">{item.restaurantName}</Text>
+                        <Text className="mt-0.5 text-sm text-slate-500" numberOfLines={1}>
+                          {item.dishes.map((d) => d.name).join(", ") || "No dishes yet"}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
+                    </Pressable>
+                  )}
+                  ListEmptyComponent={
+                    <View className="items-center px-6 py-16">
+                      <Ionicons name="search-outline" size={42} color="#94a3b8" />
+                      <Text className="mt-4 text-lg font-bold text-slate-900">No restaurants found</Text>
                       <Text className="mt-2 text-center text-slate-500">
                         Try searching with different keywords.
                       </Text>

@@ -210,7 +210,14 @@ export default function RestaurantMealDetailPage() {
 
             return (
               <View key={dish._id} className="mb-4 rounded-2xl border border-slate-200 bg-white p-5">
-                <Text className="text-lg font-bold text-slate-900">{dish.name}</Text>
+                <View className="flex-row items-center justify-between">
+                  <Text className="flex-1 text-lg font-bold text-slate-900">{dish.name}</Text>
+                  {dish.price != null && (
+                    <Text className="ml-2 text-base font-semibold text-slate-500">
+                      ${dish.price.toFixed(2)}
+                    </Text>
+                  )}
+                </View>
                 {dish.notes ? (
                   <Text className="mt-1 text-sm leading-5 text-slate-600">{dish.notes}</Text>
                 ) : null}

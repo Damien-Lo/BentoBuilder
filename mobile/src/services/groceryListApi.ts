@@ -12,6 +12,15 @@ export interface GroceryItemIngredientRef {
 // (storage location, expiry, etc. confirmed) — not a plain toggle.
 export type GroceryItemStatus = "toBuy" | "pendingLog" | "completed";
 
+// One demand source contributing to this item's quantity — a specific
+// meal-plan entry's shortfall, or the user's own manual add. The item's
+// quantity is server-maintained as the sum of these.
+export interface GroceryItemContribution {
+  source: "mealPlanEntry" | "manual";
+  mealPlanEntry?: string | null;
+  amount: number;
+}
+
 export interface GroceryItem {
   _id: string;
   ingredient: GroceryItemIngredientRef | string | null;
@@ -22,6 +31,7 @@ export interface GroceryItem {
   // The pantry entry that logging this item created, once completed — see
   // GroceryItem.js for the undo/delete semantics around this field.
   pantryItem?: string | null;
+  requestedBy?: GroceryItemContribution[];
   createdAt?: string;
 }
 
@@ -82,6 +92,30 @@ export async function createGroceryItem(
   input: CreateGroceryItemInput,
 ): Promise<GroceryItem> {
   const response = await fetch(`${API_BASE_URL}/api/grocery-list`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const result = await parseResponse<GroceryItemResponse>(response);
+  return result.data;
+}
+
+export interface UpsertMealPlanContributionInput {
+  mealPlanEntry: string;
+  ingredient: string;
+  name: string;
+  amount: number;
+  unit: string;
+}
+
+// Idempotent per (ingredient, mealPlanEntry) — re-calling for the same entry
+// updates its existing contribution amount in place instead of duplicating,
+// so re-pressing "add missing to grocery list" closer to shopping day
+// refreshes a stale shortfall rather than piling up extra demand.
+export async function upsertMealPlanEntryContribution(
+  input: UpsertMealPlanContributionInput,
+): Promise<GroceryItem> {
+  const response = await fetch(`${API_BASE_URL}/api/grocery-list/contributions/meal-plan-entry`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
