@@ -31,6 +31,7 @@ import {
   getLastUsedMap,
   getMealPlanForDate,
   unconfirmMealPlanEntry,
+  updateMealPlanEntryQuantity,
   type LastUsedMap,
   type MealPlanEntry,
   type MealPlanEntryStatus,
@@ -53,6 +54,7 @@ import {
   getWeekDates,
   parseLocalDate,
   scaleIngredientNutrition,
+  scaleRecipeNutrition,
   SLOT_MAP,
   SLOTS,
   todayStr,
@@ -145,6 +147,16 @@ export default function HomeScreen() {
   // choice of what was actually eaten, not an accidental full-menu count.
   const [pendingRestaurantMeal, setPendingRestaurantMeal] = useState<RestaurantMeal | null>(null);
   const [selectedDishIds, setSelectedDishIds] = useState<Set<string>>(new Set());
+
+  // Tapping an ingredient/recipe entry opens this overlay instead of
+  // navigating straight to the catalog page - shows and lets you edit how
+  // much of it was actually eaten *for this one entry*, with a button to
+  // still reach the full catalog page from here. Meal/restaurant entries
+  // keep navigating directly (no analogous single-quantity field to edit).
+  const [editEntry, setEditEntry] = useState<MealPlanEntry | null>(null);
+  const [editQuantity, setEditQuantity] = useState("1");
+  const [editUnit, setEditUnit] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   // Expanded info overlay for a meal/recipe/ingredient row
   const [infoItem, setInfoItem] = useState<
@@ -631,13 +643,47 @@ export default function HomeScreen() {
 
   function handleOpenEntry(entry: MealPlanEntry) {
     if (entry.recipe) {
-      router.push({ pathname: "/recipes/[id]", params: { id: entry.recipe._id } });
+      setEditEntry(entry);
+      setEditQuantity(String(entry.recipeServings ?? 1));
     } else if (entry.ingredient) {
-      router.push({ pathname: "/ingredients/edit/[id]", params: { id: entry.ingredient._id } });
+      setEditEntry(entry);
+      setEditQuantity(String(entry.ingredientQuantity ?? 1));
+      setEditUnit(entry.ingredientUnit ?? "");
     } else if (entry.meal) {
       router.push({ pathname: "/meals/[id]", params: { id: entry.meal._id } });
     } else if (entry.restaurantMeal) {
       router.push({ pathname: "/restaurant-meals/[id]", params: { id: entry.restaurantMeal._id } });
+    }
+  }
+
+  // Jumps from the entry-edit overlay to the underlying catalog page - what
+  // tapping the entry used to do directly.
+  function handleViewFullItem() {
+    if (!editEntry) return;
+    if (editEntry.recipe) {
+      router.push({ pathname: "/recipes/[id]", params: { id: editEntry.recipe._id } });
+    } else if (editEntry.ingredient) {
+      router.push({ pathname: "/ingredients/edit/[id]", params: { id: editEntry.ingredient._id } });
+    }
+    setEditEntry(null);
+  }
+
+  async function handleSaveEntryQuantity() {
+    if (!editEntry || editSaving) return;
+    const q = Number(editQuantity);
+    if (!Number.isFinite(q) || q <= 0) return;
+
+    setEditSaving(true);
+    try {
+      const updated = editEntry.ingredient
+        ? await updateMealPlanEntryQuantity(editEntry._id, { ingredientQuantity: q, ingredientUnit: editUnit })
+        : await updateMealPlanEntryQuantity(editEntry._id, { recipeServings: q });
+      setEntries(prev => prev.map(e => (e._id === updated._id ? updated : e)));
+      setEditEntry(null);
+    } catch (err) {
+      Alert.alert("Couldn't update", err instanceof Error ? err.message : "Please try again.");
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -1034,6 +1080,163 @@ export default function HomeScreen() {
                 <Text className="ml-2 text-xs text-slate-400">Loading full details…</Text>
               </View>
             )}
+          </ScrollView>
+        </View>
+      </View>
+    );
+  }
+
+  // ── Edit-entry overlay: how much of this ingredient/recipe was eaten,
+  // for this one meal-plan entry specifically ── same bottom-sheet pattern
+  // as renderInfoOverlay above.
+  function renderEditEntryOverlay() {
+    if (!editEntry) return null;
+    const isIngredient = !!editEntry.ingredient;
+    const title = isIngredient ? editEntry.ingredient!.name : editEntry.recipe!.name;
+    const icon = isIngredient ? "nutrition-outline" : "book-outline";
+
+    const q = Number(editQuantity);
+    const validQty = Number.isFinite(q) && q > 0;
+    const n = !validQty
+      ? null
+      : isIngredient
+        ? scaleIngredientNutrition(
+            editEntry.ingredient!,
+            q,
+            editUnit,
+            getIngredientConversions(editEntry.ingredient!, appSettings?.unitConversions ?? []),
+          )
+        : scaleRecipeNutrition(editEntry.recipe!, q);
+    const rows: [string, number | null | undefined, string][] = [
+      ["Calories", n?.calories, "kcal"],
+      ["Protein",  n?.protein,  "g"],
+      ["Carbs",    n?.carbs,    "g"],
+      ["Fats",     n?.fats,     "g"],
+      ["Fiber",    n?.fiber,    "g"],
+      ["Sodium",   n?.sodium,   "mg"],
+    ];
+
+    // A confirmed recipe entry's *displayed* nutrition actually comes from
+    // real stockDeductions (computeConfirmedRecipeNutrition), not
+    // recipeServings - so editing servings here wouldn't visibly change
+    // anything, and pretending it would is misleading. Ingredients don't
+    // have that indirection (ingredientQuantity IS the deducted amount), so
+    // they stay editable either way - just flagged that pantry stock itself
+    // isn't retroactively adjusted.
+    const recipeConfirmedLocked = !isIngredient && editEntry.status === "confirmed"
+      && !!editEntry.stockDeductions?.length;
+
+    return (
+      <View className="absolute inset-0">
+        <Pressable className="absolute inset-0 bg-black/40" onPress={() => setEditEntry(null)} />
+        <View
+          className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl bg-white"
+          style={{ maxHeight: windowHeight * 0.85 }}
+        >
+          <View className="items-center pt-3">
+            <View className="h-1 w-10 rounded-full bg-slate-200" />
+          </View>
+          <View className="flex-row items-center border-b border-slate-100 px-5 pb-4 pt-3">
+            <View className="h-11 w-11 items-center justify-center rounded-xl bg-blue-50">
+              <Ionicons name={icon} size={20} color="#2563EB" />
+            </View>
+            <Text className="ml-3 flex-1 text-lg font-bold text-slate-950" numberOfLines={2}>
+              {title}
+            </Text>
+            <Pressable
+              hitSlop={10}
+              onPress={() => setEditEntry(null)}
+              className="ml-2 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+            >
+              <Ionicons name="close" size={20} color="#64748B" />
+            </Pressable>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+            {recipeConfirmedLocked ? (
+              <View className="mb-5 rounded-2xl bg-slate-50 px-4 py-3">
+                <Text className="text-sm text-slate-600">
+                  This meal is confirmed — nutrition shown elsewhere reflects exactly what was deducted
+                  from pantry stock, not the servings number below. Unconfirm the entry first if you need
+                  to change servings and have it actually affect the logged nutrition.
+                </Text>
+              </View>
+            ) : null}
+
+            <Text className="mb-1.5 text-sm font-semibold text-slate-700">
+              {isIngredient ? "Quantity eaten" : "Servings eaten"}
+            </Text>
+            {isIngredient ? (
+              <View className="mb-6 flex-row gap-2">
+                <TextInput
+                  value={editQuantity}
+                  onChangeText={setEditQuantity}
+                  keyboardType="decimal-pad"
+                  placeholder="1"
+                  placeholderTextColor="#94A3B8"
+                  className="h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+                />
+                <TextInput
+                  value={editUnit}
+                  onChangeText={setEditUnit}
+                  placeholder="unit (g, cup, …)"
+                  placeholderTextColor="#94A3B8"
+                  className="h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+                />
+              </View>
+            ) : (
+              <TextInput
+                value={editQuantity}
+                onChangeText={setEditQuantity}
+                keyboardType="decimal-pad"
+                placeholder="1"
+                placeholderTextColor="#94A3B8"
+                editable={!recipeConfirmedLocked}
+                className={`mb-6 h-14 rounded-2xl border border-slate-200 px-4 text-base text-slate-950 ${
+                  recipeConfirmedLocked ? "bg-slate-100" : "bg-white"
+                }`}
+              />
+            )}
+
+            {/* Live nutrition preview for this entry */}
+            <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              {rows.map(([label, value, unit], i) => (
+                <View
+                  key={label}
+                  className={`flex-row items-center justify-between px-4 py-3 ${
+                    i < rows.length - 1 ? "border-b border-slate-100" : ""
+                  }`}
+                >
+                  <Text className="text-base text-slate-600">{label}</Text>
+                  <Text className="text-base font-semibold text-slate-900">
+                    {value != null ? `${Math.round(value * 10) / 10} ${unit}` : "—"}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {!recipeConfirmedLocked && isIngredient && editEntry.status === "confirmed" && (
+              <Text className="mb-4 text-xs text-slate-400">
+                Note: this updates the logged amount only — it won't adjust pantry stock, which was
+                already deducted when this entry was confirmed.
+              </Text>
+            )}
+
+            <Pressable
+              disabled={editSaving || recipeConfirmedLocked || !validQty}
+              className={`mb-3 items-center rounded-2xl py-4 ${
+                editSaving || recipeConfirmedLocked || !validQty ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
+              }`}
+              onPress={() => void handleSaveEntryQuantity()}
+            >
+              <Text className="font-semibold text-white">{editSaving ? "Saving…" : "Save changes"}</Text>
+            </Pressable>
+            <Pressable
+              className="items-center rounded-2xl border border-slate-200 py-4 active:bg-slate-50"
+              onPress={handleViewFullItem}
+            >
+              <Text className="font-semibold text-slate-700">View full item</Text>
+            </Pressable>
           </ScrollView>
         </View>
       </View>
@@ -1803,6 +2006,7 @@ export default function HomeScreen() {
       )}
 
       {renderInfoOverlay()}
+      {renderEditEntryOverlay()}
 
       <RateAndConfirmModal
         visible={!!rateConfirmEntry}

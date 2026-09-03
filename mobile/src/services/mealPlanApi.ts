@@ -126,6 +126,22 @@ export async function updateMealPlanEntryStatus(id: string, status: MealPlanEntr
   return result.data;
 }
 
+// Editing how much of an already-planned/confirmed ingredient or recipe was
+// actually eaten. Only ever sends one of the two shapes - callers pass just
+// the fields relevant to the entry's type.
+export async function updateMealPlanEntryQuantity(
+  id: string,
+  fields: { ingredientQuantity: number; ingredientUnit: string } | { recipeServings: number },
+): Promise<MealPlanEntry> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  const result = await parseResponse<{ success: boolean; data: MealPlanEntry }>(res);
+  return result.data;
+}
+
 // Confirming deducts pantry stock — the caller works out which pantry items
 // to draw from (brother-grouping, expiry order, any manual choice) and
 // sends the flat result here. The server clamps each amount to what's
