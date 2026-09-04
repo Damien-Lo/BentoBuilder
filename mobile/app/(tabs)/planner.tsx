@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { getMeals, type Meal } from "@/src/services/mealApi";
@@ -124,7 +124,7 @@ export default function HomeScreen() {
   // Add-to-plan overlay (plain local state — no navigation involved)
   const [showAdd, setShowAdd] = useState(false);
   const [addSlot, setAddSlot] = useState<MealSlot>("breakfast");
-  const [addStatus, setAddStatus] = useState<MealPlanEntryStatus>("planned");
+  const [addStatus, setAddStatus] = useState<MealPlanEntryStatus>("confirmed");
   // Per-recipe "servings to add" overrides for the recipe picker below —
   // keyed by recipe id so scrolling/re-rendering the list doesn't lose them.
   const [addRecipeServingsById, setAddRecipeServingsById] = useState<Record<string, number>>({});
@@ -184,17 +184,23 @@ export default function HomeScreen() {
   const dateStripRef = useRef<FlatList<string>>(null);
   const swipeableRefs = useRef(new Map<string, SwipeableMethods>()).current;
 
-  // Load available meals/recipes/ingredients for the add overlay, once on
-  // mount — pantry items are loaded here too, purely for the planned-entry
-  // availability icon (not re-fetched reactively, matching these others).
-  useEffect(() => {
-    getMeals().then(setAllMeals).catch(() => {});
-    getRecipes().then(setAllRecipes).catch(() => {});
-    getIngredients().then(setAllIngredients).catch(() => {});
-    getPantryItems().then(setPantryItems).catch(() => {});
-    getRestaurantMeals().then(setAllRestaurantMeals).catch(() => {});
-    getLastUsedMap().then(setLastUsed).catch(() => {});
-  }, []);
+  // Load available meals/recipes/ingredients for the add overlay — on every
+  // focus, not just mount, so something added elsewhere (a new ingredient
+  // from the Kitchen section, a pantry change, etc.) shows up here without
+  // needing to leave and re-enter the whole Kitchen section to force a
+  // remount. Matches the pattern RecipesMainPage already uses for the same
+  // reason. Pantry items are loaded here too, purely for the planned-entry
+  // availability icon.
+  useFocusEffect(
+    useCallback(() => {
+      getMeals().then(setAllMeals).catch(() => {});
+      getRecipes().then(setAllRecipes).catch(() => {});
+      getIngredients().then(setAllIngredients).catch(() => {});
+      getPantryItems().then(setPantryItems).catch(() => {});
+      getRestaurantMeals().then(setAllRestaurantMeals).catch(() => {});
+      getLastUsedMap().then(setLastUsed).catch(() => {});
+    }, []),
+  );
 
   // Load plan for the selected date
   const loadEntries = useCallback(() => {
@@ -303,7 +309,7 @@ export default function HomeScreen() {
 
   function openAdd(slot: MealSlot) {
     setAddSlot(slot);
-    setAddStatus("planned");
+    setAddStatus("confirmed");
     setAddMode("meal");
     setMealSearch("");
     setRecipeSearch("");
