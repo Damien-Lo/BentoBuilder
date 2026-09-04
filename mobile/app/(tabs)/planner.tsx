@@ -45,13 +45,14 @@ import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCa
 import {
   computeConfirmedRecipeNutrition,
   computeDayNutrition,
+  divideNutrition,
   friendlyDayLabel,
   getEntryAvailability,
   getIngredientKcal,
   getMealKcal,
   getRecipeKcal,
   getRestaurantMealKcal,
-  getWeekDates,
+  getRollingDates,
   parseLocalDate,
   scaleIngredientNutrition,
   scaleRecipeNutrition,
@@ -117,7 +118,7 @@ export default function HomeScreen() {
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
   // Daily / weekly nutrition card paging
-  const [nutritionView, setNutritionView] = useState<0 | 1>(0);
+  const [nutritionView, setNutritionView] = useState<0 | 1 | 2>(0);
   const [weekEntries, setWeekEntries] = useState<MealPlanEntry[][]>([]);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
@@ -219,22 +220,23 @@ export default function HomeScreen() {
     loadSettings().then(setAppSettings).catch(() => {});
   }, []);
 
-  // Load the full week (for the weekly nutrition card) whenever the selected
-  // date moves into a different week, or the "week starts on" setting changes.
-  const weekStartDay = appSettings?.weekStartDay ?? 1;
-  const weekDates = useMemo(
-    () => getWeekDates(selectedDate, weekStartDay),
-    [selectedDate, weekStartDay],
+  // Load the rolling 7-day window (for the "last 7 days" and daily-average
+  // nutrition cards) ending at the selected date — a rolling window, not
+  // the calendar week containing it, so it tracks backwards with whatever
+  // date you're looking at rather than jumping around at week boundaries.
+  const last7Dates = useMemo(
+    () => getRollingDates(selectedDate, 7),
+    [selectedDate],
   );
 
   useEffect(() => {
-    Promise.all(weekDates.map(d => getMealPlanForDate(d)))
+    Promise.all(last7Dates.map(d => getMealPlanForDate(d)))
       .then(setWeekEntries)
-      .catch(() => setWeekEntries(weekDates.map(() => [])));
+      .catch(() => setWeekEntries(last7Dates.map(() => [])));
     // `entries` is included so that adding/deleting/toggling an item on the
-    // selected day (which updates `entries` locally, not `weekDates`) also
-    // refreshes the weekly total instead of leaving it stale.
-  }, [weekDates, entries]);
+    // selected day (which updates `entries` locally, not `last7Dates`) also
+    // refreshes the rolling total instead of leaving it stale.
+  }, [last7Dates, entries]);
 
   // Scroll date strip to today on mount
   useEffect(() => {
@@ -255,13 +257,24 @@ export default function HomeScreen() {
     () => computeDayNutrition(entries.filter(e => e.status === "planned"), appSettings?.unitConversions ?? []),
     [entries, appSettings],
   );
-  const weeklyConfirmedNutrition = useMemo(
+  const last7ConfirmedNutrition = useMemo(
     () => computeDayNutrition(weekEntries.flat().filter(e => e.status === "confirmed"), appSettings?.unitConversions ?? []),
     [weekEntries, appSettings],
   );
-  const weeklyPlannedNutrition = useMemo(
+  const last7PlannedNutrition = useMemo(
     () => computeDayNutrition(weekEntries.flat().filter(e => e.status === "planned"), appSettings?.unitConversions ?? []),
     [weekEntries, appSettings],
+  );
+  // Per-day average across the same rolling window, for the third
+  // nutrition-card page - divides the 7-day totals down to a daily figure
+  // so it can be read against the same daily limits as the "today" card.
+  const avgConfirmedNutrition = useMemo(
+    () => divideNutrition(last7ConfirmedNutrition, last7Dates.length),
+    [last7ConfirmedNutrition, last7Dates.length],
+  );
+  const avgPlannedNutrition = useMemo(
+    () => divideNutrition(last7PlannedNutrition, last7Dates.length),
+    [last7PlannedNutrition, last7Dates.length],
   );
 
   const entriesBySlot = useMemo(() => {
@@ -1305,7 +1318,7 @@ export default function HomeScreen() {
           </View>
         ) : (
           <>
-            {/* Daily / weekly nutrition — swipe to switch */}
+            {/* Daily / last-7-days / daily-average nutrition — swipe to switch */}
             <View className="mb-5">
               <ScrollView
                 horizontal
@@ -1313,7 +1326,7 @@ export default function HomeScreen() {
                 showsHorizontalScrollIndicator={false}
                 onMomentumScrollEnd={e => {
                   const page = Math.round(e.nativeEvent.contentOffset.x / windowWidth);
-                  setNutritionView(page === 1 ? 1 : 0);
+                  setNutritionView(page >= 2 ? 2 : page === 1 ? 1 : 0);
                 }}
                 style={{ width: windowWidth - 32 }}
               >
@@ -1334,10 +1347,10 @@ export default function HomeScreen() {
                 </View>
                 <View style={{ width: windowWidth - 32 }}>
                   <NutritionSummaryCard
-                    title="Weekly nutrition"
-                    subtitle={weekRangeLabel(weekDates)}
-                    confirmed={weeklyConfirmedNutrition}
-                    planned={weeklyPlannedNutrition}
+                    title="Last 7 days"
+                    subtitle={weekRangeLabel(last7Dates)}
+                    confirmed={last7ConfirmedNutrition}
+                    planned={last7PlannedNutrition}
                     limits={{
                       calories: appSettings?.dailyCalorieLimit != null ? appSettings.dailyCalorieLimit * 7 : null,
                       protein:  appSettings?.dailyProteinLimit != null ? appSettings.dailyProteinLimit * 7 : null,
@@ -1345,6 +1358,22 @@ export default function HomeScreen() {
                       fats:     appSettings?.dailyFatsLimit    != null ? appSettings.dailyFatsLimit    * 7 : null,
                       fiber:    appSettings?.dailyFiberLimit   != null ? appSettings.dailyFiberLimit   * 7 : null,
                       sodium:   appSettings?.dailySodiumLimit  != null ? appSettings.dailySodiumLimit  * 7 : null,
+                    }}
+                  />
+                </View>
+                <View style={{ width: windowWidth - 32 }}>
+                  <NutritionSummaryCard
+                    title="Daily average"
+                    subtitle="Last 7 days"
+                    confirmed={avgConfirmedNutrition}
+                    planned={avgPlannedNutrition}
+                    limits={{
+                      calories: appSettings?.dailyCalorieLimit ?? null,
+                      protein:  appSettings?.dailyProteinLimit ?? null,
+                      carbs:    appSettings?.dailyCarbsLimit   ?? null,
+                      fats:     appSettings?.dailyFatsLimit    ?? null,
+                      fiber:    appSettings?.dailyFiberLimit   ?? null,
+                      sodium:   appSettings?.dailySodiumLimit  ?? null,
                     }}
                   />
                 </View>
@@ -1359,6 +1388,10 @@ export default function HomeScreen() {
                 <View
                   className="h-1.5 w-1.5 rounded-full bg-slate-200"
                   style={nutritionView === 1 ? pageDotStyles.active : undefined}
+                />
+                <View
+                  className="h-1.5 w-1.5 rounded-full bg-slate-200"
+                  style={nutritionView === 2 ? pageDotStyles.active : undefined}
                 />
               </View>
             </View>

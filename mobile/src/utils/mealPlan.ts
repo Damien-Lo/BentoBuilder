@@ -56,6 +56,22 @@ export function getWeekDates(dateStr: string, weekStartDay: number): string[] {
   return dates;
 }
 
+// Returns `days` date strings ending at (and including) `dateStr`, oldest
+// first — a rolling window, not aligned to any calendar week boundary. Used
+// for the planner's "last 7 days" nutrition card, which should track
+// backwards from whatever date is selected, not jump around with the
+// weekStartDay setting the way the calendar-week card does.
+export function getRollingDates(dateStr: string, days: number): string[] {
+  const end = parseLocalDate(dateStr);
+  const dates: string[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const day = new Date(end);
+    day.setDate(end.getDate() - i);
+    dates.push(toDateStr(day));
+  }
+  return dates;
+}
+
 export function weekRangeLabel(weekDates: string[]): string {
   const start = parseLocalDate(weekDates[0]);
   const end = parseLocalDate(weekDates[weekDates.length - 1]);
@@ -317,6 +333,22 @@ export function computeDayNutrition(entries: MealPlanEntry[], conversions: Custo
     fats:     Math.round(fats     * 10) / 10,
     fiber:    Math.round(fiber    * 10) / 10,
     sodium:   Math.round(sodium),
+  };
+}
+
+// Scales a totals object down to a per-day average (e.g. a week's totals /
+// 7) - same rounding as computeDayNutrition, so an averaged card reads
+// consistently with a single day's card. `days` of 0 returns all zeros
+// rather than dividing by zero.
+export function divideNutrition(totals: DayNutrition, days: number): DayNutrition {
+  if (days <= 0) return { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
+  return {
+    calories: Math.round(totals.calories / days),
+    protein:  Math.round((totals.protein / days) * 10) / 10,
+    carbs:    Math.round((totals.carbs   / days) * 10) / 10,
+    fats:     Math.round((totals.fats    / days) * 10) / 10,
+    fiber:    Math.round((totals.fiber   / days) * 10) / 10,
+    sodium:   Math.round(totals.sodium / days),
   };
 }
 
