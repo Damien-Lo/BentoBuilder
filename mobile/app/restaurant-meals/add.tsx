@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -20,9 +21,14 @@ import {
   PriceInput,
   SectionTitle,
 } from "@/src/components/forms";
+import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 
 import { createTag, getTags, type SelectOption } from "@/src/services/optionsApi";
-import { createRestaurantMeal, type DishInput } from "@/src/services/restaurantMealApi";
+import {
+  createRestaurantMeal,
+  estimateDishesFromPhoto,
+  type DishInput,
+} from "@/src/services/restaurantMealApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 
 type DishRow = {
@@ -76,6 +82,9 @@ export default function AddRestaurantMealPage() {
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [scannerVisible, setScannerVisible] = useState(false);
+  const [estimating, setEstimating] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     getTags()
@@ -103,6 +112,47 @@ export default function AddRestaurantMealPage() {
 
   function removeDish(key: string) {
     setDishes((prev) => (prev.length > 1 ? prev.filter((d) => d.key !== key) : prev));
+  }
+
+  // Appends one pre-filled dish row per estimated dish - the existing
+  // dish-row editing UI below doubles as the review/correction step, same
+  // as any manually typed dish. Nothing is saved until the normal Save
+  // button is pressed.
+  function handlePhotoCaptured(photoUri: string) {
+    setScannerVisible(false);
+    setEstimating(true);
+
+    estimateDishesFromPhoto(photoUri, restaurantName.trim() || undefined)
+      .then((estimated) => {
+        if (estimated.length === 0) {
+          Alert.alert(
+            "No dishes recognized",
+            "Couldn't identify any food in that photo — try again, or add the dish manually.",
+          );
+          return;
+        }
+        setDishes((prev) => [
+          ...prev,
+          ...estimated.map((d) => ({
+            ...newDishRow(),
+            name: d.name,
+            notes: d.confidence !== "high" ? `[${d.confidence} confidence] ${d.portionNote}` : d.portionNote,
+            calories: d.estimatedNutrition.calories != null ? String(d.estimatedNutrition.calories) : "",
+            protein:  d.estimatedNutrition.protein  != null ? String(d.estimatedNutrition.protein)  : "",
+            carbs:    d.estimatedNutrition.carbs    != null ? String(d.estimatedNutrition.carbs)    : "",
+            fats:     d.estimatedNutrition.fats     != null ? String(d.estimatedNutrition.fats)     : "",
+            fiber:    d.estimatedNutrition.fiber    != null ? String(d.estimatedNutrition.fiber)    : "",
+            sodium:   d.estimatedNutrition.sodium   != null ? String(d.estimatedNutrition.sodium)   : "",
+          })),
+        ]);
+      })
+      .catch((error) => {
+        Alert.alert(
+          "Couldn't estimate photo",
+          error instanceof Error ? error.message : "Something went wrong reading that photo.",
+        );
+      })
+      .finally(() => setEstimating(false));
   }
 
   async function handleSave() {
@@ -327,15 +377,43 @@ export default function AddRestaurantMealPage() {
             </View>
           ))}
 
-          <Pressable
-            className="mb-4 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-4 active:bg-slate-100"
-            onPress={() => setDishes((prev) => [...prev, newDishRow()])}
-          >
-            <Ionicons name="add" size={20} color="#2563EB" />
-            <Text className="ml-2 font-semibold text-blue-700">Add dish</Text>
-          </Pressable>
+          <View className="mb-4 flex-row gap-3">
+            <Pressable
+              className="flex-1 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-4 active:bg-slate-100"
+              onPress={() => setDishes((prev) => [...prev, newDishRow()])}
+            >
+              <Ionicons name="add" size={20} color="#2563EB" />
+              <Text className="ml-2 font-semibold text-blue-700">Add dish</Text>
+            </Pressable>
+            <Pressable
+              className="flex-1 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-4 active:bg-slate-100"
+              onPress={() => setScannerVisible(true)}
+            >
+              <Ionicons name="camera-outline" size={20} color="#2563EB" />
+              <Text className="ml-2 font-semibold text-blue-700">Scan a photo</Text>
+            </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <PhotoCaptureModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onCaptured={handlePhotoCaptured}
+        subject="meal photo"
+        instructions="Fit the dish(es) in frame — a photo of a table with several plates is fine, each one gets estimated separately."
+      />
+
+      <Modal visible={estimating} transparent animationType="fade">
+        <View className="flex-1 items-center justify-center bg-black/50">
+          <View className="items-center rounded-3xl bg-white px-8 py-6">
+            <ActivityIndicator size="large" />
+            <Text className="mt-3 text-base font-semibold text-slate-700">
+              Estimating nutrition...
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
