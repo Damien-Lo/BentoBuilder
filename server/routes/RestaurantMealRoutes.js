@@ -87,7 +87,7 @@ router.post("/", async (req, res) => {
  */
 router.post("/estimate-photo", async (req, res) => {
   try {
-    const { imageBase64, mediaType, restaurantName } = req.body;
+    const { imageBase64, mediaType, restaurantName, singleDish } = req.body;
 
     if (typeof imageBase64 !== "string" || !imageBase64) {
       return res.status(400).json({ success: false, message: "imageBase64 is required." });
@@ -100,6 +100,7 @@ router.post("/estimate-photo", async (req, res) => {
       imageBase64,
       mediaType,
       restaurantName: typeof restaurantName === "string" ? restaurantName : null,
+      singleDish: singleDish === true,
     });
 
     return res.status(200).json({ success: true, data });

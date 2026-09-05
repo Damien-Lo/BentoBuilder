@@ -66,23 +66,27 @@ const MEAL_PHOTO_JSON_SCHEMA = {
   required: ["dishes"],
 };
 
-function buildPrompt(restaurantName) {
+function buildPrompt(restaurantName, singleDish) {
   const restaurantContext = restaurantName
     ? `This photo is from a visit to "${restaurantName}". Use any real knowledge you have of this specific restaurant's dishes if you recognize them; otherwise reason from the cuisine/dish type visible.`
     : "No restaurant name was given — reason purely from what's visible in the photo.";
+
+  const scopeInstruction = singleDish
+    ? "This photo shows exactly ONE dish the person is logging — return exactly one entry in the dishes array. If multiple components are visible (a protein, a side, a sauce, a garnish), treat them as one combined dish and sum their nutrition into that single entry rather than splitting it up, even if it looks like it could be described as several parts."
+    : "Identify each visually distinct dish in the photo (a photo of a single plate is usually one dish; a table spread may show several — list each separately rather than lumping them into one entry).";
 
   return `You are estimating the nutrition of food shown in a photo, for someone logging what they ate.
 
 ${restaurantContext}
 
-1. Identify each visually distinct dish in the photo (a photo of a single plate is usually one dish; a table spread may show several — list each separately rather than lumping them into one entry).
+1. ${scopeInstruction}
 2. For each dish, estimate calories/protein/carbs/fats/fiber/sodium using your general knowledge of similar dishes and visible portion size. Reason about visible ingredients, cooking method (fried/grilled/sauced), and roughly how much is on the plate.
 3. Set portionNote to a short, honest caveat about what's uncertain — e.g. sauce/oil quantity not fully visible, portion size assumed from typical serving, some ingredients possibly hidden under others. Never leave it empty; if you're fairly confident, say what made you confident instead (e.g. "standard-looking single restaurant portion").
 4. Set confidence to "high" only when the dish is clearly identifiable and portion size is easy to judge, "medium" for a reasonable guess with real uncertainty, "low" when you're genuinely unsure what's in it or the portion is hard to judge.
 5. If the photo doesn't clearly show food at all, return an empty dishes array rather than guessing.`;
 }
 
-export async function estimateMealPhoto({ imageBase64, mediaType, restaurantName }) {
+export async function estimateMealPhoto({ imageBase64, mediaType, restaurantName, singleDish }) {
   if (!process.env.GOOGLE_AI_API_KEY) {
     throw new Error("GOOGLE_AI_API_KEY is missing from server/.env");
   }
@@ -94,7 +98,7 @@ export async function estimateMealPhoto({ imageBase64, mediaType, restaurantName
       contents: [{
         parts: [
           { inlineData: { mimeType: mediaType, data: imageBase64 } },
-          { text: buildPrompt(restaurantName) },
+          { text: buildPrompt(restaurantName, !!singleDish) },
         ],
       }],
       generationConfig: {

@@ -28,6 +28,7 @@ import {
   createRestaurantMeal,
   estimateDishesFromPhoto,
   type DishInput,
+  type EstimatedDish,
 } from "@/src/services/restaurantMealApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 
@@ -69,6 +70,26 @@ function parseOptionalNumber(text: string): number | null | undefined {
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
+// "append" is the top-level "Scan a photo" button (one photo may cover
+// several dishes on a table); "update" is a single dish card's own scan
+// button (one photo, exactly that one card) — same capture modal and
+// endpoint either way, just a different singleDish flag and what happens
+// with the result.
+type ScanTarget = { mode: "append" } | { mode: "update"; key: string };
+
+function estimatedDishToRowFields(d: EstimatedDish) {
+  return {
+    name: d.name,
+    notes: d.confidence !== "high" ? `[${d.confidence} confidence] ${d.portionNote}` : d.portionNote,
+    calories: d.estimatedNutrition.calories != null ? String(d.estimatedNutrition.calories) : "",
+    protein:  d.estimatedNutrition.protein  != null ? String(d.estimatedNutrition.protein)  : "",
+    carbs:    d.estimatedNutrition.carbs    != null ? String(d.estimatedNutrition.carbs)    : "",
+    fats:     d.estimatedNutrition.fats     != null ? String(d.estimatedNutrition.fats)     : "",
+    fiber:    d.estimatedNutrition.fiber    != null ? String(d.estimatedNutrition.fiber)    : "",
+    sodium:   d.estimatedNutrition.sodium   != null ? String(d.estimatedNutrition.sodium)   : "",
+  };
+}
+
 export default function AddRestaurantMealPage() {
   const router = useRouter();
 
@@ -82,7 +103,7 @@ export default function AddRestaurantMealPage() {
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [scannerVisible, setScannerVisible] = useState(false);
+  const [scanTarget, setScanTarget] = useState<ScanTarget | null>(null);
   const [estimating, setEstimating] = useState(false);
 
   useEffect(() => {
@@ -114,37 +135,41 @@ export default function AddRestaurantMealPage() {
     setDishes((prev) => (prev.length > 1 ? prev.filter((d) => d.key !== key) : prev));
   }
 
-  // Appends one pre-filled dish row per estimated dish - the existing
-  // dish-row editing UI below doubles as the review/correction step, same
-  // as any manually typed dish. Nothing is saved until the normal Save
-  // button is pressed.
+  // "append" mode adds one pre-filled dish row per estimated dish; "update"
+  // mode (a single card's own scan button) fills just that one card in
+  // place. Either way, nothing is saved until the normal Save button is
+  // pressed - the dish-row editing UI is the review/correction step, same
+  // as any manually typed dish.
   function handlePhotoCaptured(photoUri: string) {
-    setScannerVisible(false);
-    setEstimating(true);
+    const target = scanTarget;
+    setScanTarget(null);
+    if (!target) return;
 
-    estimateDishesFromPhoto(photoUri, restaurantName.trim() || undefined)
+    setEstimating(true);
+    estimateDishesFromPhoto(photoUri, restaurantName.trim() || undefined, target.mode === "update")
       .then((estimated) => {
         if (estimated.length === 0) {
           Alert.alert(
-            "No dishes recognized",
+            "No dish recognized",
             "Couldn't identify any food in that photo — try again, or add the dish manually.",
           );
           return;
         }
-        setDishes((prev) => [
-          ...prev,
-          ...estimated.map((d) => ({
-            ...newDishRow(),
-            name: d.name,
-            notes: d.confidence !== "high" ? `[${d.confidence} confidence] ${d.portionNote}` : d.portionNote,
-            calories: d.estimatedNutrition.calories != null ? String(d.estimatedNutrition.calories) : "",
-            protein:  d.estimatedNutrition.protein  != null ? String(d.estimatedNutrition.protein)  : "",
-            carbs:    d.estimatedNutrition.carbs    != null ? String(d.estimatedNutrition.carbs)    : "",
-            fats:     d.estimatedNutrition.fats     != null ? String(d.estimatedNutrition.fats)     : "",
-            fiber:    d.estimatedNutrition.fiber    != null ? String(d.estimatedNutrition.fiber)    : "",
-            sodium:   d.estimatedNutrition.sodium   != null ? String(d.estimatedNutrition.sodium)   : "",
-          })),
-        ]);
+
+        if (target.mode === "update") {
+          updateDish(target.key, estimatedDishToRowFields(estimated[0]));
+          if (estimated.length > 1) {
+            Alert.alert(
+              "Spotted more than one dish",
+              "This card was only updated with the first one — use the \"Scan a photo\" button below the dish list to add several from one photo instead.",
+            );
+          }
+        } else {
+          setDishes((prev) => [
+            ...prev,
+            ...estimated.map((d) => ({ ...newDishRow(), ...estimatedDishToRowFields(d) })),
+          ]);
+        }
       })
       .catch((error) => {
         Alert.alert(
@@ -290,11 +315,16 @@ export default function AddRestaurantMealPage() {
                 <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">
                   Dish {index + 1}
                 </Text>
-                {dishes.length > 1 && (
-                  <Pressable hitSlop={8} onPress={() => removeDish(dish.key)}>
-                    <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
+                <View className="flex-row items-center gap-3">
+                  <Pressable hitSlop={8} onPress={() => setScanTarget({ mode: "update", key: dish.key })}>
+                    <Ionicons name="camera-outline" size={20} color="#2563EB" />
                   </Pressable>
-                )}
+                  {dishes.length > 1 && (
+                    <Pressable hitSlop={8} onPress={() => removeDish(dish.key)}>
+                      <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
+                    </Pressable>
+                  )}
+                </View>
               </View>
 
               <FieldLabel text="Dish name" required />
@@ -387,7 +417,7 @@ export default function AddRestaurantMealPage() {
             </Pressable>
             <Pressable
               className="flex-1 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-4 active:bg-slate-100"
-              onPress={() => setScannerVisible(true)}
+              onPress={() => setScanTarget({ mode: "append" })}
             >
               <Ionicons name="camera-outline" size={20} color="#2563EB" />
               <Text className="ml-2 font-semibold text-blue-700">Scan a photo</Text>
@@ -397,11 +427,15 @@ export default function AddRestaurantMealPage() {
       </KeyboardAvoidingView>
 
       <PhotoCaptureModal
-        visible={scannerVisible}
-        onClose={() => setScannerVisible(false)}
+        visible={!!scanTarget}
+        onClose={() => setScanTarget(null)}
         onCaptured={handlePhotoCaptured}
         subject="meal photo"
-        instructions="Fit the dish(es) in frame — a photo of a table with several plates is fine, each one gets estimated separately."
+        instructions={
+          scanTarget?.mode === "update"
+            ? "Fit just this one dish in frame."
+            : "Fit the dish(es) in frame — a photo of a table with several plates is fine, each one gets estimated separately."
+        }
       />
 
       <Modal visible={estimating} transparent animationType="fade">

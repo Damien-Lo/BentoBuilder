@@ -218,16 +218,22 @@ interface MealPhotoEstimateResponse {
   message?: string;
 }
 
+// singleDish tells the model this photo is of exactly one dish (the
+// per-dish-card scan button) rather than a possible multi-dish table spread
+// (the top-level "Scan a photo" button) — changes how it reasons about the
+// photo, not just how the caller uses the result, so a plate with a few
+// visible components doesn't get needlessly split into several entries.
 export async function estimateDishesFromPhoto(
   photoUri: string,
   restaurantName?: string,
+  singleDish?: boolean,
 ): Promise<EstimatedDish[]> {
   const imageBase64 = await new File(photoUri).base64();
 
   const response = await fetch(`${API_BASE_URL}/api/restaurant-meals/estimate-photo`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ imageBase64, mediaType: "image/jpeg", restaurantName }),
+    body: JSON.stringify({ imageBase64, mediaType: "image/jpeg", restaurantName, singleDish }),
   });
 
   const result = await parseResponse<MealPhotoEstimateResponse>(response);
