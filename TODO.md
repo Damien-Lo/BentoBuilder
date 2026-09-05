@@ -20,6 +20,7 @@ Still genuinely unresolved (nothing in the catalog to map to):
 
 ## Scoped but deferred features
 
+- **User profiles and authentication** — deliberately saved for one of the *last* things to build, not because it's unimportant but because adding it early would block day-to-day development flow (every test/debug pass would have to go through login, multi-user state, etc.) before the base app's actual features are fleshed out. Revisit once the core feature set feels done.
 - **Whole-unit pantry deduction** ("use 1 whole fillet, whatever size it is, without splitting across pantry items to hit an exact gram target") — see `[[whole-unit-deduction]]` in memory for the full writeup. Needs new logic in `pantryDeduction.ts`'s brother-grouping/ambiguity-resolution system; deliberately separated from the exact-nutrition-from-`stockDeductions` work (which is done).
 
 ## Branch / deploy housekeeping
