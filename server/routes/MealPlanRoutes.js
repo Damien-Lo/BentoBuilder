@@ -75,6 +75,28 @@ router.get("/", async (req, res) => {
   }
 });
 
+/**
+ * GET /api/meal-plan/by-restaurant/:restaurantMealId
+ * Every non-archived visit to this restaurant, most recent first — powers
+ * the restaurant detail page's "Past visits" section. Registered before
+ * "/:id"-style routes for the same reason as "/last-used" below, even
+ * though this file has no generic "/:id" route today.
+ */
+router.get("/by-restaurant/:restaurantMealId", async (req, res) => {
+  try {
+    const entries = await populateEntry(
+      MealPlanEntry.find({
+        restaurantMeal: req.params.restaurantMealId,
+        isArchived: false,
+      }).sort({ date: -1, createdAt: -1 }),
+    );
+    return res.status(200).json({ success: true, count: entries.length, data: entries });
+  } catch (error) {
+    console.error("Get meal plan by restaurant error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load restaurant visit history" });
+  }
+});
+
 // How far back "last used" looks — sorting priority only cares about
 // recent activity (something planned 3 years ago shouldn't outrank
 // something from last month just because it happens to have a date at

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 
 import type { Meal, MealRecipeRef } from "@/src/services/mealApi";
-import type { MealPlanEntry, MealSlot } from "@/src/services/mealPlanApi";
+import type { MealPlanEntry, MealSlot, RestaurantDishSelection } from "@/src/services/mealPlanApi";
 import type { Recipe } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
 import type { RestaurantMeal } from "@/src/services/restaurantMealApi";
@@ -120,13 +120,17 @@ export function getMealKcal(meal: Meal): number | null {
 }
 
 // A restaurant visit has no "servings" to scale — each dish's manual
-// nutrition estimate is summed flat, as eaten.
-// dishIds filters to just those dishes (e.g. what a specific meal-plan
-// entry actually logged) — omitted or empty means "every dish," used when
-// browsing a restaurant's full menu before picking anything.
-export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal, dishIds?: string[]): number | null {
-  const dishes = dishIds?.length
-    ? restaurantMeal.dishes?.filter(d => dishIds.includes(d._id))
+// nutrition estimate is multiplied by how many of that dish were had (1 if
+// unspecified) and summed. `selections` filters to just those dishes (e.g.
+// what a specific meal-plan entry actually logged) — omitted or empty means
+// "every dish, one each," used when browsing a restaurant's full menu
+// before picking anything.
+export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal, selections?: RestaurantDishSelection[]): number | null {
+  const quantityByDish = selections?.length
+    ? new Map(selections.map(s => [s.dish, s.quantity]))
+    : null;
+  const dishes = quantityByDish
+    ? restaurantMeal.dishes?.filter(d => quantityByDish.has(d._id))
     : restaurantMeal.dishes;
   if (!dishes?.length) return null;
   let total = 0;
@@ -134,7 +138,7 @@ export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal, dishIds?: 
   for (const dish of dishes) {
     const cal = dish.nutrition?.calories;
     if (cal != null) {
-      total += cal;
+      total += cal * (quantityByDish?.get(dish._id) ?? 1);
       hasAny = true;
     }
   }
@@ -291,20 +295,24 @@ export function computeDayNutrition(entries: MealPlanEntry[], conversions: Custo
       continue;
     }
     if (entry.restaurantMeal) {
-      const dishIds = entry.restaurantDishIds;
-      const dishes = dishIds?.length
-        ? entry.restaurantMeal.dishes?.filter(d => dishIds.includes(d._id))
+      const selections = entry.restaurantDishSelections;
+      const quantityByDish = selections?.length
+        ? new Map(selections.map(s => [s.dish, s.quantity]))
+        : null;
+      const dishes = quantityByDish
+        ? entry.restaurantMeal.dishes?.filter(d => quantityByDish.has(d._id))
         : entry.restaurantMeal.dishes;
       for (const dish of dishes ?? []) {
         const n = dish.nutrition;
         if (!n) continue;
+        const qty = quantityByDish?.get(dish._id) ?? 1;
         addScaled(totals, {
-          calories: n.calories ?? null,
-          protein: n.protein ?? null,
-          carbs: n.carbs ?? null,
-          fats: n.fats ?? null,
-          fiber: n.fiber ?? null,
-          sodium: n.sodium ?? null,
+          calories: n.calories != null ? n.calories * qty : null,
+          protein:  n.protein  != null ? n.protein  * qty : null,
+          carbs:    n.carbs    != null ? n.carbs    * qty : null,
+          fats:     n.fats     != null ? n.fats     * qty : null,
+          fiber:    n.fiber    != null ? n.fiber    * qty : null,
+          sodium:   n.sodium   != null ? n.sodium   * qty : null,
         });
       }
       continue;

@@ -14,6 +14,8 @@ import {
   type Dish,
   type RestaurantMeal,
 } from "@/src/services/restaurantMealApi";
+import { getMealPlanHistoryForRestaurant, type MealPlanEntry } from "@/src/services/mealPlanApi";
+import { friendlyDayLabel, getRestaurantMealKcal } from "@/src/utils/mealPlan";
 
 function recentScoresFor(dish: Dish) {
   return (dish.scores ?? []).slice(-50);
@@ -38,6 +40,14 @@ export default function RestaurantMealDetailPage() {
   const [savingScore, setSavingScore] = useState(false);
   const [expandedHistoryDishIds, setExpandedHistoryDishIds] = useState<Set<string>>(new Set());
 
+  // Past visits to this restaurant - the whole section starts collapsed
+  // (there can be a lot of these once you've eaten somewhere a while),
+  // individual visits expand on tap to show what was actually ordered.
+  const [visits, setVisits] = useState<MealPlanEntry[]>([]);
+  const [visitsLoading, setVisitsLoading] = useState(true);
+  const [visitsExpanded, setVisitsExpanded] = useState(false);
+  const [expandedVisitId, setExpandedVisitId] = useState<string | null>(null);
+
   const load = useCallback(() => {
     if (!id) return;
     setIsLoading(true);
@@ -50,7 +60,17 @@ export default function RestaurantMealDetailPage() {
       .finally(() => setIsLoading(false));
   }, [id]);
 
+  const loadVisits = useCallback(() => {
+    if (!id) return;
+    setVisitsLoading(true);
+    getMealPlanHistoryForRestaurant(id)
+      .then(setVisits)
+      .catch(() => setVisits([]))
+      .finally(() => setVisitsLoading(false));
+  }, [id]);
+
   useFocusEffect(load);
+  useFocusEffect(loadVisits);
 
   function toggleHistory(dishId: string) {
     setExpandedHistoryDishIds((prev) => {
@@ -308,6 +328,82 @@ export default function RestaurantMealDetailPage() {
               </View>
             );
           })}
+
+          {/* Past visits - collapsed by default (can be a long list once
+              you've eaten somewhere a while), individual visits expand on
+              tap to show what was actually ordered that time. */}
+          <Pressable
+            className="mb-2 mt-6 flex-row items-center justify-between"
+            onPress={() => setVisitsExpanded((v) => !v)}
+          >
+            <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+              Past Visits ({visits.length})
+            </Text>
+            <Ionicons name={visitsExpanded ? "chevron-up" : "chevron-down"} size={18} color="#64748B" />
+          </Pressable>
+
+          {visitsExpanded && (
+            visitsLoading ? (
+              <ActivityIndicator size="small" color="#2563EB" style={{ marginVertical: 12 }} />
+            ) : visits.length === 0 ? (
+              <Text className="mb-4 text-sm text-slate-400">No visits logged yet.</Text>
+            ) : (
+              <View className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                {visits.map((visit, i) => {
+                  const isOpen = expandedVisitId === visit._id;
+                  const selections = visit.restaurantDishSelections ?? [];
+                  const quantityByDish = new Map(selections.map((s) => [s.dish, s.quantity]));
+                  const orderedDishes = restaurantMeal.dishes.filter((d) => quantityByDish.has(d._id));
+                  const kcal = getRestaurantMealKcal(restaurantMeal, selections);
+                  return (
+                    <View key={visit._id} className={i < visits.length - 1 ? "border-b border-slate-100" : ""}>
+                      <Pressable
+                        className="flex-row items-center justify-between px-4 py-3.5 active:bg-slate-50"
+                        onPress={() => setExpandedVisitId(isOpen ? null : visit._id)}
+                      >
+                        <View className="flex-1">
+                          <Text className="font-semibold text-slate-900">{friendlyDayLabel(visit.date)}</Text>
+                          <Text className="mt-0.5 text-xs text-slate-400">
+                            {orderedDishes.length} {orderedDishes.length === 1 ? "dish" : "dishes"}
+                            {kcal != null ? ` · ${kcal} kcal` : ""}
+                          </Text>
+                        </View>
+                        <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={16} color="#94A3B8" />
+                      </Pressable>
+
+                      {isOpen && (
+                        <View className="bg-slate-50 px-4 pb-4">
+                          {orderedDishes.length === 0 ? (
+                            <Text className="text-sm text-slate-400">Dish details no longer available.</Text>
+                          ) : (
+                            orderedDishes.map((d) => {
+                              const qty = quantityByDish.get(d._id) ?? 1;
+                              return (
+                                <View key={d._id} className="flex-row items-center justify-between py-1.5">
+                                  <Text className="text-sm text-slate-700">
+                                    {d.name}
+                                    {qty > 1 ? ` ×${qty}` : ""}
+                                  </Text>
+                                  {d.nutrition?.calories != null && (
+                                    <Text className="text-xs text-slate-400">
+                                      {Math.round(d.nutrition.calories * qty)} kcal
+                                    </Text>
+                                  )}
+                                </View>
+                              );
+                            })
+                          )}
+                          <Text className="mt-2 text-xs font-semibold text-slate-400">
+                            {visit.status === "confirmed" ? "Confirmed" : "Planned"}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            )
+          )}
         </ScrollView>
       </SafeAreaView>
 
