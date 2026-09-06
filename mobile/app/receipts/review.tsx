@@ -130,7 +130,13 @@ interface ReviewRow {
   // catalog definition. Both quantity and this are directly, independently
   // editable.
   nutrition: ReceiptNutrition;
-  defaultPortionAmount: number;
+  // A string, like `quantity` above, and for the same reason - a
+  // controlled TextInput whose value is derived from a `number` can't
+  // represent "the field is momentarily empty, about to be retyped"
+  // without snapping back to the old value and mangling the next
+  // keystroke (typing "5" over a snapped-back "1" becomes "15"). Parsed
+  // with Number(...) wherever it's actually used for math.
+  defaultPortionAmount: string;
 
   // Only meaningful while matchedIngredientId is null, like the proposal
   // fields above - a real, reusable unit conversion (e.g. "1 stalk = 15
@@ -265,6 +271,15 @@ function getRequiredMissingFields(row: ReviewRow): string[] {
   const parsedQuantity = Number(row.quantity);
   if (row.quantity.trim() === "" || !Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
     missing.push("quantity");
+  }
+
+  const parsedPortionAmount = Number(row.defaultPortionAmount);
+  if (
+    row.defaultPortionAmount.trim() === "" ||
+    !Number.isFinite(parsedPortionAmount) ||
+    parsedPortionAmount <= 0
+  ) {
+    missing.push("serving size");
   }
 
   if (!row.storageLocationId) missing.push("storage location");
@@ -559,6 +574,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
               onChangeText={(value) => updateRow(row.key, { unit: value })}
               placeholder="Unit"
               placeholderTextColor="#94A3B8"
+              autoCapitalize="none"
               className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
               style={{ height: 40 }}
             />
@@ -657,13 +673,8 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         </Text>
         <View className="w-14">
           <TextInput
-            value={String(row.defaultPortionAmount)}
-            onChangeText={(value) => {
-              const parsed = Number(value);
-              if (value.trim() !== "" && Number.isFinite(parsed) && parsed > 0) {
-                updateRow(row.key, { defaultPortionAmount: parsed });
-              }
-            }}
+            value={row.defaultPortionAmount}
+            onChangeText={(value) => updateRow(row.key, { defaultPortionAmount: value })}
             keyboardType="decimal-pad"
             placeholder="Amt"
             placeholderTextColor="#94A3B8"
@@ -715,7 +726,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         const totalNutrition = Number.isFinite(qty) && qty > 0
           ? scaleNutritionToQuantity(
               row.nutrition,
-              row.defaultPortionAmount,
+              Number(row.defaultPortionAmount),
               row.unit,
               qty,
               row.unit,
@@ -1099,7 +1110,7 @@ export default function ReceiptReviewPage() {
               genericName: proposedGenericParent?.name ?? proposal?.genericName ?? "",
               barcode: null,
               nutrition: portionNutrition,
-              defaultPortionAmount: portionAmount,
+              defaultPortionAmount: String(portionAmount),
               unitConversions: matched?.unitConversions ?? [],
               submitted: false,
             };
@@ -1292,11 +1303,13 @@ export default function ReceiptReviewPage() {
       // matched ingredient's own portion into the row's existing unit
       // when possible, otherwise fall back to 1 rather than pair a wrong
       // amount with the wrong unit.
-      defaultPortionAmount: convertPortionAmount(
-        ingredient.defaultPortionAmount ?? 1,
-        ingredient.defaultPortionUnit ?? "item",
-        row?.unit ?? "item",
-        getIngredientConversions(ingredient, [], ingredients),
+      defaultPortionAmount: String(
+        convertPortionAmount(
+          ingredient.defaultPortionAmount ?? 1,
+          ingredient.defaultPortionUnit ?? "item",
+          row?.unit ?? "item",
+          getIngredientConversions(ingredient, [], ingredients),
+        ),
       ),
       unitConversions: ingredient.unitConversions ?? [],
       error: undefined,
@@ -1342,7 +1355,7 @@ export default function ReceiptReviewPage() {
             nutrition: {
               calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null,
             },
-            defaultPortionAmount: 1,
+            defaultPortionAmount: "1",
             unitConversions: [],
             expirySuggestion: null,
           }
@@ -1394,11 +1407,13 @@ export default function ReceiptReviewPage() {
         expiryTouched: false,
         expirySuggestion: suggestedExpiry,
         nutrition: toReceiptNutrition(existingMatch.nutrition),
-        defaultPortionAmount: convertPortionAmount(
-          existingMatch.defaultPortionAmount ?? 1,
-          existingMatch.defaultPortionUnit ?? "item",
-          row.unit,
-          getIngredientConversions(existingMatch, [], ingredients),
+        defaultPortionAmount: String(
+          convertPortionAmount(
+            existingMatch.defaultPortionAmount ?? 1,
+            existingMatch.defaultPortionUnit ?? "item",
+            row.unit,
+            getIngredientConversions(existingMatch, [], ingredients),
+          ),
         ),
         unitConversions: existingMatch.unitConversions ?? [],
         error: undefined,
@@ -1451,7 +1466,7 @@ export default function ReceiptReviewPage() {
       ...(product.packageQuantity != null
         ? { quantity: String(product.packageQuantity), unit: resultingUnit }
         : {}),
-      defaultPortionAmount: convertPortionAmount(product.servingSize, product.servingUnit, resultingUnit),
+      defaultPortionAmount: String(convertPortionAmount(product.servingSize, product.servingUnit, resultingUnit)),
       nutrition: {
         calories: product.calories ?? null,
         protein: product.protein ?? null,
@@ -1506,7 +1521,7 @@ export default function ReceiptReviewPage() {
       genericName: "",
       barcode: null,
       nutrition: { calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null },
-      defaultPortionAmount: 1,
+      defaultPortionAmount: "1",
       unitConversions: [],
     };
   }
@@ -1662,7 +1677,7 @@ export default function ReceiptReviewPage() {
               genericParent: row.isGeneric ? undefined : row.genericParentId || undefined,
               genericName:
                 row.isGeneric || row.genericParentId ? undefined : row.genericName || undefined,
-              defaultPortionAmount: row.defaultPortionAmount,
+              defaultPortionAmount: Number(row.defaultPortionAmount) || 1,
               defaultPortionUnit: row.unit || "item",
               nutrition: {
                 calories: row.nutrition.calories ?? undefined,
