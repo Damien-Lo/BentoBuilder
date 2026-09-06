@@ -30,6 +30,7 @@ import {
   PriceInput,
   SearchableObjectDropdown,
   SegmentedToggle,
+  UnitConversionsEditor,
 } from "@/src/components/forms";
 import {
   getIngredients,
@@ -120,16 +121,22 @@ interface ReviewRow {
   genericName: string;
   barcode: string | null;
 
-  // The serving size nutrition is defined for — Gemini's estimate, the
-  // matched ingredient's own record, or a scanned barcode's per-serving
-  // values. Independent of `quantity`/`unit` (how much was actually
-  // bought, tracked to the pantry) and never touched by editing those -
-  // e.g. buying 6 stalks of a brand-new ingredient shouldn't turn "5 cal
-  // per 1 stalk" into "30 cal per 6 stalks" as its permanent catalog
-  // definition. Both are directly, independently editable.
+  // The serving size nutrition is defined for, in the *same* unit as
+  // `unit` above (how much was bought) - there's only ever one unit in
+  // play for a given row, so there's nothing to keep in sync. Independent
+  // of `quantity` itself (the total bought) and never touched by editing
+  // that - e.g. buying 6 (of whatever unit) of a brand-new ingredient
+  // shouldn't turn "5 cal per 1" into "30 cal per 6" as its permanent
+  // catalog definition. Both quantity and this are directly, independently
+  // editable.
   nutrition: ReceiptNutrition;
   defaultPortionAmount: number;
-  defaultPortionUnit: string;
+
+  // Only meaningful while matchedIngredientId is null, like the proposal
+  // fields above - a real, reusable unit conversion (e.g. "1 stalk = 15
+  // g") to save on the new ingredient, for when its natural unit differs
+  // from whatever unit this particular purchase happened to be in.
+  unitConversions: CustomUnitConversion[];
 }
 
 // Ingredient.nutrition uses optional numbers; ReviewRow.nutrition uses
@@ -144,6 +151,24 @@ function toReceiptNutrition(nutrition?: IngredientNutrition): ReceiptNutrition {
     fiber: nutrition?.fiber ?? null,
     sodium: nutrition?.sodium ?? null,
   };
+}
+
+// A row has one single unit throughout (quantity bought and serving size
+// always share it) - converts a portion amount that came from a different
+// unit (a matched ingredient's own catalog portion, a barcode's serving
+// size, Gemini's proposal) into the row's unit when possible: same unit
+// (case-insensitive), or a real conversion exists via customConversions.
+// Otherwise falls back to 1 rather than pairing the wrong amount with the
+// wrong unit - a safe, honest default the user can correct (or fix for
+// good by adding a real conversion in the unit-conversions section).
+function convertPortionAmount(
+  amount: number,
+  fromUnit: string,
+  targetUnit: string,
+  customConversions: CustomUnitConversion[] = [],
+): number {
+  if (fromUnit.trim().toLowerCase() === targetUnit.trim().toLowerCase()) return amount;
+  return convertUnits(amount, fromUnit, targetUnit, customConversions) ?? 1;
 }
 
 // Scales `base` (nutrition per baseAmount/baseUnit) onto quantity/unit —
@@ -361,12 +386,21 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
   const matchedIngredient = row.matchedIngredientId
     ? ingredients.find((ing) => ing._id === row.matchedIngredientId)
     : null;
-  const customConversions = getIngredientConversions(matchedIngredient, [], ingredients);
+  // A matched ingredient's own conversions come straight from the catalog;
+  // a brand-new one has no catalog entry yet, so its only source is
+  // whatever's been entered in this row's own Unit conversions section below.
+  const customConversions = matchedIngredient
+    ? getIngredientConversions(matchedIngredient, [], ingredients)
+    : row.unitConversions;
 
   return (
     <View
-      className={`flex-1 rounded-2xl border bg-white p-3 ${row.error ? "border-red-300" : "border-slate-200"} ${row.submitted ? "opacity-50" : ""}`}
+      className={`flex-1 overflow-hidden rounded-2xl border bg-white ${row.error ? "border-red-300" : "border-slate-200"} ${row.submitted ? "opacity-50" : ""}`}
     >
+      {/* Pinned header — the name row stays visible no matter how far the
+          scrollable body below is scrolled, so it's always clear which
+          item this card is. */}
+      <View className="p-3 pb-1">
       <View className="flex-row items-center justify-between gap-2">
         <Pressable
           disabled={row.submitted}
@@ -462,7 +496,21 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           <Ionicons name="trash-outline" size={18} color="#DC2626" />
         </Pressable>
       </View>
+      </View>
 
+      {/* Everything below the name row scrolls independently, inside the
+          card's own fixed height — the bottom padding reserves space for
+          the draggable item-list panel that overlays the bottom of the
+          screen, so the last field can still be scrolled clear of it. */}
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
+          paddingHorizontal: 12,
+          paddingBottom: COLLAPSED_LIST_HEIGHT + LIST_HANDLE_AREA_HEIGHT + 24,
+        }}
+      >
       {/* How much was actually bought — feeds the pantry item's stock
           directly, independent of the serving size nutrition is defined
           for below. Editing this never touches nutrition. */}
@@ -584,37 +632,32 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
       )}
 
       {/* Serving size nutrition is defined for — independent of how much was
-          bought above. This is what actually gets saved as the ingredient's
-          catalog default portion for a brand-new ingredient, so it should
-          read like "5 cal per 1 stalk," not "however much I bought today." */}
-      <Text className="mt-2 text-xs font-semibold text-slate-600">Serving size (nutrition is per this much)</Text>
-      <View className="mt-1 flex-row gap-2">
-        <View className="w-12">
-          <TextInput
-            value={String(row.defaultPortionAmount)}
-            onChangeText={(value) => {
-              const parsed = Number(value);
-              if (value.trim() !== "" && Number.isFinite(parsed) && parsed > 0) {
-                updateRow(row.key, { defaultPortionAmount: parsed });
-              }
-            }}
-            keyboardType="decimal-pad"
-            placeholder="Amt"
-            placeholderTextColor="#94A3B8"
-            className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
-            style={{ height: 40 }}
-          />
-        </View>
-        <View className="w-12">
-          <TextInput
-            value={row.defaultPortionUnit}
-            onChangeText={(value) => updateRow(row.key, { defaultPortionUnit: value })}
-            placeholder="Unit"
-            placeholderTextColor="#94A3B8"
-            className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
-            style={{ height: 40 }}
-          />
-        </View>
+          bought above, but always the *same unit* as that (there's only
+          ever one unit in play for a row - if the ingredient's natural
+          serving unit is genuinely different, e.g. "1 stalk" for something
+          bought in grams, that's what the unit conversion section further
+          down is for). This is what actually gets saved as the
+          ingredient's catalog default portion for a brand-new ingredient,
+          so it should read like "5 cal per 1 <unit>," not "however much I
+          bought today." */}
+      <Text className="mt-2 text-xs font-semibold text-slate-600">
+        Serving size ({row.unit || "unit"} — nutrition is per this much)
+      </Text>
+      <View className="mt-1 w-12">
+        <TextInput
+          value={String(row.defaultPortionAmount)}
+          onChangeText={(value) => {
+            const parsed = Number(value);
+            if (value.trim() !== "" && Number.isFinite(parsed) && parsed > 0) {
+              updateRow(row.key, { defaultPortionAmount: parsed });
+            }
+          }}
+          keyboardType="decimal-pad"
+          placeholder="Amt"
+          placeholderTextColor="#94A3B8"
+          className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
+          style={{ height: 40 }}
+        />
       </View>
       <View className="mt-1 flex-row gap-1">
         {(
@@ -651,15 +694,16 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
 
       {/* Read-only, derived preview only — never stored. Purely "here's
           roughly how much you're adding to your pantry," computed live from
-          quantity-bought x serving-size nutrition; null (shown as "—") when
-          the two units aren't convertible rather than a wrong guess. */}
+          quantity-bought x serving-size nutrition. Serving size and
+          quantity share the same unit by design now, so this is always a
+          plain ratio - no cross-unit conversion involved. */}
       {(() => {
         const qty = Number(row.quantity);
         const totalNutrition = Number.isFinite(qty) && qty > 0
           ? scaleNutritionToQuantity(
               row.nutrition,
               row.defaultPortionAmount,
-              row.defaultPortionUnit,
+              row.unit,
               qty,
               row.unit,
               customConversions,
@@ -711,7 +755,23 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         </View>
       )}
 
+      {/* Only meaningful for a brand-new ingredient — a matched ingredient's
+          conversions live on its own catalog record (edit it from the
+          ingredient page instead), not on this one-off receipt row. */}
+      {isNew && (
+        <View className="mt-3 border-t border-slate-100 pt-2">
+          <Text className="mb-1.5 text-xs font-semibold text-slate-600">
+            Unit conversions ({row.unit || "unit"} ↔ other units)
+          </Text>
+          <UnitConversionsEditor
+            conversions={row.unitConversions}
+            onChange={(conversions) => updateRow(row.key, { unitConversions: conversions })}
+          />
+        </View>
+      )}
+
       {row.error && <Text className="mt-2 text-xs text-red-600">{row.error}</Text>}
+      </ScrollView>
     </View>
   );
 }
@@ -977,8 +1037,12 @@ export default function ReceiptReviewPage() {
               : proposal?.estimatedNutrition ?? {
                   calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null,
                 };
-            const portionAmount = matched?.defaultPortionAmount ?? proposal?.defaultPortionAmount ?? 1;
-            const portionUnit = matched?.defaultPortionUnit ?? proposal?.defaultPortionUnit ?? "item";
+            const portionAmount = convertPortionAmount(
+              matched?.defaultPortionAmount ?? proposal?.defaultPortionAmount ?? 1,
+              matched?.defaultPortionUnit ?? proposal?.defaultPortionUnit ?? "item",
+              lineItem.unit,
+              matched ? getIngredientConversions(matched, [], ingredientList) : [],
+            );
 
             return {
               key: `${index}-${lineItem.rawText}`,
@@ -1008,7 +1072,7 @@ export default function ReceiptReviewPage() {
               barcode: null,
               nutrition: portionNutrition,
               defaultPortionAmount: portionAmount,
-              defaultPortionUnit: portionUnit,
+              unitConversions: matched?.unitConversions ?? [],
               submitted: false,
             };
           }),
@@ -1165,6 +1229,7 @@ export default function ReceiptReviewPage() {
   // Shared by both the exact-match-while-typing case and explicitly tapping
   // a suggestion from the name dropdown — snaps a row onto a real ingredient.
   function applyIngredientMatch(rowKey: string, ingredient: Ingredient) {
+    const row = rows.find((r) => r.key === rowKey);
     const history = recentPantryEntries(
       pantryItems.filter((item) => referenceId(item.ingredient) === ingredient._id),
     );
@@ -1195,8 +1260,17 @@ export default function ReceiptReviewPage() {
       expiryTouched: false,
       expirySuggestion: suggestedExpiry,
       nutrition: toReceiptNutrition(ingredient.nutrition),
-      defaultPortionAmount: ingredient.defaultPortionAmount ?? 1,
-      defaultPortionUnit: ingredient.defaultPortionUnit ?? "item",
+      // Same one-unit-per-row rule as initial parsing - convert the
+      // matched ingredient's own portion into the row's existing unit
+      // when possible, otherwise fall back to 1 rather than pair a wrong
+      // amount with the wrong unit.
+      defaultPortionAmount: convertPortionAmount(
+        ingredient.defaultPortionAmount ?? 1,
+        ingredient.defaultPortionUnit ?? "item",
+        row?.unit ?? "item",
+        getIngredientConversions(ingredient, [], ingredients),
+      ),
+      unitConversions: ingredient.unitConversions ?? [],
       error: undefined,
     });
   }
@@ -1241,7 +1315,7 @@ export default function ReceiptReviewPage() {
               calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null,
             },
             defaultPortionAmount: 1,
-            defaultPortionUnit: "item",
+            unitConversions: [],
             expirySuggestion: null,
           }
         : {}),
@@ -1292,8 +1366,13 @@ export default function ReceiptReviewPage() {
         expiryTouched: false,
         expirySuggestion: suggestedExpiry,
         nutrition: toReceiptNutrition(existingMatch.nutrition),
-        defaultPortionAmount: existingMatch.defaultPortionAmount ?? 1,
-        defaultPortionUnit: existingMatch.defaultPortionUnit ?? "item",
+        defaultPortionAmount: convertPortionAmount(
+          existingMatch.defaultPortionAmount ?? 1,
+          existingMatch.defaultPortionUnit ?? "item",
+          row.unit,
+          getIngredientConversions(existingMatch, [], ingredients),
+        ),
+        unitConversions: existingMatch.unitConversions ?? [],
         error: undefined,
       });
       return;
@@ -1327,7 +1406,11 @@ export default function ReceiptReviewPage() {
     // bought), which comes from the label's package size when it has one
     // (a real, separate signal - "this package is 500g total" - previously
     // discarded here even though ScannedProduct already carries it),
-    // otherwise whatever's already in the row is left untouched.
+    // otherwise whatever's already in the row is left untouched. Same
+    // one-unit-per-row rule applies - the resulting unit (package unit if
+    // the scan has one, else whatever the row already had) is what the
+    // serving size gets converted into.
+    const resultingUnit = product.packageQuantity != null ? product.packageUnit ?? row.unit : row.unit;
     updateRow(rowKey, {
       matchedIngredientId: null,
       name: product.name,
@@ -1338,10 +1421,9 @@ export default function ReceiptReviewPage() {
       genericName,
       barcode: product.barcode,
       ...(product.packageQuantity != null
-        ? { quantity: String(product.packageQuantity), unit: product.packageUnit ?? row.unit }
+        ? { quantity: String(product.packageQuantity), unit: resultingUnit }
         : {}),
-      defaultPortionAmount: product.servingSize,
-      defaultPortionUnit: product.servingUnit,
+      defaultPortionAmount: convertPortionAmount(product.servingSize, product.servingUnit, resultingUnit),
       nutrition: {
         calories: product.calories ?? null,
         protein: product.protein ?? null,
@@ -1350,6 +1432,7 @@ export default function ReceiptReviewPage() {
         fiber: product.fiber ?? null,
         sodium: product.sodium ?? null,
       },
+      unitConversions: [],
       expirySuggestion: null,
       error: undefined,
     });
@@ -1394,7 +1477,7 @@ export default function ReceiptReviewPage() {
       barcode: null,
       nutrition: { calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null },
       defaultPortionAmount: 1,
-      defaultPortionUnit: "item",
+      unitConversions: [],
     };
   }
 
@@ -1550,7 +1633,7 @@ export default function ReceiptReviewPage() {
               genericName:
                 row.isGeneric || row.genericParentId ? undefined : row.genericName || undefined,
               defaultPortionAmount: row.defaultPortionAmount,
-              defaultPortionUnit: row.defaultPortionUnit,
+              defaultPortionUnit: row.unit || "item",
               nutrition: {
                 calories: row.nutrition.calories ?? undefined,
                 protein: row.nutrition.protein ?? undefined,
@@ -1559,6 +1642,7 @@ export default function ReceiptReviewPage() {
                 fiber: row.nutrition.fiber ?? undefined,
                 sodium: row.nutrition.sodium ?? undefined,
               },
+              unitConversions: row.unitConversions,
             });
             ingredientId = newIngredient._id;
           }
@@ -1803,20 +1887,16 @@ export default function ReceiptReviewPage() {
               }}
               renderItem={({ item: row }) => (
                 <View style={{ width: cardWidth }} className="flex-1">
-                  <ScrollView
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={{ flexGrow: 1 }}
-                  >
-                    <ReceiptRowDetail row={row} callbacks={rowCallbacks} />
-                  </ScrollView>
+                  <ReceiptRowDetail row={row} callbacks={rowCallbacks} />
                 </View>
               )}
             />
           </View>
         )}
+        </View>
+      </KeyboardAvoidingView>
 
-        <Animated.View
+      <Animated.View
           style={listPanelStyle}
           className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl border border-slate-200 bg-white"
         >
@@ -1879,9 +1959,7 @@ export default function ReceiptReviewPage() {
               </Text>
             </Pressable>
           </ScrollView>
-        </Animated.View>
-        </View>
-      </KeyboardAvoidingView>
+      </Animated.View>
 
       <BarcodeScannerModal
         visible={!!barcodeScanRowKey}
