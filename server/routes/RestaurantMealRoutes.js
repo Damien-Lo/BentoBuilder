@@ -1,5 +1,6 @@
 import express from "express";
 import RestaurantMeal from "../models/RestaurantMeal.js";
+import { estimateMealPhoto } from "../services/mealPhotoEstimation.js";
 
 const router = express.Router();
 
@@ -72,6 +73,43 @@ router.post("/", async (req, res) => {
     return res.status(400).json({
       success: false,
       message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/restaurant-meals/estimate-photo
+ * Preview only — does not write to the database. Body: { imageBase64,
+ * mediaType, restaurantName? }. Returns estimated dishes (name, estimated
+ * nutrition, confidence, a caveat note) for the caller to drop into the
+ * existing dish-row editing UI as a starting point, same as any manually
+ * typed dish.
+ */
+router.post("/estimate-photo", async (req, res) => {
+  try {
+    const { imageBase64, mediaType, restaurantName, singleDish } = req.body;
+
+    if (typeof imageBase64 !== "string" || !imageBase64) {
+      return res.status(400).json({ success: false, message: "imageBase64 is required." });
+    }
+    if (typeof mediaType !== "string" || !mediaType) {
+      return res.status(400).json({ success: false, message: "mediaType is required." });
+    }
+
+    const data = await estimateMealPhoto({
+      imageBase64,
+      mediaType,
+      restaurantName: typeof restaurantName === "string" ? restaurantName : null,
+      singleDish: singleDish === true,
+    });
+
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Failed to estimate meal photo:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to estimate meal photo.",
     });
   }
 });
