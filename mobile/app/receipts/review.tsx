@@ -1821,7 +1821,6 @@ export default function ReceiptReviewPage() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingHorizontal: cardSidePadding }}
               ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
-              initialScrollIndex={0}
               getItemLayout={(_, index) => ({
                 length: cardStride,
                 offset: cardStride * index,
