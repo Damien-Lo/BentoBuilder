@@ -16,6 +16,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 
 import { BarcodeScannerModal, type ScannedProduct } from "@/src/components/BarcodeScannerModal";
 import {
@@ -273,6 +279,15 @@ function getMissingFields(row: ReviewRow, hasPendingGroceryItems: boolean): stri
 // section scrolls horizontally.
 const CARD_PEEK = 18;
 const CARD_GAP = 12;
+
+// The item-list panel overlays the card area from the bottom, like a
+// bottom sheet — collapsed by default to roughly one row's height (still
+// scrollable within that, just showing less at once) so the detail card
+// above gets most of the screen; dragging the handle up expands it toward
+// EXPANDED_LIST_HEIGHT, overlaying the cards for easier browsing through
+// many items at once.
+const COLLAPSED_LIST_HEIGHT = 168;
+const LIST_HANDLE_AREA_HEIGHT = 28;
 
 // The New/Matched/Added status pill, reused by both the full-detail card and
 // the compact summary row so the two stay visually consistent.
@@ -774,6 +789,15 @@ export default function ReceiptReviewPage() {
   const router = useRouter();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const pagerRef = useRef<FlatList<ReviewRow>>(null);
+
+  // The item-list panel's draggable height (see the gesture + JSX further
+  // down) — declared here, unconditionally, alongside the other hooks and
+  // before any of this component's early returns (loading/error states
+  // below), since these are genuine Reanimated hooks and must run on every
+  // render regardless of which branch the rest of the component takes.
+  const listHeight = useSharedValue(COLLAPSED_LIST_HEIGHT);
+  const dragStartHeight = useSharedValue(COLLAPSED_LIST_HEIGHT);
+  const listPanelStyle = useAnimatedStyle(() => ({ height: listHeight.value }));
 
   // Captured exactly once (lazy initializer, not re-run on re-render) —
   // takePendingReceipt() has read-and-clear semantics, so calling it again
@@ -1649,16 +1673,34 @@ export default function ReceiptReviewPage() {
   const allSelectableChecked =
     rows.filter((r) => !r.submitted).length > 0 && rows.filter((r) => !r.submitted).every((r) => r.checked);
 
-  // Roughly half the screen, with a floor so the detail card stays usable
-  // on smaller phones — the rest goes to the compact list below it.
-  const pagerHeight = Math.max(380, Math.round(windowHeight * 0.5));
-
   // Card width leaves CARD_PEEK px of the neighboring card visible on each
   // side (with CARD_GAP of empty space between cards) — a visual hint that
   // this section scrolls horizontally, not just an isolated single card.
   const cardWidth = windowWidth - 2 * (CARD_GAP + CARD_PEEK);
   const cardStride = cardWidth + CARD_GAP;
   const cardSidePadding = CARD_GAP + CARD_PEEK;
+
+  // The list panel's draggable height — starts collapsed (one row visible,
+  // still scrollable within that), drag the handle up to expand it toward
+  // covering most of the screen (leaving just the top nav/store/date
+  // visible), overlaying the card carousel underneath. Free-form while
+  // dragging, snaps to whichever end is closer on release.
+  const expandedListHeight = Math.round(windowHeight * 0.78);
+  const listPanGesture = Gesture.Pan()
+    .onStart(() => {
+      dragStartHeight.value = listHeight.value;
+    })
+    .onUpdate((event) => {
+      const next = dragStartHeight.value - event.translationY;
+      listHeight.value = Math.min(expandedListHeight, Math.max(COLLAPSED_LIST_HEIGHT, next));
+    })
+    .onEnd(() => {
+      const midpoint = (COLLAPSED_LIST_HEIGHT + expandedListHeight) / 2;
+      listHeight.value = withSpring(
+        listHeight.value > midpoint ? expandedListHeight : COLLAPSED_LIST_HEIGHT,
+        { damping: 20, stiffness: 200 },
+      );
+    });
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
@@ -1722,6 +1764,7 @@ export default function ReceiptReviewPage() {
           </View>
         </View>
 
+        <View className="flex-1">
         {rows.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
             <Text className="text-center text-slate-500">
@@ -1729,7 +1772,7 @@ export default function ReceiptReviewPage() {
             </Text>
           </View>
         ) : (
-          <View style={{ height: pagerHeight }} className="mt-3">
+          <View className="flex-1 mt-3">
             <Text className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Item {focusedIndex + 1} of {rows.length} · swipe for next
             </Text>
@@ -1773,8 +1816,17 @@ export default function ReceiptReviewPage() {
           </View>
         )}
 
-        <View className="mt-2 flex-1 border-t border-slate-200 bg-white">
-          <View className="flex-row items-center justify-between px-4 pb-2 pt-3">
+        <Animated.View
+          style={listPanelStyle}
+          className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl border border-slate-200 bg-white"
+        >
+          <GestureDetector gesture={listPanGesture}>
+            <View className="items-center justify-center" style={{ height: LIST_HANDLE_AREA_HEIGHT }}>
+              <View className="h-1.5 w-10 rounded-full bg-slate-300" />
+            </View>
+          </GestureDetector>
+
+          <View className="flex-row items-center justify-between px-4 pb-2">
             <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
               {rows.length} item{rows.length === 1 ? "" : "s"} ·{" "}
               {rows.filter((r) => r.checked && !r.submitted).length} selected
@@ -1827,6 +1879,7 @@ export default function ReceiptReviewPage() {
               </Text>
             </Pressable>
           </ScrollView>
+        </Animated.View>
         </View>
       </KeyboardAvoidingView>
 
