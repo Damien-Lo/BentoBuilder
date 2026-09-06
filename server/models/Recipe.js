@@ -28,6 +28,20 @@ const ingredientEntrySchema = new mongoose.Schema(
     // discarded (e.g. baking soda used to soften kelp noodles) rather than
     // eaten. Multiplies straight into calcNutrition's per-line contribution.
     nutritionFactor: { type: Number, min: 0, max: 1, default: 1 },
+
+    // "quantity" (default) is today's behavior: `quantity`/`unit` is an
+    // exact numeric target, split across pantry stock however needed to
+    // hit it. "wholePiece" is for ingredients naturally sold/used as
+    // discrete, irregularly-sized units (a fish fillet, a steak) — here
+    // `quantity` means "how many whole pieces" and `unit` is just a
+    // display label ("fillet"); pieceMinWeight/pieceMaxWeight/
+    // pieceWeightUnit is the acceptable real-world weight range for one
+    // piece, used by pantryDeduction.ts to pick whole matching pantry
+    // items (never a partial cut off one) instead of splitting by weight.
+    matchMode: { type: String, enum: ["quantity", "wholePiece"], default: "quantity" },
+    pieceMinWeight: { type: Number, min: 0, default: null },
+    pieceMaxWeight: { type: Number, min: 0, default: null },
+    pieceWeightUnit: { type: String, trim: true, default: "g" },
   },
   { _id: false },
 );
@@ -157,6 +171,26 @@ const recipeSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+// A "wholePiece" line is meaningless without both ends of its weight range
+// - "at least X" or "no more than X" alone would let deduction disagree
+// with itself about what counts, so both are required together, same as
+// Ingredient's own default-expiry-duration pair.
+recipeSchema.pre("validate", function () {
+  for (const entry of this.ingredientList) {
+    if (entry.matchMode !== "wholePiece") continue;
+    if (entry.pieceMinWeight == null || entry.pieceMaxWeight == null) {
+      throw new Error(
+        "A whole-piece ingredient line needs both a minimum and maximum piece weight",
+      );
+    }
+    if (entry.pieceMinWeight > entry.pieceMaxWeight) {
+      throw new Error(
+        "A whole-piece ingredient line's minimum weight can't be greater than its maximum",
+      );
+    }
+  }
+});
 
 const Recipe = mongoose.model("Recipe", recipeSchema);
 

@@ -1,9 +1,9 @@
 import type { MealPlanEntry } from "@/src/services/mealPlanApi";
-import type { Recipe } from "@/src/services/recipeApi";
+import type { Recipe, IngredientMatchMode } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
-import { getIngredientStockInUnit } from "./ingredientStock";
+import { getIngredientStockInUnit, pieceWeightInRange } from "./ingredientStock";
 
 function extractId(value: unknown): string {
   if (typeof value === "string") return value;
@@ -25,14 +25,27 @@ export interface PantryGroupMember {
 
 // A set of pantry entries identical in every way that matters (same
 // ingredient, unit, expiry, location, purchase date) — "brothers" that
-// don't need the user to distinguish between them.
+// don't need the user to distinguish between them. Note that "brothers"
+// can still individually weigh different amounts (e.g. two fillets bought
+// together) — grouping is about interchangeability of *source*, not size.
 export interface PantryGroup {
   key: string;
   members: PantryGroupMember[];
   displayName: string;
   expiryDate: string | null;
-  // Combined amount across members, converted into the requirement's unit.
+  // "quantity" mode: combined amount across every member, converted into
+  // the requirement's unit. "wholePiece" mode: count of members whose own
+  // weight falls within the requirement's piece range (see
+  // qualifyingMembers) - never a sum, since an undersized and an oversized
+  // piece don't add up to one usable whole piece even if their sum would
+  // land in range.
   totalAvailable: number;
+  // Only populated for a "wholePiece" requirement - the subset of `members`
+  // whose weight qualifies as one whole piece. `drainWholePieceGroups`
+  // takes from this list (always a member's *entire* quantityAvailable,
+  // never a fraction); the UI can diff it against `members` to show which
+  // candidates were excluded as too small/too large.
+  qualifyingMembers?: PantryGroupMember[];
   // This group's own ingredient's resolved conversions (its own entries,
   // then its generic parent's, then the app-wide list) — a group's members
   // all share one specific ingredient by construction (it's part of the
@@ -44,8 +57,15 @@ export interface PantryGroup {
 export interface IngredientRequirement {
   ingredientId: string;
   ingredientName: string;
+  // "quantity" mode: an exact amount in `unit`. "wholePiece" mode: how many
+  // whole pieces are needed - `unit` is just a display label in that case.
   neededQuantity: number;
   unit: string;
+  matchMode: IngredientMatchMode;
+  // Only set when matchMode is "wholePiece".
+  pieceMinWeight?: number;
+  pieceMaxWeight?: number;
+  pieceWeightUnit?: string;
   // Sorted soonest-expiry-first, no-expiry last.
   groups: PantryGroup[];
 }
@@ -59,6 +79,17 @@ interface RawRow {
   ingredientId: string;
   quantity: number;
   unit: string;
+  matchMode: IngredientMatchMode;
+  pieceMinWeight?: number;
+  pieceMaxWeight?: number;
+  pieceWeightUnit?: string;
+}
+
+// A quantity-mode row not tied to any particular recipe line - the default
+// for bare-ingredient meal-plan entries and anywhere else a row is built
+// without its own match-mode fields to carry through.
+function quantityRow(ingredientId: string, quantity: number, unit: string): RawRow {
+  return { ingredientId, quantity, unit, matchMode: "quantity" };
 }
 
 // A recipe's ingredientList is authored for its own `servings` — actually
@@ -71,24 +102,44 @@ function servingsRatio(authoredServings: number | undefined, consumedServings: n
   return authored > 0 ? consumed / authored : 1;
 }
 
+// One recipe ingredientList line, scaled by however much of the recipe is
+// actually being consumed, into a RawRow — shared by the direct-recipe and
+// meal-course branches below. For a "wholePiece" line, `quantity` is a
+// piece *count*, which the ratio can turn fractional (e.g. cooking half a
+// 2-fillet recipe) — rounded to the nearest whole piece since there's no
+// such thing as half a discrete piece; an approximation for a genuinely
+// uncommon case (recipes are almost always cooked at a whole multiple of
+// their authored servings).
+function recipeLineToRow(line: Recipe["ingredientList"][number], ratio: number): RawRow {
+  const ingredientId = extractId(line.ingredient);
+  const matchMode = line.matchMode ?? "quantity";
+  const quantity = matchMode === "wholePiece"
+    ? Math.max(0, Math.round(line.quantity * ratio))
+    : line.quantity * ratio;
+  return {
+    ingredientId,
+    quantity,
+    unit: line.unit,
+    matchMode,
+    pieceMinWeight: line.pieceMinWeight ?? undefined,
+    pieceMaxWeight: line.pieceMaxWeight ?? undefined,
+    pieceWeightUnit: line.pieceWeightUnit,
+  };
+}
+
 function gatherRows(entry: MealPlanEntry, recipeMap: Map<string, Recipe>): RawRow[] {
   const rows: RawRow[] = [];
 
   if (entry.recipe) {
     const ratio = servingsRatio(entry.recipe.servings, entry.recipeServings);
     for (const line of entry.recipe.ingredientList) {
-      const id = extractId(line.ingredient);
-      if (id) rows.push({ ingredientId: id, quantity: line.quantity * ratio, unit: line.unit });
+      if (extractId(line.ingredient)) rows.push(recipeLineToRow(line, ratio));
     }
     return rows;
   }
 
   if (entry.ingredient) {
-    rows.push({
-      ingredientId: entry.ingredient._id,
-      quantity: entry.ingredientQuantity ?? 0,
-      unit: entry.ingredientUnit ?? "",
-    });
+    rows.push(quantityRow(entry.ingredient._id, entry.ingredientQuantity ?? 0, entry.ingredientUnit ?? ""));
     return rows;
   }
 
@@ -102,8 +153,7 @@ function gatherRows(entry: MealPlanEntry, recipeMap: Map<string, Recipe>): RawRo
       if (!fullRecipe) continue;
       const ratio = servingsRatio(fullRecipe.servings, course.servings);
       for (const line of fullRecipe.ingredientList) {
-        const id = extractId(line.ingredient);
-        if (id) rows.push({ ingredientId: id, quantity: line.quantity * ratio, unit: line.unit });
+        if (extractId(line.ingredient)) rows.push(recipeLineToRow(line, ratio));
       }
     }
   }
@@ -145,7 +195,12 @@ function expandProducedIngredientRows(
     const ing = ingredientMap.get(row.ingredientId);
     const productionRecipeId = ing ? extractId(ing.productionRecipe) : "";
 
-    if (!ing || !productionRecipeId) {
+    // Production substitution is a continuous-quantity concept (fractional
+    // batch yields covering a fractional shortfall) that doesn't apply to a
+    // "how many whole pieces" row - and nothing produced via a sub-recipe
+    // (stocks, minced/prepped ingredients) is naturally a discrete piece
+    // anyway, so this is a pass-through rather than a real limitation.
+    if (row.matchMode === "wholePiece" || !ing || !productionRecipeId) {
       result.push(row);
       continue;
     }
@@ -169,24 +224,20 @@ function expandProducedIngredientRows(
     const shortfall = round(neededInNative - covered);
 
     if (covered > 0) {
-      result.push({ ingredientId: row.ingredientId, quantity: covered, unit: nativeUnit });
+      result.push(quantityRow(row.ingredientId, covered, nativeUnit));
     }
 
     if (shortfall <= 0) continue;
 
     const productionRecipe = recipeMap.get(productionRecipeId);
     if (!productionRecipe || visitedRecipeIds.has(productionRecipeId)) {
-      result.push({ ingredientId: row.ingredientId, quantity: shortfall, unit: nativeUnit });
+      result.push(quantityRow(row.ingredientId, shortfall, nativeUnit));
       continue;
     }
 
     const totalYield = (productionRecipe.servings || 1) * (ing.defaultPortionAmount || 1);
     const scale = shortfall / totalYield;
-    const subRows: RawRow[] = productionRecipe.ingredientList.map((line) => ({
-      ingredientId: extractId(line.ingredient),
-      quantity: line.quantity * scale,
-      unit: line.unit,
-    }));
+    const subRows: RawRow[] = productionRecipe.ingredientList.map((line) => recipeLineToRow(line, scale));
 
     const nextVisited = new Set(visitedRecipeIds);
     nextVisited.add(productionRecipeId);
@@ -206,6 +257,27 @@ function expandProducedIngredientRows(
   return result;
 }
 
+// Accumulated per-ingredient need, aggregated across every row referencing
+// it — a recipe/meal can reference the same ingredient more than once, and
+// the candidate pool must be considered once per ingredient, not once per
+// row (otherwise the same stock could be double-counted). "wholePiece"
+// rows contribute a raw piece count (no unit conversion — `quantity` isn't
+// an amount); "quantity" rows convert into the ingredient's own native
+// unit, same as before. A mix of both modes for the same ingredient within
+// one entry isn't expected (one recipe line = one mode) and isn't
+// specially handled - whichever mode is seen last simply wins.
+interface NeededAccumulator {
+  quantity: number;
+  matchMode: IngredientMatchMode;
+  pieceMinWeight?: number;
+  pieceMaxWeight?: number;
+  pieceWeightUnit?: string;
+  // The recipe line's own descriptive label (e.g. "fillet") - display only,
+  // distinct from pieceWeightUnit (e.g. "g"), which is what the range is
+  // actually expressed in and what matching converts pantry weights into.
+  pieceDisplayUnit?: string;
+}
+
 // The row-consuming core of buildIngredientRequirements — separated so
 // substitution (above) can run on the row list first.
 function buildRequirementsFromRows(
@@ -215,14 +287,25 @@ function buildRequirementsFromRows(
   pantryItems: PantryItem[],
   globalConversions: CustomUnitConversion[],
 ): IngredientRequirement[] {
-  // Aggregate needed quantity per distinct ingredient (in that ingredient's
-  // own unit) — a recipe/meal can reference the same ingredient more than
-  // once, and the candidate pool must be considered once per ingredient,
-  // not once per row (otherwise the same stock could be double-counted).
-  const neededByIngredient = new Map<string, number>();
+  const neededByIngredient = new Map<string, NeededAccumulator>();
   for (const row of rows) {
     const ing = ingredientMap.get(row.ingredientId);
     if (!ing || ing.isAlwaysAvailable) continue;
+
+    const current = neededByIngredient.get(row.ingredientId);
+
+    if (row.matchMode === "wholePiece") {
+      neededByIngredient.set(row.ingredientId, {
+        quantity: (current?.quantity ?? 0) + row.quantity,
+        matchMode: "wholePiece",
+        pieceMinWeight: row.pieceMinWeight,
+        pieceMaxWeight: row.pieceMaxWeight,
+        pieceWeightUnit: row.pieceWeightUnit,
+        pieceDisplayUnit: row.unit || undefined,
+      });
+      continue;
+    }
+
     const nativeUnit = ing.defaultPortionUnit || row.unit;
     const converted = convertUnits(
       row.quantity,
@@ -231,17 +314,21 @@ function buildRequirementsFromRows(
       getIngredientConversions(ing, globalConversions, allIngredients),
     );
     if (converted == null) continue;
-    neededByIngredient.set(row.ingredientId, (neededByIngredient.get(row.ingredientId) ?? 0) + converted);
+    neededByIngredient.set(row.ingredientId, {
+      quantity: (current?.quantity ?? 0) + converted,
+      matchMode: "quantity",
+    });
   }
 
   const requirements: IngredientRequirement[] = [];
 
-  for (const [ingredientId, rawNeeded] of neededByIngredient) {
-    const neededQuantity = round(rawNeeded);
+  for (const [ingredientId, needed] of neededByIngredient) {
+    const neededQuantity = round(needed.quantity);
     if (neededQuantity <= 0) continue;
     const ing = ingredientMap.get(ingredientId);
     if (!ing) continue;
-    const unit = ing.defaultPortionUnit || "";
+    const isWholePiece = needed.matchMode === "wholePiece";
+    const unit = isWholePiece ? (needed.pieceDisplayUnit || "piece") : (ing.defaultPortionUnit || "");
 
     // Generic ingredients are satisfied by their own direct stock plus
     // every specific/branded variant's stock (same pool the availability
@@ -293,6 +380,32 @@ function buildRequirementsFromRows(
     const groups: PantryGroup[] = Array.from(groupMap.entries()).map(([key, g]) => {
       const groupIngredient = ingredientMap.get(g.ingredientId) ?? ing;
       const conversions = getIngredientConversions(groupIngredient, globalConversions, allIngredients);
+
+      if (isWholePiece) {
+        // Count of members - never a weight sum - since an undersized and
+        // an oversized piece don't add up to one usable whole piece even
+        // if their combined weight would land in range.
+        const qualifyingMembers = g.members.filter((m) =>
+          pieceWeightInRange(
+            m.quantityAvailable,
+            m.quantityUnit,
+            needed.pieceMinWeight ?? 0,
+            needed.pieceMaxWeight ?? Infinity,
+            needed.pieceWeightUnit || "g",
+            conversions,
+          ),
+        );
+        return {
+          key,
+          members: g.members,
+          displayName: g.displayName,
+          expiryDate: g.expiryDate,
+          totalAvailable: qualifyingMembers.length,
+          qualifyingMembers,
+          conversions,
+        };
+      }
+
       const totalAvailable = g.members.reduce((sum, m) => {
         const converted = convertUnits(m.quantityAvailable, m.quantityUnit, unit, conversions);
         return sum + (converted ?? 0);
@@ -314,7 +427,17 @@ function buildRequirementsFromRows(
       return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
     });
 
-    requirements.push({ ingredientId, ingredientName: ing.name, neededQuantity, unit, groups });
+    requirements.push({
+      ingredientId,
+      ingredientName: ing.name,
+      neededQuantity,
+      unit,
+      matchMode: needed.matchMode,
+      pieceMinWeight: needed.pieceMinWeight,
+      pieceMaxWeight: needed.pieceMaxWeight,
+      pieceWeightUnit: needed.pieceWeightUnit,
+      groups,
+    });
   }
 
   return requirements;
@@ -385,12 +508,45 @@ function drainGroups(
   return instructions;
 }
 
+// The "wholePiece" counterpart to drainGroups above - takes whole
+// qualifying members (their *entire* quantityAvailable, never a fraction)
+// in expiry order until neededQuantity (a piece count) is satisfied. A
+// group's non-qualifying members (too small/too large for this line's
+// range) are never touched, even if the group is otherwise drained -
+// that's the whole point of this mode over drainGroups' numeric split.
+function drainWholePieceGroups(
+  groups: PantryGroup[],
+  neededQuantity: number,
+): DeductionInstruction[] {
+  const instructions: DeductionInstruction[] = [];
+  let remaining = neededQuantity;
+
+  for (const group of groups) {
+    if (remaining <= 0) break;
+    for (const member of group.qualifyingMembers ?? []) {
+      if (remaining <= 0) break;
+      instructions.push({ pantryItemId: member.pantryItemId, amount: round(member.quantityAvailable) });
+      remaining -= 1;
+    }
+  }
+
+  return instructions;
+}
+
 function mergeInstructions(instructions: DeductionInstruction[]): DeductionInstruction[] {
   const byId = new Map<string, number>();
   for (const { pantryItemId, amount } of instructions) {
     byId.set(pantryItemId, round((byId.get(pantryItemId) ?? 0) + amount));
   }
   return Array.from(byId.entries()).map(([pantryItemId, amount]) => ({ pantryItemId, amount }));
+}
+
+// One requirement's own drain, whichever mode it's in - shared by both the
+// fully-automatic plan and the manual-selection path below.
+function drainRequirement(req: IngredientRequirement, groups: PantryGroup[]): DeductionInstruction[] {
+  return req.matchMode === "wholePiece"
+    ? drainWholePieceGroups(groups, req.neededQuantity)
+    : drainGroups(groups, req.neededQuantity, req.unit);
 }
 
 // The fully-automatic plan — every requirement drained in expiry order, no
@@ -400,7 +556,7 @@ export function getDefaultDeductionInstructions(
 ): DeductionInstruction[] {
   const all: DeductionInstruction[] = [];
   for (const req of requirements) {
-    all.push(...drainGroups(req.groups, req.neededQuantity, req.unit));
+    all.push(...drainRequirement(req, req.groups));
   }
   return mergeInstructions(all);
 }
@@ -420,14 +576,14 @@ export function getResolvedDeductionInstructions(
   for (const req of requirements) {
     const pickedKeys = selections[req.ingredientId];
     if (!pickedKeys || pickedKeys.length === 0) {
-      all.push(...drainGroups(req.groups, req.neededQuantity, req.unit));
+      all.push(...drainRequirement(req, req.groups));
       continue;
     }
 
     const orderedGroups = pickedKeys
       .map((key) => req.groups.find((g) => g.key === key))
       .filter((g): g is PantryGroup => !!g);
-    all.push(...drainGroups(orderedGroups, req.neededQuantity, req.unit));
+    all.push(...drainRequirement(req, orderedGroups));
   }
 
   return mergeInstructions(all);
