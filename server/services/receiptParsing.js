@@ -30,6 +30,14 @@ const ReceiptLineItemSchema = z.object({
   proposedIngredient: ProposedIngredientSchema.nullable(),
   quantity: z.number(),
   unit: z.string(),
+  // The real net weight/volume of ONE unit of this product (e.g. "500" +
+  // "g" for a package printed on the receipt as just "PASTE ... 1") —
+  // null when the printed unit is already a real mass/volume unit, or
+  // when it can't be determined with reasonable confidence. Lets the
+  // client log the actual bought amount in a useful unit instead of a
+  // meaningless discrete count.
+  packageQuantity: z.number().nullable(),
+  packageUnit: z.string().nullable(),
   price: z.number().nullable(),
   confidence: z.enum(["high", "medium", "low"]),
 });
@@ -92,12 +100,14 @@ const RECEIPT_JSON_SCHEMA = {
           },
           quantity: { type: "number" },
           unit: { type: "string" },
+          packageQuantity: { type: "number", nullable: true },
+          packageUnit: { type: "string", nullable: true },
           price: { type: "number", nullable: true },
           confidence: { type: "string", enum: ["high", "medium", "low"] },
         },
         required: [
           "rawText", "matchedIngredientId", "proposedIngredient",
-          "quantity", "unit", "price", "confidence",
+          "quantity", "unit", "packageQuantity", "packageUnit", "price", "confidence",
         ],
       },
     },
@@ -131,7 +141,8 @@ For each purchased product line on the receipt (skip tax, subtotal, total, tende
 2. If nothing fits, propose a new ingredient: decide isGeneric vs a specific brand the same way a careful shopper would (only mark isGeneric: false when the receipt text clearly names a specific brand/product, not just a category of food). Pick categoryId from the existing list above whenever anything reasonably fits; only set newCategoryName when truly nothing does. Estimate nutrition using your general knowledge of the product (typical/label values), and a sensible defaultPortionAmount/defaultPortionUnit.
 3. Set confidence to "high" when the line item and its match/proposal are unambiguous, "medium" when reasonably sure but worth a glance, and "low" when the receipt text is unclear, abbreviated cryptically, or you're genuinely guessing.
 4. Extract quantity, unit (best guess, e.g. "lb", "item", "oz"), and price per line as printed.
-5. Also extract the store name and purchase date from the receipt header if visible.
+5. If the printed unit is just a discrete count ("item", "ea", "pk", or similar - not already a real mass/volume unit like "lb" or "oz"), also try to determine the real net weight/volume of ONE of that product as packageQuantity/packageUnit — e.g. a receipt line "PASTE ... 1" for a product you recognize as a standard 500g box becomes packageQuantity: 500, packageUnit: "g". Use OCR text near the product name if the size is printed on the receipt itself, otherwise your general knowledge of that specific product's typical packaging - only when reasonably confident, not a wild guess. Leave both null when the unit is already a real mass/volume unit, or when you can't determine a package size with reasonable confidence.
+6. Also extract the store name and purchase date from the receipt header if visible.
 
 IMPORTANT — do not transcribe any payment card numbers, loyalty/rewards account numbers, phone numbers, or email addresses into your output, even if visible on the receipt. Only extract product/purchase information.`;
 }

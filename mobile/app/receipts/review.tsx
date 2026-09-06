@@ -516,7 +516,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           for below. Editing this never touches nutrition. */}
       <Text className="mt-2 text-xs font-semibold text-slate-600">Quantity bought</Text>
       <View className="mt-1 flex-row gap-2">
-        <View className="w-12">
+        <View className="w-14">
           <TextInput
             value={row.quantity}
             onChangeText={(value) => updateRow(row.key, { quantity: value })}
@@ -527,7 +527,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             style={{ height: 40 }}
           />
         </View>
-        <View className="w-12">
+        <View className="w-14">
           <TextInput
             value={row.unit}
             onChangeText={(value) => updateRow(row.key, { unit: value })}
@@ -540,19 +540,21 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         <View style={{ flex: 1 }}>
           <PriceInput compact value={row.price} onChangeText={(value) => updateRow(row.key, { price: value })} />
         </View>
-        <View style={{ flex: 1.4 }}>
-          <SearchableObjectDropdown<SelectOption>
-            options={storageLocations}
-            selectedId={row.storageLocationId}
-            selectedName={row.storageLocationName}
-            compact
-            placeholder="Location"
-            onTextChange={(value) => updateRow(row.key, { storageLocationName: value })}
-            onSelect={(option) =>
-              updateRow(row.key, { storageLocationId: option._id, storageLocationName: option.name })
-            }
-          />
-        </View>
+      </View>
+
+      <Text className="mt-2 text-xs font-semibold text-slate-600">Storage location</Text>
+      <View className="mt-1">
+        <SearchableObjectDropdown<SelectOption>
+          options={storageLocations}
+          selectedId={row.storageLocationId}
+          selectedName={row.storageLocationName}
+          compact
+          placeholder="Location"
+          onTextChange={(value) => updateRow(row.key, { storageLocationName: value })}
+          onSelect={(option) =>
+            updateRow(row.key, { storageLocationId: option._id, storageLocationName: option.name })
+          }
+        />
       </View>
 
       {isNew && (
@@ -574,24 +576,25 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             }
           />
 
-          <View className="mt-1.5 flex-row gap-2">
-            <View className="flex-1">
-              <SearchableObjectDropdown<SelectOption>
-                options={categories}
-                selectedId={row.categoryId}
-                selectedName={row.categoryName}
-                compact
-                placeholder="Category"
-                onTextChange={(value) => {
-                  if (value !== row.categoryName) updateRow(row.key, { categoryId: "" });
-                  updateRow(row.key, { categoryName: value });
-                }}
-                onSelect={(option) =>
-                  updateRow(row.key, { categoryId: option._id, categoryName: option.name })
-                }
-              />
-            </View>
-            {!row.isGeneric && (
+          <View className="mt-1.5">
+            <SearchableObjectDropdown<SelectOption>
+              options={categories}
+              selectedId={row.categoryId}
+              selectedName={row.categoryName}
+              compact
+              placeholder="Category"
+              onTextChange={(value) => {
+                if (value !== row.categoryName) updateRow(row.key, { categoryId: "" });
+                updateRow(row.key, { categoryName: value });
+              }}
+              onSelect={(option) =>
+                updateRow(row.key, { categoryId: option._id, categoryName: option.name })
+              }
+            />
+          </View>
+
+          {!row.isGeneric && (
+            <View className="mt-1.5 flex-row gap-2">
               <View className="flex-1">
                 <SearchableObjectDropdown<SelectOption>
                   options={brands}
@@ -608,8 +611,6 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                   }
                 />
               </View>
-            )}
-            {!row.isGeneric && (
               <View className="flex-1">
                 <SearchableObjectDropdown<Ingredient>
                   options={genericIngredients}
@@ -626,8 +627,8 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                   }
                 />
               </View>
-            )}
-          </View>
+            </View>
+          )}
         </View>
       )}
 
@@ -640,24 +641,26 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           ingredient's catalog default portion for a brand-new ingredient,
           so it should read like "5 cal per 1 <unit>," not "however much I
           bought today." */}
-      <Text className="mt-2 text-xs font-semibold text-slate-600">
-        Serving size ({row.unit || "unit"} — nutrition is per this much)
-      </Text>
-      <View className="mt-1 w-12">
-        <TextInput
-          value={String(row.defaultPortionAmount)}
-          onChangeText={(value) => {
-            const parsed = Number(value);
-            if (value.trim() !== "" && Number.isFinite(parsed) && parsed > 0) {
-              updateRow(row.key, { defaultPortionAmount: parsed });
-            }
-          }}
-          keyboardType="decimal-pad"
-          placeholder="Amt"
-          placeholderTextColor="#94A3B8"
-          className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
-          style={{ height: 40 }}
-        />
+      <View className="mt-2 flex-row items-center gap-2">
+        <Text className="flex-1 text-xs font-semibold text-slate-600">
+          Serving size ({row.unit || "unit"} — nutrition is per this much)
+        </Text>
+        <View className="w-14">
+          <TextInput
+            value={String(row.defaultPortionAmount)}
+            onChangeText={(value) => {
+              const parsed = Number(value);
+              if (value.trim() !== "" && Number.isFinite(parsed) && parsed > 0) {
+                updateRow(row.key, { defaultPortionAmount: parsed });
+              }
+            }}
+            keyboardType="decimal-pad"
+            placeholder="Amt"
+            placeholderTextColor="#94A3B8"
+            className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
+            style={{ height: 40 }}
+          />
+        </View>
       </View>
       <View className="mt-1 flex-row gap-1">
         {(
@@ -764,6 +767,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             Unit conversions ({row.unit || "unit"} ↔ other units)
           </Text>
           <UnitConversionsEditor
+            compact
             conversions={row.unitConversions}
             onChange={(conversions) => updateRow(row.key, { unitConversions: conversions })}
           />
@@ -1037,10 +1041,24 @@ export default function ReceiptReviewPage() {
               : proposal?.estimatedNutrition ?? {
                   calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null,
                 };
+
+            // Gemini reports the real net weight/volume of ONE unit of this
+            // product separately from the printed count (e.g. "1 item" that's
+            // really "500 g") - prefer logging that when it found one, scaled
+            // by however many of that product were printed (2 boxes @ 500g
+            // each = 1000g total), since a mass/volume unit is far more
+            // useful to have on file than a bare discrete count.
+            const resultingUnit = lineItem.packageQuantity != null
+              ? lineItem.packageUnit ?? lineItem.unit
+              : lineItem.unit;
+            const resultingQuantity = lineItem.packageQuantity != null
+              ? lineItem.quantity * lineItem.packageQuantity
+              : lineItem.quantity;
+
             const portionAmount = convertPortionAmount(
               matched?.defaultPortionAmount ?? proposal?.defaultPortionAmount ?? 1,
               matched?.defaultPortionUnit ?? proposal?.defaultPortionUnit ?? "item",
-              lineItem.unit,
+              resultingUnit,
               matched ? getIngredientConversions(matched, [], ingredientList) : [],
             );
 
@@ -1051,8 +1069,8 @@ export default function ReceiptReviewPage() {
               matchedIngredientId: matched?._id ?? null,
               matchedGroceryItemId: groceryMatch,
               name: matched?.name ?? proposal?.name ?? lineItem.rawText,
-              quantity: String(lineItem.quantity),
-              unit: lineItem.unit,
+              quantity: String(resultingQuantity),
+              unit: resultingUnit,
               price: lineItem.price != null ? String(lineItem.price) : "",
               storageLocationId: suggestedLocation?.id ?? "",
               storageLocationName: suggestedLocation?.name ?? "",
@@ -1451,6 +1469,8 @@ export default function ReceiptReviewPage() {
         proposedIngredient: null,
         quantity: 1,
         unit: "item",
+        packageQuantity: null,
+        packageUnit: null,
         price: null,
         confidence: "high",
       },
