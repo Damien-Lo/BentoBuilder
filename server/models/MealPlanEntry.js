@@ -8,6 +8,18 @@ const stockDeductionSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const restaurantDishSelectionSchema = new mongoose.Schema(
+  {
+    dish: { type: mongoose.Schema.Types.ObjectId, required: true },
+    // How many of this dish were had on this specific visit - lets "I got 2
+    // tacos this time" scale just this one entry's nutrition without
+    // touching the shared dish's base definition (still "1 taco") in the
+    // RestaurantMeal catalog. Defaults to 1, the common case.
+    quantity: { type: Number, min: 0.01, default: 1 },
+  },
+  { _id: false },
+);
+
 const mealPlanEntrySchema = new mongoose.Schema(
   {
     date: { type: String, required: [true, "Date is required"] }, // "YYYY-MM-DD"
@@ -27,15 +39,16 @@ const mealPlanEntrySchema = new mongoose.Schema(
 
     // A restaurant/eating-out visit — no ingredients, no pantry deduction.
     restaurantMeal:     { type: mongoose.Schema.Types.ObjectId, ref: "RestaurantMeal" },
-    // Which dish(es) from that restaurant's dish list were actually eaten —
-    // a restaurant can have several independent dishes (e.g. two separate
-    // orders logged under the same visit), and without this, nutrition
-    // calculations would sum every dish on the restaurant's menu instead of
-    // just what this entry represents. IDs reference RestaurantMeal.dishes
-    // subdocuments (not their own collection, so no `ref`/populate here —
-    // the client already has the full dish list from populating
-    // restaurantMeal and just filters it by these ids).
-    restaurantDishIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+    // Which dish(es) from that restaurant's dish list were actually eaten,
+    // and how many of each — a restaurant can have several independent
+    // dishes (e.g. two separate orders logged under the same visit), and
+    // without this, nutrition calculations would sum every dish on the
+    // restaurant's menu instead of just what this entry represents. `dish`
+    // references a RestaurantMeal.dishes subdocument (not its own
+    // collection, so no `ref`/populate here — the client already has the
+    // full dish list from populating restaurantMeal and just filters it by
+    // these ids).
+    restaurantDishSelections: { type: [restaurantDishSelectionSchema], default: [] },
 
     // "planned" = tentative, not yet eaten; "confirmed" = logged as actually eaten
     status: {

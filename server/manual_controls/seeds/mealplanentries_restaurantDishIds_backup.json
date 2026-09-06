@@ -1,0 +1,452 @@
+[
+  {
+    "_id": "6a98e5d1b6b8dbbbe8dcb658",
+    "date": "2026-09-05",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d0e030498deb30c30ea9",
+    "restaurantDishIds": [
+      "6a98d0e630498deb30c30eb0"
+    ],
+    "status": "planned",
+    "notes": "",
+    "isArchived": true,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T03:13:21.110Z",
+    "updatedAt": "2026-09-05T14:20:53.724Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a98e5dfb6b8dbbbe8dcb666",
+    "date": "2026-09-05",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d0174129ceec31a00939",
+    "restaurantDishIds": [
+      "6a98d0e630498deb30c30eb0"
+    ],
+    "status": "planned",
+    "notes": "",
+    "isArchived": true,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T03:13:35.795Z",
+    "updatedAt": "2026-09-03T03:13:44.469Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe823d5fc0856eb5fce2",
+    "date": "2026-08-10",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d0174129ceec31a00939",
+    "restaurantDishIds": [
+      "6a98d0e630498deb30c30eb0",
+      "6a98d0e630498deb30c30eb1"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:10:58.695Z",
+    "updatedAt": "2026-09-03T23:10:58.695Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe833d5fc0856eb5fce7",
+    "date": "2026-08-11",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d57a30498deb30c30eca",
+    "restaurantDishIds": [
+      "6a98d57a30498deb30c30ecb"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:10:59.103Z",
+    "updatedAt": "2026-09-03T23:10:59.103Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe833d5fc0856eb5fcec",
+    "date": "2026-08-12",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d57a30498deb30c30eca",
+    "restaurantDishIds": [
+      "6a98d57a30498deb30c30ecb"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:10:59.555Z",
+    "updatedAt": "2026-09-03T23:10:59.555Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe833d5fc0856eb5fced",
+    "date": "2026-08-12",
+    "slot": "dinner",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d01f4129ceec31a0093c",
+    "restaurantDishIds": [
+      "6a98d0ed30498deb30c30eb5",
+      "6a98d0ed30498deb30c30eb4"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:10:59.629Z",
+    "updatedAt": "2026-09-03T23:10:59.629Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe843d5fc0856eb5fcf2",
+    "date": "2026-08-13",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d57a30498deb30c30eca",
+    "restaurantDishIds": [
+      "6a98d57a30498deb30c30ecb"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:11:00.078Z",
+    "updatedAt": "2026-09-03T23:11:00.078Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe843d5fc0856eb5fcfc",
+    "date": "2026-08-14",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98dba7069d5efdd45f5d53",
+    "restaurantDishIds": [
+      "6a98dba7069d5efdd45f5d54",
+      "6a98dba7069d5efdd45f5d55",
+      "6a98dba7069d5efdd45f5d56"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:11:00.898Z",
+    "updatedAt": "2026-09-03T23:11:00.898Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe853d5fc0856eb5fcfe",
+    "date": "2026-08-14",
+    "slot": "dinner",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d01f4129ceec31a0093c",
+    "restaurantDishIds": [
+      "6a98d0ed30498deb30c30eb5",
+      "6a98d0ed30498deb30c30eb4"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:11:01.126Z",
+    "updatedAt": "2026-09-03T23:11:01.126Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe863d5fc0856eb5fd11",
+    "date": "2026-08-17",
+    "slot": "dinner",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d01f4129ceec31a0093c",
+    "restaurantDishIds": [
+      "6a98d0ed30498deb30c30eb6",
+      "6a98d0ed30498deb30c30eb5"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:11:02.775Z",
+    "updatedAt": "2026-09-03T23:11:02.775Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe863d5fc0856eb5fd13",
+    "date": "2026-08-18",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98e3de069d5efdd45f5e48",
+    "restaurantDishIds": [
+      "6a98e3de069d5efdd45f5e49"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:11:02.916Z",
+    "updatedAt": "2026-09-03T23:11:02.916Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe863d5fc0856eb5fd14",
+    "date": "2026-08-18",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98e3de069d5efdd45f5e48",
+    "restaurantDishIds": [
+      "6a98e3de069d5efdd45f5e49",
+      "6a98e3de069d5efdd45f5e4a"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:11:02.988Z",
+    "updatedAt": "2026-09-03T23:11:02.988Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe873d5fc0856eb5fd1c",
+    "date": "2026-08-20",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98e3de069d5efdd45f5e48",
+    "restaurantDishIds": [
+      "6a98e3de069d5efdd45f5e49"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:11:03.747Z",
+    "updatedAt": "2026-09-03T23:11:03.747Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe873d5fc0856eb5fd1d",
+    "date": "2026-08-20",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98e3de069d5efdd45f5e48",
+    "restaurantDishIds": [
+      "6a98e3de069d5efdd45f5e49",
+      "6a98e3de069d5efdd45f5e4a"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:11:03.820Z",
+    "updatedAt": "2026-09-03T23:11:03.820Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe8a3d5fc0856eb5fd42",
+    "date": "2026-08-26",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d57a30498deb30c30eca",
+    "restaurantDishIds": [
+      "6a98d57a30498deb30c30ecb"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:11:06.963Z",
+    "updatedAt": "2026-09-03T23:11:06.963Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99fe8b3d5fc0856eb5fd43",
+    "date": "2026-08-26",
+    "slot": "dinner",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d01f4129ceec31a0093c",
+    "restaurantDishIds": [
+      "6a98d0ed30498deb30c30eb5",
+      "6a98d0ed30498deb30c30eb4"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:11:07.035Z",
+    "updatedAt": "2026-09-03T23:11:07.035Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99ffddc19f499f9d86fe49",
+    "date": "2026-08-15",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98dc37069d5efdd45f5d84",
+    "restaurantDishIds": [
+      "6a98dc37069d5efdd45f5d85",
+      "6a98dc37069d5efdd45f5d86"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:16:45.359Z",
+    "updatedAt": "2026-09-03T23:16:45.359Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a9a0175a447dd80eb11345c",
+    "date": "2026-08-23",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a99e884eaa4ac3b8f255098",
+    "restaurantDishIds": [
+      "6a99e884eaa4ac3b8f255099",
+      "6a99e884eaa4ac3b8f25509a"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:23:33.591Z",
+    "updatedAt": "2026-09-03T23:23:37.630Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a9a07f8f783c1565133ed89",
+    "date": "2026-09-03",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a99e884eaa4ac3b8f255098",
+    "restaurantDishIds": [
+      "6a99e884eaa4ac3b8f255099",
+      "6a99e884eaa4ac3b8f25509a"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-03T23:51:20.327Z",
+    "updatedAt": "2026-09-03T23:51:24.435Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a9a0b36f783c1565133ee60",
+    "date": "2026-09-01",
+    "slot": "dinner",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d01f4129ceec31a0093c",
+    "restaurantDishIds": [
+      "6a98d0ed30498deb30c30eb6",
+      "6a98d0ed30498deb30c30eb5"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-04T00:05:10.452Z",
+    "updatedAt": "2026-09-04T00:05:11.893Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a9a113dc19f499f9d87013e",
+    "date": "2026-08-30",
+    "slot": "dinner",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98d01f4129ceec31a0093c",
+    "restaurantDishIds": [
+      "6a98d0ed30498deb30c30eb4",
+      "6a98d0ed30498deb30c30eb5"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-04T00:30:53.214Z",
+    "updatedAt": "2026-09-04T00:30:53.214Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a9b3a1b811c74470f660c48",
+    "date": "2026-09-04",
+    "slot": "dinner",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a9b3a05811c74470f660c10",
+    "restaurantDishIds": [
+      "6a9b3a05811c74470f660c11"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-04T21:37:31.889Z",
+    "updatedAt": "2026-09-04T21:37:33.448Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a9c677e08dec8a7013fe735",
+    "date": "2026-09-05",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98dba7069d5efdd45f5d53",
+    "restaurantDishIds": [
+      "6a98dba7069d5efdd45f5d55",
+      "6a98dba7069d5efdd45f5d56",
+      "6a98dba7069d5efdd45f5d54"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": true,
+    "stockDeductions": [],
+    "createdAt": "2026-09-05T19:03:26.965Z",
+    "updatedAt": "2026-09-05T19:04:10.809Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a9c67b008dec8a7013fe795",
+    "date": "2026-09-05",
+    "slot": "lunch",
+    "recipeServings": 1,
+    "ingredientUnit": "",
+    "restaurantMeal": "6a98dba7069d5efdd45f5d53",
+    "restaurantDishIds": [
+      "6a9c679d08dec8a7013fe74c",
+      "6a9c679d08dec8a7013fe74d",
+      "6a9c679d08dec8a7013fe74e"
+    ],
+    "status": "confirmed",
+    "notes": "",
+    "isArchived": false,
+    "stockDeductions": [],
+    "createdAt": "2026-09-05T19:04:16.812Z",
+    "updatedAt": "2026-09-05T19:04:16.812Z",
+    "__v": 0
+  }
+]

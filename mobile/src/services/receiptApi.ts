@@ -29,6 +29,12 @@ export interface ReceiptLineItem {
   proposedIngredient: ProposedIngredient | null;
   quantity: number;
   unit: string;
+  // The real net weight/volume of ONE unit of this product, when the
+  // printed unit above is just a discrete count (e.g. quantity=1,
+  // unit="item" but packageQuantity=500, packageUnit="g") — null when the
+  // printed unit is already a real mass/volume unit, or undeterminable.
+  packageQuantity: number | null;
+  packageUnit: string | null;
   price: number | null;
   confidence: "high" | "medium" | "low";
 }

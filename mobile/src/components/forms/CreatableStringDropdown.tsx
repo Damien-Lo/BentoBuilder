@@ -15,6 +15,10 @@ interface CreatableStringDropdownProps {
   placeholder: string;
   disabled?: boolean;
   onSelect: (value: string) => void;
+  // Shrinks just the closed-state trigger to match a tight host layout —
+  // the opened dropdown/search modal stays full-size either way, since it
+  // floats above the layout rather than needing to match it.
+  compact?: boolean;
 }
 
 interface DropdownPosition {
@@ -29,6 +33,7 @@ export function CreatableStringDropdown({
   placeholder,
   disabled = false,
   onSelect,
+  compact = false,
 }: CreatableStringDropdownProps) {
   const safeOptions = useMemo(
     () => (Array.isArray(options) ? options : []),
@@ -121,7 +126,9 @@ export function CreatableStringDropdown({
     <View ref={anchorRef} collapsable={false}>
       <Pressable
         disabled={disabled}
-        className={`h-[52px] flex-row items-center rounded-2xl border bg-white px-4 ${
+        className={`flex-row items-center border bg-white ${
+          compact ? "h-10 rounded-xl px-2" : "h-[52px] rounded-2xl px-4"
+        } ${
           disabled
             ? "border-slate-100 opacity-60"
             : open
@@ -132,7 +139,7 @@ export function CreatableStringDropdown({
       >
         <Text
           numberOfLines={1}
-          className={`flex-1 text-base ${
+          className={`flex-1 ${compact ? "text-sm" : "text-base"} ${
             safeSelectedValue
               ? "text-slate-950"
               : "text-slate-400"
@@ -143,7 +150,7 @@ export function CreatableStringDropdown({
 
         <Ionicons
           name={open ? "chevron-up" : "chevron-down"}
-          size={18}
+          size={compact ? 14 : 18}
           color="#64748B"
         />
       </Pressable>

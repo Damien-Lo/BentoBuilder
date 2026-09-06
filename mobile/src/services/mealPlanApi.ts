@@ -24,6 +24,14 @@ export interface StockDeduction {
   amount: number;
 }
 
+// Which dish (by RestaurantMeal.dishes subdocument _id) and how many of it
+// were had on one specific visit — quantity defaults to 1 server-side, but
+// is always present once populated back from the API.
+export interface RestaurantDishSelection {
+  dish: string;
+  quantity: number;
+}
+
 export interface MealPlanEntry {
   _id: string;
   date: string; // "YYYY-MM-DD"
@@ -41,11 +49,11 @@ export interface MealPlanEntry {
 
   // A restaurant/eating-out visit — no ingredients, no pantry deduction.
   restaurantMeal?: RestaurantMeal;
-  // Which dish(es) from restaurantMeal.dishes were actually eaten — a
-  // restaurant can have several independent dishes, so nutrition is summed
-  // from just these, not the whole menu. Ids reference dish subdocument
-  // _ids within restaurantMeal.dishes.
-  restaurantDishIds?: string[];
+  // Which dish(es) from restaurantMeal.dishes were actually eaten, and how
+  // many of each — a restaurant can have several independent dishes, so
+  // nutrition is summed from just these (each scaled by its quantity), not
+  // the whole menu at 1x.
+  restaurantDishSelections?: RestaurantDishSelection[];
 
   // Exactly what confirming this entry deducted from the pantry — replayed
   // in reverse on unconfirm/delete. Empty while planned.
@@ -70,7 +78,7 @@ export interface CreateMealPlanEntryInput {
   ingredientUnit?: string;
 
   restaurantMeal?: string; // restaurant meal _id
-  restaurantDishIds?: string[]; // which of restaurantMeal's dishes were eaten
+  restaurantDishSelections?: RestaurantDishSelection[]; // which of restaurantMeal's dishes were eaten, and how many of each
 
   notes?: string;
 }
@@ -126,12 +134,15 @@ export async function updateMealPlanEntryStatus(id: string, status: MealPlanEntr
   return result.data;
 }
 
-// Editing how much of an already-planned/confirmed ingredient or recipe was
-// actually eaten. Only ever sends one of the two shapes - callers pass just
-// the fields relevant to the entry's type.
+// Editing how much of an already-planned/confirmed ingredient, recipe, or
+// restaurant visit was actually eaten. Only ever sends one of the three
+// shapes - callers pass just the fields relevant to the entry's type.
 export async function updateMealPlanEntryQuantity(
   id: string,
-  fields: { ingredientQuantity: number; ingredientUnit: string } | { recipeServings: number },
+  fields:
+    | { ingredientQuantity: number; ingredientUnit: string }
+    | { recipeServings: number }
+    | { restaurantDishSelections: RestaurantDishSelection[] },
 ): Promise<MealPlanEntry> {
   const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}`, {
     method: "PATCH",
@@ -174,4 +185,30 @@ export async function unconfirmMealPlanEntry(id: string): Promise<MealPlanEntry>
 export async function deleteMealPlanEntry(id: string): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}`, { method: "DELETE" });
   await parseResponse<{ success: boolean }>(res);
+}
+
+// Every non-archived visit to one restaurant, most recent first — powers
+// the restaurant detail page's "Past visits" section.
+export async function getMealPlanHistoryForRestaurant(restaurantMealId: string): Promise<MealPlanEntry[]> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/by-restaurant/${restaurantMealId}`);
+  const result = await parseResponse<{ success: boolean; data: MealPlanEntry[] }>(res);
+  return Array.isArray(result.data) ? result.data : [];
+}
+
+// For each of the four slots, the single most recent non-archived entry
+// strictly before `before` (or null) — powers the planner's "swipe to add
+// yesterday's breakfast again" quick-add on an empty slot.
+export interface LastEntryBySlot {
+  breakfast: MealPlanEntry | null;
+  lunch: MealPlanEntry | null;
+  dinner: MealPlanEntry | null;
+  snack: MealPlanEntry | null;
+}
+
+const EMPTY_LAST_ENTRIES: LastEntryBySlot = { breakfast: null, lunch: null, dinner: null, snack: null };
+
+export async function getLastEntriesBeforeDate(before: string): Promise<LastEntryBySlot> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/last-entries?before=${encodeURIComponent(before)}`);
+  const result = await parseResponse<{ success: boolean; data: LastEntryBySlot }>(res);
+  return result.data ?? EMPTY_LAST_ENTRIES;
 }
