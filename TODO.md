@@ -18,6 +18,10 @@ Still genuinely unresolved (nothing in the catalog to map to):
 - Starbucks Unsweetened Iced Coffee (Aug 15) — no coffee ingredient exists.
 - Aug 27 lunch remainder — a handful of individual nigiri/tempura pieces (~472cal) that don't match any restaurant dish or standalone ingredient.
 
+## Known issues (pinned, not urgent)
+
+- **Receipt-review units aren't fully reliable yet** (Sept 6) — after fixing the barcode-scanner's quantity-not-updating and wrong-liquid-nutrition bugs, live-tested the receipt scanner end to end and it's functioning but "not perfect" per real-device testing — units still don't come out right in every case. Not yet diagnosed further; revisit with fresh real-receipt/barcode examples of what specifically comes out wrong.
+
 ## Scoped but deferred features
 
 - **User profiles and authentication** — deliberately saved for one of the *last* things to build, not because it's unimportant but because adding it early would block day-to-day development flow (every test/debug pass would have to go through login, multi-user state, etc.) before the base app's actual features are fleshed out. Revisit once the core feature set feels done.
@@ -26,7 +30,8 @@ Still genuinely unresolved (nothing in the catalog to map to):
 ## Branch / deploy housekeeping
 
 - `ShoppingMode` and `NutritionTracker` are merged into `WorkingSave` and pushed (Sept 3) — the `planner.tsx`/`mealPlan.ts` conflict (NutritionTracker's extracted `computeDayNutrition` vs ShoppingMode's local extension with restaurant-dish filtering + confirmed-entry exact nutrition) was resolved by porting ShoppingMode's logic into the shared `mealPlan.ts`. Verified: `tsc --noEmit` clean (one pre-existing, unrelated `SwipeableMethods` ref error on both source branches), server boot + route checks passed on both branches' endpoints. A new EAS `preview` build was cut from `WorkingSave` and installed over the real "BentoBuilder" app.
-- Shopping Mode (grocery list from meal-plan shortfalls, store grouping, receipt-scan reconciliation) is now live on the real app but still not live-device-tested end to end — that's the next thing to actually try.
+- Shopping Mode (grocery list from meal-plan shortfalls, store grouping, receipt-scan reconciliation) has now been live-device-tested (Sept 6) — functioning, not perfect (see units issue above).
+- `RestaurantVisitQuantities` (per-visit dish quantities, Past Visits section, receipt-review rework, barcode-scan fixes — carrying `ReceiptReviewCardFix` along with it) and `MealPhotoEstimate` (photo-based dish nutrition estimation) merged into `WorkingSave` and pushed (Sept 6). All fully-merged feature branches deleted, both locally and on GitHub, to keep the branch list to just `main` and `WorkingSave`.
 
 ## Open data-quality questions (not urgent)
 
