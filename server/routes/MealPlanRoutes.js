@@ -97,6 +97,38 @@ router.get("/by-restaurant/:restaurantMealId", async (req, res) => {
   }
 });
 
+/**
+ * GET /api/meal-plan/last-entries?before=YYYY-MM-DD
+ * For each of the four slots (breakfast/lunch/dinner/snack), the single
+ * most recent non-archived entry strictly before the given date — powers
+ * the planner's "swipe to add yesterday's breakfast again" quick-add on an
+ * empty slot. null for a slot with no prior entry at all.
+ */
+router.get("/last-entries", async (req, res) => {
+  try {
+    const { before } = req.query;
+    if (!before) {
+      return res.status(400).json({ success: false, message: "before query param is required" });
+    }
+
+    const slots = ["breakfast", "lunch", "dinner", "snack"];
+    const results = await Promise.all(
+      slots.map((slot) =>
+        populateEntry(
+          MealPlanEntry.findOne({ slot, date: { $lt: before }, isArchived: false })
+            .sort({ date: -1, createdAt: -1 }),
+        ),
+      ),
+    );
+
+    const data = Object.fromEntries(slots.map((slot, i) => [slot, results[i] ?? null]));
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Get last meal plan entries error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load last entries" });
+  }
+});
+
 // How far back "last used" looks — sorting priority only cares about
 // recent activity (something planned 3 years ago shouldn't outrank
 // something from last month just because it happens to have a date at

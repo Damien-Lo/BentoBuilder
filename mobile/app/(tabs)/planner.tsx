@@ -28,10 +28,13 @@ import {
   confirmMealPlanEntry,
   createMealPlanEntry,
   deleteMealPlanEntry,
+  getLastEntriesBeforeDate,
   getLastUsedMap,
   getMealPlanForDate,
   unconfirmMealPlanEntry,
   updateMealPlanEntryQuantity,
+  type CreateMealPlanEntryInput,
+  type LastEntryBySlot,
   type LastUsedMap,
   type MealPlanEntry,
   type MealPlanEntryStatus,
@@ -115,6 +118,7 @@ export default function HomeScreen() {
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
   const [allRestaurantMeals, setAllRestaurantMeals] = useState<RestaurantMeal[]>([]);
   const [lastUsed, setLastUsed] = useState<LastUsedMap>({ meal: {}, recipe: {}, ingredient: {}, restaurantMeal: {} });
+  const [lastEntryBySlot, setLastEntryBySlot] = useState<LastEntryBySlot | null>(null);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
@@ -222,6 +226,14 @@ export default function HomeScreen() {
   useEffect(() => {
     loadEntries();
   }, [loadEntries]);
+
+  // The most recent prior entry per slot, strictly before the selected date
+  // — powers the "swipe to add yesterday's breakfast again" quick-add on an
+  // empty slot. Refetches whenever the selected date changes, since "before"
+  // moves with it.
+  useEffect(() => {
+    getLastEntriesBeforeDate(selectedDate).then(setLastEntryBySlot).catch(() => setLastEntryBySlot(null));
+  }, [selectedDate]);
 
   useEffect(() => {
     loadSettings().then(setAppSettings).catch(() => {});
@@ -610,6 +622,60 @@ export default function HomeScreen() {
         },
       },
     ]);
+  }
+
+  // Display name for the swipe-to-add hint - same "what is this entry"
+  // logic as renderEntry's title, but a single string rather than a
+  // title/subtitle split, and including which dish(es) for a restaurant
+  // visit since "Wagaya" alone doesn't say what was actually ordered.
+  function entryDisplayName(entry: MealPlanEntry): string {
+    if (entry.recipe) return entry.recipe.name;
+    if (entry.ingredient) return entry.ingredient.name;
+    if (entry.restaurantMeal) {
+      const quantityByDish = new Map((entry.restaurantDishSelections ?? []).map(s => [s.dish, s.quantity]));
+      const dishNames = (entry.restaurantMeal.dishes ?? [])
+        .filter(d => quantityByDish.has(d._id))
+        .map(d => d.name);
+      return dishNames.length
+        ? `${entry.restaurantMeal.restaurantName}: ${dishNames.join(", ")}`
+        : entry.restaurantMeal.restaurantName;
+    }
+    return entry.meal?.name ?? "";
+  }
+
+  // "yesterday" / "N days ago", relative to the day currently being viewed
+  // (not always today) - matches this file's existing pattern of following
+  // the selected date rather than assuming it's the current day.
+  function daysAgoLabel(fromDateStr: string, toDateStr: string): string {
+    const days = Math.round((parseLocalDate(toDateStr).getTime() - parseLocalDate(fromDateStr).getTime()) / 86400000);
+    return days === 1 ? "yesterday" : `${days} days ago`;
+  }
+
+  async function handleQuickAddFromLastEntry(slot: MealSlot, lastEntry: MealPlanEntry) {
+    if (saving) return;
+    try {
+      setSaving(true);
+      const input: CreateMealPlanEntryInput = { date: selectedDate, slot, status: "confirmed" };
+      if (lastEntry.recipe) {
+        input.recipe = lastEntry.recipe._id;
+        input.recipeServings = lastEntry.recipeServings;
+      } else if (lastEntry.ingredient) {
+        input.ingredient = lastEntry.ingredient._id;
+        input.ingredientQuantity = lastEntry.ingredientQuantity;
+        input.ingredientUnit = lastEntry.ingredientUnit;
+      } else if (lastEntry.restaurantMeal) {
+        input.restaurantMeal = lastEntry.restaurantMeal._id;
+        input.restaurantDishSelections = lastEntry.restaurantDishSelections;
+      } else if (lastEntry.meal) {
+        input.meal = lastEntry.meal._id;
+      }
+      const entry = await createMealPlanEntry(input);
+      setEntries(prev => [...prev, entry]);
+    } catch (err) {
+      Alert.alert("Error", err instanceof Error ? err.message : "Could not add this item.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function jumpToToday() {
@@ -1559,6 +1625,38 @@ export default function HomeScreen() {
                   {/* Entries */}
                   {slotEntries.length > 0 ? (
                     slotEntries.map(renderEntry)
+                  ) : lastEntryBySlot?.[slot.id] ? (
+                    (() => {
+                      const lastEntry = lastEntryBySlot[slot.id]!;
+                      const name = entryDisplayName(lastEntry);
+                      const when = daysAgoLabel(lastEntry.date, selectedDate);
+                      return (
+                        <ReanimatedSwipeable
+                          friction={2}
+                          leftThreshold={40}
+                          renderLeftActions={() => (
+                            <Pressable
+                              className="mb-0 flex-1 items-center justify-center rounded-2xl bg-emerald-500 px-4 active:bg-emerald-600"
+                              onPress={() => void handleQuickAddFromLastEntry(slot.id, lastEntry)}
+                            >
+                              <Ionicons name="repeat-outline" size={18} color="white" />
+                              <Text className="mt-1 text-center text-xs font-semibold text-white">
+                                Add "{name}"
+                              </Text>
+                            </Pressable>
+                          )}
+                        >
+                          <Pressable
+                            onPress={() => openAdd(slot.id)}
+                            className="items-center rounded-2xl border border-dashed border-slate-200 py-5 active:bg-slate-50"
+                          >
+                            <Text className="px-6 text-center text-sm text-slate-400">
+                              Swipe to add {slot.label.toLowerCase()} from {when}: "{name}"
+                            </Text>
+                          </Pressable>
+                        </ReanimatedSwipeable>
+                      );
+                    })()
                   ) : (
                     <Pressable
                       onPress={() => openAdd(slot.id)}

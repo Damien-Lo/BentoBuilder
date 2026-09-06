@@ -194,3 +194,21 @@ export async function getMealPlanHistoryForRestaurant(restaurantMealId: string):
   const result = await parseResponse<{ success: boolean; data: MealPlanEntry[] }>(res);
   return Array.isArray(result.data) ? result.data : [];
 }
+
+// For each of the four slots, the single most recent non-archived entry
+// strictly before `before` (or null) — powers the planner's "swipe to add
+// yesterday's breakfast again" quick-add on an empty slot.
+export interface LastEntryBySlot {
+  breakfast: MealPlanEntry | null;
+  lunch: MealPlanEntry | null;
+  dinner: MealPlanEntry | null;
+  snack: MealPlanEntry | null;
+}
+
+const EMPTY_LAST_ENTRIES: LastEntryBySlot = { breakfast: null, lunch: null, dinner: null, snack: null };
+
+export async function getLastEntriesBeforeDate(before: string): Promise<LastEntryBySlot> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/last-entries?before=${encodeURIComponent(before)}`);
+  const result = await parseResponse<{ success: boolean; data: LastEntryBySlot }>(res);
+  return result.data ?? EMPTY_LAST_ENTRIES;
+}
