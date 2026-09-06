@@ -156,7 +156,17 @@ export function BarcodeScannerModal({
         packageQuantity: Number.isFinite(pkgQty) && pkgQty > 0 ? pkgQty : undefined,
         packageUnit: pkgUnit,
         servingSize: portionAmount,
-        servingUnit: "g",
+        // A real declared serving_quantity shares the package's own unit
+        // system (g for solids, ml for liquids - Open Food Facts doesn't
+        // report a separate unit for serving_quantity, but it's always in
+        // the same system as product_quantity_unit). Hardcoding "g" here
+        // broke every liquid product: a serving genuinely in ml labeled
+        // "g" can't be reconciled against the row's real unit, so it
+        // silently fell back to a bogus 1:1 conversion and the nutrition
+        // came out wildly wrong. The no-serving-data fallback (100 g) is
+        // unaffected - Open Food Facts' own _100g-suffixed fields are that
+        // convention regardless of product type.
+        servingUnit: hasServing ? pkgUnit : "g",
         calories: getNum("energy-kcal"),
         protein: getNum("proteins"),
         carbs: getNum("carbohydrates"),

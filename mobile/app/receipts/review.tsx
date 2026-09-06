@@ -1394,8 +1394,16 @@ export default function ReceiptReviewPage() {
       );
 
       // A barcode match, like a manual match, updates the serving-size
-      // nutrition basis only - quantity/unit (how much was bought) is left
-      // exactly as the user already has it.
+      // nutrition basis - but unlike a plain name match, a barcode scan
+      // also carries the label's own real package size (product.
+      // packageQuantity/packageUnit), which is far more reliable than
+      // whatever Gemini's OCR guessed the printed quantity/unit to be.
+      // Same one-unit-per-row rule as the new-product path below: prefer
+      // the scanned package unit when the scan has one, and convert the
+      // matched ingredient's own serving size into *that* resulting unit.
+      const matchedResultingUnit = product.packageQuantity != null
+        ? product.packageUnit ?? row.unit
+        : row.unit;
       updateRow(rowKey, {
         matchedIngredientId: existingMatch._id,
         name: existingMatch.name,
@@ -1407,11 +1415,14 @@ export default function ReceiptReviewPage() {
         expiryTouched: false,
         expirySuggestion: suggestedExpiry,
         nutrition: toReceiptNutrition(existingMatch.nutrition),
+        ...(product.packageQuantity != null
+          ? { quantity: String(product.packageQuantity), unit: matchedResultingUnit }
+          : {}),
         defaultPortionAmount: String(
           convertPortionAmount(
             existingMatch.defaultPortionAmount ?? 1,
             existingMatch.defaultPortionUnit ?? "item",
-            row.unit,
+            matchedResultingUnit,
             getIngredientConversions(existingMatch, [], ingredients),
           ),
         ),
