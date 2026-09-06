@@ -511,28 +511,13 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           paddingBottom: COLLAPSED_LIST_HEIGHT + LIST_HANDLE_AREA_HEIGHT + 24,
         }}
       >
-      {/* What kind of ingredient this is — decided before how much of it
-          was bought, since it's classification, not a purchase detail. */}
+      {/* Category alone, ahead of the purchase details below — the rest of
+          the new-ingredient classification (Specific/Generic, Brand,
+          Generic parent) stays with Storage location further down. */}
       {isNew && (
         <View className="mt-2">
-          <SegmentedToggle<boolean>
-            compact
-            value={row.isGeneric}
-            options={[
-              { value: false, label: "Specific / Branded" },
-              { value: true, label: "Generic" },
-            ] as const}
-            onChange={(isGeneric) =>
-              updateRow(row.key, {
-                isGeneric,
-                ...(isGeneric
-                  ? { brandId: "", brandName: "", barcode: null, genericParentId: "", genericName: "" }
-                  : {}),
-              })
-            }
-          />
-
-          <View className="mt-1.5">
+          <Text className="text-xs font-semibold text-slate-600">Category</Text>
+          <View className="mt-1">
             <SearchableObjectDropdown<SelectOption>
               options={categories}
               selectedId={row.categoryId}
@@ -548,43 +533,6 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
               }
             />
           </View>
-
-          {!row.isGeneric && (
-            <View className="mt-1.5 flex-row gap-2">
-              <View className="flex-1">
-                <SearchableObjectDropdown<SelectOption>
-                  options={brands}
-                  selectedId={row.brandId}
-                  selectedName={row.brandName}
-                  compact
-                  placeholder="Brand"
-                  onTextChange={(value) => {
-                    if (value !== row.brandName) updateRow(row.key, { brandId: "" });
-                    updateRow(row.key, { brandName: value });
-                  }}
-                  onSelect={(option) =>
-                    updateRow(row.key, { brandId: option._id, brandName: option.name })
-                  }
-                />
-              </View>
-              <View className="flex-1">
-                <SearchableObjectDropdown<Ingredient>
-                  options={genericIngredients}
-                  selectedId={row.genericParentId}
-                  selectedName={row.genericName}
-                  compact
-                  placeholder="Generic"
-                  onTextChange={(value) => {
-                    if (value !== row.genericName) updateRow(row.key, { genericParentId: "" });
-                    updateRow(row.key, { genericName: value });
-                  }}
-                  onSelect={(option) =>
-                    updateRow(row.key, { genericParentId: option._id, genericName: option.name })
-                  }
-                />
-              </View>
-            </View>
-          )}
         </View>
       )}
 
@@ -635,6 +583,64 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           }
         />
       </View>
+
+      {isNew && (
+        <View className="mt-2 border-t border-slate-100 pt-2">
+          <SegmentedToggle<boolean>
+            compact
+            value={row.isGeneric}
+            options={[
+              { value: false, label: "Specific / Branded" },
+              { value: true, label: "Generic" },
+            ] as const}
+            onChange={(isGeneric) =>
+              updateRow(row.key, {
+                isGeneric,
+                ...(isGeneric
+                  ? { brandId: "", brandName: "", barcode: null, genericParentId: "", genericName: "" }
+                  : {}),
+              })
+            }
+          />
+
+          {!row.isGeneric && (
+            <View className="mt-1.5 flex-row gap-2">
+              <View className="flex-1">
+                <SearchableObjectDropdown<SelectOption>
+                  options={brands}
+                  selectedId={row.brandId}
+                  selectedName={row.brandName}
+                  compact
+                  placeholder="Brand"
+                  onTextChange={(value) => {
+                    if (value !== row.brandName) updateRow(row.key, { brandId: "" });
+                    updateRow(row.key, { brandName: value });
+                  }}
+                  onSelect={(option) =>
+                    updateRow(row.key, { brandId: option._id, brandName: option.name })
+                  }
+                />
+              </View>
+              <View className="flex-1">
+                <SearchableObjectDropdown<Ingredient>
+                  options={genericIngredients}
+                  selectedId={row.genericParentId}
+                  selectedName={row.genericName}
+                  compact
+                  placeholder="Generic"
+                  onTextChange={(value) => {
+                    if (value !== row.genericName) updateRow(row.key, { genericParentId: "" });
+                    updateRow(row.key, { genericName: value });
+                  }}
+                  onSelect={(option) =>
+                    updateRow(row.key, { genericParentId: option._id, genericName: option.name })
+                  }
+                />
+              </View>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Serving size nutrition is defined for — independent of how much was
           bought above, but always the *same unit* as that (there's only
