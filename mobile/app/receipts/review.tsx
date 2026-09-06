@@ -511,54 +511,10 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           paddingBottom: COLLAPSED_LIST_HEIGHT + LIST_HANDLE_AREA_HEIGHT + 24,
         }}
       >
-      {/* How much was actually bought — feeds the pantry item's stock
-          directly, independent of the serving size nutrition is defined
-          for below. Editing this never touches nutrition. */}
-      <Text className="mt-2 text-xs font-semibold text-slate-600">Quantity bought</Text>
-      <View className="mt-1 flex-row gap-2">
-        <View className="w-14">
-          <TextInput
-            value={row.quantity}
-            onChangeText={(value) => updateRow(row.key, { quantity: value })}
-            keyboardType="decimal-pad"
-            placeholder="Qty"
-            placeholderTextColor="#94A3B8"
-            className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
-            style={{ height: 40 }}
-          />
-        </View>
-        <View className="w-14">
-          <TextInput
-            value={row.unit}
-            onChangeText={(value) => updateRow(row.key, { unit: value })}
-            placeholder="Unit"
-            placeholderTextColor="#94A3B8"
-            className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
-            style={{ height: 40 }}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <PriceInput compact value={row.price} onChangeText={(value) => updateRow(row.key, { price: value })} />
-        </View>
-      </View>
-
-      <Text className="mt-2 text-xs font-semibold text-slate-600">Storage location</Text>
-      <View className="mt-1">
-        <SearchableObjectDropdown<SelectOption>
-          options={storageLocations}
-          selectedId={row.storageLocationId}
-          selectedName={row.storageLocationName}
-          compact
-          placeholder="Location"
-          onTextChange={(value) => updateRow(row.key, { storageLocationName: value })}
-          onSelect={(option) =>
-            updateRow(row.key, { storageLocationId: option._id, storageLocationName: option.name })
-          }
-        />
-      </View>
-
+      {/* What kind of ingredient this is — decided before how much of it
+          was bought, since it's classification, not a purchase detail. */}
       {isNew && (
-        <View className="mt-2 border-t border-slate-100 pt-2">
+        <View className="mt-2">
           <SegmentedToggle<boolean>
             compact
             value={row.isGeneric}
@@ -631,6 +587,54 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           )}
         </View>
       )}
+
+      {/* How much was actually bought — feeds the pantry item's stock
+          directly, independent of the serving size nutrition is defined
+          for below. Editing this never touches nutrition. */}
+      <View className={isNew ? "mt-2 border-t border-slate-100 pt-2" : "mt-2"}>
+        <Text className="text-xs font-semibold text-slate-600">Quantity bought</Text>
+        <View className="mt-1 flex-row gap-2">
+          <View className="w-14">
+            <TextInput
+              value={row.quantity}
+              onChangeText={(value) => updateRow(row.key, { quantity: value })}
+              keyboardType="decimal-pad"
+              placeholder="Qty"
+              placeholderTextColor="#94A3B8"
+              className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
+              style={{ height: 40 }}
+            />
+          </View>
+          <View className="w-14">
+            <TextInput
+              value={row.unit}
+              onChangeText={(value) => updateRow(row.key, { unit: value })}
+              placeholder="Unit"
+              placeholderTextColor="#94A3B8"
+              className="rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-950"
+              style={{ height: 40 }}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <PriceInput compact value={row.price} onChangeText={(value) => updateRow(row.key, { price: value })} />
+          </View>
+        </View>
+      </View>
+
+      <Text className="mt-2 text-xs font-semibold text-slate-600">Storage location</Text>
+      <View className="mt-1">
+        <SearchableObjectDropdown<SelectOption>
+          options={storageLocations}
+          selectedId={row.storageLocationId}
+          selectedName={row.storageLocationName}
+          compact
+          placeholder="Location"
+          onTextChange={(value) => updateRow(row.key, { storageLocationName: value })}
+          onSelect={(option) =>
+            updateRow(row.key, { storageLocationId: option._id, storageLocationName: option.name })
+          }
+        />
+      </View>
 
       {/* Serving size nutrition is defined for — independent of how much was
           bought above, but always the *same unit* as that (there's only
