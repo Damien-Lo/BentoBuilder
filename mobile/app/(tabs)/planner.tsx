@@ -1441,7 +1441,7 @@ export default function HomeScreen() {
 
             {!recipeConfirmedLocked && isIngredient && editEntry.status === "confirmed" && (
               <Text className="mb-4 text-xs text-slate-400">
-                Note: this updates the logged amount only — it won't adjust pantry stock, which was
+                Note: this updates the logged amount only — it won&apos;t adjust pantry stock, which was
                 already deducted when this entry was confirmed.
               </Text>
             )}
@@ -1641,7 +1641,7 @@ export default function HomeScreen() {
                             >
                               <Ionicons name="repeat-outline" size={18} color="white" />
                               <Text className="mt-1 text-center text-xs font-semibold text-white">
-                                Add "{name}"
+                                Add &quot;{name}&quot;
                               </Text>
                             </Pressable>
                           )}
@@ -1651,7 +1651,7 @@ export default function HomeScreen() {
                             className="items-center rounded-2xl border border-dashed border-slate-200 py-5 active:bg-slate-50"
                           >
                             <Text className="px-6 text-center text-sm text-slate-400">
-                              Swipe to add {slot.label.toLowerCase()} from {when}: "{name}"
+                              Swipe to add {slot.label.toLowerCase()} from {when}: &quot;{name}&quot;
                             </Text>
                           </Pressable>
                         </ReanimatedSwipeable>
