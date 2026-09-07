@@ -20,12 +20,26 @@ export async function calcNutrition(recipe) {
     const ing = entry.ingredient;
     if (!ing || typeof ing !== "object" || !ing.nutrition) continue;
 
-    const quantityInNativeUnit = convertUnits(
-      entry.quantity,
-      entry.unit,
-      ing.defaultPortionUnit,
-      getIngredientConversions(ing, globalConversions),
-    );
+    // A "wholePiece" line has no single real amount in entry.unit to
+    // convert (it's just a display label like "fillet") - the snapshot
+    // estimate uses entry.quantity (how many pieces) x the midpoint of its
+    // acceptable weight range as a stand-in for "how big a piece probably
+    // is." The real, exact nutrition once actually cooked comes from
+    // whichever real pantry piece got deducted (mobile's
+    // computeConfirmedRecipeNutrition), not this cached snapshot.
+    const quantityInNativeUnit = entry.matchMode === "wholePiece"
+      ? convertUnits(
+          entry.quantity * ((entry.pieceMinWeight + entry.pieceMaxWeight) / 2),
+          entry.pieceWeightUnit,
+          ing.defaultPortionUnit,
+          getIngredientConversions(ing, globalConversions),
+        )
+      : convertUnits(
+          entry.quantity,
+          entry.unit,
+          ing.defaultPortionUnit,
+          getIngredientConversions(ing, globalConversions),
+        );
     if (quantityInNativeUnit == null) continue;
 
     const multiplier =
