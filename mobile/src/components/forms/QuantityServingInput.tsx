@@ -31,6 +31,14 @@ interface QuantityServingInputProps {
   // this component only collects the count.
   entryCount?: string;
   onChangeEntryCount?: (value: string) => void;
+  // When provided alongside entryCount (> 1), also offers "different weight
+  // per piece" — for irregularly-sized items bought together (a few fish
+  // fillets, a couple of steaks) where reusing one shared amount for every
+  // entry would be wrong. A non-empty array signals that mode is active;
+  // the caller owns looping over it at submit time (one pantry entry per
+  // element, each its own quantityAvailable) instead of the shared amount.
+  perEntryAmounts?: string[];
+  onChangePerEntryAmounts?: (amounts: string[]) => void;
   // Lets switching the unit within a convertible family (e.g. g -> kg)
   // rescale the entered amount to the equivalent value, instead of leaving
   // the number as-is under a now-mismatched unit.
@@ -54,6 +62,8 @@ export function QuantityServingInput({
   initialMode,
   entryCount,
   onChangeEntryCount,
+  perEntryAmounts,
+  onChangePerEntryAmounts,
   customUnitConversions = [],
 }: QuantityServingInputProps) {
   const hasPortionInfo =
@@ -97,8 +107,44 @@ export function QuantityServingInput({
     ? getRelatedUnits(defaultPortionUnit, customUnitConversions)
     : [];
 
+  // A non-empty perEntryAmounts signals "different weight per piece" mode
+  // is active - resized here (padding new slots with the shared amount as
+  // a starting point, trimming extras) any time the entry count itself
+  // changes, so the parent's committed array is always the right length
+  // at submit time even if the user never touches an individual field.
+  const isPerEntryMode = (perEntryAmounts?.length ?? 0) > 0;
+
+  function resizePerEntryAmounts(newCount: number) {
+    if (!isPerEntryMode || !onChangePerEntryAmounts) return;
+    onChangePerEntryAmounts(
+      Array.from({ length: newCount }, (_, i) => perEntryAmounts?.[i] ?? quantityAvailable),
+    );
+  }
+
   function adjustEntryCount(delta: number) {
-    onChangeEntryCount?.(String(Math.max(1, parsedEntryCount + delta)));
+    const next = Math.max(1, parsedEntryCount + delta);
+    onChangeEntryCount?.(String(next));
+    resizePerEntryAmounts(next);
+  }
+
+  function handleEntryCountTextChange(value: string) {
+    onChangeEntryCount?.(value);
+    const parsed = Math.max(1, Math.round(Number(value)) || 1);
+    resizePerEntryAmounts(parsed);
+  }
+
+  function toggleDifferentWeights() {
+    if (isPerEntryMode) {
+      onChangePerEntryAmounts?.([]);
+    } else {
+      onChangePerEntryAmounts?.(Array.from({ length: parsedEntryCount }, () => quantityAvailable));
+    }
+  }
+
+  function updatePerEntryAmount(index: number, value: string) {
+    const next = [...(perEntryAmounts ?? [])];
+    next[index] = value;
+    onChangePerEntryAmounts?.(next);
   }
 
   function handleUnitSelect(unit: string) {
@@ -221,7 +267,7 @@ export function QuantityServingInput({
             </Pressable>
             <TextInput
               value={entryCount}
-              onChangeText={onChangeEntryCount}
+              onChangeText={handleEntryCountTextChange}
               editable={!disabled}
               keyboardType="number-pad"
               className="mx-2 h-11 w-16 rounded-2xl border border-slate-200 bg-white text-center text-base text-slate-950"
@@ -234,7 +280,8 @@ export function QuantityServingInput({
               <Ionicons name="add" size={18} color="#475569" />
             </Pressable>
           </View>
-          {parsedEntryCount > 1 && (
+
+          {parsedEntryCount > 1 && !isPerEntryMode && (
             <Text className="mt-1.5 text-xs text-slate-400">
               Creates {parsedEntryCount} separate pantry entries of{" "}
               {mode === "servings" && computedTotal != null
@@ -242,6 +289,40 @@ export function QuantityServingInput({
                 : `${quantityAvailable || "0"} ${effectiveUnit}`}{" "}
               each.
             </Text>
+          )}
+
+          {parsedEntryCount > 1 && onChangePerEntryAmounts && (
+            <Pressable
+              disabled={disabled}
+              className="mt-2 self-start"
+              onPress={toggleDifferentWeights}
+            >
+              <Text className="text-xs font-semibold text-blue-600">
+                {isPerEntryMode
+                  ? "Same weight for all — tap to switch back"
+                  : "Different weight per piece? (e.g. a few fillets of different sizes)"}
+              </Text>
+            </Pressable>
+          )}
+
+          {isPerEntryMode && (
+            <View className="mt-2">
+              {Array.from({ length: parsedEntryCount }, (_, index) => (
+                <View key={index} className="mt-1.5 flex-row items-center">
+                  <Text className="w-16 text-xs text-slate-500">Piece {index + 1}</Text>
+                  <TextInput
+                    value={perEntryAmounts?.[index] ?? ""}
+                    onChangeText={(value) => updatePerEntryAmount(index, value)}
+                    editable={!disabled}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    placeholderTextColor="#94A3B8"
+                    className="ml-2 h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-base text-slate-950"
+                  />
+                  <Text className="ml-2 text-sm text-slate-500">{effectiveUnit}</Text>
+                </View>
+              ))}
+            </View>
           )}
         </View>
       )}

@@ -128,6 +128,10 @@ export default function AddPantryItemByIngredientScreen() {
   const [quantity, setQuantity] = useState("1");
   const [quantityUnit, setQuantityUnit] = useState("item");
   const [entryCount, setEntryCount] = useState("1");
+  // Non-empty signals "different weight per piece" mode is active — see
+  // QuantityServingInput's own doc comment. Each element becomes its own
+  // pantry entry's quantityAvailable instead of reusing `quantity` for all.
+  const [perEntryAmounts, setPerEntryAmounts] = useState<string[]>([]);
   const [storageLocationId, setStorageLocationId] = useState(locationId ?? "");
   // A location passed in via route params (e.g. "add here" from a specific
   // storage location page) is itself a deliberate choice — don't let the
@@ -333,6 +337,7 @@ export default function AddPantryItemByIngredientScreen() {
     setExpiryDate("");
     setExpiryTouched(false);
     setEntryCount("1");
+    setPerEntryAmounts([]);
     setPurchasePrice("");
     setStoreId("");
     setStoreName("");
@@ -361,9 +366,19 @@ export default function AddPantryItemByIngredientScreen() {
       return;
     }
 
+    const isPerEntryMode = perEntryAmounts.length > 0;
     const parsedQuantity = Number(quantity);
+    const parsedPerEntryAmounts = perEntryAmounts.map((a) => Number(a));
 
-    if (!Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
+    if (isPerEntryMode) {
+      if (parsedPerEntryAmounts.some((a) => !Number.isFinite(a) || a <= 0)) {
+        Alert.alert(
+          "Invalid weight",
+          "Enter a weight greater than zero for every piece.",
+        );
+        return;
+      }
+    } else if (!Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
       Alert.alert(
         "Invalid quantity",
         "Enter a valid quantity of zero or greater.",
@@ -392,7 +407,17 @@ export default function AddPantryItemByIngredientScreen() {
       }
     }
 
-    const parsedCount = Math.max(1, Math.round(Number(entryCount)) || 1);
+    const parsedCount = isPerEntryMode
+      ? parsedPerEntryAmounts.length
+      : Math.max(1, Math.round(Number(entryCount)) || 1);
+
+    // A price entered once for a batch of differently-weighed pieces is
+    // the total for all of them, not each — split evenly (rounded to
+    // cents) so the sum still adds back up to what was actually paid.
+    const totalPrice = purchasePrice.trim() ? Number(purchasePrice) : undefined;
+    const perPiecePrice = isPerEntryMode && totalPrice != null
+      ? Math.round((totalPrice / parsedCount) * 100) / 100
+      : totalPrice;
 
     try {
       setSaving(true);
@@ -406,11 +431,11 @@ export default function AddPantryItemByIngredientScreen() {
         await addIngredientToPantry({
           ingredient: selectedIngredient._id,
           storageLocation: storageLocationId,
-          quantityAvailable: parsedQuantity,
+          quantityAvailable: isPerEntryMode ? parsedPerEntryAmounts[i] : parsedQuantity,
           quantityUnit: quantityUnit.trim(),
           purchaseDate: purchaseDate.trim() || undefined,
           expiryDate: expiryDate.trim() || undefined,
-          purchasePrice: purchasePrice.trim() ? Number(purchasePrice) : undefined,
+          purchasePrice: perPiecePrice,
           store: store ? store._id : null,
           notes: notes.trim() || undefined,
         });
@@ -633,6 +658,8 @@ export default function AddPantryItemByIngredientScreen() {
               defaultPortionUnit={selectedIngredient.defaultPortionUnit}
               entryCount={entryCount}
               onChangeEntryCount={setEntryCount}
+              perEntryAmounts={perEntryAmounts}
+              onChangePerEntryAmounts={setPerEntryAmounts}
               customUnitConversions={getIngredientConversions(selectedIngredient, customUnitConversions)}
             />
 
