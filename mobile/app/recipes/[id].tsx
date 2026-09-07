@@ -40,7 +40,7 @@ import {
 } from "@/src/services/optionsApi";
 import { loadSettings } from "@/src/services/settingsService";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
-import { getIngredientStockInUnit } from "@/src/utils/ingredientStock";
+import { countQualifyingPantryPieces, getIngredientStockInUnit } from "@/src/utils/ingredientStock";
 import { RateRecipeModal } from "@/src/components/recipes/RateRecipeModal";
 import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
 import { DateTextInput, DurationExpiryInput, FieldLabel, FormInput, SearchableObjectDropdown } from "@/src/components/forms";
@@ -170,12 +170,23 @@ export default function RecipeDetailPage() {
       const ing = entry.ingredient;
       if (typeof ing === "string" || !ing.nutrition) continue;
 
-      const qtyInNativeUnit = convertUnits(
-        entry.quantity,
-        entry.unit,
-        ing.defaultPortionUnit ?? "",
-        getIngredientConversions(ing, customUnitConversions, allIngredients),
-      );
+      // A "wholePiece" line has no real amount in entry.unit to convert
+      // (just a display label like "fillet") - same estimate used
+      // everywhere else on this page and in the recipe editor: quantity x
+      // the midpoint of its acceptable weight range.
+      const qtyInNativeUnit = entry.matchMode === "wholePiece"
+        ? convertUnits(
+            entry.quantity * (((entry.pieceMinWeight ?? 0) + (entry.pieceMaxWeight ?? entry.pieceMinWeight ?? 0)) / 2),
+            entry.pieceWeightUnit || "g",
+            ing.defaultPortionUnit ?? "",
+            getIngredientConversions(ing, customUnitConversions, allIngredients),
+          )
+        : convertUnits(
+            entry.quantity,
+            entry.unit,
+            ing.defaultPortionUnit ?? "",
+            getIngredientConversions(ing, customUnitConversions, allIngredients),
+          );
       if (qtyInNativeUnit == null) continue;
 
       const multiplier =
@@ -725,23 +736,41 @@ export default function RecipeDetailPage() {
                   : entry.quantity;
 
                 const ing = typeof entry.ingredient === "string" ? null : entry.ingredient;
-                const inStock = ing
-                  ? getIngredientStockInUnit(ing, entry.unit, allIngredients, pantryItems, customUnitConversions)
-                  : 0;
-                const remaining = inStock - displayQty;
-                const rawThreshold = ing?.lowStockThreshold ?? 0;
-                const threshold = ing?.defaultPortionUnit
-                  ? (convertUnits(
-                      rawThreshold,
-                      ing.defaultPortionUnit,
-                      entry.unit,
-                      getIngredientConversions(ing, customUnitConversions, allIngredients),
-                    ) ?? rawThreshold)
-                  : rawThreshold;
-                const barState: "green" | "yellow" | "red" =
-                  remaining > threshold ? "green" :
-                  remaining >= 0 ? "yellow" :
-                  "red";
+                const isWholePiece = entry.matchMode === "wholePiece";
+
+                let barState: "green" | "yellow" | "red";
+                if (isWholePiece && ing) {
+                  // Counts real qualifying pantry pieces instead of a
+                  // pooled weight — no low-stock threshold (it's expressed
+                  // in the ingredient's native weight unit, not a piece
+                  // count).
+                  const qualifying = countQualifyingPantryPieces(
+                    ing,
+                    entry.pieceMinWeight ?? 0,
+                    entry.pieceMaxWeight ?? 0,
+                    entry.pieceWeightUnit || "g",
+                    allIngredients,
+                    pantryItems,
+                    customUnitConversions,
+                  );
+                  const remaining = qualifying - displayQty;
+                  barState = remaining > 0 ? "green" : remaining >= 0 ? "yellow" : "red";
+                } else {
+                  const inStock = ing
+                    ? getIngredientStockInUnit(ing, entry.unit, allIngredients, pantryItems, customUnitConversions)
+                    : 0;
+                  const remaining = inStock - displayQty;
+                  const rawThreshold = ing?.lowStockThreshold ?? 0;
+                  const threshold = ing?.defaultPortionUnit
+                    ? (convertUnits(
+                        rawThreshold,
+                        ing.defaultPortionUnit,
+                        entry.unit,
+                        getIngredientConversions(ing, customUnitConversions, allIngredients),
+                      ) ?? rawThreshold)
+                    : rawThreshold;
+                  barState = remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
+                }
 
                 return (
                   <View
@@ -761,22 +790,37 @@ export default function RecipeDetailPage() {
                         <Text className="text-sm font-semibold text-slate-500">
                           {displayQty}
                           {entry.unit ? ` × ${entry.unit}` : ""}
+                          {isWholePiece
+                            ? ` (${entry.pieceMinWeight}-${entry.pieceMaxWeight}${entry.pieceWeightUnit} each, whole)`
+                            : ""}
                           {entry.nutritionFactor != null && entry.nutritionFactor !== 1
                             ? ` · ${Math.round(entry.nutritionFactor * 100)}% counted`
                             : ""}
                         </Text>
                         {ing?.nutrition?.calories != null && (() => {
-                          // displayQty is in entry.unit, not necessarily the
-                          // ingredient's own defaultPortionUnit (e.g. a
-                          // recipe using grams for an ingredient portioned
-                          // in packages) — has to convert before scaling,
-                          // same as the total nutrition sum above.
-                          const qtyInNativeUnit = convertUnits(
-                            displayQty,
-                            entry.unit,
-                            ing.defaultPortionUnit ?? "",
-                            getIngredientConversions(ing, customUnitConversions, allIngredients),
-                          );
+                          // A "wholePiece" line has no real amount in
+                          // entry.unit to convert (just a display label) -
+                          // same estimate as the recipe editor's preview:
+                          // displayQty x the midpoint of its weight range.
+                          // displayQty is in entry.unit otherwise, not
+                          // necessarily the ingredient's own
+                          // defaultPortionUnit (e.g. a recipe using grams
+                          // for an ingredient portioned in packages) — has
+                          // to convert before scaling either way, same as
+                          // the total nutrition sum above.
+                          const qtyInNativeUnit = isWholePiece
+                            ? convertUnits(
+                                displayQty * (((entry.pieceMinWeight ?? 0) + (entry.pieceMaxWeight ?? entry.pieceMinWeight ?? 0)) / 2),
+                                entry.pieceWeightUnit || "g",
+                                ing.defaultPortionUnit ?? "",
+                                getIngredientConversions(ing, customUnitConversions, allIngredients),
+                              )
+                            : convertUnits(
+                                displayQty,
+                                entry.unit,
+                                ing.defaultPortionUnit ?? "",
+                                getIngredientConversions(ing, customUnitConversions, allIngredients),
+                              );
                           if (qtyInNativeUnit == null) return null;
                           const kcal = Math.round(
                             ing.nutrition.calories *

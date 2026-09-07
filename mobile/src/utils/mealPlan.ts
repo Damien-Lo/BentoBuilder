@@ -6,7 +6,7 @@ import type { Recipe } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
 import type { RestaurantMeal } from "@/src/services/restaurantMealApi";
 import type { PantryItem } from "@/src/types/pantry";
-import { getIngredientStockInUnit } from "./ingredientStock";
+import { countQualifyingPantryPieces, getIngredientStockInUnit } from "./ingredientStock";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -404,6 +404,37 @@ function ingredientAvailabilityState(
   return remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
 }
 
+// The "wholePiece" counterpart to ingredientAvailabilityState above — counts
+// real qualifying pantry pieces instead of pooling a total weight, so an
+// undersized or oversized piece doesn't silently count toward the need.
+// lowStockThreshold isn't piece-aware (it's expressed in the ingredient's
+// native weight unit, not a piece count), so there's no soft buffer here:
+// green when more qualifying pieces exist than needed, yellow when exactly
+// enough, red on a genuine shortfall — same 3-state shape as the
+// zero-threshold case above.
+function wholePieceAvailabilityState(
+  ingredient: Ingredient,
+  neededPieces: number,
+  pieceMinWeight: number,
+  pieceMaxWeight: number,
+  pieceWeightUnit: string,
+  allIngredients: Ingredient[],
+  pantryItems: PantryItem[],
+  customConversions: CustomUnitConversion[],
+): AvailabilityState {
+  const qualifying = countQualifyingPantryPieces(
+    ingredient,
+    pieceMinWeight,
+    pieceMaxWeight,
+    pieceWeightUnit,
+    allIngredients,
+    pantryItems,
+    customConversions,
+  );
+  const remaining = qualifying - neededPieces;
+  return remaining > 0 ? "green" : remaining >= 0 ? "yellow" : "red";
+}
+
 function worseOf(current: AvailabilityState | null, next: AvailabilityState): AvailabilityState {
   if (current === null) return next;
   if (current === "red" || next === "red") return "red";
@@ -423,7 +454,18 @@ export function getRecipeAvailability(
     const ingId = typeof entry.ingredient === "string" ? entry.ingredient : entry.ingredient._id;
     const ing = ingredientMap.get(ingId);
     if (!ing) continue;
-    const state = ingredientAvailabilityState(ing, entry.quantity, entry.unit, allIngredients, pantryItems, customConversions);
+    const state = entry.matchMode === "wholePiece"
+      ? wholePieceAvailabilityState(
+          ing,
+          entry.quantity,
+          entry.pieceMinWeight ?? 0,
+          entry.pieceMaxWeight ?? 0,
+          entry.pieceWeightUnit || "g",
+          allIngredients,
+          pantryItems,
+          customConversions,
+        )
+      : ingredientAvailabilityState(ing, entry.quantity, entry.unit, allIngredients, pantryItems, customConversions);
     availability = worseOf(availability, state);
     if (availability === "red") break;
   }

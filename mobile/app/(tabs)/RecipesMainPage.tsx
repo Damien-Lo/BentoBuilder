@@ -39,7 +39,7 @@ import { getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { loadSettings } from "@/src/services/settingsService";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
-import { getIngredientStockInUnit } from "@/src/utils/ingredientStock";
+import { countQualifyingPantryPieces, getIngredientStockInUnit } from "@/src/utils/ingredientStock";
 import { referenceId } from "@/src/utils/pantryDefaults";
 
 type SortMode = "category" | "meal" | "mealPrep";
@@ -98,19 +98,40 @@ function getMealAvailability(
         : (entry.ingredient as { _id: string })._id;
       const ing = ingredientMap.get(ingId);
       if (!ing) continue;
-      const inStock = getIngredientStockInUnit(ing, entry.unit, allIngredients, pantryItems, customConversions);
-      const remaining = inStock - entry.quantity;
-      const rawThreshold = ing.lowStockThreshold ?? 0;
-      const threshold = ing.defaultPortionUnit
-        ? (convertUnits(
-            rawThreshold,
-            ing.defaultPortionUnit,
-            entry.unit,
-            getIngredientConversions(ing, customConversions, allIngredients),
-          ) ?? rawThreshold)
-        : rawThreshold;
-      const state: "green" | "yellow" | "red" =
-        remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
+
+      let state: "green" | "yellow" | "red";
+      if (entry.matchMode === "wholePiece") {
+        // Counts real qualifying pantry pieces instead of pooling a total
+        // weight — an undersized/oversized piece doesn't count. No
+        // low-stock threshold here (it's expressed in the ingredient's
+        // native weight unit, not a piece count): green with pieces to
+        // spare, yellow exactly enough, red on a genuine shortfall.
+        const qualifying = countQualifyingPantryPieces(
+          ing,
+          entry.pieceMinWeight ?? 0,
+          entry.pieceMaxWeight ?? 0,
+          entry.pieceWeightUnit || "g",
+          allIngredients,
+          pantryItems,
+          customConversions,
+        );
+        const remaining = qualifying - entry.quantity;
+        state = remaining > 0 ? "green" : remaining >= 0 ? "yellow" : "red";
+      } else {
+        const inStock = getIngredientStockInUnit(ing, entry.unit, allIngredients, pantryItems, customConversions);
+        const remaining = inStock - entry.quantity;
+        const rawThreshold = ing.lowStockThreshold ?? 0;
+        const threshold = ing.defaultPortionUnit
+          ? (convertUnits(
+              rawThreshold,
+              ing.defaultPortionUnit,
+              entry.unit,
+              getIngredientConversions(ing, customConversions, allIngredients),
+            ) ?? rawThreshold)
+          : rawThreshold;
+        state = remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
+      }
+
       if (overall === null) overall = state;
       else if (state === "red") { overall = "red"; break; }
       else if (state === "yellow" && overall === "green") overall = "yellow";
@@ -466,19 +487,35 @@ export default function RecipesMainPage() {
         : (entry.ingredient as { _id: string })._id;
       const ing = ingredientMap.get(ingId);
       if (!ing) continue;
-      const inStock = getIngredientStockInUnit(ing, entry.unit, ingredients, pantryItems, customUnitConversions);
-      const remaining = inStock - entry.quantity;
-      const rawThreshold = ing.lowStockThreshold ?? 0;
-      const threshold = ing.defaultPortionUnit
-        ? (convertUnits(
-            rawThreshold,
-            ing.defaultPortionUnit,
-            entry.unit,
-            getIngredientConversions(ing, customUnitConversions, ingredients),
-          ) ?? rawThreshold)
-        : rawThreshold;
-      const state: "green" | "yellow" | "red" =
-        remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
+
+      let state: "green" | "yellow" | "red";
+      if (entry.matchMode === "wholePiece") {
+        const qualifying = countQualifyingPantryPieces(
+          ing,
+          entry.pieceMinWeight ?? 0,
+          entry.pieceMaxWeight ?? 0,
+          entry.pieceWeightUnit || "g",
+          ingredients,
+          pantryItems,
+          customUnitConversions,
+        );
+        const remaining = qualifying - entry.quantity;
+        state = remaining > 0 ? "green" : remaining >= 0 ? "yellow" : "red";
+      } else {
+        const inStock = getIngredientStockInUnit(ing, entry.unit, ingredients, pantryItems, customUnitConversions);
+        const remaining = inStock - entry.quantity;
+        const rawThreshold = ing.lowStockThreshold ?? 0;
+        const threshold = ing.defaultPortionUnit
+          ? (convertUnits(
+              rawThreshold,
+              ing.defaultPortionUnit,
+              entry.unit,
+              getIngredientConversions(ing, customUnitConversions, ingredients),
+            ) ?? rawThreshold)
+          : rawThreshold;
+        state = remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
+      }
+
       if (availability === null) availability = state;
       else if (state === "red") { availability = "red"; break; }
       else if (state === "yellow" && availability === "green") availability = "yellow";
