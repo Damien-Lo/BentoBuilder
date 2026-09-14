@@ -20,8 +20,15 @@ import { getMeals, type Meal } from "@/src/services/mealApi";
 import { addRecipeScore, getRecipeById, getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
-import { getRestaurantMeals, type RestaurantMeal } from "@/src/services/restaurantMealApi";
+import {
+  getRestaurantMeals,
+  updateRestaurantMeal,
+  type Dish,
+  type DishInput,
+  type RestaurantMeal,
+} from "@/src/services/restaurantMealApi";
 import { upsertMealPlanEntryContribution } from "@/src/services/groceryListApi";
+import { FormInput, PriceInput } from "@/src/components/forms";
 import type { SelectOption } from "@/src/services/optionsApi";
 import type { PantryItem } from "@/src/types/pantry";
 import {
@@ -153,8 +160,22 @@ export default function HomeScreen() {
   // choice of what was actually eaten, not an accidental full-menu count.
   const [pendingRestaurantMeal, setPendingRestaurantMeal] = useState<RestaurantMeal | null>(null);
   // dish _id -> quantity; presence in the map is "selected", same role the
-  // old Set<string> played, but now carries how many of each too.
+  // old Set<string> played, but now carries how many of each too. Keyed by
+  // a staged dish's temp key (see stagedNewDishes) until confirm remaps it
+  // to the real id the server assigns.
   const [selectedDishQuantities, setSelectedDishQuantities] = useState<Map<string, number>>(new Map());
+  // A dish ordered today that isn't on this restaurant's menu yet, typed
+  // inline while picking what was eaten — kept purely local (never written
+  // to the restaurant record) until the whole visit is actually confirmed,
+  // so backing out of the add-to-plan flow never leaves an orphaned menu
+  // item behind for something that was never actually logged.
+  const [stagedNewDishes, setStagedNewDishes] = useState<
+    { key: string; name: string; price: string; calories: string }[]
+  >([]);
+  const [showAddDishForm, setShowAddDishForm] = useState(false);
+  const [newDishName, setNewDishName] = useState("");
+  const [newDishPrice, setNewDishPrice] = useState("");
+  const [newDishCalories, setNewDishCalories] = useState("");
 
   // Tapping an ingredient/recipe entry opens this overlay instead of
   // navigating straight to the catalog page - shows and lets you edit how
@@ -339,6 +360,18 @@ export default function HomeScreen() {
     );
   }, [allRestaurantMeals, restaurantSearch, lastUsed.restaurantMeal]);
 
+  // Local-only dish-picker state (staged new dishes + the inline form that
+  // stages them) - reset everywhere selectedDishQuantities itself resets,
+  // so a leftover draft never carries over into a different restaurant or
+  // a later add-to-plan session.
+  function resetDishPickerDrafts() {
+    setStagedNewDishes([]);
+    setShowAddDishForm(false);
+    setNewDishName("");
+    setNewDishPrice("");
+    setNewDishCalories("");
+  }
+
   function openAdd(slot: MealSlot) {
     setAddSlot(slot);
     setAddStatus("confirmed");
@@ -350,6 +383,7 @@ export default function HomeScreen() {
     setPendingIngredient(null);
     setPendingRestaurantMeal(null);
     setSelectedDishQuantities(new Map());
+    resetDishPickerDrafts();
     setShowAdd(true);
   }
 
@@ -448,12 +482,97 @@ export default function HomeScreen() {
       setEntries(prev => [...prev, entry]);
       setPendingRestaurantMeal(null);
       setSelectedDishQuantities(new Map());
+      resetDishPickerDrafts();
       setShowAdd(false);
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not add restaurant meal.");
     } finally {
       setSaving(false);
     }
+  }
+
+  // Stages a dish typed inline (not yet on this restaurant's menu) as
+  // "selected" under a temp key, same as tapping an existing dish's
+  // checkbox — nothing is written to the restaurant record until confirm.
+  function addStagedDish() {
+    const name = newDishName.trim();
+    if (!name) return;
+    const key = `staged-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setStagedNewDishes(prev => [...prev, { key, name, price: newDishPrice, calories: newDishCalories }]);
+    setSelectedDishQuantities(prev => {
+      const next = new Map(prev);
+      next.set(key, 1);
+      return next;
+    });
+    setNewDishName("");
+    setNewDishPrice("");
+    setNewDishCalories("");
+    setShowAddDishForm(false);
+  }
+
+  function removeStagedDish(key: string) {
+    setStagedNewDishes(prev => prev.filter(d => d.key !== key));
+    setSelectedDishQuantities(prev => {
+      const next = new Map(prev);
+      next.delete(key);
+      return next;
+    });
+  }
+
+  // Confirms the current restaurant dish-picker step: if anything was
+  // staged inline, persists those to the restaurant's actual menu FIRST
+  // (a single PATCH replacing dishes with the existing list + the staged
+  // ones appended — the route does a full replace, not a push), remaps
+  // selectedDishQuantities from each staged dish's temp key to the real id
+  // the server assigns, then hands off to handleAddRestaurantEntry exactly
+  // as if every dish had already existed on the menu.
+  async function handleConfirmRestaurantVisit() {
+    if (!pendingRestaurantMeal || saving) return;
+
+    let restaurantMeal = pendingRestaurantMeal;
+    let quantities = selectedDishQuantities;
+
+    if (stagedNewDishes.length > 0) {
+      setSaving(true);
+      try {
+        // Existing dishes are passed through completely unchanged (real
+        // _id and scores included) - the route replaces the whole array,
+        // so sending anything less would silently mint fresh ids for
+        // every dish already on the menu and orphan every past visit's
+        // restaurantDishSelections that reference the old ones.
+        const dishInputs: (DishInput | Dish)[] = [
+          ...pendingRestaurantMeal.dishes,
+          ...stagedNewDishes.map((d): DishInput => ({
+            name: d.name,
+            price: d.price.trim() ? Number(d.price) : undefined,
+            nutrition: d.calories.trim() ? { calories: Number(d.calories) } : undefined,
+          })),
+        ];
+        restaurantMeal = await updateRestaurantMeal(pendingRestaurantMeal._id, { dishes: dishInputs });
+        setAllRestaurantMeals(prev => prev.map(r => (r._id === restaurantMeal._id ? restaurantMeal : r)));
+
+        // The route replaces the whole array, but preserves order - the
+        // newly-created dishes are exactly the tail past the original count.
+        const newRealDishes = restaurantMeal.dishes.slice(pendingRestaurantMeal.dishes.length);
+        quantities = new Map(selectedDishQuantities);
+        stagedNewDishes.forEach((staged, i) => {
+          const qty = quantities.get(staged.key);
+          quantities.delete(staged.key);
+          const real = newRealDishes[i];
+          if (real && qty != null) quantities.set(real._id, qty);
+        });
+      } catch (err) {
+        Alert.alert("Error", err instanceof Error ? err.message : "Could not save the new dish.");
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+    }
+
+    await handleAddRestaurantEntry(
+      restaurantMeal,
+      [...quantities.entries()].map(([dish, quantity]) => ({ dish, quantity })),
+    );
   }
 
   async function handleAddIngredientEntry() {
@@ -1685,6 +1804,7 @@ export default function HomeScreen() {
                   setPendingIngredient(null);
                   setPendingRestaurantMeal(null);
                   setSelectedDishQuantities(new Map());
+                  resetDishPickerDrafts();
                 }}
                 hitSlop={10}
                 className="-ml-2 flex-1 flex-row items-center px-2 py-2"
@@ -1887,24 +2007,160 @@ export default function HomeScreen() {
                     </View>
                   );
                 })}
+
+                {/* Staged locally — not yet on this restaurant's real menu.
+                    Saved to the restaurant record only once the visit is
+                    actually confirmed below. */}
+                {stagedNewDishes.map((dish, i) => {
+                  const qty = selectedDishQuantities.get(dish.key) ?? 1;
+                  return (
+                    <View
+                      key={dish.key}
+                      className={`bg-blue-50/40 px-4 py-3.5 ${
+                        i < stagedNewDishes.length - 1 || pendingRestaurantMeal.dishes.length > 0
+                          ? "border-b border-slate-100"
+                          : ""
+                      }`}
+                    >
+                      <View className="flex-row items-center justify-between">
+                        <View className="flex-1 flex-row items-center">
+                          <Ionicons name="checkbox" size={22} color="#2563EB" />
+                          <View className="ml-3 flex-1">
+                            <View className="flex-row items-center">
+                              <Text className="font-semibold text-slate-900">{dish.name}</Text>
+                              <Text className="ml-1.5 text-[10px] font-bold uppercase tracking-wide text-blue-600">
+                                New
+                              </Text>
+                            </View>
+                            {!!dish.calories.trim() && (
+                              <Text className="mt-0.5 text-xs text-slate-400">{dish.calories} kcal each</Text>
+                            )}
+                          </View>
+                        </View>
+                        {!!dish.price.trim() && (
+                          <Text className="text-sm font-semibold text-slate-500">
+                            ${Number(dish.price).toFixed(2)}
+                          </Text>
+                        )}
+                        <Pressable hitSlop={8} className="ml-2" onPress={() => removeStagedDish(dish.key)}>
+                          <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
+                        </Pressable>
+                      </View>
+
+                      <View className="mt-2 flex-row items-center justify-end">
+                        <Text className="mr-2 text-xs font-medium text-slate-400">Quantity</Text>
+                        <Pressable
+                          hitSlop={8}
+                          onPress={() =>
+                            setSelectedDishQuantities(prev => {
+                              const next = new Map(prev);
+                              const current = next.get(dish.key) ?? 1;
+                              next.set(dish.key, Math.max(1, current - 1));
+                              return next;
+                            })
+                          }
+                          className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                        >
+                          <Ionicons name="remove" size={14} color="#475569" />
+                        </Pressable>
+                        <Text className="mx-2 text-sm font-semibold text-slate-700">{qty}</Text>
+                        <Pressable
+                          hitSlop={8}
+                          onPress={() =>
+                            setSelectedDishQuantities(prev => {
+                              const next = new Map(prev);
+                              next.set(dish.key, (next.get(dish.key) ?? 1) + 1);
+                              return next;
+                            })
+                          }
+                          className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                        >
+                          <Ionicons name="add" size={14} color="#475569" />
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
 
-              {/* Live nutrition preview — sum of selected dishes, each scaled by quantity */}
+              {showAddDishForm ? (
+                <View className="mb-6 rounded-2xl border border-dashed border-slate-300 bg-white p-4">
+                  <Text className="mb-2 text-xs font-semibold text-slate-500">
+                    Not on the menu yet — add what you ordered
+                  </Text>
+                  <FormInput value={newDishName} placeholder="Dish name" onChangeText={setNewDishName} />
+                  <View className="mt-2 flex-row gap-3">
+                    <View className="flex-1">
+                      <FormInput
+                        value={newDishCalories}
+                        placeholder="Calories (optional)"
+                        keyboardType="decimal-pad"
+                        onChangeText={setNewDishCalories}
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <PriceInput value={newDishPrice} onChangeText={setNewDishPrice} />
+                    </View>
+                  </View>
+                  <View className="mt-3 flex-row gap-3">
+                    <Pressable
+                      className="flex-1 items-center rounded-xl bg-slate-100 py-2.5 active:bg-slate-200"
+                      onPress={() => {
+                        setShowAddDishForm(false);
+                        setNewDishName("");
+                        setNewDishPrice("");
+                        setNewDishCalories("");
+                      }}
+                    >
+                      <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      disabled={!newDishName.trim()}
+                      className={`flex-1 items-center rounded-xl py-2.5 ${
+                        newDishName.trim() ? "bg-blue-600 active:bg-blue-700" : "bg-blue-300"
+                      }`}
+                      onPress={addStagedDish}
+                    >
+                      <Text className="text-sm font-semibold text-white">Add dish</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable
+                  className="mb-6 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3.5 active:bg-slate-100"
+                  onPress={() => setShowAddDishForm(true)}
+                >
+                  <Ionicons name="add" size={18} color="#2563EB" />
+                  <Text className="ml-2 font-semibold text-blue-700">Add a dish not on this list</Text>
+                </Pressable>
+              )}
+
+              {/* Live nutrition preview — sum of selected dishes (existing +
+                  staged), each scaled by quantity. Computed directly rather
+                  than via getRestaurantMealKcal since a staged dish isn't
+                  part of pendingRestaurantMeal.dishes yet. */}
               {(() => {
-                const selections: RestaurantDishSelection[] = [...selectedDishQuantities.entries()].map(
-                  ([dish, quantity]) => ({ dish, quantity }),
+                const qtyOf = (key: string) => selectedDishQuantities.get(key) ?? 1;
+                const selectedReal = pendingRestaurantMeal.dishes.filter(d => selectedDishQuantities.has(d._id));
+                const selectedStaged = stagedNewDishes.filter(d => selectedDishQuantities.has(d.key));
+                const stagedCalories = selectedStaged.reduce(
+                  (s, d) => s + (Number(d.calories) || 0) * qtyOf(d.key), 0,
                 );
-                const selected = pendingRestaurantMeal.dishes.filter(d => selectedDishQuantities.has(d._id));
-                const qtyOf = (d: { _id: string }) => selectedDishQuantities.get(d._id) ?? 1;
-                const kcal = getRestaurantMealKcal(pendingRestaurantMeal, selections);
+                const realCalories = selectedReal.reduce(
+                  (s, d) => s + (d.nutrition?.calories ?? 0) * qtyOf(d._id), 0,
+                );
+                const hasAnyCalorieData = selectedReal.some(d => d.nutrition?.calories != null)
+                  || selectedStaged.some(d => d.calories.trim());
+                const kcal = hasAnyCalorieData ? Math.round(realCalories + stagedCalories) : null;
                 const rows: [string, number | null | undefined, string][] = [
                   ["Calories", kcal, "kcal"],
-                  ["Protein",  selected.reduce((s, d) => s + (d.nutrition?.protein ?? 0) * qtyOf(d), 0),  "g"],
-                  ["Carbs",    selected.reduce((s, d) => s + (d.nutrition?.carbs ?? 0) * qtyOf(d), 0),    "g"],
-                  ["Fats",     selected.reduce((s, d) => s + (d.nutrition?.fats ?? 0) * qtyOf(d), 0),     "g"],
-                  ["Fiber",    selected.reduce((s, d) => s + (d.nutrition?.fiber ?? 0) * qtyOf(d), 0),    "g"],
-                  ["Sodium",   selected.reduce((s, d) => s + (d.nutrition?.sodium ?? 0) * qtyOf(d), 0),   "mg"],
+                  ["Protein",  selectedReal.reduce((s, d) => s + (d.nutrition?.protein ?? 0) * qtyOf(d._id), 0),  "g"],
+                  ["Carbs",    selectedReal.reduce((s, d) => s + (d.nutrition?.carbs ?? 0) * qtyOf(d._id), 0),    "g"],
+                  ["Fats",     selectedReal.reduce((s, d) => s + (d.nutrition?.fats ?? 0) * qtyOf(d._id), 0),     "g"],
+                  ["Fiber",    selectedReal.reduce((s, d) => s + (d.nutrition?.fiber ?? 0) * qtyOf(d._id), 0),    "g"],
+                  ["Sodium",   selectedReal.reduce((s, d) => s + (d.nutrition?.sodium ?? 0) * qtyOf(d._id), 0),   "mg"],
                 ];
+                const selected = [...selectedReal, ...selectedStaged];
                 return (
                   <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                     {rows.map(([label, value, unit], i) => (
@@ -1929,12 +2185,7 @@ export default function HomeScreen() {
                 className={`items-center rounded-2xl py-4 ${
                   saving || selectedDishQuantities.size === 0 ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
                 }`}
-                onPress={() =>
-                  void handleAddRestaurantEntry(
-                    pendingRestaurantMeal,
-                    [...selectedDishQuantities.entries()].map(([dish, quantity]) => ({ dish, quantity })),
-                  )
-                }
+                onPress={() => void handleConfirmRestaurantVisit()}
               >
                 <Text className="font-semibold text-white">
                   {saving ? "Adding…" : selectedDishQuantities.size === 0 ? "Select at least one dish" : "Add to plan"}
@@ -2268,16 +2519,25 @@ export default function HomeScreen() {
                   keyboardShouldPersistTaps="handled"
                   contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 }}
                   ListHeaderComponent={
-                    <Pressable
-                      className="mb-2 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3.5 active:bg-slate-100"
-                      onPress={() => {
-                        setShowAdd(false);
-                        router.push("/restaurant-meals/add");
-                      }}
-                    >
-                      <Ionicons name="add" size={18} color="#2563EB" />
-                      <Text className="ml-2 font-semibold text-blue-700">Log a new visit</Text>
-                    </Pressable>
+                    <>
+                      {filteredRestaurantMeals.length > 0 && (
+                        <Text className="mb-2 px-1 text-xs font-medium text-slate-400">
+                          Been here before? Tap it below — you&apos;ll pick just what you had.
+                        </Text>
+                      )}
+                      <Pressable
+                        className="mb-2 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3.5 active:bg-slate-100"
+                        onPress={() => {
+                          setShowAdd(false);
+                          router.push("/restaurant-meals/add");
+                        }}
+                      >
+                        <Ionicons name="add" size={18} color="#2563EB" />
+                        <Text className="ml-2 font-semibold text-blue-700">
+                          {restaurantSearch.trim() ? `Add "${restaurantSearch.trim()}" as a new restaurant` : "Add a new restaurant"}
+                        </Text>
+                      </Pressable>
+                    </>
                   }
                   renderItem={({ item: restaurantMeal }) => {
                     const kcal = getRestaurantMealKcal(restaurantMeal);
@@ -2288,6 +2548,7 @@ export default function HomeScreen() {
                         disabled={saving}
                         onPress={() => {
                           setSelectedDishQuantities(new Map());
+                          resetDishPickerDrafts();
                           setPendingRestaurantMeal(restaurantMeal);
                         }}
                       >

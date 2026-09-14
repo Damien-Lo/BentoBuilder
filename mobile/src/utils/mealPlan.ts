@@ -122,11 +122,15 @@ export function getMealKcal(meal: Meal): number | null {
 // A restaurant visit has no "servings" to scale — each dish's manual
 // nutrition estimate is multiplied by how many of that dish were had (1 if
 // unspecified) and summed. `selections` filters to just those dishes (e.g.
-// what a specific meal-plan entry actually logged) — omitted or empty means
-// "every dish, one each," used when browsing a restaurant's full menu
-// before picking anything.
+// what a specific meal-plan entry actually logged) — *omitting the
+// argument entirely* means "every dish, one each," for browsing a
+// restaurant's full menu before picking anything. An explicit empty array
+// is a different thing entirely — a real entry (or a live pick-in-progress)
+// that has selected nothing yet — and must total to null/0, not silently
+// fall back to the whole menu (that used to conflate the two: a fresh visit
+// with no dishes picked showed the previous, unrelated full-menu total).
 export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal, selections?: RestaurantDishSelection[]): number | null {
-  const quantityByDish = selections?.length
+  const quantityByDish = selections
     ? new Map(selections.map(s => [s.dish, s.quantity]))
     : null;
   const dishes = quantityByDish
@@ -295,17 +299,17 @@ export function computeDayNutrition(entries: MealPlanEntry[], conversions: Custo
       continue;
     }
     if (entry.restaurantMeal) {
-      const selections = entry.restaurantDishSelections;
-      const quantityByDish = selections?.length
-        ? new Map(selections.map(s => [s.dish, s.quantity]))
-        : null;
-      const dishes = quantityByDish
-        ? entry.restaurantMeal.dishes?.filter(d => quantityByDish.has(d._id))
-        : entry.restaurantMeal.dishes;
+      // A day total is always entry-specific — unlike getRestaurantMealKcal,
+      // there's no legitimate "show the whole menu" case here, so an
+      // entry with no selections recorded contributes nothing rather than
+      // ever falling back to every dish on the restaurant's record.
+      const selections = entry.restaurantDishSelections ?? [];
+      const quantityByDish = new Map(selections.map(s => [s.dish, s.quantity]));
+      const dishes = entry.restaurantMeal.dishes?.filter(d => quantityByDish.has(d._id));
       for (const dish of dishes ?? []) {
         const n = dish.nutrition;
         if (!n) continue;
-        const qty = quantityByDish?.get(dish._id) ?? 1;
+        const qty = quantityByDish.get(dish._id) ?? 1;
         addScaled(totals, {
           calories: n.calories != null ? n.calories * qty : null,
           protein:  n.protein  != null ? n.protein  * qty : null,
