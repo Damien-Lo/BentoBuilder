@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import type { IngredientRequirement } from "@/src/utils/pantryDeduction";
+import type { IngredientRequirement, PantryGroup } from "@/src/utils/pantryDeduction";
 
 interface ResolveIngredientSourcesModalProps {
   visible: boolean;
@@ -15,6 +15,19 @@ interface ResolveIngredientSourcesModalProps {
 function formatExpiry(expiryDate: string | null): string {
   if (!expiryDate) return "No expiry";
   return `Exp. ${new Date(expiryDate).toLocaleDateString()}`;
+}
+
+// A "wholePiece" group's real per-member weights, each flagged for whether
+// it actually qualifies — lets the user see *why* only some of a group's
+// pieces count (too small/too large), not just a bare qualifying count.
+function formatPieceWeights(group: PantryGroup, pieceWeightUnit: string): string {
+  const qualifyingIds = new Set((group.qualifyingMembers ?? []).map((m) => m.pantryItemId));
+  return group.members
+    .map((m) => {
+      const weight = `${m.quantityAvailable}${m.quantityUnit === pieceWeightUnit ? pieceWeightUnit : ` ${m.quantityUnit}`}`;
+      return qualifyingIds.has(m.pantryItemId) ? weight : `${weight} ✗`;
+    })
+    .join(", ");
 }
 
 // Shown when confirming a recipe/meal/ingredient entry that has at least
@@ -105,7 +118,11 @@ export function ResolveIngredientSourcesModal({
                               {group.displayName}
                             </Text>
                             <Text className="mt-0.5 text-xs text-slate-400">
-                              {group.totalAvailable} {req.unit} available · {formatExpiry(group.expiryDate)}
+                              {req.matchMode === "wholePiece"
+                                ? `${group.totalAvailable} of ${group.members.length} qualify (${
+                                    formatPieceWeights(group, req.pieceWeightUnit || "g")
+                                  }) · ${formatExpiry(group.expiryDate)}`
+                                : `${group.totalAvailable} ${req.unit} available · ${formatExpiry(group.expiryDate)}`}
                             </Text>
                           </View>
                           {isSelected ? (

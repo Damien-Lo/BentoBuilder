@@ -31,6 +31,16 @@ export interface PopulatedIngredient {
   genericParent?: string | { _id: string; name?: string; unitConversions?: CustomUnitConversion[] } | null;
 }
 
+// "quantity" (default, may be omitted) is an exact numeric target — split
+// across pantry stock however needed to hit it. "wholePiece" is for
+// ingredients naturally sold/used as discrete, irregularly-sized units (a
+// fish fillet, a steak): `quantity` means "how many whole pieces" and
+// `unit` is just a display label, while pieceMinWeight/pieceMaxWeight/
+// pieceWeightUnit is the acceptable real weight range for one piece —
+// pantryDeduction.ts uses it to take a whole matching pantry item rather
+// than splitting by weight.
+export type IngredientMatchMode = "quantity" | "wholePiece";
+
 export interface RecipeIngredientEntry {
   ingredient: string | PopulatedIngredient;
   quantity: number;
@@ -40,6 +50,10 @@ export interface RecipeIngredientEntry {
   // covers ingredients that are mostly rinsed off or discarded rather than
   // eaten (e.g. the baking soda used to soften kelp noodles).
   nutritionFactor?: number;
+  matchMode?: IngredientMatchMode;
+  pieceMinWeight?: number | null;
+  pieceMaxWeight?: number | null;
+  pieceWeightUnit?: string;
 }
 
 export interface RecipeScore {
@@ -85,6 +99,10 @@ export interface RecipeIngredientInput {
   quantity: number;
   unit: string;
   nutritionFactor?: number;
+  matchMode?: IngredientMatchMode;
+  pieceMinWeight?: number | null;
+  pieceMaxWeight?: number | null;
+  pieceWeightUnit?: string;
 }
 
 export interface CreateRecipeInput {

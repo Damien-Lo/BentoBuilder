@@ -34,6 +34,7 @@ import {
   getRecipeById,
   getRecipeCategories,
   updateRecipe,
+  type IngredientMatchMode,
   type MealCategory,
   type PopulatedIngredient,
   type RecipeCategory,
@@ -73,6 +74,15 @@ type IngredientRow = {
   // (the common case) counts it in full; lower values cover ingredients
   // mostly rinsed off or discarded rather than eaten.
   nutritionFactor: number;
+  // "quantity" (default) is today's exact-amount matching. "wholePiece" is
+  // for something naturally sold/used as a discrete, irregularly-sized
+  // unit (a fish fillet, a steak) — quantity/unit above mean "how many"
+  // and a display label ("fillet"), and pieceMinWeight/pieceMaxWeight/
+  // pieceWeightUnit is the acceptable real weight range for one piece.
+  matchMode: IngredientMatchMode;
+  pieceMinWeight: number | null;
+  pieceMaxWeight: number | null;
+  pieceWeightUnit: string;
   calories?: number | null;
   protein?: number | null;
   carbs?: number | null;
@@ -111,6 +121,10 @@ function populatedToRow(
   quantity: number,
   unit: string,
   nutritionFactor: number,
+  matchMode: IngredientMatchMode,
+  pieceMinWeight: number | null,
+  pieceMaxWeight: number | null,
+  pieceWeightUnit: string,
   index: number,
 ): IngredientRow {
   return {
@@ -126,6 +140,10 @@ function populatedToRow(
     nativeUnit: ing.defaultPortionUnit || "serving",
     portionAmount: ing.defaultPortionAmount ?? 1,
     nutritionFactor,
+    matchMode,
+    pieceMinWeight,
+    pieceMaxWeight,
+    pieceWeightUnit,
     calories: ing.nutrition?.calories ?? null,
     protein: ing.nutrition?.protein ?? null,
     carbs: ing.nutrition?.carbs ?? null,
@@ -171,6 +189,12 @@ export default function EditRecipePage() {
   // every ingredient counts in full.
   const [pickerNutritionPercent, setPickerNutritionPercent] = useState("100");
   const [showNutritionFactor, setShowNutritionFactor] = useState(false);
+  // "Whole piece" mode — kept collapsed unless opted in, since almost every
+  // ingredient is matched by exact quantity.
+  const [pickerMatchMode, setPickerMatchMode] = useState<IngredientMatchMode>("quantity");
+  const [pickerPieceMinWeight, setPickerPieceMinWeight] = useState("");
+  const [pickerPieceMaxWeight, setPickerPieceMaxWeight] = useState("");
+  const [pickerPieceWeightUnit, setPickerPieceWeightUnit] = useState("g");
   const [pickerSelected, setPickerSelected] = useState<IngredientOption | null>(null);
   const [showCreateIngredient, setShowCreateIngredient] = useState(false);
 
@@ -245,7 +269,17 @@ export default function EditRecipePage() {
         recipe.ingredientList.forEach((entry, index) => {
           if (typeof entry.ingredient !== "string") {
             rows.push(
-              populatedToRow(entry.ingredient, entry.quantity, entry.unit, entry.nutritionFactor ?? 1, index),
+              populatedToRow(
+                entry.ingredient,
+                entry.quantity,
+                entry.unit,
+                entry.nutritionFactor ?? 1,
+                entry.matchMode ?? "quantity",
+                entry.pieceMinWeight ?? null,
+                entry.pieceMaxWeight ?? null,
+                entry.pieceWeightUnit || "g",
+                index,
+              ),
             );
           }
         });
@@ -305,12 +339,25 @@ export default function EditRecipePage() {
       (acc, row) => {
         const qty = Number(row.quantity) || 0;
         const rowIngredient = ingredientOptions.find((o) => o._id === row.ingredientId);
-        const qtyInNativeUnit = convertUnits(
-          qty,
-          row.unit,
-          row.nativeUnit,
-          getIngredientConversions(rowIngredient, customUnitConversions),
-        );
+        // A "wholePiece" line has no single real amount to convert (`unit`
+        // is just a display label like "fillet") - the pre-cook estimate
+        // uses the midpoint of its acceptable weight range as a stand-in
+        // for "how big a piece probably is." The real, exact nutrition
+        // once actually cooked comes from whichever real pantry piece got
+        // deducted (see computeConfirmedRecipeNutrition), not this preview.
+        const qtyInNativeUnit = row.matchMode === "wholePiece"
+          ? convertUnits(
+              qty * (((row.pieceMinWeight ?? 0) + (row.pieceMaxWeight ?? row.pieceMinWeight ?? 0)) / 2),
+              row.pieceWeightUnit,
+              row.nativeUnit,
+              getIngredientConversions(rowIngredient, customUnitConversions),
+            )
+          : convertUnits(
+              qty,
+              row.unit,
+              row.nativeUnit,
+              getIngredientConversions(rowIngredient, customUnitConversions),
+            );
         const multiplier =
           qtyInNativeUnit != null
             ? (qtyInNativeUnit / (row.portionAmount || 1)) * row.nutritionFactor
@@ -363,6 +410,26 @@ export default function EditRecipePage() {
       return;
     }
 
+    let pieceMinWeight: number | null = null;
+    let pieceMaxWeight: number | null = null;
+    if (pickerMatchMode === "wholePiece") {
+      const min = Number(pickerPieceMinWeight);
+      const max = Number(pickerPieceMaxWeight);
+      if (!Number.isFinite(min) || min <= 0 || !Number.isFinite(max) || max <= 0) {
+        Alert.alert(
+          "Piece weight range required",
+          "Enter both a minimum and maximum weight for one whole piece.",
+        );
+        return;
+      }
+      if (min > max) {
+        Alert.alert("Invalid range", "The minimum weight can't be greater than the maximum.");
+        return;
+      }
+      pieceMinWeight = min;
+      pieceMaxWeight = max;
+    }
+
     const nativeUnit = pickerSelected?.unit ?? "serving";
     const unit = pickerUnit || nativeUnit;
 
@@ -381,6 +448,10 @@ export default function EditRecipePage() {
       nativeUnit,
       portionAmount: pickerSelected?.portionAmount ?? 1,
       nutritionFactor,
+      matchMode: pickerMatchMode,
+      pieceMinWeight,
+      pieceMaxWeight,
+      pieceWeightUnit: pickerPieceWeightUnit.trim() || "g",
       calories: pickerSelected?.calories ?? null,
       protein: pickerSelected?.protein ?? null,
       carbs: pickerSelected?.carbs ?? null,
@@ -402,6 +473,10 @@ export default function EditRecipePage() {
     setPickerUnit("");
     setPickerNutritionPercent("100");
     setShowNutritionFactor(false);
+    setPickerMatchMode("quantity");
+    setPickerPieceMinWeight("");
+    setPickerPieceMaxWeight("");
+    setPickerPieceWeightUnit("g");
     setPickerSelected(null);
   }
 
@@ -414,6 +489,10 @@ export default function EditRecipePage() {
     setPickerUnit(row.unit);
     setPickerNutritionPercent(String(Math.round(row.nutritionFactor * 100)));
     setShowNutritionFactor(row.nutritionFactor !== 1);
+    setPickerMatchMode(row.matchMode);
+    setPickerPieceMinWeight(row.pieceMinWeight != null ? String(row.pieceMinWeight) : "");
+    setPickerPieceMaxWeight(row.pieceMaxWeight != null ? String(row.pieceMaxWeight) : "");
+    setPickerPieceWeightUnit(row.pieceWeightUnit || "g");
     setPickerSelected(option);
   }
 
@@ -425,6 +504,10 @@ export default function EditRecipePage() {
     setPickerUnit("");
     setPickerNutritionPercent("100");
     setShowNutritionFactor(false);
+    setPickerMatchMode("quantity");
+    setPickerPieceMinWeight("");
+    setPickerPieceMaxWeight("");
+    setPickerPieceWeightUnit("g");
     setPickerSelected(null);
   }
 
@@ -518,6 +601,10 @@ export default function EditRecipePage() {
           quantity: Number(row.quantity),
           unit: row.unit,
           nutritionFactor: row.nutritionFactor,
+          matchMode: row.matchMode,
+          pieceMinWeight: row.pieceMinWeight,
+          pieceMaxWeight: row.pieceMaxWeight,
+          pieceWeightUnit: row.pieceWeightUnit,
         })),
         instructions: steps.map((s) => s.trim()).filter((s) => s.length > 0),
         nutrition: hasNutritionData ? perServingNutrition : undefined,
@@ -955,6 +1042,56 @@ export default function EditRecipePage() {
                 </Text>
               </View>
             )}
+
+            <Pressable
+              className="mt-3 self-start"
+              onPress={() =>
+                setPickerMatchMode((prev) => (prev === "wholePiece" ? "quantity" : "wholePiece"))
+              }
+            >
+              <Text className="text-xs font-semibold text-blue-600">
+                {pickerMatchMode === "wholePiece"
+                  ? "Matched as a whole piece — tap to switch back to an exact amount"
+                  : "Naturally a whole piece (fillet, steak)? Match by piece instead"}
+              </Text>
+            </Pressable>
+
+            {pickerMatchMode === "wholePiece" && (
+              <View className="mt-2">
+                <Text className="text-xs leading-4 text-slate-400">
+                  Amount above is how many whole pieces this line needs — a real pantry
+                  item whose own weight falls in this range is used whole, never split.
+                </Text>
+                <View className="mt-2 flex-row items-end gap-2">
+                  <View className="flex-1">
+                    <FieldLabel text="Min weight" />
+                    <FormInput
+                      value={pickerPieceMinWeight}
+                      placeholder="150"
+                      keyboardType="decimal-pad"
+                      onChangeText={setPickerPieceMinWeight}
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <FieldLabel text="Max weight" />
+                    <FormInput
+                      value={pickerPieceMaxWeight}
+                      placeholder="250"
+                      keyboardType="decimal-pad"
+                      onChangeText={setPickerPieceMaxWeight}
+                    />
+                  </View>
+                  <View style={{ width: 70 }}>
+                    <FieldLabel text="Unit" />
+                    <FormInput
+                      value={pickerPieceWeightUnit}
+                      placeholder="g"
+                      onChangeText={setPickerPieceWeightUnit}
+                    />
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
 
           {/* Ingredient rows */}
@@ -982,6 +1119,9 @@ export default function EditRecipePage() {
                     <Text className="mt-0.5 text-sm text-slate-500">
                       {row.quantity}{" "}
                       {row.unit ? `× ${row.unit}` : `serving${Number(row.quantity) !== 1 ? "s" : ""}`}
+                      {row.matchMode === "wholePiece"
+                        ? ` (${row.pieceMinWeight}-${row.pieceMaxWeight}${row.pieceWeightUnit} each, whole)`
+                        : ""}
                       {row.nutritionFactor !== 1
                         ? ` · ${Math.round(row.nutritionFactor * 100)}% counted`
                         : ""}
