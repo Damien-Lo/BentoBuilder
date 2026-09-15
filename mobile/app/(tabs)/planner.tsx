@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,14 +22,17 @@ import { addRecipeScore, getRecipeById, getRecipes, type Recipe } from "@/src/se
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import {
+  estimateDishesFromPhoto,
   getRestaurantMeals,
   updateRestaurantMeal,
   type Dish,
   type DishInput,
+  type DishNutrition,
   type RestaurantMeal,
 } from "@/src/services/restaurantMealApi";
 import { upsertMealPlanEntryContribution } from "@/src/services/groceryListApi";
 import { FormInput, PriceInput } from "@/src/components/forms";
+import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { takePendingNewRestaurant } from "@/src/utils/pendingNewRestaurantStore";
 import type { SelectOption } from "@/src/services/optionsApi";
 import type { PantryItem } from "@/src/types/pantry";
@@ -171,12 +175,20 @@ export default function HomeScreen() {
   // so backing out of the add-to-plan flow never leaves an orphaned menu
   // item behind for something that was never actually logged.
   const [stagedNewDishes, setStagedNewDishes] = useState<
-    { key: string; name: string; price: string; calories: string }[]
+    { key: string; name: string; price: string; nutrition: DishNutrition }[]
   >([]);
   const [showAddDishForm, setShowAddDishForm] = useState(false);
   const [newDishName, setNewDishName] = useState("");
   const [newDishPrice, setNewDishPrice] = useState("");
+  // The visible/editable calories text mirrors newDishNutrition.calories;
+  // the rest of newDishNutrition only ever gets filled by a photo estimate
+  // (this lightweight form has no fields for protein/carbs/fats/fiber/
+  // sodium) but is still carried through to the staged dish so that data
+  // isn't thrown away just because the form doesn't display it.
   const [newDishCalories, setNewDishCalories] = useState("");
+  const [newDishNutrition, setNewDishNutrition] = useState<DishNutrition>({});
+  const [showDishScanModal, setShowDishScanModal] = useState(false);
+  const [estimatingDish, setEstimatingDish] = useState(false);
 
   // Tapping an ingredient/recipe entry opens this overlay instead of
   // navigating straight to the catalog page - shows and lets you edit how
@@ -388,6 +400,7 @@ export default function HomeScreen() {
     setNewDishName("");
     setNewDishPrice("");
     setNewDishCalories("");
+    setNewDishNutrition({});
   }
 
   function openAdd(slot: MealSlot) {
@@ -516,7 +529,7 @@ export default function HomeScreen() {
     const name = newDishName.trim();
     if (!name) return;
     const key = `staged-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    setStagedNewDishes(prev => [...prev, { key, name, price: newDishPrice, calories: newDishCalories }]);
+    setStagedNewDishes(prev => [...prev, { key, name, price: newDishPrice, nutrition: newDishNutrition }]);
     setSelectedDishQuantities(prev => {
       const next = new Map(prev);
       next.set(key, 1);
@@ -525,7 +538,38 @@ export default function HomeScreen() {
     setNewDishName("");
     setNewDishPrice("");
     setNewDishCalories("");
+    setNewDishNutrition({});
     setShowAddDishForm(false);
+  }
+
+  // singleDish: true tells the model this photo is of exactly the one dish
+  // being staged (same signal add.tsx's per-dish-card scan button sends),
+  // not a possible multi-dish table spread.
+  function handleDishPhotoCaptured(photoUri: string) {
+    setShowDishScanModal(false);
+    setEstimatingDish(true);
+    estimateDishesFromPhoto(photoUri, pendingRestaurantMeal?.restaurantName, true)
+      .then((estimated) => {
+        if (estimated.length === 0) {
+          Alert.alert(
+            "No dish recognized",
+            "Couldn't identify any food in that photo — try again, or fill this in manually.",
+          );
+          return;
+        }
+        const [d] = estimated;
+        setNewDishName(d.name);
+        setNewDishNutrition(d.estimatedNutrition);
+        setNewDishCalories(d.estimatedNutrition.calories != null ? String(d.estimatedNutrition.calories) : "");
+        setShowAddDishForm(true);
+      })
+      .catch((error) => {
+        Alert.alert(
+          "Couldn't estimate photo",
+          error instanceof Error ? error.message : "Something went wrong reading that photo.",
+        );
+      })
+      .finally(() => setEstimatingDish(false));
   }
 
   function removeStagedDish(key: string) {
@@ -563,7 +607,7 @@ export default function HomeScreen() {
           ...stagedNewDishes.map((d): DishInput => ({
             name: d.name,
             price: d.price.trim() ? Number(d.price) : undefined,
-            nutrition: d.calories.trim() ? { calories: Number(d.calories) } : undefined,
+            nutrition: d.nutrition,
           })),
         ];
         restaurantMeal = await updateRestaurantMeal(pendingRestaurantMeal._id, { dishes: dishInputs });
@@ -2050,8 +2094,8 @@ export default function HomeScreen() {
                                 New
                               </Text>
                             </View>
-                            {!!dish.calories.trim() && (
-                              <Text className="mt-0.5 text-xs text-slate-400">{dish.calories} kcal each</Text>
+                            {dish.nutrition.calories != null && (
+                              <Text className="mt-0.5 text-xs text-slate-400">{dish.nutrition.calories} kcal each</Text>
                             )}
                           </View>
                         </View>
@@ -2103,9 +2147,14 @@ export default function HomeScreen() {
 
               {showAddDishForm ? (
                 <View className="mb-6 rounded-2xl border border-dashed border-slate-300 bg-white p-4">
-                  <Text className="mb-2 text-xs font-semibold text-slate-500">
-                    Not on the menu yet — add what you ordered
-                  </Text>
+                  <View className="mb-2 flex-row items-center justify-between">
+                    <Text className="flex-1 text-xs font-semibold text-slate-500">
+                      Not on the menu yet — add what you ordered
+                    </Text>
+                    <Pressable hitSlop={8} onPress={() => setShowDishScanModal(true)}>
+                      <Ionicons name="camera-outline" size={20} color="#2563EB" />
+                    </Pressable>
+                  </View>
                   <FormInput value={newDishName} placeholder="Dish name" onChangeText={setNewDishName} />
                   <View className="mt-2 flex-row gap-3">
                     <View className="flex-1">
@@ -2113,13 +2162,26 @@ export default function HomeScreen() {
                         value={newDishCalories}
                         placeholder="Calories (optional)"
                         keyboardType="decimal-pad"
-                        onChangeText={setNewDishCalories}
+                        onChangeText={(text) => {
+                          setNewDishCalories(text);
+                          setNewDishNutrition(prev => ({
+                            ...prev,
+                            calories: text.trim() ? Number(text) : undefined,
+                          }));
+                        }}
                       />
                     </View>
                     <View className="flex-1">
                       <PriceInput value={newDishPrice} onChangeText={setNewDishPrice} />
                     </View>
                   </View>
+                  {(newDishNutrition.protein != null
+                    || newDishNutrition.carbs != null
+                    || newDishNutrition.fats != null) && (
+                    <Text className="mt-2 text-xs text-slate-400">
+                      From photo estimate: {newDishNutrition.protein ?? "—"}g protein, {newDishNutrition.carbs ?? "—"}g carbs, {newDishNutrition.fats ?? "—"}g fat
+                    </Text>
+                  )}
                   <View className="mt-3 flex-row gap-3">
                     <Pressable
                       className="flex-1 items-center rounded-xl bg-slate-100 py-2.5 active:bg-slate-200"
@@ -2128,6 +2190,7 @@ export default function HomeScreen() {
                         setNewDishName("");
                         setNewDishPrice("");
                         setNewDishCalories("");
+                        setNewDishNutrition({});
                       }}
                     >
                       <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
@@ -2161,22 +2224,22 @@ export default function HomeScreen() {
                 const qtyOf = (key: string) => selectedDishQuantities.get(key) ?? 1;
                 const selectedReal = pendingRestaurantMeal.dishes.filter(d => selectedDishQuantities.has(d._id));
                 const selectedStaged = stagedNewDishes.filter(d => selectedDishQuantities.has(d.key));
-                const stagedCalories = selectedStaged.reduce(
-                  (s, d) => s + (Number(d.calories) || 0) * qtyOf(d.key), 0,
-                );
-                const realCalories = selectedReal.reduce(
-                  (s, d) => s + (d.nutrition?.calories ?? 0) * qtyOf(d._id), 0,
-                );
+                // A staged dish can carry a full breakdown (from a photo
+                // estimate) or just calories (typed manually) - sum
+                // whatever each one actually has, same as a real dish.
+                const sumField = (field: keyof DishNutrition) =>
+                  selectedReal.reduce((s, d) => s + (d.nutrition?.[field] ?? 0) * qtyOf(d._id), 0)
+                  + selectedStaged.reduce((s, d) => s + (d.nutrition[field] ?? 0) * qtyOf(d.key), 0);
                 const hasAnyCalorieData = selectedReal.some(d => d.nutrition?.calories != null)
-                  || selectedStaged.some(d => d.calories.trim());
-                const kcal = hasAnyCalorieData ? Math.round(realCalories + stagedCalories) : null;
+                  || selectedStaged.some(d => d.nutrition.calories != null);
+                const kcal = hasAnyCalorieData ? Math.round(sumField("calories")) : null;
                 const rows: [string, number | null | undefined, string][] = [
                   ["Calories", kcal, "kcal"],
-                  ["Protein",  selectedReal.reduce((s, d) => s + (d.nutrition?.protein ?? 0) * qtyOf(d._id), 0),  "g"],
-                  ["Carbs",    selectedReal.reduce((s, d) => s + (d.nutrition?.carbs ?? 0) * qtyOf(d._id), 0),    "g"],
-                  ["Fats",     selectedReal.reduce((s, d) => s + (d.nutrition?.fats ?? 0) * qtyOf(d._id), 0),     "g"],
-                  ["Fiber",    selectedReal.reduce((s, d) => s + (d.nutrition?.fiber ?? 0) * qtyOf(d._id), 0),    "g"],
-                  ["Sodium",   selectedReal.reduce((s, d) => s + (d.nutrition?.sodium ?? 0) * qtyOf(d._id), 0),   "mg"],
+                  ["Protein",  sumField("protein"), "g"],
+                  ["Carbs",    sumField("carbs"),   "g"],
+                  ["Fats",     sumField("fats"),    "g"],
+                  ["Fiber",    sumField("fiber"),   "g"],
+                  ["Sodium",   sumField("sodium"),  "mg"],
                 ];
                 const selected = [...selectedReal, ...selectedStaged];
                 return (
@@ -2630,6 +2693,23 @@ export default function HomeScreen() {
         }}
         onConfirm={(selections) => void handleResolvedConfirm(selections)}
       />
+
+      <PhotoCaptureModal
+        visible={showDishScanModal}
+        onClose={() => setShowDishScanModal(false)}
+        onCaptured={handleDishPhotoCaptured}
+        subject="dish photo"
+        instructions="Fit just this one dish in frame."
+      />
+
+      <Modal visible={estimatingDish} transparent animationType="fade">
+        <View className="flex-1 items-center justify-center bg-black/50">
+          <View className="items-center rounded-3xl bg-white px-8 py-6">
+            <ActivityIndicator size="large" />
+            <Text className="mt-3 text-base font-semibold text-slate-700">Estimating nutrition...</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
