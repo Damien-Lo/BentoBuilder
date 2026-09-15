@@ -25,6 +25,7 @@ Still genuinely unresolved (nothing in the catalog to map to):
 ## Scoped but deferred features
 
 - **User profiles and authentication** — deliberately saved for one of the *last* things to build, not because it's unimportant but because adding it early would block day-to-day development flow (every test/debug pass would have to go through login, multi-user state, etc.) before the base app's actual features are fleshed out. Revisit once the core feature set feels done.
+- **Receipt/barcode scanning for piece-labeled ingredients** (Sept 15) — the manual "add to pantry" screen (`mobile/app/pantry/add_by_ingredient.tsx`) now adds piece-based ingredients (steak, fillet, ...) as one row per physical piece, each with its own weight and a price split proportional to weight (see `[[whole-unit-deduction]]`/`pieceLabel` in memory). The receipt scanner and barcode scanner haven't been revisited to match — a scanned line still becomes a single pantry entry with one blended weight, so a receipt showing "3 steaks, $18.47" has no per-piece weights to split across. Probably the right shape: let the receipt-review screen split one matched line into N rows the same way the manual screen now does, when the matched ingredient has a `pieceLabel`. Not started.
 
 ## Branch / deploy housekeeping
 

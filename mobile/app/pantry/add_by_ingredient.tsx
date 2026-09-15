@@ -28,13 +28,14 @@ import {
 import { addIngredientToPantry, getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import {
+  CreatableStringDropdown,
   CreateGenericIngredientModal,
   DateTextInput,
   DurationExpiryInput,
   PriceInput,
-  QuantityServingInput,
   SearchableObjectDropdown,
   SegmentedToggle,
+  UnitFamilyDropdown,
 } from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
@@ -46,7 +47,52 @@ import {
   resolveEffectiveStorageLocation,
   suggestStore,
 } from "@/src/utils/pantryDefaults";
-import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
+import {
+  convertAmountForUnitChange,
+  convertUnits,
+  getIngredientConversions,
+  getRelatedUnits,
+  type CustomUnitConversion,
+} from "@/src/utils/unitConversion";
+
+// One row = one physical pantry instance (a bag, a steak, a bottle) — its
+// own amount and unit. For a piece-labeled ingredient (steak, fillet, ...)
+// a row IS one piece, always; there's no separate count to set.
+type QuantityRow = { amount: string; unit: string };
+
+// A single price paid for a batch of rows is split by weight (a 227g steak
+// costs more of the receipt total than a 150g one), not evenly — falls
+// back to an even split only when the rows' units can't all be converted
+// to a common one, since an unconvertible mix has no meaningful "weight."
+// Rounds to cents and nudges the last row so the split still adds back up
+// to what was actually paid.
+function splitPriceByWeight(
+  rows: { amount: number; unit: string }[],
+  totalPrice: number,
+  conversions: CustomUnitConversion[],
+): number[] {
+  if (rows.length <= 1) return [totalPrice];
+
+  const baseUnit = rows[0].unit;
+  const weights = rows.map((row) =>
+    row.unit === baseUnit ? row.amount : convertUnits(row.amount, row.unit, baseUnit, conversions),
+  );
+
+  const totalWeight = weights.reduce(
+    (sum: number | null, w) => (sum == null || w == null ? null : sum + w),
+    0,
+  );
+
+  if (totalWeight == null || totalWeight <= 0) {
+    const even = Math.round((totalPrice / rows.length) * 100) / 100;
+    return rows.map(() => even);
+  }
+
+  const rounded = weights.map((w) => Math.round((totalPrice * (w as number) / totalWeight) * 100) / 100);
+  const roundingRemainder = Math.round((totalPrice - rounded.reduce((sum, v) => sum + v, 0)) * 100) / 100;
+  rounded[rounded.length - 1] = Math.round((rounded[rounded.length - 1] + roundingRemainder) * 100) / 100;
+  return rounded;
+}
 
 type SelectedIngredientCardProps = {
   ingredient: Ingredient;
@@ -125,13 +171,9 @@ export default function AddPantryItemByIngredientScreen() {
   const [searchText, setSearchText] = useState("");
   const [browseKind, setBrowseKind] = useState<"ingredient" | "mealPrep">("ingredient");
   const [showCreateIngredient, setShowCreateIngredient] = useState(false);
-  const [quantity, setQuantity] = useState("1");
-  const [quantityUnit, setQuantityUnit] = useState("item");
-  const [entryCount, setEntryCount] = useState("1");
-  // Non-empty signals "different weight per piece" mode is active — see
-  // QuantityServingInput's own doc comment. Each element becomes its own
-  // pantry entry's quantityAvailable instead of reusing `quantity` for all.
-  const [perEntryAmounts, setPerEntryAmounts] = useState<string[]>([]);
+  const [quantityRows, setQuantityRows] = useState<QuantityRow[]>([
+    { amount: "1", unit: "item" },
+  ]);
   const [storageLocationId, setStorageLocationId] = useState(locationId ?? "");
   // A location passed in via route params (e.g. "add here" from a specific
   // storage location page) is itself a deliberate choice — don't let the
@@ -195,7 +237,12 @@ export default function AddPantryItemByIngredientScreen() {
           const match = ingredientList.find((i) => i._id === ingredientId);
           if (match) {
             setSelectedIngredient(match);
-            setQuantityUnit(match.defaultPortionUnit ?? "item");
+            setQuantityRows([
+              {
+                amount: match.defaultPortionAmount != null ? String(match.defaultPortionAmount) : "1",
+                unit: match.defaultPortionUnit ?? "item",
+              },
+            ]);
           }
         }
       } catch (error) {
@@ -314,18 +361,66 @@ export default function AddPantryItemByIngredientScreen() {
     setStoreDraft(suggestedStore.name);
   }, [suggestedStore, storeTouched]);
 
+  const ingredientConversions = useMemo(
+    () => getIngredientConversions(selectedIngredient, customUnitConversions),
+    [selectedIngredient, customUnitConversions],
+  );
+
+  // Restricts a row's unit dropdown to the ingredient's own convertible
+  // family (e.g. g/kg/oz) once it has a default unit to anchor one — same
+  // rule already applied to recipe ingredient rows — so a unit that would
+  // never participate in stock/availability math can't get picked.
+  const familyUnits = useMemo(
+    () =>
+      selectedIngredient?.defaultPortionUnit
+        ? getRelatedUnits(selectedIngredient.defaultPortionUnit, ingredientConversions)
+        : [],
+    [selectedIngredient, ingredientConversions],
+  );
+
+  function addQuantityRow() {
+    setQuantityRows((rows) => {
+      const last = rows[rows.length - 1];
+      return [...rows, { amount: last?.amount ?? "1", unit: last?.unit ?? "item" }];
+    });
+  }
+
+  function removeQuantityRow(index: number) {
+    setQuantityRows((rows) => rows.filter((_, i) => i !== index));
+  }
+
+  function updateQuantityRowAmount(index: number, value: string) {
+    setQuantityRows((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, amount: value } : row)),
+    );
+  }
+
+  function updateQuantityRowUnit(index: number, unit: string) {
+    setQuantityRows((rows) =>
+      rows.map((row, i) => {
+        if (i !== index) return row;
+        const converted = convertAmountForUnitChange(
+          Number(row.amount),
+          row.unit,
+          unit,
+          ingredientConversions,
+        );
+        return { amount: converted != null ? String(converted) : row.amount, unit };
+      }),
+    );
+  }
+
   // Shared by tapping a search result and by finishing the "create a new
   // ingredient" flow below — both land on the same quantity form.
   function handleSelectIngredient(ingredient: Ingredient) {
     setSelectedIngredient(ingredient);
 
-    if (ingredient.defaultPortionUnit) {
-      setQuantityUnit(ingredient.defaultPortionUnit);
-    }
-
-    if (ingredient.defaultPortionAmount !== undefined) {
-      setQuantity(String(ingredient.defaultPortionAmount));
-    }
+    setQuantityRows([
+      {
+        amount: ingredient.defaultPortionAmount != null ? String(ingredient.defaultPortionAmount) : "1",
+        unit: ingredient.defaultPortionUnit ?? "item",
+      },
+    ]);
 
     // A location passed in via route params stays pinned regardless of
     // which ingredient gets picked; otherwise let this ingredient's own
@@ -336,8 +431,6 @@ export default function AddPantryItemByIngredientScreen() {
     }
     setExpiryDate("");
     setExpiryTouched(false);
-    setEntryCount("1");
-    setPerEntryAmounts([]);
     setPurchasePrice("");
     setStoreId("");
     setStoreName("");
@@ -366,28 +459,21 @@ export default function AddPantryItemByIngredientScreen() {
       return;
     }
 
-    const isPerEntryMode = perEntryAmounts.length > 0;
-    const parsedQuantity = Number(quantity);
-    const parsedPerEntryAmounts = perEntryAmounts.map((a) => Number(a));
+    const parsedRows = quantityRows.map((row) => ({
+      amount: Number(row.amount),
+      unit: row.unit.trim(),
+    }));
 
-    if (isPerEntryMode) {
-      if (parsedPerEntryAmounts.some((a) => !Number.isFinite(a) || a <= 0)) {
-        Alert.alert(
-          "Invalid weight",
-          "Enter a weight greater than zero for every piece.",
-        );
-        return;
-      }
-    } else if (!Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
+    if (parsedRows.some((row) => !Number.isFinite(row.amount) || row.amount <= 0)) {
       Alert.alert(
         "Invalid quantity",
-        "Enter a valid quantity of zero or greater.",
+        "Enter an amount greater than zero for every row.",
       );
       return;
     }
 
-    if (!quantityUnit.trim()) {
-      Alert.alert("Unit required", "Select or enter a quantity unit.");
+    if (parsedRows.some((row) => !row.unit)) {
+      Alert.alert("Unit required", "Select or enter a unit for every row.");
       return;
     }
 
@@ -407,17 +493,13 @@ export default function AddPantryItemByIngredientScreen() {
       }
     }
 
-    const parsedCount = isPerEntryMode
-      ? parsedPerEntryAmounts.length
-      : Math.max(1, Math.round(Number(entryCount)) || 1);
-
-    // A price entered once for a batch of differently-weighed pieces is
-    // the total for all of them, not each — split evenly (rounded to
-    // cents) so the sum still adds back up to what was actually paid.
+    // A price entered once for a batch of rows is the total for all of
+    // them, not each — split proportionally to each row's weight so a
+    // bigger piece is charged more of the total than a smaller one.
     const totalPrice = purchasePrice.trim() ? Number(purchasePrice) : undefined;
-    const perPiecePrice = isPerEntryMode && totalPrice != null
-      ? Math.round((totalPrice / parsedCount) * 100) / 100
-      : totalPrice;
+    const perRowPrices = totalPrice != null
+      ? splitPriceByWeight(parsedRows, totalPrice, ingredientConversions)
+      : parsedRows.map(() => undefined);
 
     try {
       setSaving(true);
@@ -427,15 +509,16 @@ export default function AddPantryItemByIngredientScreen() {
         setStores((prev) => [...prev, store]);
       }
 
-      for (let i = 0; i < parsedCount; i++) {
+      for (let i = 0; i < parsedRows.length; i++) {
+        const row = parsedRows[i];
         await addIngredientToPantry({
           ingredient: selectedIngredient._id,
           storageLocation: storageLocationId,
-          quantityAvailable: isPerEntryMode ? parsedPerEntryAmounts[i] : parsedQuantity,
-          quantityUnit: quantityUnit.trim(),
+          quantityAvailable: row.amount,
+          quantityUnit: row.unit,
           purchaseDate: purchaseDate.trim() || undefined,
           expiryDate: expiryDate.trim() || undefined,
-          purchasePrice: perPiecePrice,
+          purchasePrice: perRowPrices[i],
           store: store ? store._id : null,
           notes: notes.trim() || undefined,
         });
@@ -443,8 +526,8 @@ export default function AddPantryItemByIngredientScreen() {
 
       Alert.alert(
         "Added to pantry",
-        parsedCount > 1
-          ? `${parsedCount} entries of ${selectedIngredient.name} were added to ${
+        parsedRows.length > 1
+          ? `${parsedRows.length} entries of ${selectedIngredient.name} were added to ${
               selectedStorageLocation?.name ?? "your pantry"
             }.`
           : `${selectedIngredient.name} was added to ${
@@ -639,29 +722,74 @@ export default function AddPantryItemByIngredientScreen() {
               Quantity
             </Text>
 
-            <QuantityServingInput
-              quantityAvailable={quantity}
-              quantityUnit={quantityUnit}
-              onChangeQuantity={setQuantity}
-              onChangeUnit={setQuantityUnit}
-              unitOptions={unitOptions}
-              onAddUnit={(unit) => {
-                const trimmed = unit.trim();
-                if (!trimmed) return;
-                setUnitOptions((current) =>
-                  current.some((u) => u.toLowerCase() === trimmed.toLowerCase())
-                    ? current
-                    : [...current, trimmed].sort((a, b) => a.localeCompare(b)),
-                );
-              }}
-              defaultPortionAmount={selectedIngredient.defaultPortionAmount}
-              defaultPortionUnit={selectedIngredient.defaultPortionUnit}
-              entryCount={entryCount}
-              onChangeEntryCount={setEntryCount}
-              perEntryAmounts={perEntryAmounts}
-              onChangePerEntryAmounts={setPerEntryAmounts}
-              customUnitConversions={getIngredientConversions(selectedIngredient, customUnitConversions)}
-            />
+            {quantityRows.map((row, index) => (
+              <View key={index} className="mb-2 flex-row items-center">
+                <TextInput
+                  value={row.amount}
+                  onChangeText={(value) => updateQuantityRowAmount(index, value)}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor="#94A3B8"
+                  className="mr-3 h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+                />
+
+                <View className="flex-1">
+                  {selectedIngredient.defaultPortionUnit ? (
+                    <UnitFamilyDropdown
+                      unit={row.unit || selectedIngredient.defaultPortionUnit}
+                      options={familyUnits}
+                      onSelect={(unit) => updateQuantityRowUnit(index, unit)}
+                    />
+                  ) : (
+                    <CreatableStringDropdown
+                      options={unitOptions}
+                      selectedValue={row.unit}
+                      placeholder="Unit"
+                      onSelect={(unit) => {
+                        updateQuantityRowUnit(index, unit);
+                        const trimmed = unit.trim();
+                        if (!trimmed) return;
+                        setUnitOptions((current) =>
+                          current.some((u) => u.toLowerCase() === trimmed.toLowerCase())
+                            ? current
+                            : [...current, trimmed].sort((a, b) => a.localeCompare(b)),
+                        );
+                      }}
+                    />
+                  )}
+                </View>
+
+                {selectedIngredient.pieceLabel && (
+                  <View className="ml-2 rounded-full bg-slate-100 px-2.5 py-2">
+                    <Text className="text-xs font-semibold text-slate-500">
+                      1× {selectedIngredient.pieceLabel}
+                    </Text>
+                  </View>
+                )}
+
+                {quantityRows.length > 1 && (
+                  <Pressable
+                    className="ml-2"
+                    hitSlop={8}
+                    onPress={() => removeQuantityRow(index)}
+                  >
+                    <Ionicons name="close-circle" size={22} color="#CBD5E1" />
+                  </Pressable>
+                )}
+              </View>
+            ))}
+
+            <Pressable
+              className="mb-1 mt-1 flex-row items-center self-start active:opacity-60"
+              onPress={addQuantityRow}
+            >
+              <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+              <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+                {selectedIngredient.pieceLabel
+                  ? `Add another ${selectedIngredient.pieceLabel}`
+                  : "Add another entry"}
+              </Text>
+            </Pressable>
 
             {/* Storage location */}
             <Text className="mb-2 mt-6 text-sm font-semibold text-slate-700">
