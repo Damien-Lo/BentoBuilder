@@ -58,7 +58,15 @@ export interface CreateRestaurantMealInput {
   isArchived?: boolean;
 }
 
-export type UpdateRestaurantMealInput = Partial<CreateRestaurantMealInput>;
+// PATCH replaces the whole `dishes` array (see RestaurantMealRoutes.js) -
+// unlike create, an update commonly needs to keep *existing* dishes
+// unchanged (add one new dish alongside them) while still sending the
+// full array. Passing a Dish through as-is (its real _id and scores
+// included) is how that identity survives the replace; a bare DishInput
+// (no _id) is only for a genuinely new dish being added in the same call.
+export type UpdateRestaurantMealInput = Omit<Partial<CreateRestaurantMealInput>, "dishes"> & {
+  dishes?: (DishInput | Dish)[];
+};
 
 interface RestaurantMealListResponse {
   success: boolean;

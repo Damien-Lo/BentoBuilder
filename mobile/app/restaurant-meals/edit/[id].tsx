@@ -25,6 +25,7 @@ import { createTag, getTags, type SelectOption } from "@/src/services/optionsApi
 import {
   getRestaurantMealById,
   updateRestaurantMeal,
+  type Dish,
   type DishInput,
 } from "@/src/services/restaurantMealApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
@@ -76,7 +77,15 @@ export default function EditRestaurantMealPage() {
 
   const [restaurantName, setRestaurantName] = useState("");
   const [notes, setNotes] = useState("");
-  const [dishes, setDishes] = useState<DishRow[]>([newDishRow()]);
+  // Starts empty, not one blank required-feeling row - dishes are
+  // optional, same reasoning as the add screen.
+  const [dishes, setDishes] = useState<DishRow[]>([]);
+  // The raw dishes as loaded, keyed by _id - preserved through save so an
+  // edited dish keeps its real identity (and its scores, which this form
+  // doesn't even expose) instead of every save minting a fresh id for the
+  // whole menu and orphaning every past visit's restaurantDishSelections
+  // that reference the old ones.
+  const [originalDishesById, setOriginalDishesById] = useState<Map<string, Dish>>(new Map());
 
   const [allTags, setAllTags] = useState<SelectOption[]>([]);
   const [selectedTags, setSelectedTags] = useState<SelectOption[]>([]);
@@ -104,21 +113,20 @@ export default function EditRestaurantMealPage() {
             (t): t is SelectOption => typeof t !== "string",
           ),
         );
+        setOriginalDishesById(new Map(restaurantMeal.dishes.map((d) => [d._id, d])));
         setDishes(
-          restaurantMeal.dishes.length > 0
-            ? restaurantMeal.dishes.map((d) => ({
-                key: d._id,
-                name: d.name,
-                notes: d.notes ?? "",
-                price: numToText(d.price),
-                calories: numToText(d.nutrition?.calories),
-                protein: numToText(d.nutrition?.protein),
-                carbs: numToText(d.nutrition?.carbs),
-                fats: numToText(d.nutrition?.fats),
-                fiber: numToText(d.nutrition?.fiber),
-                sodium: numToText(d.nutrition?.sodium),
-              }))
-            : [newDishRow()],
+          restaurantMeal.dishes.map((d) => ({
+            key: d._id,
+            name: d.name,
+            notes: d.notes ?? "",
+            price: numToText(d.price),
+            calories: numToText(d.nutrition?.calories),
+            protein: numToText(d.nutrition?.protein),
+            carbs: numToText(d.nutrition?.carbs),
+            fats: numToText(d.nutrition?.fats),
+            fiber: numToText(d.nutrition?.fiber),
+            sodium: numToText(d.nutrition?.sodium),
+          })),
         );
       } catch (error) {
         if (!cancelled) {
@@ -150,25 +158,22 @@ export default function EditRestaurantMealPage() {
   }
 
   function removeDish(key: string) {
-    setDishes((prev) => (prev.length > 1 ? prev.filter((d) => d.key !== key) : prev));
+    setDishes((prev) => prev.filter((d) => d.key !== key));
   }
 
   async function handleSave() {
     if (!id) return;
     const trimmedRestaurantName = restaurantName.trim();
     if (!trimmedRestaurantName) {
-      Alert.alert("Restaurant name required", "Enter where you ate.");
+      Alert.alert("Restaurant name required", "Enter the restaurant's name.");
       return;
     }
 
+    // Dishes are optional - a menu can be edited down to nothing (or never
+    // had any to begin with, if created empty from the add screen).
     const trimmedDishes = dishes
       .map((d) => ({ ...d, name: d.name.trim() }))
       .filter((d) => d.name.length > 0);
-
-    if (trimmedDishes.length === 0) {
-      Alert.alert("At least one dish required", "Add what you ordered.");
-      return;
-    }
 
     setSaving(true);
     try {
@@ -179,19 +184,29 @@ export default function EditRestaurantMealPage() {
       );
       const tagIds = resolvedTags.filter((t): t is SelectOption => t != null).map((t) => t._id);
 
-      const dishInputs: DishInput[] = trimmedDishes.map((d) => ({
-        name: d.name,
-        notes: d.notes.trim() || undefined,
-        price: parseOptionalNumber(d.price),
-        nutrition: {
+      // updateRestaurantMeal replaces the WHOLE dishes array - a row that
+      // already existed (its key is the real dish _id, from
+      // originalDishesById) is sent as that original dish with just the
+      // edited fields overridden, preserving _id and anything this form
+      // doesn't expose (like scores). A row added during this edit session
+      // has no real id yet and is sent as a bare DishInput. Getting this
+      // wrong would silently mint a fresh id for every dish on every save,
+      // orphaning every past visit's restaurantDishSelections that
+      // reference the old ones.
+      const dishInputs: (DishInput | Dish)[] = trimmedDishes.map((d) => {
+        const nutrition = {
           calories: parseOptionalNumber(d.calories),
           protein: parseOptionalNumber(d.protein),
           carbs: parseOptionalNumber(d.carbs),
           fats: parseOptionalNumber(d.fats),
           fiber: parseOptionalNumber(d.fiber),
           sodium: parseOptionalNumber(d.sodium),
-        },
-      }));
+        };
+        const original = originalDishesById.get(d.key);
+        return original
+          ? { ...original, name: d.name, notes: d.notes.trim() || undefined, price: parseOptionalNumber(d.price), nutrition }
+          : { name: d.name, notes: d.notes.trim() || undefined, price: parseOptionalNumber(d.price), nutrition };
+      });
 
       await updateRestaurantMeal(id, {
         restaurantName: trimmedRestaurantName,
@@ -230,7 +245,7 @@ export default function EditRestaurantMealPage() {
             <Ionicons name="chevron-back" size={26} color="#0F172A" />
           </Pressable>
 
-          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Edit Visit</Text>
+          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Edit Restaurant</Text>
 
           <Pressable
             disabled={saving}
@@ -247,7 +262,7 @@ export default function EditRestaurantMealPage() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <SectionTitle first title="Where'd you eat?" description="" />
+          <SectionTitle first title="Restaurant" description="" />
 
           <FieldLabel text="Restaurant name" required />
           <FormInput
@@ -275,8 +290,8 @@ export default function EditRestaurantMealPage() {
 
           {/* ── Dishes ── */}
           <SectionTitle
-            title="What did you get?"
-            description="Add each dish you ordered. Nutrition is optional and can be a rough estimate."
+            title="Menu (optional)"
+            description="Dishes on this restaurant's menu. Nutrition is optional and can be a rough estimate."
           />
 
           {dishes.map((dish, index) => (
@@ -285,11 +300,9 @@ export default function EditRestaurantMealPage() {
                 <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">
                   Dish {index + 1}
                 </Text>
-                {dishes.length > 1 && (
-                  <Pressable hitSlop={8} onPress={() => removeDish(dish.key)}>
-                    <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
-                  </Pressable>
-                )}
+                <Pressable hitSlop={8} onPress={() => removeDish(dish.key)}>
+                  <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
+                </Pressable>
               </View>
 
               <FieldLabel text="Dish name" required />
