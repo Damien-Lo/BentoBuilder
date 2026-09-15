@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -31,6 +31,7 @@ import {
   type EstimatedDish,
 } from "@/src/services/restaurantMealApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
+import { setPendingNewRestaurant } from "@/src/utils/pendingNewRestaurantStore";
 
 type DishRow = {
   key: string;
@@ -92,10 +93,20 @@ function estimatedDishToRowFields(d: EstimatedDish) {
 
 export default function AddRestaurantMealPage() {
   const router = useRouter();
+  // Set only when reached from the planner's add-to-plan flow (as opposed
+  // to the Eating Out catalog's "+" or the Recipes tab shortcut) - in that
+  // case, saving hands the new restaurant back for the planner's own
+  // dish-picker to pick up, so creating it and logging today's visit is
+  // one continuous action instead of two separate trips.
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const fromPlanner = from === "planner";
 
   const [restaurantName, setRestaurantName] = useState("");
   const [notes, setNotes] = useState("");
-  const [dishes, setDishes] = useState<DishRow[]>([newDishRow()]);
+  // Starts empty, not one blank required-feeling row - dishes are optional
+  // now, so an empty menu is a normal starting state, not something to
+  // nudge past.
+  const [dishes, setDishes] = useState<DishRow[]>([]);
 
   const [allTags, setAllTags] = useState<SelectOption[]>([]);
   const [selectedTags, setSelectedTags] = useState<SelectOption[]>([]);
@@ -132,7 +143,7 @@ export default function AddRestaurantMealPage() {
   }
 
   function removeDish(key: string) {
-    setDishes((prev) => (prev.length > 1 ? prev.filter((d) => d.key !== key) : prev));
+    setDishes((prev) => prev.filter((d) => d.key !== key));
   }
 
   // "append" mode adds one pre-filled dish row per estimated dish; "update"
@@ -183,18 +194,17 @@ export default function AddRestaurantMealPage() {
   async function handleSave() {
     const trimmedRestaurantName = restaurantName.trim();
     if (!trimmedRestaurantName) {
-      Alert.alert("Restaurant name required", "Enter where you ate.");
+      Alert.alert("Restaurant name required", "Enter the restaurant's name.");
       return;
     }
 
+    // Dishes are optional here - a restaurant's menu can just as well
+    // start empty and be filled in over time (from here later, from the
+    // restaurant's own page, or inline while logging a visit in the
+    // planner) as be fully entered up front.
     const trimmedDishes = dishes
       .map((d) => ({ ...d, name: d.name.trim() }))
       .filter((d) => d.name.length > 0);
-
-    if (trimmedDishes.length === 0) {
-      Alert.alert("At least one dish required", "Add what you ordered.");
-      return;
-    }
 
     setSaving(true);
     try {
@@ -219,13 +229,20 @@ export default function AddRestaurantMealPage() {
         },
       }));
 
-      await createRestaurantMeal({
+      const created = await createRestaurantMeal({
         restaurantName: trimmedRestaurantName,
         dishes: dishInputs,
         tags: tagIds,
         notes: notes.trim() || undefined,
       });
 
+      if (fromPlanner) {
+        // Hand the new restaurant back to the planner's own dish-picker
+        // instead of just closing - whatever was just entered as the menu
+        // is almost always also what was actually ordered today, so this
+        // turns "create the restaurant" + "log the visit" into one trip.
+        setPendingNewRestaurant(created);
+      }
       router.back();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save restaurant meal.";
@@ -256,14 +273,16 @@ export default function AddRestaurantMealPage() {
             <Ionicons name="chevron-back" size={26} color="#0F172A" />
           </Pressable>
 
-          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Eating Out</Text>
+          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Add Restaurant</Text>
 
           <Pressable
             disabled={saving}
             className={`rounded-xl px-4 py-2 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
             onPress={() => void handleSave()}
           >
-            <Text className="font-semibold text-white">{saving ? "Saving..." : "Save"}</Text>
+            <Text className="font-semibold text-white">
+              {saving ? "Saving..." : fromPlanner ? "Save & Continue" : "Save"}
+            </Text>
           </Pressable>
         </View>
 
@@ -275,8 +294,8 @@ export default function AddRestaurantMealPage() {
         >
           <SectionTitle
             first
-            title="Where'd you eat?"
-            description="Log a restaurant visit — no pantry items are used for this."
+            title="Restaurant"
+            description="Add it once, then log visits to it anytime from the planner — no pantry items are used for this."
           />
 
           <FieldLabel text="Restaurant name" required />
@@ -305,8 +324,8 @@ export default function AddRestaurantMealPage() {
 
           {/* ── Dishes ── */}
           <SectionTitle
-            title="What did you get?"
-            description="Add each dish you ordered. Nutrition is optional and can be a rough estimate."
+            title="Menu (optional)"
+            description="Add dishes you know about now, or skip this and add them later — from here, the restaurant's own page, or right when logging a visit. Nutrition is optional and can be a rough estimate."
           />
 
           {dishes.map((dish, index) => (
@@ -319,11 +338,9 @@ export default function AddRestaurantMealPage() {
                   <Pressable hitSlop={8} onPress={() => setScanTarget({ mode: "update", key: dish.key })}>
                     <Ionicons name="camera-outline" size={20} color="#2563EB" />
                   </Pressable>
-                  {dishes.length > 1 && (
-                    <Pressable hitSlop={8} onPress={() => removeDish(dish.key)}>
-                      <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
-                    </Pressable>
-                  )}
+                  <Pressable hitSlop={8} onPress={() => removeDish(dish.key)}>
+                    <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
+                  </Pressable>
                 </View>
               </View>
 

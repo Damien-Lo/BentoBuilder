@@ -29,6 +29,7 @@ import {
 } from "@/src/services/restaurantMealApi";
 import { upsertMealPlanEntryContribution } from "@/src/services/groceryListApi";
 import { FormInput, PriceInput } from "@/src/components/forms";
+import { takePendingNewRestaurant } from "@/src/utils/pendingNewRestaurantStore";
 import type { SelectOption } from "@/src/services/optionsApi";
 import type { PantryItem } from "@/src/types/pantry";
 import {
@@ -232,6 +233,23 @@ export default function HomeScreen() {
       getPantryItems().then(setPantryItems).catch(() => {});
       getRestaurantMeals().then(setAllRestaurantMeals).catch(() => {});
       getLastUsedMap().then(setLastUsed).catch(() => {});
+
+      // Coming back from "Add a new restaurant" specifically when it was
+      // reached from this screen's own add-to-plan flow (restaurant-meals/
+      // add.tsx only stashes a hand-off when it was opened with
+      // ?from=planner, not from the Eating Out catalog or Recipes tab) -
+      // reopen straight into the dish-picker instead of leaving the user
+      // to find and re-tap the restaurant they just created. Whatever was
+      // entered as the menu while creating it is almost always also what
+      // was actually ordered today, so it's pre-selected (still freely
+      // editable) rather than making the user re-check it all.
+      const newRestaurant = takePendingNewRestaurant();
+      if (newRestaurant) {
+        resetDishPickerDrafts();
+        setSelectedDishQuantities(new Map(newRestaurant.dishes.map(d => [d._id, 1])));
+        setPendingRestaurantMeal(newRestaurant);
+        setShowAdd(true);
+      }
     }, []),
   );
 
@@ -2529,7 +2547,7 @@ export default function HomeScreen() {
                         className="mb-2 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3.5 active:bg-slate-100"
                         onPress={() => {
                           setShowAdd(false);
-                          router.push("/restaurant-meals/add");
+                          router.push({ pathname: "/restaurant-meals/add", params: { from: "planner" } });
                         }}
                       >
                         <Ionicons name="add" size={18} color="#2563EB" />
