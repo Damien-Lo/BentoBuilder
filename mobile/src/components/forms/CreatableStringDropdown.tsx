@@ -64,22 +64,23 @@ export function CreatableStringDropdown({
 
   const normalizedQuery = query.trim().toLowerCase();
 
+  // Only the empty-query case shows everything — any actual typed text
+  // always filters. There used to also be a "query equals the current
+  // selection" branch meant to let re-opening an untouched field browse
+  // again, but handleTextChange below echoes every keystroke straight into
+  // onSelect, which flows back in as selectedValue — so query and
+  // safeSelectedValue were equal after literally every keystroke, which
+  // permanently short-circuited the filter (same bug already found and
+  // removed in SearchableObjectDropdown).
   const filteredOptions = useMemo(() => {
-    const normalizedSelectedValue = safeSelectedValue
-      .trim()
-      .toLowerCase();
-
-    if (
-      !normalizedQuery ||
-      normalizedQuery === normalizedSelectedValue
-    ) {
+    if (!normalizedQuery) {
       return safeOptions;
     }
 
     return safeOptions.filter((option) =>
       option.trim().toLowerCase().includes(normalizedQuery),
     );
-  }, [normalizedQuery, safeOptions, safeSelectedValue]);
+  }, [normalizedQuery, safeOptions]);
 
   function openDropdown() {
     if (disabled) {
