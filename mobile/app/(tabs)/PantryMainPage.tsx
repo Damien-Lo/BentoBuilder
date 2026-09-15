@@ -313,13 +313,13 @@ export default function PantryMainPage() {
   // threshold in "tbsp" can't be checked against a variant's stock recorded
   // in "ml").
   const genericStockByIngredientId = useMemo(() => {
-    const stats = new Map<string, { total: number; variantCount: number }>();
+    const stats = new Map<string, { total: number; variantCount: number; pieceCount: number }>();
 
     for (const ingredient of ingredients) {
       const parentId = getReferenceId(ingredient.genericParent as unknown);
       if (!parentId) continue;
 
-      const entry = stats.get(parentId) ?? { total: 0, variantCount: 0 };
+      const entry = stats.get(parentId) ?? { total: 0, variantCount: 0, pieceCount: 0 };
       entry.variantCount += 1;
       stats.set(parentId, entry);
     }
@@ -337,18 +337,25 @@ export default function PantryMainPage() {
       if (!parentId) continue;
 
       const parent = ingredientById.get(parentId);
-      if (!parent || !parent.defaultPortionUnit) continue;
+      if (!parent) continue;
 
-      const converted = convertUnits(
-        Number(pantryItem.quantityAvailable ?? 0),
-        pantryItem.quantityUnit,
-        parent.defaultPortionUnit,
-        getIngredientConversions(itemIngredient, customUnitConversions, ingredients),
-      );
-      if (converted == null) continue;
+      const entry = stats.get(parentId) ?? { total: 0, variantCount: 0, pieceCount: 0 };
+      // Piece count doesn't need unit conversion — every pantry item is one
+      // physical piece regardless of what unit its weight happens to be
+      // recorded in, so this counts unconditionally (unlike the weight
+      // total below, which is meaningless without a valid conversion).
+      entry.pieceCount += 1;
 
-      const entry = stats.get(parentId) ?? { total: 0, variantCount: 0 };
-      entry.total += converted;
+      if (parent.defaultPortionUnit) {
+        const converted = convertUnits(
+          Number(pantryItem.quantityAvailable ?? 0),
+          pantryItem.quantityUnit,
+          parent.defaultPortionUnit,
+          getIngredientConversions(itemIngredient, customUnitConversions, ingredients),
+        );
+        if (converted != null) entry.total += converted;
+      }
+
       stats.set(parentId, entry);
     }
 
@@ -711,6 +718,15 @@ export default function PantryMainPage() {
           (sum, p) => sum + Number(p.quantityAvailable ?? 0),
           0,
         );
+    // For a piece-labeled ingredient ("steak", "fillet", ...) a summed
+    // weight ("682 g") hides the actually-useful fact — how many whole
+    // pieces are on hand. pieceCount mirrors totalQuantity's generic-vs-
+    // direct split, but counts pantry entries rather than summing weight.
+    const pieceCount = ingredientItem.pieceLabel
+      ? (ingredientItem.isGeneric
+          ? (genericStockByIngredientId.get(ingredientItem._id)?.pieceCount ?? 0)
+          : ingredientPantryItems.length)
+      : null;
     const isAlwaysAvailable = ingredientItem.isAlwaysAvailable ?? false;
     const isInStock = isAlwaysAvailable || totalQuantity > 0;
     const isLowStock =
@@ -756,7 +772,9 @@ export default function PantryMainPage() {
           {isAlwaysAvailable
             ? "Always available"
             : isInStock
-              ? `${Math.round(totalQuantity * 100) / 100} ${displayUnit ?? ""}`.trim()
+              ? pieceCount != null
+                ? `${pieceCount} ${pieceCount === 1 ? ingredientItem.pieceLabel : `${ingredientItem.pieceLabel}s`}`
+                : `${Math.round(totalQuantity * 100) / 100} ${displayUnit ?? ""}`.trim()
               : "—"}
         </Text>
       </View>

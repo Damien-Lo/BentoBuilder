@@ -134,6 +134,12 @@ interface FormState {
   categoryName: string;
   defaultPortionAmount: string;
   defaultPortionUnit: string;
+  // Purely a display/grouping label (e.g. "steak", "fillet") - set only
+  // when this ingredient is naturally bought/consumed as discrete,
+  // individually-sized pieces, so the pantry list can show a piece count
+  // instead of a summed weight. No weight range - that's a per-recipe
+  // decision made on the recipe's own ingredient line.
+  pieceLabel: string;
   barcode: string;
   lowStockThreshold: string;
   alwaysAvailable: boolean;
@@ -163,6 +169,7 @@ function ingredientToForm(ingredient: Ingredient): FormState {
         ? String(ingredient.defaultPortionAmount)
         : "",
     defaultPortionUnit: ingredient.defaultPortionUnit ?? "",
+    pieceLabel: ingredient.pieceLabel ?? "",
     barcode: ingredient.barcode ?? "",
     lowStockThreshold:
       ingredient.lowStockThreshold != null
@@ -624,6 +631,7 @@ export default function IngredientDetailScreen() {
         category: category?._id || null,
         defaultPortionAmount: optionalNumber(form.defaultPortionAmount),
         defaultPortionUnit: form.defaultPortionUnit.trim() || undefined,
+        pieceLabel: form.pieceLabel.trim() || null,
         lowStockThreshold: optionalNumber(form.lowStockThreshold),
         isAlwaysAvailable: form.alwaysAvailable,
         defaultStorageLocation: defaultStorageLocation?._id || null,
@@ -1136,6 +1144,23 @@ export default function IngredientDetailScreen() {
                     onSelect={handleAddUnit}
                   />
                 </View>
+              </View>
+
+              <View className="mt-4">
+                <FieldLabel text="Piece label (optional)" />
+                <FormInput
+                  value={form.pieceLabel}
+                  placeholder="e.g. steak, fillet, cut"
+                  onChangeText={(v) => updateForm("pieceLabel", v)}
+                />
+                <Text className="mt-2 text-xs leading-4 text-slate-500">
+                  Only set this if you buy/log it as individual pieces rather than
+                  a continuous amount (a steak vs. ground beef) — the pantry list
+                  will then show a count (&quot;3 steaks&quot;) instead of a summed
+                  weight. Doesn&apos;t set any size limit; a recipe&apos;s own
+                  ingredient line still decides what weight range counts as a
+                  usable piece.
+                </Text>
               </View>
 
               <ToggleRow

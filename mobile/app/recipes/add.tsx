@@ -95,6 +95,7 @@ function ingredientToOption(ingredient: Ingredient) {
     isGeneric: ingredient.isGeneric ?? false,
     portionAmount: ingredient.defaultPortionAmount ?? 1,
     unit: ingredient.defaultPortionUnit ?? "",
+    pieceLabel: ingredient.pieceLabel ?? null,
     calories: ingredient.nutrition?.calories ?? undefined,
     protein: ingredient.nutrition?.protein ?? undefined,
     carbs: ingredient.nutrition?.carbs ?? undefined,
@@ -969,9 +970,19 @@ export default function AddRecipePage() {
 
             <Pressable
               className="mt-3 self-start"
-              onPress={() =>
-                setPickerMatchMode((prev) => (prev === "wholePiece" ? "quantity" : "wholePiece"))
-              }
+              onPress={() => {
+                setPickerMatchMode((prev) => {
+                  const next = prev === "wholePiece" ? "quantity" : "wholePiece";
+                  // Pre-fill the display unit from the ingredient's own
+                  // piece label (e.g. "steak"), if it has one and nothing's
+                  // already been typed - purely a typing convenience, never
+                  // overwrites something the user already entered.
+                  if (next === "wholePiece" && pickerSelected?.pieceLabel && !pickerUnit.trim()) {
+                    setPickerUnit(pickerSelected.pieceLabel);
+                  }
+                  return next;
+                });
+              }}
             >
               <Text className="text-xs font-semibold text-blue-600">
                 {pickerMatchMode === "wholePiece"

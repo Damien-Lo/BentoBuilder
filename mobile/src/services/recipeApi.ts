@@ -24,6 +24,10 @@ export interface PopulatedIngredient {
   nutrition?: RecipeNutrition;
   defaultPortionAmount?: number;
   defaultPortionUnit?: string;
+  // Purely a display convenience - lets the ingredient-row editor pre-fill
+  // a wholePiece line's unit field (e.g. "steak") when this ingredient has
+  // one set, saving retyping it. Carries no weight range of its own.
+  pieceLabel?: string | null;
   lowStockThreshold?: number | null;
   isGeneric?: boolean;
   isAlwaysAvailable?: boolean;

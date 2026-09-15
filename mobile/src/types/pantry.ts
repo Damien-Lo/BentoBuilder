@@ -20,6 +20,12 @@ export interface Ingredient {
   genericParent?: string | { _id: string; unitConversions?: CustomUnitConversion[] } | null;
   defaultPortionAmount: number;
   defaultPortionUnit: string;
+  // Purely a display/grouping label (e.g. "steak", "fillet") - set only
+  // when this ingredient is naturally bought/consumed as discrete,
+  // individually-sized pieces, so the pantry list can show a piece count
+  // instead of a summed weight. No weight range attached - that's a
+  // per-recipe decision (Recipe.ingredientList's own wholePiece fields).
+  pieceLabel?: string | null;
   nutrition: Nutrition;
   lowStockThreshold?: number | null;
   isAlwaysAvailable?: boolean;

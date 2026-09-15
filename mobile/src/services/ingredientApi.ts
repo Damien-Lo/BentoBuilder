@@ -32,6 +32,15 @@ export interface Ingredient {
   defaultPortionAmount?: number;
   defaultPortionUnit?: string;
 
+  // Purely a display/grouping label (e.g. "steak", "fillet") - set only
+  // when this ingredient is naturally bought/consumed as discrete,
+  // individually-sized pieces rather than a continuous amount, so the
+  // pantry list can show a piece count instead of a summed weight.
+  // Deliberately carries no weight range - what size counts as "usable"
+  // is a per-recipe decision (Recipe.ingredientList's own matchMode/
+  // pieceMinWeight/pieceMaxWeight), not a property of the ingredient.
+  pieceLabel?: string | null;
+
   nutrition?: IngredientNutrition;
 
   lowStockThreshold?: number;
@@ -93,6 +102,8 @@ export interface CreateIngredientInput {
 
   defaultPortionAmount?: number;
   defaultPortionUnit?: string;
+
+  pieceLabel?: string | null;
 
   nutrition?: IngredientNutrition;
 
@@ -244,6 +255,8 @@ export async function createIngredient(
 
     defaultPortionUnit: input.defaultPortionUnit?.trim() || "",
 
+    pieceLabel: input.pieceLabel?.trim() || null,
+
     nutrition: input.nutrition
       ? {
           calories: input.nutrition.calories,
@@ -306,6 +319,10 @@ export async function updateIngredient(
 
   if (typeof input.defaultPortionUnit === "string") {
     payload.defaultPortionUnit = input.defaultPortionUnit.trim();
+  }
+
+  if (typeof input.pieceLabel === "string") {
+    payload.pieceLabel = input.pieceLabel.trim() || null;
   }
 
   const response = await fetch(`${API_BASE_URL}/api/ingredients/${trimmedId}`, {

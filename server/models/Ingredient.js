@@ -111,6 +111,22 @@ const ingredientSchema = new mongoose.Schema(
       default: "serving",
     },
 
+    // Purely a display/grouping label - e.g. "steak" for Filet Mignon,
+    // "fillet" for Salmon Fillet. Set only when this ingredient is
+    // naturally bought/consumed as discrete, individually-sized pieces
+    // (as opposed to a continuous amount like flour or ground beef), so
+    // the pantry list can show a piece *count* ("3 steaks") instead of a
+    // summed weight ("682 g"). Deliberately carries no weight range of its
+    // own - what size counts as "usable" is a per-recipe decision (a
+    // recipe wanting an unusually large or small cut is still valid),
+    // handled entirely by Recipe.ingredientList's own matchMode/
+    // pieceMinWeight/pieceMaxWeight fields, not by anything here.
+    pieceLabel: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
     nutrition: {
       type: nutritionSchema,
       default: () => ({}),
