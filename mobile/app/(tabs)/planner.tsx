@@ -1472,6 +1472,17 @@ export default function HomeScreen() {
           )
         : scaleRecipeNutrition(editEntry.recipe!, q);
 
+    // A confirmed recipe entry's real nutrition (from the actual
+    // ingredients/weights used — see computeConfirmNutrition) can differ
+    // from the recipe's own generic snapshot at its logged servings — show
+    // both, rather than only the generic one this overlay used to display
+    // (which quietly ignored anything confirmed).
+    const isConfirmedRecipe = !isIngredient && !isRestaurant && editEntry.status === "confirmed";
+    const loggedNutrition = isConfirmedRecipe ? (editEntry.confirmedNutrition ?? null) : null;
+    const originalNutrition = isConfirmedRecipe
+      ? scaleRecipeNutrition(editEntry.recipe!, editEntry.recipeServings ?? 1)
+      : null;
+
     // Restaurant nutrition is computed from the whole selection map (each
     // dish x its own quantity), not a single scalar like the other two types.
     const restaurantDishes = isRestaurant ? editEntry.restaurantMeal!.dishes : [];
@@ -1484,23 +1495,35 @@ export default function HomeScreen() {
       ? getRestaurantMealKcal(editEntry.restaurantMeal!, restaurantSelections)
       : null;
 
-    const rows: [string, number | null | undefined, string][] = isRestaurant
+    // Label, true (logged) value, unit, and — only for a confirmed recipe
+    // with a real logged total — the recipe's own original assumed value,
+    // rendered as "original → true log" so it's obvious the two can differ.
+    const rows: [string, number | null | undefined, string, number | null | undefined][] = isRestaurant
       ? [
-          ["Calories", restaurantKcal, "kcal"],
-          ["Protein",  selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.protein ?? 0) * restaurantQtyOf(d), 0), "g"],
-          ["Carbs",    selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.carbs ?? 0) * restaurantQtyOf(d), 0),   "g"],
-          ["Fats",     selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.fats ?? 0) * restaurantQtyOf(d), 0),    "g"],
-          ["Fiber",    selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.fiber ?? 0) * restaurantQtyOf(d), 0),   "g"],
-          ["Sodium",   selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.sodium ?? 0) * restaurantQtyOf(d), 0),  "mg"],
+          ["Calories", restaurantKcal, "kcal", undefined],
+          ["Protein",  selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.protein ?? 0) * restaurantQtyOf(d), 0), "g", undefined],
+          ["Carbs",    selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.carbs ?? 0) * restaurantQtyOf(d), 0),   "g", undefined],
+          ["Fats",     selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.fats ?? 0) * restaurantQtyOf(d), 0),    "g", undefined],
+          ["Fiber",    selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.fiber ?? 0) * restaurantQtyOf(d), 0),   "g", undefined],
+          ["Sodium",   selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.sodium ?? 0) * restaurantQtyOf(d), 0),  "mg", undefined],
         ]
-      : [
-          ["Calories", n?.calories, "kcal"],
-          ["Protein",  n?.protein,  "g"],
-          ["Carbs",    n?.carbs,    "g"],
-          ["Fats",     n?.fats,     "g"],
-          ["Fiber",    n?.fiber,    "g"],
-          ["Sodium",   n?.sodium,   "mg"],
-        ];
+      : loggedNutrition
+        ? [
+            ["Calories", loggedNutrition.calories, "kcal", originalNutrition?.calories],
+            ["Protein",  loggedNutrition.protein,  "g",    originalNutrition?.protein],
+            ["Carbs",    loggedNutrition.carbs,    "g",    originalNutrition?.carbs],
+            ["Fats",     loggedNutrition.fats,     "g",    originalNutrition?.fats],
+            ["Fiber",    loggedNutrition.fiber,    "g",    originalNutrition?.fiber],
+            ["Sodium",   loggedNutrition.sodium,   "mg",   originalNutrition?.sodium],
+          ]
+        : [
+            ["Calories", n?.calories, "kcal", undefined],
+            ["Protein",  n?.protein,  "g", undefined],
+            ["Carbs",    n?.carbs,    "g", undefined],
+            ["Fats",     n?.fats,     "g", undefined],
+            ["Fiber",    n?.fiber,    "g", undefined],
+            ["Sodium",   n?.sodium,   "mg", undefined],
+          ];
 
     // A confirmed recipe entry's *displayed* nutrition actually comes from
     // real stockDeductions (computeConfirmedRecipeNutrition), not
@@ -1546,9 +1569,9 @@ export default function HomeScreen() {
             {recipeConfirmedLocked ? (
               <View className="mb-5 rounded-2xl bg-slate-50 px-4 py-3">
                 <Text className="text-sm text-slate-600">
-                  This meal is confirmed — nutrition shown elsewhere reflects exactly what was deducted
-                  from pantry stock, not the servings number below. Unconfirm the entry first if you need
-                  to change servings and have it actually affect the logged nutrition.
+                  This meal is confirmed — the nutrition below reflects exactly what was really used,
+                  not the servings number below it. Unconfirm the entry first if you need to change
+                  servings and have it actually affect the logged nutrition.
                 </Text>
               </View>
             ) : null}
@@ -1669,22 +1692,41 @@ export default function HomeScreen() {
               </>
             )}
 
-            {/* Live nutrition preview for this entry */}
+            {/* Live nutrition preview for this entry — for a confirmed
+                recipe with a real logged total, "original" is the recipe's
+                own generic estimate at its logged servings, shown only
+                when it actually differs from what was really used. */}
             <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              {rows.map(([label, value, unit], i) => (
-                <View
-                  key={label}
-                  className={`flex-row items-center justify-between px-4 py-3 ${
-                    i < rows.length - 1 ? "border-b border-slate-100" : ""
-                  }`}
-                >
-                  <Text className="text-base text-slate-600">{label}</Text>
-                  <Text className="text-base font-semibold text-slate-900">
-                    {value != null ? `${Math.round(value * 10) / 10} ${unit}` : "—"}
-                  </Text>
-                </View>
-              ))}
+              {rows.map(([label, value, unit, original], i) => {
+                const roundedValue = value != null ? Math.round(value * 10) / 10 : null;
+                const roundedOriginal = original != null ? Math.round(original * 10) / 10 : null;
+                const showComparison = roundedOriginal != null && roundedValue != null
+                  && roundedOriginal !== roundedValue;
+                return (
+                  <View
+                    key={label}
+                    className={`flex-row items-center justify-between px-4 py-3 ${
+                      i < rows.length - 1 ? "border-b border-slate-100" : ""
+                    }`}
+                  >
+                    <Text className="text-base text-slate-600">{label}</Text>
+                    <Text className="text-base font-semibold text-slate-900">
+                      {showComparison
+                        ? `${roundedOriginal} → ${roundedValue} ${unit}`
+                        : roundedValue != null
+                          ? `${roundedValue} ${unit}`
+                          : "—"}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
+            {loggedNutrition && (
+              <Text className="-mt-4 mb-6 text-xs leading-4 text-slate-400">
+                Original → true log: the recipe&apos;s own estimate vs. what you actually
+                confirmed (real weights used, per-ingredient).
+              </Text>
+            )}
 
             {!recipeConfirmedLocked && isIngredient && editEntry.status === "confirmed" && (
               <Text className="mb-4 text-xs text-slate-400">
