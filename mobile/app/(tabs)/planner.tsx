@@ -55,6 +55,7 @@ import {
   type RestaurantDishSelection,
 } from "@/src/services/mealPlanApi";
 import { sortAlphabetically, sortByLastUsed } from "@/src/utils/lastUsedSort";
+import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { RateAndConfirmModal } from "@/src/components/planner/RateAndConfirmModal";
 import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
@@ -379,6 +380,21 @@ export default function HomeScreen() {
     if (!q) return sortByLastUsed(allRecipes, lastUsed.recipe, r => r._id, r => r.name);
     return sortAlphabetically(allRecipes.filter(r => r.name.toLowerCase().includes(q)), r => r.name);
   }, [allRecipes, recipeSearch, lastUsed.recipe]);
+
+  // Recipes that produce another ingredient (a raw prep step, e.g. "Sous
+  // Vide Filet Mignon Prep" makes "Vacuum-Sealed Filet Mignon") - flagged
+  // in the add-recipe picker below so it's not confused for the finished,
+  // directly-eaten dish at a glance. Reuses the reverse Ingredient ->
+  // productionRecipe link RecipesMainPage.tsx already keys its own "Meal
+  // Preps" filter tab off of - no new data.
+  const producingRecipeIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const ingredient of allIngredients) {
+      const recipeId = referenceId(ingredient.productionRecipe);
+      if (recipeId) ids.add(recipeId);
+    }
+    return ids;
+  }, [allIngredients]);
 
   const filteredIngredients = useMemo(() => {
     const q = ingredientSearch.trim().toLowerCase();
@@ -2583,6 +2599,7 @@ export default function HomeScreen() {
                     const addServings = getAddServings(recipe);
                     const kcal = getRecipeKcal(recipe, addServings);
                     const slotCfg = SLOT_MAP[addSlot];
+                    const isPrep = producingRecipeIds.has(recipe._id);
                     return (
                       <View className="mb-2 rounded-2xl border border-slate-200 bg-white p-4">
                         <Pressable
@@ -2594,7 +2611,16 @@ export default function HomeScreen() {
                             <Ionicons name="book-outline" size={18} color={slotCfg.iconColor} />
                           </View>
                           <View className="ml-3 flex-1">
-                            <Text className="font-semibold text-slate-900">{recipe.name}</Text>
+                            <View className="flex-row items-center">
+                              <Text className="font-semibold text-slate-900">{recipe.name}</Text>
+                              {isPrep && (
+                                <View className="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5">
+                                  <Text className="text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                                    Prep
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
                             <Text className="mt-0.5 text-sm text-slate-400">
                               {recipe.mealCategory?.join(", ") ?? "Recipe"}
                               {recipe.servings != null && ` · makes ${recipe.servings} servings`}
