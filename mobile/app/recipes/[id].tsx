@@ -77,12 +77,16 @@ function ingredientRefId(ingredient: string | PopulatedIngredient): string {
   return typeof ingredient === "string" ? ingredient : ingredient._id;
 }
 
-// A meal-prep ingredient's own recipe, nested read-only underneath its row
-// once expanded — allRecipes (the list endpoint) doesn't populate
-// ingredientList.ingredient, so names are resolved via ingredientMap
-// rather than assumed to already be objects. Recurses for a prep nested
-// inside another prep (own expand state per instance, so expanding one
-// doesn't affect a sibling at the same depth).
+// A produced ingredient's own recipe, nested read-only underneath its row
+// once expanded — gated on productionRecipe being set, not isMealPrep
+// (isMealPrep only flags a produced ingredient that's itself a complete,
+// directly-eaten meal, e.g. Okonomiyaki — an intermediate component like
+// "Vacuum-Sealed Filet Mignon" has productionRecipe set but isMealPrep
+// false, and still has real ingredients worth revealing). allRecipes (the
+// list endpoint) doesn't populate ingredientList.ingredient, so names are
+// resolved via ingredientMap rather than assumed to already be objects.
+// Recurses for a prep nested inside another prep (own expand state per
+// instance, so expanding one doesn't affect a sibling at the same depth).
 function NestedIngredientList({
   ingredientList,
   ingredientMap,
@@ -107,7 +111,7 @@ function NestedIngredientList({
     <View className="pl-5">
       {ingredientList.map((line, index) => {
         const ingredient = ingredientMap.get(ingredientRefId(line.ingredient));
-        const childRecipeId = ingredient?.isMealPrep ? referenceId(ingredient.productionRecipe) : null;
+        const childRecipeId = ingredient ? referenceId(ingredient.productionRecipe) : null;
         const childRecipe = childRecipeId ? recipeMap.get(childRecipeId) : null;
         const isExpanded = expanded.has(index);
         const isWholePiece = line.matchMode === "wholePiece";
@@ -880,7 +884,9 @@ export default function RecipeDetailPage() {
                   barState = remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
                 }
 
-                const childRecipeId = ing?.isMealPrep ? referenceId(ing.productionRecipe) : null;
+                // Gated on productionRecipe, not isMealPrep — see
+                // NestedIngredientList's own comment on the distinction.
+                const childRecipeId = ing ? referenceId(ing.productionRecipe) : null;
                 const childRecipe = childRecipeId ? recipeMap.get(childRecipeId) : null;
                 const isRowExpanded = expandedIngredientRows.has(index);
 
