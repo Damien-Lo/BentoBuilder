@@ -16,6 +16,18 @@ interface ResolveIngredientSourcesModalProps {
   onConfirm: (selections: Record<string, string[]>, manualPieceEntries: ManualPieceInput[]) => void;
 }
 
+// A starting point for a shortfall's manual-weight field — the recipe
+// line's own range midpoint, the same number its nutrition estimate
+// already assumes. Saves typing a weight from scratch when the real one
+// is close to typical; still fully editable, and clearing it back to
+// blank still means "skip" exactly as before.
+function midpointWeight(req: IngredientRequirement): string {
+  const min = req.pieceMinWeight ?? 0;
+  const max = req.pieceMaxWeight ?? min;
+  const mid = (min + max) / 2;
+  return mid > 0 ? String(Math.round(mid)) : "";
+}
+
 function formatExpiry(expiryDate: string | null): string {
   if (!expiryDate) return "No expiry";
   return `Exp. ${new Date(expiryDate).toLocaleDateString()}`;
@@ -51,8 +63,10 @@ export function ResolveIngredientSourcesModal({
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   // One text field per shortfall slot, keyed by ingredientId - e.g. needing
   // 2 steaks with only 1 in pantry leaves a shortfall of 1, so one field.
-  // Left blank, that slot just stays unfulfilled (typing a weight is always
-  // optional, never a hard requirement to get past this modal).
+  // Pre-filled with the recipe's own range midpoint (see midpointWeight) as
+  // a starting point - editable, and clearing it back to blank still means
+  // "skip" (uses that same midpoint as a defensive fallback anyway, but
+  // without pretending a real weight was confirmed).
   const [manualWeights, setManualWeights] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
@@ -61,7 +75,9 @@ export function ResolveIngredientSourcesModal({
     setManualWeights(
       Object.fromEntries(
         requirements
-          .map((req) => [req.ingredientId, Array.from({ length: wholePieceShortfall(req) }, () => "")] as const)
+          .map((req) =>
+            [req.ingredientId, Array.from({ length: wholePieceShortfall(req) }, () => midpointWeight(req))] as const,
+          )
           .filter(([, slots]) => slots.length > 0),
       ),
     );
@@ -190,9 +206,10 @@ export function ResolveIngredientSourcesModal({
                           : "Nothing in your pantry qualifies"}
                       </Text>
                       <Text className="mt-0.5 text-xs leading-4 text-amber-700">
-                        Bought and used without logging it in? Type the weight for accurate
-                        nutrition — it won&apos;t be deducted from pantry since there&apos;s
-                        nothing there to deduct. Leave blank to skip.
+                        Bought and used without logging it in? Pre-filled with this recipe&apos;s
+                        usual size — adjust it to the real weight for accurate nutrition, or clear
+                        it to skip. Either way, it won&apos;t be deducted from pantry since
+                        there&apos;s nothing there to deduct.
                       </Text>
                       {manualSlots.map((value, index) => (
                         <View key={index} className="mt-2 flex-row items-center">
