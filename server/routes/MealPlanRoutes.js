@@ -53,7 +53,8 @@ function populateEntry(query) {
     .populate({
       path: "stockDeductions.pantryItem",
       populate: { path: "ingredient" },
-    });
+    })
+    .populate("manualPieceEntries.ingredient");
 }
 
 /**
@@ -218,7 +219,10 @@ router.patch("/:id", async (req, res) => {
 
 /**
  * POST /api/meal-plan/:id/confirm
- * Body: { deductions: [{ pantryItem: "<id>", amount: Number }, ...] }
+ * Body: {
+ *   deductions: [{ pantryItem: "<id>", amount: Number }, ...],
+ *   manualPieceEntries: [{ ingredient: "<id>", weight: Number, weightUnit: String }, ...],
+ * }
  *
  * The client decides WHICH pantry items to draw from (brother-grouping,
  * expiry ordering, any user-resolved ambiguous choices) and sends the flat
@@ -226,6 +230,11 @@ router.patch("/:id", async (req, res) => {
  * stock: each deduction is clamped to whatever that pantry item actually
  * has left (defends against stale client state too), and a pantry item
  * that's missing entirely is skipped rather than failing the whole confirm.
+ *
+ * manualPieceEntries covers a wholePiece ingredient the user says they used
+ * but never logged into pantry — no pantry item exists for these, so
+ * they're stored as-is with no stock mutation at all, purely so the
+ * confirmed entry's nutrition can still reflect the real weight typed in.
  */
 router.post("/:id/confirm", async (req, res) => {
   try {
@@ -259,7 +268,13 @@ router.post("/:id/confirm", async (req, res) => {
       ledger.push({ pantryItem: pantryItem._id, amount: actualAmount });
     }
 
+    const requestedManual = Array.isArray(req.body.manualPieceEntries) ? req.body.manualPieceEntries : [];
+    const manualLedger = requestedManual
+      .map(({ ingredient, weight, weightUnit }) => ({ ingredient, weight: Number(weight), weightUnit }))
+      .filter(({ ingredient, weight, weightUnit }) => ingredient && Number.isFinite(weight) && weight > 0 && weightUnit);
+
     entry.stockDeductions = ledger;
+    entry.manualPieceEntries = manualLedger;
     entry.status = "confirmed";
     await entry.save();
 
@@ -283,6 +298,7 @@ router.post("/:id/unconfirm", async (req, res) => {
     }
 
     await reverseStockDeductions(entry);
+    entry.manualPieceEntries = [];
     entry.status = "planned";
     await entry.save();
 

@@ -514,8 +514,39 @@ export function buildIngredientRequirements(
   return buildRequirementsFromRows(expandedRows, ingredientMap, allIngredients, pantryItems, globalConversions);
 }
 
+// How many whole pieces a requirement still needs beyond what real pantry
+// stock can cover — 0 for a quantity-mode requirement (a partial quantity
+// shortfall there just silently deducts what's available, same as always;
+// only wholePiece has a per-unit "which one" identity worth asking about).
+export function wholePieceShortfall(req: IngredientRequirement): number {
+  if (req.matchMode !== "wholePiece") return 0;
+  const available = req.groups.reduce((sum, g) => sum + g.totalAvailable, 0);
+  return Math.max(0, round(req.neededQuantity - available));
+}
+
+// Whether a requirement needs the user's input before confirming: either
+// real ambiguity (more than one real pantry source to choose between), or
+// — wholePiece only — an outright shortfall, where some or all of the
+// needed pieces have nothing in pantry to auto-pick at all. The latter is
+// what unlocks the resolve-sources modal's "not in my pantry, type the
+// weight" fallback rather than silently leaving the gap unfulfilled.
+export function requirementNeedsResolution(req: IngredientRequirement): boolean {
+  return req.groups.length > 1 || wholePieceShortfall(req) > 0;
+}
+
 export function hasAmbiguity(requirements: IngredientRequirement[]): boolean {
-  return requirements.some((r) => r.groups.length > 1);
+  return requirements.some(requirementNeedsResolution);
+}
+
+// A wholePiece ingredient the user says they used but has no pantry item
+// to back it — see manualPieceEntrySchema on the server. Kept separate
+// from DeductionInstruction (which always refers to a real PantryItem)
+// rather than folding it in as an optional field, since the two are never
+// interchangeable — one subtracts from real stock, the other doesn't.
+export interface ManualPieceInput {
+  ingredientId: string;
+  weight: number;
+  unit: string;
 }
 
 // Drains `groups` in the given order, up to `neededQuantity` (in `unit`),

@@ -259,8 +259,9 @@ export function computeConfirmedRecipeNutrition(
   entry: MealPlanEntry,
   conversions: CustomUnitConversion[],
 ): DayNutrition | null {
-  const deductions = entry.stockDeductions;
-  if (!deductions?.length) return null;
+  const deductions = entry.stockDeductions ?? [];
+  const manualEntries = entry.manualPieceEntries ?? [];
+  if (!deductions.length && !manualEntries.length) return null;
 
   const totals: DayNutrition = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
   let hasAny = false;
@@ -273,6 +274,19 @@ export function computeConfirmedRecipeNutrition(
       d.amount,
       d.pantryItem.quantityUnit,
       getIngredientConversions(ingredient, conversions),
+    ));
+    hasAny = true;
+  }
+  // A wholePiece ingredient confirmed with a typed weight instead of a real
+  // pantry item (see ManualPieceEntry) — same nutrition math, just sourced
+  // from the ingredient directly rather than through a pantry item.
+  for (const m of manualEntries) {
+    if (!m.ingredient) continue;
+    addScaled(totals, scaleIngredientNutrition(
+      m.ingredient,
+      m.weight,
+      m.weightUnit,
+      getIngredientConversions(m.ingredient, conversions),
     ));
     hasAny = true;
   }

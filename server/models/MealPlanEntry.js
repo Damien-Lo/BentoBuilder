@@ -8,6 +8,20 @@ const stockDeductionSchema = new mongoose.Schema(
   { _id: false },
 );
 
+// A wholePiece ingredient the user says they used but never logged into
+// pantry (bought and used it the same day, say) — there's no real
+// PantryItem to deduct from, so this just records enough to compute
+// accurate nutrition (the ingredient plus the real weight typed in)
+// without pretending any actual stock was touched.
+const manualPieceEntrySchema = new mongoose.Schema(
+  {
+    ingredient: { type: mongoose.Schema.Types.ObjectId, ref: "Ingredient", required: true },
+    weight: { type: Number, min: 0, required: true },
+    weightUnit: { type: String, required: true, trim: true },
+  },
+  { _id: false },
+);
+
 const restaurantDishSelectionSchema = new mongoose.Schema(
   {
     dish: { type: mongoose.Schema.Types.ObjectId, required: true },
@@ -63,6 +77,10 @@ const mealPlanEntrySchema = new mongoose.Schema(
     // confirm restores the same pantry items by the same amounts rather
     // than guessing.
     stockDeductions: [stockDeductionSchema],
+
+    // Populated alongside stockDeductions by POST /:id/confirm, cleared by
+    // POST /:id/unconfirm — see manualPieceEntrySchema above.
+    manualPieceEntries: { type: [manualPieceEntrySchema], default: [] },
 
     notes:      { type: String, trim: true, default: "" },
     isArchived: { type: Boolean, default: false },

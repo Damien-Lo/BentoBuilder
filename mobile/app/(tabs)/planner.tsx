@@ -83,8 +83,10 @@ import {
   getDefaultDeductionInstructions,
   getResolvedDeductionInstructions,
   hasAmbiguity,
+  requirementNeedsResolution,
   type DeductionInstruction,
   type IngredientRequirement,
+  type ManualPieceInput,
 } from "@/src/utils/pantryDeduction";
 import { getIngredientConversions } from "@/src/utils/unitConversion";
 
@@ -451,12 +453,27 @@ export default function HomeScreen() {
     }
   }
 
+  // Creating directly with status "confirmed" used to skip pantry
+  // deduction and the ambiguity/resolve-sources overlay entirely — only
+  // the separate planned -> confirmed toggle (handleConfirmEntry) ever ran
+  // buildIngredientRequirements. Unified here: always create as "planned",
+  // then — only if the caller actually wanted it confirmed — immediately
+  // run the exact same confirm pipeline that toggle uses, so both paths to
+  // "confirmed" behave identically (real deduction, same overlay when
+  // needed) instead of diverging based on how "confirmed" was reached.
+  async function createEntry(input: CreateMealPlanEntryInput): Promise<MealPlanEntry> {
+    const wantsConfirmed = input.status === "confirmed";
+    const entry = await createMealPlanEntry({ ...input, status: "planned" });
+    setEntries(prev => [...prev, entry]);
+    if (wantsConfirmed) handleConfirmEntry(entry);
+    return entry;
+  }
+
   async function handleAddEntry(meal: Meal) {
     if (saving) return;
     try {
       setSaving(true);
-      const entry = await createMealPlanEntry({ date: selectedDate, slot: addSlot, status: addStatus, meal: meal._id });
-      setEntries(prev => [...prev, entry]);
+      await createEntry({ date: selectedDate, slot: addSlot, status: addStatus, meal: meal._id });
       setShowAdd(false);
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not add meal.");
@@ -483,14 +500,13 @@ export default function HomeScreen() {
     if (saving) return;
     try {
       setSaving(true);
-      const entry = await createMealPlanEntry({
+      await createEntry({
         date: selectedDate,
         slot: addSlot,
         status: addStatus,
         recipe: recipe._id,
         recipeServings: servings,
       });
-      setEntries(prev => [...prev, entry]);
       setShowAdd(false);
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not add recipe.");
@@ -503,14 +519,13 @@ export default function HomeScreen() {
     if (saving || selections.length === 0) return;
     try {
       setSaving(true);
-      const entry = await createMealPlanEntry({
+      await createEntry({
         date: selectedDate,
         slot: addSlot,
         status: addStatus,
         restaurantMeal: restaurantMeal._id,
         restaurantDishSelections: selections,
       });
-      setEntries(prev => [...prev, entry]);
       setPendingRestaurantMeal(null);
       setSelectedDishQuantities(new Map());
       resetDishPickerDrafts();
@@ -646,7 +661,7 @@ export default function HomeScreen() {
     }
     try {
       setSaving(true);
-      const entry = await createMealPlanEntry({
+      await createEntry({
         date: selectedDate,
         slot: addSlot,
         status: addStatus,
@@ -654,7 +669,6 @@ export default function HomeScreen() {
         ingredientQuantity: quantity,
         ingredientUnit: pendingUnit.trim(),
       });
-      setEntries(prev => [...prev, entry]);
       setPendingIngredient(null);
       setShowAdd(false);
     } catch (err) {
@@ -664,10 +678,14 @@ export default function HomeScreen() {
     }
   }
 
-  async function performConfirm(entry: MealPlanEntry, instructions: DeductionInstruction[]) {
+  async function performConfirm(
+    entry: MealPlanEntry,
+    instructions: DeductionInstruction[],
+    manualPieceEntries: ManualPieceInput[] = [],
+  ) {
     swipeableRefs.get(entry._id)?.close();
     try {
-      const updated = await confirmMealPlanEntry(entry._id, instructions);
+      const updated = await confirmMealPlanEntry(entry._id, instructions, manualPieceEntries);
       setEntries(prev => prev.map(e => (e._id === entry._id ? updated : e)));
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not confirm.");
@@ -687,7 +705,10 @@ export default function HomeScreen() {
   // Confirming deducts pantry stock. Most of the time that's fully
   // automatic (nearest-expiry order) — the resolve-sources overlay only
   // appears when at least one ingredient genuinely has more than one
-  // pantry source to choose from.
+  // pantry source to choose from, or (wholePiece only) an outright
+  // shortfall with nothing in pantry to cover part or all of what's
+  // needed, which is where the overlay's "type a weight instead" fallback
+  // comes in.
   function handleConfirmEntry(entry: MealPlanEntry) {
     const conversions = appSettings?.unitConversions ?? [];
     const requirements = buildIngredientRequirements(
@@ -697,7 +718,7 @@ export default function HomeScreen() {
     if (hasAmbiguity(requirements)) {
       swipeableRefs.get(entry._id)?.close();
       setPendingConfirmEntry(entry);
-      setAmbiguousRequirements(requirements.filter(r => r.groups.length > 1));
+      setAmbiguousRequirements(requirements.filter(requirementNeedsResolution));
       setShowResolveModal(true);
       return;
     }
@@ -754,12 +775,15 @@ export default function HomeScreen() {
     }
   }
 
-  async function handleResolvedConfirm(selections: Record<string, string[]>) {
+  async function handleResolvedConfirm(
+    selections: Record<string, string[]>,
+    manualPieceEntries: ManualPieceInput[],
+  ) {
     if (!pendingConfirmEntry) return;
     setResolvingSaving(true);
     try {
       const instructions = getResolvedDeductionInstructions(ambiguousRequirements, selections);
-      await performConfirm(pendingConfirmEntry, instructions);
+      await performConfirm(pendingConfirmEntry, instructions, manualPieceEntries);
       setShowResolveModal(false);
       setPendingConfirmEntry(null);
     } finally {
@@ -850,8 +874,7 @@ export default function HomeScreen() {
       } else if (lastEntry.meal) {
         input.meal = lastEntry.meal._id;
       }
-      const entry = await createMealPlanEntry(input);
-      setEntries(prev => [...prev, entry]);
+      await createEntry(input);
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not add this item.");
     } finally {
@@ -2691,7 +2714,7 @@ export default function HomeScreen() {
           setShowResolveModal(false);
           setPendingConfirmEntry(null);
         }}
-        onConfirm={(selections) => void handleResolvedConfirm(selections)}
+        onConfirm={(selections, manualPieceEntries) => void handleResolvedConfirm(selections, manualPieceEntries)}
       />
 
       <PhotoCaptureModal
