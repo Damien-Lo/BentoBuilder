@@ -23,11 +23,14 @@ export interface PantryGroupMember {
   quantityUnit: string;
 }
 
-// A set of pantry entries identical in every way that matters (same
-// ingredient, unit, expiry, location, purchase date) — "brothers" that
-// don't need the user to distinguish between them. Note that "brothers"
-// can still individually weigh different amounts (e.g. two fillets bought
-// together) — grouping is about interchangeability of *source*, not size.
+// A set of pantry entries identical in every way that matters — "brothers"
+// that don't need the user to distinguish between them. For a "quantity"
+// requirement that's same ingredient, unit, expiry, location, and purchase
+// date (pure interchangeability of *source*, since the amounts just sum).
+// For a "wholePiece" requirement it's same ingredient and real weight
+// instead (purchase logistics don't matter — two pieces bought on
+// different trips that happen to weigh the same are still fully
+// interchangeable) — see the wholePiece branch in buildRequirementsFromRows.
 export interface PantryGroup {
   key: string;
   members: PantryGroupMember[];
@@ -350,21 +353,62 @@ function buildRequirementsFromRows(
       const itemIngredientId = extractId(item.ingredient);
       if (!relevantIds.has(itemIngredientId)) continue;
 
-      const expiryKey = item.expiryDate ? new Date(item.expiryDate).toISOString().slice(0, 10) : "none";
-      const locationKey = extractId(item.storageLocation) || "none";
-      const purchaseKey = item.purchaseDate ? new Date(item.purchaseDate).toISOString().slice(0, 10) : "none";
-      const groupKey = `${itemIngredientId}|${item.quantityUnit}|${expiryKey}|${locationKey}|${purchaseKey}`;
+      const itemIngredient = typeof item.ingredient === "object" ? item.ingredient : null;
+
+      let groupKey: string;
+      let displayName: string;
+
+      if (isWholePiece) {
+        // Real weight is what actually distinguishes one piece from
+        // another here — purchase date/location/expiry don't, so two
+        // steaks logged in the same pantry-add batch (same date/location)
+        // still land in separate groups if they weigh differently, and the
+        // resolve-sources picker can tell them apart. Converted into the
+        // requirement's own weight unit first so e.g. "227g" and "0.227kg"
+        // collapse into the same group rather than looking distinct.
+        const weightUnit = needed.pieceWeightUnit || "g";
+        const itemConversions = getIngredientConversions(
+          ingredientMap.get(itemIngredientId) ?? ing,
+          globalConversions,
+          allIngredients,
+        );
+        const convertedWeight = convertUnits(
+          item.quantityAvailable ?? 0,
+          item.quantityUnit,
+          weightUnit,
+          itemConversions,
+        );
+        const weightLabel = convertedWeight != null
+          ? `${Math.round(convertedWeight)} ${weightUnit}`
+          : `${item.quantityAvailable} ${item.quantityUnit}`;
+        groupKey = convertedWeight != null
+          ? `${itemIngredientId}|${Math.round(convertedWeight)}${weightUnit}`
+          : `${itemIngredientId}|raw:${item.quantityAvailable}${item.quantityUnit}`;
+        displayName = `${itemIngredient?.name ?? ing.name} — ${weightLabel}`;
+      } else {
+        const expiryKey = item.expiryDate ? new Date(item.expiryDate).toISOString().slice(0, 10) : "none";
+        const locationKey = extractId(item.storageLocation) || "none";
+        const purchaseKey = item.purchaseDate ? new Date(item.purchaseDate).toISOString().slice(0, 10) : "none";
+        groupKey = `${itemIngredientId}|${item.quantityUnit}|${expiryKey}|${locationKey}|${purchaseKey}`;
+        displayName = itemIngredient?.name ?? ing.name;
+      }
 
       let group = groupMap.get(groupKey);
       if (!group) {
-        const itemIngredient = typeof item.ingredient === "object" ? item.ingredient : null;
         group = {
           members: [],
-          displayName: itemIngredient?.name ?? ing.name,
+          displayName,
           expiryDate: item.expiryDate ?? null,
           ingredientId: itemIngredientId,
         };
         groupMap.set(groupKey, group);
+      } else if (item.expiryDate && (!group.expiryDate || new Date(item.expiryDate) < new Date(group.expiryDate))) {
+        // A wholePiece group can now span several purchase dates, so its
+        // members' expiry dates can genuinely differ — keep the soonest
+        // one so the group still sorts (and gets auto-drained) as if that
+        // more time-sensitive stock existed, even though it truly doesn't
+        // matter *which* particular member ends up consumed.
+        group.expiryDate = item.expiryDate;
       }
       group.members.push({
         pantryItemId: item._id,
