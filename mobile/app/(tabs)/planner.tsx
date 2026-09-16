@@ -84,6 +84,7 @@ import {
 import {
   buildIngredientRequirements,
   getDefaultDeductionInstructions,
+  getExpandedRows,
   getResolvedDeductionInstructions,
   hasAmbiguity,
   requirementNeedsResolution,
@@ -749,8 +750,9 @@ export default function HomeScreen() {
     }
 
     const instructions = getDefaultDeductionInstructions(requirements);
+    const rows = getExpandedRows(entry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions);
     const confirmedNutrition = computeConfirmNutrition(
-      requirements, instructions, [], ingredientMap, pantryItems, conversions,
+      requirements, rows, instructions, [], ingredientMap, pantryItems, conversions,
     );
     void performConfirm(entry, instructions, [], confirmedNutrition);
   }
@@ -817,8 +819,11 @@ export default function HomeScreen() {
       // ones would silently skip deducting everything else.
       const instructions = getResolvedDeductionInstructions(pendingRequirements, selections);
       const conversions = appSettings?.unitConversions ?? [];
+      const rows = getExpandedRows(
+        pendingConfirmEntry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions,
+      );
       const confirmedNutrition = computeConfirmNutrition(
-        pendingRequirements, instructions, manualPieceEntries, ingredientMap, pantryItems, conversions,
+        pendingRequirements, rows, instructions, manualPieceEntries, ingredientMap, pantryItems, conversions,
       );
       await performConfirm(pendingConfirmEntry, instructions, manualPieceEntries, confirmedNutrition);
       setShowResolveModal(false);

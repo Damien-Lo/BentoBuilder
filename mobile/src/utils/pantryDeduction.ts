@@ -78,7 +78,12 @@ export interface DeductionInstruction {
   amount: number; // in the pantry item's own unit
 }
 
-interface RawRow {
+// Exported so nutrition computation (mealPlan.ts's computeConfirmNutrition)
+// can sum every quantity-mode row directly, rather than through
+// IngredientRequirement — which deliberately excludes isAlwaysAvailable
+// ingredients (salt, pepper, ...) for deduction/ambiguity purposes, but
+// still needs its real nutrition contribution counted.
+export interface RawRow {
   ingredientId: string;
   quantity: number;
   unit: string;
@@ -494,6 +499,31 @@ function buildRequirementsFromRows(
 // Rows are substitution-expanded first (see expandProducedIngredientRows)
 // so a shortfall of a recipe-produced ingredient is covered by its own raw
 // ingredients rather than left as an unfulfillable requirement.
+// The substitution-expanded row list an entry actually needs — every
+// ingredient line, including ones IngredientRequirement would otherwise
+// drop (isAlwaysAvailable seasoning-type ingredients aren't worth asking
+// the user to resolve or deducting stock for, but they still have real
+// nutrition). Exported so computeConfirmNutrition (mealPlan.ts) can sum
+// quantity-mode nutrition from the complete list rather than the
+// deduction-oriented, filtered one.
+export function getExpandedRows(
+  entry: MealPlanEntry,
+  recipeMap: Map<string, Recipe>,
+  ingredientMap: Map<string, Ingredient>,
+  allIngredients: Ingredient[],
+  pantryItems: PantryItem[],
+  globalConversions: CustomUnitConversion[],
+): RawRow[] {
+  return expandProducedIngredientRows(
+    gatherRows(entry, recipeMap),
+    ingredientMap,
+    allIngredients,
+    pantryItems,
+    recipeMap,
+    globalConversions,
+  );
+}
+
 export function buildIngredientRequirements(
   entry: MealPlanEntry,
   recipeMap: Map<string, Recipe>,
@@ -502,15 +532,7 @@ export function buildIngredientRequirements(
   pantryItems: PantryItem[],
   globalConversions: CustomUnitConversion[],
 ): IngredientRequirement[] {
-  const rows = gatherRows(entry, recipeMap);
-  const expandedRows = expandProducedIngredientRows(
-    rows,
-    ingredientMap,
-    allIngredients,
-    pantryItems,
-    recipeMap,
-    globalConversions,
-  );
+  const expandedRows = getExpandedRows(entry, recipeMap, ingredientMap, allIngredients, pantryItems, globalConversions);
   return buildRequirementsFromRows(expandedRows, ingredientMap, allIngredients, pantryItems, globalConversions);
 }
 

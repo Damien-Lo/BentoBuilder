@@ -8,7 +8,7 @@ import type { RestaurantMeal } from "@/src/services/restaurantMealApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { countQualifyingPantryPieces, getIngredientStockInUnit } from "./ingredientStock";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
-import type { DeductionInstruction, IngredientRequirement, ManualPieceInput } from "./pantryDeduction";
+import type { DeductionInstruction, IngredientRequirement, ManualPieceInput, RawRow } from "./pantryDeduction";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -311,6 +311,7 @@ export function computeConfirmedRecipeNutrition(
 // manual-entry / range-midpoint-fallback branches below account for.
 export function computeConfirmNutrition(
   requirements: IngredientRequirement[],
+  rows: RawRow[],
   instructions: DeductionInstruction[],
   manualPieceEntries: ManualPieceInput[],
   ingredientMap: Map<string, Ingredient>,
@@ -319,6 +320,22 @@ export function computeConfirmNutrition(
 ): DayNutrition {
   const totals: DayNutrition = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
   const pantryItemById = new Map(pantryItems.map((p) => [p._id, p]));
+
+  // Quantity-mode nutrition comes from the full expanded row list, not
+  // `requirements` — buildIngredientRequirements deliberately drops
+  // isAlwaysAvailable ingredients (salt, pepper, ...) since deduction and
+  // the resolve-sources overlay never need to consider untracked
+  // seasoning-type stock, but their real nutrition contribution (e.g.
+  // salt's sodium) still needs counting.
+  for (const row of rows) {
+    if (row.matchMode === "wholePiece") continue;
+    const ingredient = ingredientMap.get(row.ingredientId);
+    if (!ingredient) continue;
+    addScaled(
+      totals,
+      scaleIngredientNutrition(ingredient, row.quantity, row.unit, getIngredientConversions(ingredient, conversions)),
+    );
+  }
 
   const instructionsByIngredient = new Map<string, DeductionInstruction[]>();
   for (const instr of instructions) {
@@ -336,15 +353,17 @@ export function computeConfirmNutrition(
     manualByIngredient.set(m.ingredientId, list);
   }
 
+  // wholePiece nutrition still comes from `requirements` — matching a real
+  // deducted/manual weight per piece needs the per-ingredient aggregation
+  // already built there. A wholePiece ingredient being isAlwaysAvailable
+  // isn't a realistic combination (that flag is for continuous
+  // seasoning-type stock, not discrete physical pieces), so this doesn't
+  // reintroduce the drop the quantity-mode branch above just fixed.
   for (const req of requirements) {
+    if (req.matchMode !== "wholePiece") continue;
     const ingredient = ingredientMap.get(req.ingredientId);
     if (!ingredient) continue;
     const ingredientConversions = getIngredientConversions(ingredient, conversions);
-
-    if (req.matchMode !== "wholePiece") {
-      addScaled(totals, scaleIngredientNutrition(ingredient, req.neededQuantity, req.unit, ingredientConversions));
-      continue;
-    }
 
     let covered = 0;
     for (const instr of instructionsByIngredient.get(req.ingredientId) ?? []) {
