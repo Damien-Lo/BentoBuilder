@@ -8,6 +8,7 @@ import type { RestaurantMeal } from "@/src/services/restaurantMealApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { countQualifyingPantryPieces, getIngredientStockInUnit } from "./ingredientStock";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
+import type { DeductionInstruction, IngredientRequirement, ManualPieceInput } from "./pantryDeduction";
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -245,20 +246,24 @@ function addScaled(totals: DayNutrition, n: ScaledNutrition) {
   if (n.sodium)   totals.sodium   += n.sodium;
 }
 
-// A confirmed recipe entry's nutrition, computed from exactly what was
-// really deducted from pantry stock (the specific ingredient and amount of
-// whichever real item(s) got used) instead of the recipe's cached
-// snapshot, which only ever reflects its declared/assumed quantities —
-// e.g. a "1 fillet" line always contributes the same assumed weight in the
-// snapshot, even though the real fillet you actually cooked might have
-// been smaller or larger. Returns null when there's nothing to compute
-// from (no deductions recorded, or none came back populated), so the
-// caller falls back to the snapshot exactly as before. Exported so the
-// planner's per-entry display can use the same figure as the day total.
+// A confirmed recipe entry's real nutrition — reads the snapshot computed
+// once, with full context, right when the entry was confirmed (see
+// computeConfirmNutrition below) rather than trying to re-derive it here,
+// which would need the whole recipe/pantry catalog this function alone
+// doesn't have. Falls back to a narrower reconstruction from stockDeductions
+// / manualPieceEntries alone for entries confirmed before confirmedNutrition
+// existed — real, but only covers ingredients that happened to get a real
+// deduction or a manual entry; anything else (e.g. a quantity-mode line
+// with no pantry stock at all) silently contributes nothing in that legacy
+// path, unlike the real snapshot which always covers every ingredient.
+// Returns null when there's nothing to compute from at all, so the caller
+// falls back to the recipe's cached snapshot exactly as before.
 export function computeConfirmedRecipeNutrition(
   entry: MealPlanEntry,
   conversions: CustomUnitConversion[],
 ): DayNutrition | null {
+  if (entry.confirmedNutrition) return entry.confirmedNutrition;
+
   const deductions = entry.stockDeductions ?? [];
   const manualEntries = entry.manualPieceEntries ?? [];
   if (!deductions.length && !manualEntries.length) return null;
@@ -291,6 +296,83 @@ export function computeConfirmedRecipeNutrition(
     hasAny = true;
   }
   return hasAny ? totals : null;
+}
+
+// The real, final nutrition for a set of resolved ingredient requirements —
+// computed once, right at confirm time, with every piece of context this
+// needs (real deducted weights, any typed-in manual weights, and the
+// recipe's own assumed amount for whatever's left uncovered) so the result
+// can be stored on the entry (MealPlanEntry.confirmedNutrition) and read
+// back trivially everywhere else afterward. A quantity-mode line always
+// uses its recipe-derived neededQuantity, regardless of pantry coverage —
+// real vs. assumed produces identical nutrition per unit for a continuous
+// amount, so there's nothing to blend; only wholePiece varies by which
+// actual piece (real weight) was used, which is what the real-deduction /
+// manual-entry / range-midpoint-fallback branches below account for.
+export function computeConfirmNutrition(
+  requirements: IngredientRequirement[],
+  instructions: DeductionInstruction[],
+  manualPieceEntries: ManualPieceInput[],
+  ingredientMap: Map<string, Ingredient>,
+  pantryItems: PantryItem[],
+  conversions: CustomUnitConversion[],
+): DayNutrition {
+  const totals: DayNutrition = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
+  const pantryItemById = new Map(pantryItems.map((p) => [p._id, p]));
+
+  const instructionsByIngredient = new Map<string, DeductionInstruction[]>();
+  for (const instr of instructions) {
+    const ingredientId = pantryItemById.get(instr.pantryItemId)?.ingredient._id;
+    if (!ingredientId) continue;
+    const list = instructionsByIngredient.get(ingredientId) ?? [];
+    list.push(instr);
+    instructionsByIngredient.set(ingredientId, list);
+  }
+
+  const manualByIngredient = new Map<string, ManualPieceInput[]>();
+  for (const m of manualPieceEntries) {
+    const list = manualByIngredient.get(m.ingredientId) ?? [];
+    list.push(m);
+    manualByIngredient.set(m.ingredientId, list);
+  }
+
+  for (const req of requirements) {
+    const ingredient = ingredientMap.get(req.ingredientId);
+    if (!ingredient) continue;
+    const ingredientConversions = getIngredientConversions(ingredient, conversions);
+
+    if (req.matchMode !== "wholePiece") {
+      addScaled(totals, scaleIngredientNutrition(ingredient, req.neededQuantity, req.unit, ingredientConversions));
+      continue;
+    }
+
+    let covered = 0;
+    for (const instr of instructionsByIngredient.get(req.ingredientId) ?? []) {
+      const item = pantryItemById.get(instr.pantryItemId);
+      if (!item) continue;
+      addScaled(totals, scaleIngredientNutrition(ingredient, instr.amount, item.quantityUnit, ingredientConversions));
+      covered += 1;
+    }
+    for (const manual of manualByIngredient.get(req.ingredientId) ?? []) {
+      addScaled(totals, scaleIngredientNutrition(ingredient, manual.weight, manual.unit, ingredientConversions));
+      covered += 1;
+    }
+    // Defensive only — the resolve-sources flow should always ask for
+    // whatever real stock can't cover, but fall back to the recipe's own
+    // assumed range midpoint for any piece that still isn't accounted for
+    // (e.g. an entry confirmed via the fully-automatic path before this
+    // fallback existed) rather than silently under-counting it.
+    const uncovered = Math.max(0, req.neededQuantity - covered);
+    if (uncovered > 0) {
+      const midpoint = ((req.pieceMinWeight ?? 0) + (req.pieceMaxWeight ?? 0)) / 2;
+      addScaled(
+        totals,
+        scaleIngredientNutrition(ingredient, midpoint * uncovered, req.pieceWeightUnit || "g", ingredientConversions),
+      );
+    }
+  }
+
+  return totals;
 }
 
 export function computeDayNutrition(entries: MealPlanEntry[], conversions: CustomUnitConversion[] = []): DayNutrition {

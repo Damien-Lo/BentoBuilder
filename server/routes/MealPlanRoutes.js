@@ -222,6 +222,7 @@ router.patch("/:id", async (req, res) => {
  * Body: {
  *   deductions: [{ pantryItem: "<id>", amount: Number }, ...],
  *   manualPieceEntries: [{ ingredient: "<id>", weight: Number, weightUnit: String }, ...],
+ *   confirmedNutrition: { calories, protein, carbs, fats, fiber, sodium },
  * }
  *
  * The client decides WHICH pantry items to draw from (brother-grouping,
@@ -235,6 +236,11 @@ router.patch("/:id", async (req, res) => {
  * but never logged into pantry — no pantry item exists for these, so
  * they're stored as-is with no stock mutation at all, purely so the
  * confirmed entry's nutrition can still reflect the real weight typed in.
+ *
+ * confirmedNutrition is the real, final total the client already computed
+ * from all of the above plus the recipe's own catalog (which this route
+ * doesn't have loaded) — stored as-is, same trust model as the deductions
+ * themselves, so every reader can show it without re-deriving it.
  */
 router.post("/:id/confirm", async (req, res) => {
   try {
@@ -273,8 +279,22 @@ router.post("/:id/confirm", async (req, res) => {
       .map(({ ingredient, weight, weightUnit }) => ({ ingredient, weight: Number(weight), weightUnit }))
       .filter(({ ingredient, weight, weightUnit }) => ingredient && Number.isFinite(weight) && weight > 0 && weightUnit);
 
+    const nutrition = req.body.confirmedNutrition;
+    const confirmedNutrition = nutrition && ["calories", "protein", "carbs", "fats", "fiber", "sodium"]
+      .every((key) => Number.isFinite(Number(nutrition[key])))
+      ? {
+          calories: Number(nutrition.calories),
+          protein: Number(nutrition.protein),
+          carbs: Number(nutrition.carbs),
+          fats: Number(nutrition.fats),
+          fiber: Number(nutrition.fiber),
+          sodium: Number(nutrition.sodium),
+        }
+      : null;
+
     entry.stockDeductions = ledger;
     entry.manualPieceEntries = manualLedger;
+    entry.confirmedNutrition = confirmedNutrition;
     entry.status = "confirmed";
     await entry.save();
 
@@ -299,6 +319,7 @@ router.post("/:id/unconfirm", async (req, res) => {
 
     await reverseStockDeductions(entry);
     entry.manualPieceEntries = [];
+    entry.confirmedNutrition = null;
     entry.status = "planned";
     await entry.save();
 

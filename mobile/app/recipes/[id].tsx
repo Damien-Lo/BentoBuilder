@@ -73,9 +73,114 @@ function getIngredientName(ingredient: string | PopulatedIngredient): string {
   return ingredient.name;
 }
 
+function ingredientRefId(ingredient: string | PopulatedIngredient): string {
+  return typeof ingredient === "string" ? ingredient : ingredient._id;
+}
+
+// A meal-prep ingredient's own recipe, nested read-only underneath its row
+// once expanded — allRecipes (the list endpoint) doesn't populate
+// ingredientList.ingredient, so names are resolved via ingredientMap
+// rather than assumed to already be objects. Recurses for a prep nested
+// inside another prep (own expand state per instance, so expanding one
+// doesn't affect a sibling at the same depth).
+function NestedIngredientList({
+  ingredientList,
+  ingredientMap,
+  recipeMap,
+}: {
+  ingredientList: Recipe["ingredientList"];
+  ingredientMap: Map<string, Ingredient>;
+  recipeMap: Map<string, Recipe>;
+}) {
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  function toggle(index: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }
+
+  return (
+    <View className="pl-5">
+      {ingredientList.map((line, index) => {
+        const ingredient = ingredientMap.get(ingredientRefId(line.ingredient));
+        const childRecipeId = ingredient?.isMealPrep ? referenceId(ingredient.productionRecipe) : null;
+        const childRecipe = childRecipeId ? recipeMap.get(childRecipeId) : null;
+        const isExpanded = expanded.has(index);
+        const isWholePiece = line.matchMode === "wholePiece";
+
+        return (
+          <View key={index} className="border-t border-slate-100">
+            <Pressable
+              className="flex-row items-center py-2"
+              disabled={!childRecipe}
+              onPress={() => toggle(index)}
+            >
+              <View className="w-4 items-center">
+                {childRecipe && (
+                  <Ionicons name={isExpanded ? "chevron-down" : "chevron-forward"} size={13} color="#94A3B8" />
+                )}
+              </View>
+              <Text className="ml-1.5 flex-1 text-sm text-slate-700" numberOfLines={1}>
+                {ingredient?.name ?? "Unknown ingredient"}
+              </Text>
+              <Text className="ml-2 text-xs text-slate-400">
+                {line.quantity}
+                {line.unit ? ` ${line.unit}` : ""}
+                {isWholePiece ? ` (${line.pieceMinWeight}-${line.pieceMaxWeight}${line.pieceWeightUnit})` : ""}
+              </Text>
+            </Pressable>
+            {isExpanded && childRecipe && (
+              <NestedIngredientList
+                ingredientList={childRecipe.ingredientList}
+                ingredientMap={ingredientMap}
+                recipeMap={recipeMap}
+              />
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function RecipeDetailPage() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const {
+    id,
+    loggedCalories,
+    loggedProtein,
+    loggedCarbs,
+    loggedFats,
+    loggedFiber,
+    loggedSodium,
+  } = useLocalSearchParams<{
+    id: string;
+    loggedCalories?: string;
+    loggedProtein?: string;
+    loggedCarbs?: string;
+    loggedFats?: string;
+    loggedFiber?: string;
+    loggedSodium?: string;
+  }>();
   const router = useRouter();
+
+  // Set only when arriving from a confirmed planner entry (see
+  // planner.tsx's handleViewFullItem) — this specific meal's real
+  // nutrition, which can differ from the recipe's own generic snapshot
+  // below (the recipe's assumed amounts, not what was actually used).
+  const loggedNutrition = loggedCalories != null
+    ? {
+        calories: Number(loggedCalories),
+        protein: Number(loggedProtein),
+        carbs: Number(loggedCarbs),
+        fats: Number(loggedFats),
+        fiber: Number(loggedFiber),
+        sodium: Number(loggedSodium),
+      }
+    : null;
 
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
@@ -85,6 +190,9 @@ export default function RecipeDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPerServing, setShowPerServing] = useState(true);
+  // Which top-level ingredient rows are expanded to show their own
+  // meal-prep recipe's ingredients underneath — see NestedIngredientList.
+  const [expandedIngredientRows, setExpandedIngredientRows] = useState<Set<number>>(new Set());
   const [showRateModal, setShowRateModal] = useState(false);
   const [savingScore, setSavingScore] = useState(false);
   const [showAllScores, setShowAllScores] = useState(false);
@@ -772,12 +880,27 @@ export default function RecipeDetailPage() {
                   barState = remaining > threshold ? "green" : remaining >= 0 ? "yellow" : "red";
                 }
 
+                const childRecipeId = ing?.isMealPrep ? referenceId(ing.productionRecipe) : null;
+                const childRecipe = childRecipeId ? recipeMap.get(childRecipeId) : null;
+                const isRowExpanded = expandedIngredientRows.has(index);
+
                 return (
                   <View
                     key={index}
                     className={index < recipe.ingredientList.length - 1 ? "border-b border-slate-100" : ""}
                   >
-                    <View className="flex-row items-center px-4 py-3">
+                    <Pressable
+                      className="flex-row items-center px-4 py-3"
+                      disabled={!childRecipe}
+                      onPress={() =>
+                        setExpandedIngredientRows((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(index)) next.delete(index);
+                          else next.add(index);
+                          return next;
+                        })
+                      }
+                    >
                       <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
                         <Ionicons name="nutrition-outline" size={15} color="#2563EB" />
                       </View>
@@ -785,6 +908,15 @@ export default function RecipeDetailPage() {
                       <Text className="ml-3 flex-1 text-base text-slate-800">
                         {getIngredientName(entry.ingredient)}
                       </Text>
+
+                      {childRecipe && (
+                        <Ionicons
+                          name={isRowExpanded ? "chevron-down" : "chevron-forward"}
+                          size={16}
+                          color="#94A3B8"
+                          style={{ marginRight: 6 }}
+                        />
+                      )}
 
                       <View className="items-end">
                         <Text className="text-sm font-semibold text-slate-500">
@@ -832,7 +964,7 @@ export default function RecipeDetailPage() {
                           );
                         })()}
                       </View>
-                    </View>
+                    </Pressable>
 
                     {/* Pantry availability bar */}
                     <View className="h-[3px] w-full bg-slate-100">
@@ -846,9 +978,45 @@ export default function RecipeDetailPage() {
                         }
                       />
                     </View>
+
+                    {isRowExpanded && childRecipe && (
+                      <View className="bg-slate-50 px-4 py-2">
+                        <NestedIngredientList
+                          ingredientList={childRecipe.ingredientList}
+                          ingredientMap={ingredientMap}
+                          recipeMap={recipeMap}
+                        />
+                      </View>
+                    )}
                   </View>
                 );
               })}
+            </View>
+          </>
+        )}
+
+        {/* This specific logged meal's real nutrition, when arriving from a
+            confirmed planner entry — distinct from (and can differ from)
+            the recipe's own generic snapshot below, which only reflects
+            its assumed/authored amounts, not what was actually used. */}
+        {loggedNutrition && (
+          <>
+            <Text className="text-sm font-bold uppercase tracking-wide text-slate-500 mt-6 mb-2">
+              Your Logged Meal
+            </Text>
+            <View className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
+              <Text className="text-xs leading-4 text-blue-700">
+                Based on the real ingredients/weights you confirmed — not this recipe&apos;s
+                general estimate below.
+              </Text>
+              <View className="mt-2 flex-row flex-wrap gap-x-4 gap-y-1">
+                <Text className="text-sm font-semibold text-blue-900">
+                  {Math.round(loggedNutrition.calories)} cal
+                </Text>
+                <Text className="text-sm text-blue-800">{round1(loggedNutrition.protein)}g protein</Text>
+                <Text className="text-sm text-blue-800">{round1(loggedNutrition.carbs)}g carbs</Text>
+                <Text className="text-sm text-blue-800">{round1(loggedNutrition.fats)}g fat</Text>
+              </View>
             </View>
           </>
         )}
@@ -857,7 +1025,7 @@ export default function RecipeDetailPage() {
         {nutritionRows.length > 0 && (
           <>
             <Text className="text-sm font-bold uppercase tracking-wide text-slate-500 mt-6 mb-2">
-              Nutrition
+              Nutrition{loggedNutrition ? " (recipe estimate)" : ""}
             </Text>
 
             <View className="rounded-2xl border border-slate-200 bg-white overflow-hidden">

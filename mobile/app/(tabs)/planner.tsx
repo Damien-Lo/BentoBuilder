@@ -48,6 +48,7 @@ import {
   type CreateMealPlanEntryInput,
   type LastEntryBySlot,
   type LastUsedMap,
+  type ConfirmedNutrition,
   type MealPlanEntry,
   type MealPlanEntryStatus,
   type MealSlot,
@@ -60,6 +61,7 @@ import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveI
 import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
 import {
   computeConfirmedRecipeNutrition,
+  computeConfirmNutrition,
   computeDayNutrition,
   divideNutrition,
   friendlyDayLabel,
@@ -225,6 +227,11 @@ export default function HomeScreen() {
   // pantry deduction has a genuine choice (2+ possible sources) for at
   // least one ingredient.
   const [pendingConfirmEntry, setPendingConfirmEntry] = useState<MealPlanEntry | null>(null);
+  // The full requirement list for pendingConfirmEntry — needed so resolving
+  // just the ambiguous ones (below) can still auto-drain everything else
+  // instead of silently skipping it. ambiguousRequirements is the filtered
+  // subset actually rendered in the resolve-sources overlay.
+  const [pendingRequirements, setPendingRequirements] = useState<IngredientRequirement[]>([]);
   const [ambiguousRequirements, setAmbiguousRequirements] = useState<IngredientRequirement[]>([]);
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [resolvingSaving, setResolvingSaving] = useState(false);
@@ -682,10 +689,11 @@ export default function HomeScreen() {
     entry: MealPlanEntry,
     instructions: DeductionInstruction[],
     manualPieceEntries: ManualPieceInput[] = [],
+    confirmedNutrition?: ConfirmedNutrition,
   ) {
     swipeableRefs.get(entry._id)?.close();
     try {
-      const updated = await confirmMealPlanEntry(entry._id, instructions, manualPieceEntries);
+      const updated = await confirmMealPlanEntry(entry._id, instructions, manualPieceEntries, confirmedNutrition);
       setEntries(prev => prev.map(e => (e._id === entry._id ? updated : e)));
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not confirm.");
@@ -718,12 +726,17 @@ export default function HomeScreen() {
     if (hasAmbiguity(requirements)) {
       swipeableRefs.get(entry._id)?.close();
       setPendingConfirmEntry(entry);
+      setPendingRequirements(requirements);
       setAmbiguousRequirements(requirements.filter(requirementNeedsResolution));
       setShowResolveModal(true);
       return;
     }
 
-    void performConfirm(entry, getDefaultDeductionInstructions(requirements));
+    const instructions = getDefaultDeductionInstructions(requirements);
+    const confirmedNutrition = computeConfirmNutrition(
+      requirements, instructions, [], ingredientMap, pantryItems, conversions,
+    );
+    void performConfirm(entry, instructions, [], confirmedNutrition);
   }
 
   // Adds this entry's pantry shortfall to the grocery list — a manual,
@@ -782,10 +795,19 @@ export default function HomeScreen() {
     if (!pendingConfirmEntry) return;
     setResolvingSaving(true);
     try {
-      const instructions = getResolvedDeductionInstructions(ambiguousRequirements, selections);
-      await performConfirm(pendingConfirmEntry, instructions, manualPieceEntries);
+      // pendingRequirements (the FULL list, not just the ambiguous subset
+      // rendered in the overlay) so requirements that never needed a
+      // choice still get auto-drained here — passing only the ambiguous
+      // ones would silently skip deducting everything else.
+      const instructions = getResolvedDeductionInstructions(pendingRequirements, selections);
+      const conversions = appSettings?.unitConversions ?? [];
+      const confirmedNutrition = computeConfirmNutrition(
+        pendingRequirements, instructions, manualPieceEntries, ingredientMap, pantryItems, conversions,
+      );
+      await performConfirm(pendingConfirmEntry, instructions, manualPieceEntries, confirmedNutrition);
       setShowResolveModal(false);
       setPendingConfirmEntry(null);
+      setPendingRequirements([]);
     } finally {
       setResolvingSaving(false);
     }
@@ -958,7 +980,28 @@ export default function HomeScreen() {
   function handleViewFullItem() {
     if (!editEntry) return;
     if (editEntry.recipe) {
-      router.push({ pathname: "/recipes/[id]", params: { id: editEntry.recipe._id } });
+      // A confirmed entry's real nutrition (computeConfirmNutrition, from
+      // the actual weights used) can differ from the recipe's own generic
+      // cached snapshot (its assumed/authored amounts) — pass it through so
+      // the catalog page can show this specific meal's real numbers instead
+      // of implying the snapshot is what got eaten.
+      const logged = editEntry.status === "confirmed" ? editEntry.confirmedNutrition : null;
+      router.push({
+        pathname: "/recipes/[id]",
+        params: {
+          id: editEntry.recipe._id,
+          ...(logged
+            ? {
+                loggedCalories: String(logged.calories),
+                loggedProtein: String(logged.protein),
+                loggedCarbs: String(logged.carbs),
+                loggedFats: String(logged.fats),
+                loggedFiber: String(logged.fiber),
+                loggedSodium: String(logged.sodium),
+              }
+            : {}),
+        },
+      });
     } else if (editEntry.ingredient) {
       router.push({ pathname: "/ingredients/edit/[id]", params: { id: editEntry.ingredient._id } });
     } else if (editEntry.restaurantMeal) {
@@ -2713,6 +2756,7 @@ export default function HomeScreen() {
         onCancel={() => {
           setShowResolveModal(false);
           setPendingConfirmEntry(null);
+          setPendingRequirements([]);
         }}
         onConfirm={(selections, manualPieceEntries) => void handleResolvedConfirm(selections, manualPieceEntries)}
       />

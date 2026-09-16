@@ -22,6 +22,25 @@ const manualPieceEntrySchema = new mongoose.Schema(
   { _id: false },
 );
 
+// The real, final nutrition for a confirmed entry — computed client-side
+// once, with full context (real deducted weights, any typed-in manual
+// weights, the recipe's own assumed amount for anything else), at the
+// moment of confirming, and just stored as-is here (same trust model as
+// stockDeductions/manualPieceEntries — the client decides, this just
+// applies/stores it) so every reader shows the same number without
+// re-deriving it from a partial view of the data.
+const confirmedNutritionSchema = new mongoose.Schema(
+  {
+    calories: { type: Number, required: true },
+    protein:  { type: Number, required: true },
+    carbs:    { type: Number, required: true },
+    fats:     { type: Number, required: true },
+    fiber:    { type: Number, required: true },
+    sodium:   { type: Number, required: true },
+  },
+  { _id: false },
+);
+
 const restaurantDishSelectionSchema = new mongoose.Schema(
   {
     dish: { type: mongoose.Schema.Types.ObjectId, required: true },
@@ -81,6 +100,10 @@ const mealPlanEntrySchema = new mongoose.Schema(
     // Populated alongside stockDeductions by POST /:id/confirm, cleared by
     // POST /:id/unconfirm — see manualPieceEntrySchema above.
     manualPieceEntries: { type: [manualPieceEntrySchema], default: [] },
+
+    // See confirmedNutritionSchema above. null while planned, or for an
+    // entry confirmed before this field existed.
+    confirmedNutrition: { type: confirmedNutritionSchema, default: null },
 
     notes:      { type: String, trim: true, default: "" },
     isArchived: { type: Boolean, default: false },
