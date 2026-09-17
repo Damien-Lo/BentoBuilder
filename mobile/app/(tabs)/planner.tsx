@@ -19,7 +19,7 @@ import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture
 
 import { getMeals, type Meal } from "@/src/services/mealApi";
 import { addRecipeScore, getRecipeById, getRecipes, type Recipe } from "@/src/services/recipeApi";
-import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import { addIngredientScore, getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import {
   estimateDishesFromPhoto,
@@ -752,8 +752,9 @@ export default function HomeScreen() {
   // just resolved it), either confirm right away (the manual toggle/swipe
   // path) or — rateFirst — prompt for a rating first, skippable, since
   // adding something already-confirmed has no separate gesture prompting
-  // for one and is exactly where a rating is easiest to forget. Only
-  // recipes get rated; an ingredient/restaurant/meal entry just confirms.
+  // for one and is exactly where a rating is easiest to forget. Recipes and
+  // directly-logged ingredients (e.g. a protein shake) get rated — a
+  // restaurant visit or multi-course meal just confirms.
   function finishConfirm(
     entry: MealPlanEntry,
     instructions: DeductionInstruction[],
@@ -761,7 +762,7 @@ export default function HomeScreen() {
     confirmedNutrition: ConfirmedNutrition,
     rateFirst: boolean,
   ) {
-    if (rateFirst && entry.recipe) {
+    if (rateFirst && (entry.recipe || entry.ingredient)) {
       setPendingRatingConfirm({ entry, instructions, manualPieceEntries, confirmedNutrition });
       setRateConfirmEntry(entry);
       return;
@@ -880,7 +881,7 @@ export default function HomeScreen() {
       // rateFirst carried through from handleConfirmEntry — piece-size
       // resolution just finished, so the rating prompt (skippable) comes
       // next, before the pantry actually gets touched.
-      if (rateFirst && entry.recipe) {
+      if (rateFirst && (entry.recipe || entry.ingredient)) {
         setPendingRatingConfirm({ entry, instructions, manualPieceEntries, confirmedNutrition });
         setRateConfirmEntry(entry);
       } else {
@@ -915,10 +916,13 @@ export default function HomeScreen() {
   }
 
   async function handleSubmitRateAndConfirm(value: number) {
-    if (!rateConfirmEntry?.recipe) return;
+    const recipeId = rateConfirmEntry?.recipe?._id;
+    const ingredientId = rateConfirmEntry?.ingredient?._id;
+    if (!recipeId && !ingredientId) return;
     setRatingSaving(true);
     try {
-      await addRecipeScore(rateConfirmEntry.recipe._id, value);
+      if (recipeId) await addRecipeScore(recipeId, value);
+      else if (ingredientId) await addIngredientScore(ingredientId, value);
       finishRating();
     } catch (err) {
       Alert.alert(
@@ -1224,7 +1228,7 @@ export default function HomeScreen() {
           </Pressable>
         )}
         renderRightActions={() =>
-          entry.status === "planned" && entry.recipe ? (
+          entry.status === "planned" && (entry.recipe || entry.ingredient) ? (
             <View className="mb-2 flex-row gap-2">
               <Pressable
                 className="w-20 items-center justify-center rounded-2xl bg-blue-600 active:opacity-80"
@@ -2896,8 +2900,14 @@ export default function HomeScreen() {
 
       <RateAndConfirmModal
         visible={!!rateConfirmEntry}
-        recipeName={rateConfirmEntry?.recipe?.name ?? ""}
+        itemName={rateConfirmEntry?.recipe?.name ?? rateConfirmEntry?.ingredient?.name ?? ""}
         saving={ratingSaving}
+        // No "back out" option once this was auto-prompted on top of an
+        // already-decided confirm (adding directly as confirmed) — dismissing
+        // any way then still confirms, via onSkip, same as the explicit
+        // button. The pre-existing swipe-to-rate-and-confirm action (nothing
+        // stashed in pendingRatingConfirm) keeps its real Cancel.
+        allowCancel={!pendingRatingConfirm}
         onCancel={() => {
           setRateConfirmEntry(null);
           setPendingRatingConfirm(null);

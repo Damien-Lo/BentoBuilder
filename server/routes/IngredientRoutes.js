@@ -331,4 +331,85 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+/**
+ * POST /api/ingredients/:id/scores
+ * Add a manual (or meal-plan-linked) rating — mirrors POST
+ * /api/recipes/:id/scores exactly. Returns just the updated scores array,
+ * same reasoning as the recipe route (the client merges this in rather
+ * than replacing the whole ingredient with an unpopulated one).
+ */
+router.post("/:id/scores", async (req, res) => {
+  try {
+    const parsedValue = Number(req.body.value);
+    if (!Number.isFinite(parsedValue) || parsedValue < 1 || parsedValue > 10) {
+      return res.status(400).json({
+        success: false,
+        message: "Score must be a number between 1 and 10",
+      });
+    }
+
+    const ingredient = await Ingredient.findByIdAndUpdate(
+      req.params.id,
+      {
+        $push: {
+          scores: {
+            value: parsedValue,
+            ratedAt: req.body.ratedAt || undefined,
+            mealPlanEntry: req.body.mealPlanEntry || null,
+          },
+        },
+      },
+      { new: true, runValidators: true },
+    );
+
+    if (!ingredient) {
+      return res.status(404).json({
+        success: false,
+        message: "Ingredient not found",
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      data: ingredient.scores,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/ingredients/:id/scores/:scoreId
+ * Remove a single rating (e.g. to undo a mistaken entry).
+ */
+router.delete("/:id/scores/:scoreId", async (req, res) => {
+  try {
+    const ingredient = await Ingredient.findByIdAndUpdate(
+      req.params.id,
+      { $pull: { scores: { _id: req.params.scoreId } } },
+      { new: true },
+    );
+
+    if (!ingredient) {
+      return res.status(404).json({
+        success: false,
+        message: "Ingredient not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: ingredient.scores,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid ingredient or score ID",
+    });
+  }
+});
+
 export default router;

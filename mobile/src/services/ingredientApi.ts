@@ -12,6 +12,15 @@ export interface IngredientNutrition {
   sodium?: number;
 }
 
+export interface IngredientScore {
+  _id: string;
+  value: number;
+  ratedAt: string;
+  // Set once the meal planner can prompt for a rating — always null for a
+  // manually-added score.
+  mealPlanEntry?: string | null;
+}
+
 export interface Ingredient {
   _id: string;
   name: string;
@@ -77,6 +86,12 @@ export interface Ingredient {
   tags?: (string | SelectOption)[];
 
   isArchived?: boolean;
+
+  // Raw rating history, most-recent last — same shape/convention as
+  // Recipe.scores. Only meaningful for an ingredient actually logged as its
+  // own meal-plan entry (eaten directly, e.g. a protein shake) rather than
+  // one that only ever shows up as a line inside a recipe.
+  scores?: IngredientScore[];
 
   createdAt?: string;
   updatedAt?: string;
@@ -372,4 +387,31 @@ export async function deleteIngredientPermanently(ingredientId: string): Promise
   );
 
   await parseResponse<{ success: boolean; message: string }>(response);
+}
+
+// Both return the updated scores array (not the whole ingredient) — same
+// reasoning as Recipe's addRecipeScore/deleteRecipeScore.
+export async function addIngredientScore(
+  ingredientId: string,
+  value: number,
+  ratedAt?: string,
+): Promise<IngredientScore[]> {
+  const response = await fetch(`${API_BASE_URL}/api/ingredients/${ingredientId}/scores`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value, ratedAt }),
+  });
+  const result = await parseResponse<{ success: boolean; data: IngredientScore[] }>(response);
+  return result.data;
+}
+
+export async function deleteIngredientScore(
+  ingredientId: string,
+  scoreId: string,
+): Promise<IngredientScore[]> {
+  const response = await fetch(`${API_BASE_URL}/api/ingredients/${ingredientId}/scores/${scoreId}`, {
+    method: "DELETE",
+  });
+  const result = await parseResponse<{ success: boolean; data: IngredientScore[] }>(response);
+  return result.data;
 }

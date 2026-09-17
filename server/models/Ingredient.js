@@ -53,6 +53,36 @@ const unitConversionSchema = new mongoose.Schema(
   { _id: false },
 );
 
+// Mirrors Recipe.js's scoreEntrySchema exactly — kept as raw individual
+// entries rather than a rolling average so nothing is ever thrown away.
+// Only meaningful for an ingredient that actually gets logged as its own
+// meal-plan entry (eaten directly, e.g. a protein shake) rather than one
+// that only ever shows up as a line inside a recipe (salt, garlic, ...) —
+// nothing enforces that distinction here, it just naturally never comes up
+// for the latter since they're never confirmed as their own entry.
+const scoreEntrySchema = new mongoose.Schema(
+  {
+    value: {
+      type: Number,
+      min: 1,
+      max: 10,
+      required: true,
+    },
+    ratedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    // Set once the meal planner can prompt "rate what you just ate" —
+    // always null for a manually-added score.
+    mealPlanEntry: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MealPlanEntry",
+      default: null,
+    },
+  },
+  { timestamps: true },
+);
+
 const ingredientSchema = new mongoose.Schema(
   {
     name: {
@@ -224,6 +254,11 @@ const ingredientSchema = new mongoose.Schema(
     isArchived: {
       type: Boolean,
       default: false,
+    },
+
+    scores: {
+      type: [scoreEntrySchema],
+      default: [],
     },
   },
   {
