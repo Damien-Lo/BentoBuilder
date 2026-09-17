@@ -221,9 +221,21 @@ export default function HomeScreen() {
   const [infoLoading, setInfoLoading] = useState(false);
 
   // Rate-then-confirm overlay for a planned recipe entry — swiping it reveals
-  // a "Rate" button alongside the plain "Confirm" one.
+  // a "Rate" button alongside the plain "Confirm" one. Also used, in the
+  // opposite order (resolve piece size first, then rate), when adding an
+  // entry directly as confirmed — see handleConfirmEntry's rateFirst param.
   const [rateConfirmEntry, setRateConfirmEntry] = useState<MealPlanEntry | null>(null);
   const [ratingSaving, setRatingSaving] = useState(false);
+  // Set only for the "rate after resolving" order — holds everything
+  // finishRating needs to actually confirm once rating is done/skipped, so
+  // it isn't recomputed (and doesn't need to re-derive whether resolution
+  // was needed) after the rating step closes.
+  const [pendingRatingConfirm, setPendingRatingConfirm] = useState<{
+    entry: MealPlanEntry;
+    instructions: DeductionInstruction[];
+    manualPieceEntries: ManualPieceInput[];
+    confirmedNutrition: ConfirmedNutrition;
+  } | null>(null);
 
   // Resolve-sources overlay — only shown when confirming an entry whose
   // pantry deduction has a genuine choice (2+ possible sources) for at
@@ -237,6 +249,10 @@ export default function HomeScreen() {
   const [ambiguousRequirements, setAmbiguousRequirements] = useState<IngredientRequirement[]>([]);
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [resolvingSaving, setResolvingSaving] = useState(false);
+  // Whether resolving pendingConfirmEntry's ambiguity should lead straight
+  // to confirming (the manual toggle/swipe path) or to the rating prompt
+  // first (the "just added, already confirmed" path) — see handleConfirmEntry.
+  const [pendingRateFirst, setPendingRateFirst] = useState(false);
 
   const dateStripRef = useRef<FlatList<string>>(null);
   const swipeableRefs = useRef(new Map<string, SwipeableMethods>()).current;
@@ -489,7 +505,12 @@ export default function HomeScreen() {
     const wantsConfirmed = input.status === "confirmed";
     const entry = await createMealPlanEntry({ ...input, status: "planned" });
     setEntries(prev => [...prev, entry]);
-    if (wantsConfirmed) handleConfirmEntry(entry);
+    // rateFirst: true — adding something already-confirmed is exactly the
+    // moment a rating is easiest to forget (there's no separate swipe
+    // gesture prompting for it), so ask here, after any piece-size
+    // resolution and before the pantry actually gets touched. Skippable —
+    // see RateAndConfirmModal's onSkip.
+    if (wantsConfirmed) handleConfirmEntry(entry, true);
     return entry;
   }
 
@@ -727,14 +748,37 @@ export default function HomeScreen() {
     }
   }
 
+  // Once instructions/nutrition are settled (no ambiguity, or the overlay
+  // just resolved it), either confirm right away (the manual toggle/swipe
+  // path) or — rateFirst — prompt for a rating first, skippable, since
+  // adding something already-confirmed has no separate gesture prompting
+  // for one and is exactly where a rating is easiest to forget. Only
+  // recipes get rated; an ingredient/restaurant/meal entry just confirms.
+  function finishConfirm(
+    entry: MealPlanEntry,
+    instructions: DeductionInstruction[],
+    manualPieceEntries: ManualPieceInput[],
+    confirmedNutrition: ConfirmedNutrition,
+    rateFirst: boolean,
+  ) {
+    if (rateFirst && entry.recipe) {
+      setPendingRatingConfirm({ entry, instructions, manualPieceEntries, confirmedNutrition });
+      setRateConfirmEntry(entry);
+      return;
+    }
+    void performConfirm(entry, instructions, manualPieceEntries, confirmedNutrition);
+  }
+
   // Confirming deducts pantry stock. Most of the time that's fully
   // automatic (nearest-expiry order) — the resolve-sources overlay only
   // appears when at least one ingredient genuinely has more than one
   // pantry source to choose from, or (wholePiece only) an outright
   // shortfall with nothing in pantry to cover part or all of what's
   // needed, which is where the overlay's "type a weight instead" fallback
-  // comes in.
-  function handleConfirmEntry(entry: MealPlanEntry) {
+  // comes in. rateFirst carries through to the resolve overlay too (see
+  // pendingRateFirst) so piece-size resolution always happens before
+  // rating, never after.
+  function handleConfirmEntry(entry: MealPlanEntry, rateFirst = false) {
     const conversions = appSettings?.unitConversions ?? [];
     const requirements = buildIngredientRequirements(
       entry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions,
@@ -745,6 +789,7 @@ export default function HomeScreen() {
       setPendingConfirmEntry(entry);
       setPendingRequirements(requirements);
       setAmbiguousRequirements(requirements.filter(requirementNeedsResolution));
+      setPendingRateFirst(rateFirst);
       setShowResolveModal(true);
       return;
     }
@@ -754,7 +799,7 @@ export default function HomeScreen() {
     const confirmedNutrition = computeConfirmNutrition(
       requirements, rows, instructions, [], ingredientMap, pantryItems, conversions,
     );
-    void performConfirm(entry, instructions, [], confirmedNutrition);
+    finishConfirm(entry, instructions, [], confirmedNutrition, rateFirst);
   }
 
   // Adds this entry's pantry shortfall to the grocery list — a manual,
@@ -825,10 +870,22 @@ export default function HomeScreen() {
       const confirmedNutrition = computeConfirmNutrition(
         pendingRequirements, rows, instructions, manualPieceEntries, ingredientMap, pantryItems, conversions,
       );
-      await performConfirm(pendingConfirmEntry, instructions, manualPieceEntries, confirmedNutrition);
+      const entry = pendingConfirmEntry;
+      const rateFirst = pendingRateFirst;
       setShowResolveModal(false);
       setPendingConfirmEntry(null);
       setPendingRequirements([]);
+      setPendingRateFirst(false);
+
+      // rateFirst carried through from handleConfirmEntry — piece-size
+      // resolution just finished, so the rating prompt (skippable) comes
+      // next, before the pantry actually gets touched.
+      if (rateFirst && entry.recipe) {
+        setPendingRatingConfirm({ entry, instructions, manualPieceEntries, confirmedNutrition });
+        setRateConfirmEntry(entry);
+      } else {
+        await performConfirm(entry, instructions, manualPieceEntries, confirmedNutrition);
+      }
     } finally {
       setResolvingSaving(false);
     }
@@ -839,14 +896,30 @@ export default function HomeScreen() {
     setRateConfirmEntry(entry);
   }
 
+  // Shared by both routes into this modal: the "Rate & Confirm" swipe
+  // action (rates, then resolves + confirms from scratch — pendingRatingConfirm
+  // is null there) and the "add as confirmed" rateFirst path (piece size
+  // already resolved before rating ever showed — everything needed to
+  // confirm is already stashed, so this just finishes it).
+  function finishRating() {
+    const entry = rateConfirmEntry;
+    const pending = pendingRatingConfirm;
+    setRateConfirmEntry(null);
+    setPendingRatingConfirm(null);
+    if (!entry) return;
+    if (pending) {
+      void performConfirm(pending.entry, pending.instructions, pending.manualPieceEntries, pending.confirmedNutrition);
+    } else {
+      handleConfirmEntry(entry);
+    }
+  }
+
   async function handleSubmitRateAndConfirm(value: number) {
     if (!rateConfirmEntry?.recipe) return;
     setRatingSaving(true);
     try {
       await addRecipeScore(rateConfirmEntry.recipe._id, value);
-      const entry = rateConfirmEntry;
-      setRateConfirmEntry(null);
-      handleConfirmEntry(entry);
+      finishRating();
     } catch (err) {
       Alert.alert(
         "Couldn't save rating",
@@ -855,6 +928,13 @@ export default function HomeScreen() {
     } finally {
       setRatingSaving(false);
     }
+  }
+
+  // Confirms without saving a rating — pantry deduction (or the piece-size
+  // choice already made) still needs to happen either way; only the score
+  // is skipped.
+  function handleSkipRating() {
+    finishRating();
   }
 
   function handleDeleteEntry(id: string) {
@@ -2818,7 +2898,11 @@ export default function HomeScreen() {
         visible={!!rateConfirmEntry}
         recipeName={rateConfirmEntry?.recipe?.name ?? ""}
         saving={ratingSaving}
-        onCancel={() => setRateConfirmEntry(null)}
+        onCancel={() => {
+          setRateConfirmEntry(null);
+          setPendingRatingConfirm(null);
+        }}
+        onSkip={handleSkipRating}
         onConfirm={(value) => void handleSubmitRateAndConfirm(value)}
       />
 
@@ -2830,6 +2914,7 @@ export default function HomeScreen() {
           setShowResolveModal(false);
           setPendingConfirmEntry(null);
           setPendingRequirements([]);
+          setPendingRateFirst(false);
         }}
         onConfirm={(selections, manualPieceEntries) => void handleResolvedConfirm(selections, manualPieceEntries)}
       />

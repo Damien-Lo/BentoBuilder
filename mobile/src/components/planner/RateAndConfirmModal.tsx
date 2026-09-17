@@ -8,17 +8,26 @@ interface RateAndConfirmModalProps {
   recipeName: string;
   saving?: boolean;
   onCancel: () => void;
+  // Confirms without saving a rating — distinct from onCancel, which backs
+  // out of confirming entirely. Useful whenever this modal is shown as an
+  // unavoidable step (e.g. right after adding something already-confirmed)
+  // rather than an opt-in swipe action, so rating never blocks confirming.
+  onSkip: () => void;
   onConfirm: (value: number) => void;
 }
 
 // Swiping to confirm a planned recipe entry offers this as an alternative to
 // a bare confirm — rate it 1-10, then confirm; the rating is saved and the
-// entry flips to confirmed in one step.
+// entry flips to confirmed in one step. Also shown automatically (with the
+// piece-size resolution, if any, already done) right after adding an entry
+// directly as confirmed — skippable there via onSkip, since that path has
+// no separate opt-in gesture the way the swipe action does.
 export function RateAndConfirmModal({
   visible,
   recipeName,
   saving = false,
   onCancel,
+  onSkip,
   onConfirm,
 }: RateAndConfirmModalProps) {
   const [value, setValue] = useState(5);
@@ -57,10 +66,14 @@ export function RateAndConfirmModal({
               }`}
             >
               <Text className="text-sm font-semibold text-white">
-                {saving ? "Saving..." : "Confirm"}
+                {saving ? "Saving..." : "Rate & Confirm"}
               </Text>
             </Pressable>
           </View>
+
+          <Pressable disabled={saving} onPress={onSkip} className="mt-3 items-center py-1 active:opacity-60">
+            <Text className="text-sm font-semibold text-blue-600">Skip rating, just confirm</Text>
+          </Pressable>
         </View>
       </View>
     </Modal>
