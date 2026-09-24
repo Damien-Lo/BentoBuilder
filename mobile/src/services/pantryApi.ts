@@ -157,6 +157,37 @@ export async function usePantryItem(
   return result.data;
 }
 
+export interface PantryDeduction {
+  _id: string;
+  date: string;
+  slot: "breakfast" | "lunch" | "dinner" | "snack";
+  amount: number;
+  // Whatever the planner entry actually logged — a meal, recipe, or
+  // directly-logged ingredient's name (whichever one it was; see
+  // MealPlanEntry's "exactly one of meal/recipe/ingredient/restaurantMeal"
+  // rule on the server).
+  source: string;
+}
+
+// Every confirmed planner entry that drew stock from this pantry item,
+// most recent first — powers the pantry item's expanded deduction-history
+// view. `days` bounds how far back to look (default 30, matching how far
+// back that view shows by default).
+export async function getPantryItemDeductions(
+  pantryItemId: string,
+  days = 30,
+): Promise<PantryDeduction[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/pantry/${pantryItemId}/deductions?days=${days}`,
+  );
+
+  const result = await parseResponse<{ success: boolean; count: number; data: PantryDeduction[] }>(
+    response,
+  );
+
+  return result.data;
+}
+
 export async function deletePantryItem(pantryItemId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/pantry/${pantryItemId}`, {
     method: "DELETE",

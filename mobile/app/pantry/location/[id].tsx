@@ -30,6 +30,12 @@ function getIngredientName(item: PantryItem): string {
   return "Unknown ingredient";
 }
 
+function getStoreName(store: PantryItem["store"]): string | null {
+  if (!store) return null;
+  if (typeof store === "string") return null;
+  return store.name;
+}
+
 function itemMatchesLocation(item: PantryItem, locationId: string): boolean {
   const loc = item.storageLocation as unknown;
   if (typeof loc === "string") return loc === locationId;
@@ -240,9 +246,16 @@ export default function LocationDetailScreen() {
 
             return (
               <PantryItemCard
+                pantryItemId={item._id}
                 ingredientName={ingredientName}
                 quantityAvailable={item.quantityAvailable}
                 quantityUnit={item.quantityUnit}
+                storageLocationName={name}
+                purchaseDate={item.purchaseDate}
+                expiryDate={item.expiryDate}
+                purchasePrice={item.purchasePrice}
+                storeName={getStoreName(item.store)}
+                notes={item.notes}
                 busy={busyItemId === item._id}
                 rightBadge={
                   expiryStr ? (
@@ -270,7 +283,7 @@ export default function LocationDetailScreen() {
                     </View>
                   ) : undefined
                 }
-                onPress={() =>
+                onEdit={() =>
                   router.push({
                     pathname: "/pantry/edit/[id]",
                     params: { id: item._id },
