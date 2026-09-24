@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -78,6 +78,7 @@ import {
   suggestStore,
 } from "@/src/utils/pantryDefaults";
 import { loadSettings } from "@/src/services/settingsService";
+import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import {
   convertAmountForUnitChange,
   getIngredientConversions,
@@ -265,6 +266,42 @@ export default function IngredientDetailScreen() {
   const [genericAvailability, setGenericAvailability] =
     useState<IngredientAvailability | null>(null);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
+
+  // Scrolls whichever field was just focused/opened into view — this page
+  // has a single top-level ScrollView shared by both the edit form and the
+  // (mutually exclusive) detail/quick-add view, so one scrollRef/anchorRef
+  // pair covers every section below regardless of which branch is mounted.
+  // zIndex descends in on-screen top-to-bottom order among the dropdown-
+  // capable fields only — see useScrollFocusSection for why plain
+  // TextInput-style sections don't need one (they default to 0).
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollAnchorRef = useRef<View>(null);
+
+  // Edit-form sections, in on-screen order.
+  const nameSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const brandSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 120);
+  const categorySection = useScrollFocusSection(scrollRef, scrollAnchorRef, 100);
+  const tagsSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 80);
+  const descriptionSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const barcodeSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const portionSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const pieceLabelSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const lowStockSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const nutritionSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const defaultStorageLocationSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 60);
+  const defaultExpirySection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+
+  // Quick-add pantry entry sections (detail view, !isEditing), in on-screen
+  // order — continues the same descending zIndex sequence as the edit-form
+  // dropdowns above even though the two branches never mount together, for
+  // one consistent numbering across the file.
+  const quickAddLocationSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 40);
+  const quickAddQuantitySection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const quickAddDatesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const quickAddDurationSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const quickAddStoreSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
+  const quickAddPriceSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const quickAddNotesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
 
   useEffect(() => {
     let cancelled = false;
@@ -1009,12 +1046,14 @@ export default function IngredientDetailScreen() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           className="flex-1"
           contentContainerClassName="px-5 pb-16 pt-5"
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           removeClippedSubviews={false}
         >
+          <View ref={scrollAnchorRef} collapsable={false} />
           {isEditing ? (
             /* ── Edit form ── */
             <>
@@ -1040,21 +1079,25 @@ export default function IngredientDetailScreen() {
                 description="What it is, and how it's categorized."
               />
 
-              <FieldLabel text="Name" required />
-              <FormInput
-                value={form.name}
-                placeholder="e.g. Rolled oats"
-                onChangeText={(v) => updateForm("name", v)}
-              />
+              <View {...nameSection.wrapperProps}>
+                <FieldLabel text="Name" required />
+                <FormInput
+                  value={form.name}
+                  placeholder="e.g. Rolled oats"
+                  onFocus={nameSection.trigger}
+                  onChangeText={(v) => updateForm("name", v)}
+                />
+              </View>
 
               {!ingredient.isGeneric && (
-                <>
+                <View {...brandSection.wrapperProps}>
                   <FieldLabel text="Brand" />
                   <SearchableObjectDropdown<SelectOption>
                     options={brands}
                     selectedId={form.brandId}
                     selectedName={form.brandName}
                     placeholder="Search or type a new brand"
+                    onOpen={brandSection.trigger}
                     onTextChange={(value) => {
                       if (value !== form.brandName) {
                         updateForm("brandId", "");
@@ -1067,56 +1110,66 @@ export default function IngredientDetailScreen() {
                       setBrandDraft(option.name);
                     }}
                   />
-                </>
+                </View>
               )}
 
-              <FieldLabel text="Category" />
-              <SearchableObjectDropdown<SelectOption>
-                options={categories}
-                selectedId={form.categoryId}
-                selectedName={form.categoryName}
-                placeholder="Search or type a new category"
-                onTextChange={(value) => {
-                  if (value !== form.categoryName) {
-                    updateForm("categoryId", "");
-                  }
-                  setCategoryDraft(value);
-                }}
-                onSelect={(option) => {
-                  updateForm("categoryId", option._id);
-                  updateForm("categoryName", option.name);
-                  setCategoryDraft(option.name);
-                }}
-              />
+              <View {...categorySection.wrapperProps}>
+                <FieldLabel text="Category" />
+                <SearchableObjectDropdown<SelectOption>
+                  options={categories}
+                  selectedId={form.categoryId}
+                  selectedName={form.categoryName}
+                  placeholder="Search or type a new category"
+                  onOpen={categorySection.trigger}
+                  onTextChange={(value) => {
+                    if (value !== form.categoryName) {
+                      updateForm("categoryId", "");
+                    }
+                    setCategoryDraft(value);
+                  }}
+                  onSelect={(option) => {
+                    updateForm("categoryId", option._id);
+                    updateForm("categoryName", option.name);
+                    setCategoryDraft(option.name);
+                  }}
+                />
+              </View>
 
-              <FieldLabel text="Tags" />
-              <CreatableMultiTagDropdown
-                options={allTags}
-                selectedItems={selectedTags}
-                placeholder="Add a tag…"
-                onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
-                onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
-              />
+              <View {...tagsSection.wrapperProps}>
+                <FieldLabel text="Tags" />
+                <CreatableMultiTagDropdown
+                  options={allTags}
+                  selectedItems={selectedTags}
+                  placeholder="Add a tag…"
+                  onOpen={tagsSection.trigger}
+                  onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
+                  onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
+                />
+              </View>
 
-              <FieldLabel text="Description" />
-              <FormInput
-                value={form.description}
-                placeholder="Optional description"
-                multiline
-                onChangeText={(v) => updateForm("description", v)}
-              />
+              <View {...descriptionSection.wrapperProps}>
+                <FieldLabel text="Description" />
+                <FormInput
+                  value={form.description}
+                  placeholder="Optional description"
+                  multiline
+                  onFocus={descriptionSection.trigger}
+                  onChangeText={(v) => updateForm("description", v)}
+                />
+              </View>
 
               {!ingredient.isGeneric && (
-                <>
+                <View {...barcodeSection.wrapperProps}>
                   <FieldLabel text="Barcode" />
                   <FormInput
                     value={form.barcode}
                     placeholder="Optional barcode"
                     autoCapitalize="none"
                     keyboardType="numbers-and-punctuation"
+                    onFocus={barcodeSection.trigger}
                     onChangeText={(v) => updateForm("barcode", v)}
                   />
-                </>
+                </View>
               )}
 
               <SectionTitle
@@ -1125,13 +1178,14 @@ export default function IngredientDetailScreen() {
                 description="Define a serving size and when to flag low stock."
               />
 
-              <View className="flex-row">
+              <View className="flex-row" {...portionSection.wrapperProps}>
                 <View className="mr-3 flex-1">
                   <FieldLabel text="Default portion" />
                   <FormInput
                     value={form.defaultPortionAmount}
                     placeholder="0"
                     keyboardType="decimal-pad"
+                    onFocus={portionSection.trigger}
                     onChangeText={(v) => updateForm("defaultPortionAmount", v)}
                   />
                 </View>
@@ -1146,11 +1200,12 @@ export default function IngredientDetailScreen() {
                 </View>
               </View>
 
-              <View className="mt-4">
+              <View className="mt-4" {...pieceLabelSection.wrapperProps}>
                 <FieldLabel text="Piece label (optional)" />
                 <FormInput
                   value={form.pieceLabel}
                   placeholder="e.g. steak, fillet, cut"
+                  onFocus={pieceLabelSection.trigger}
                   onChangeText={(v) => updateForm("pieceLabel", v)}
                 />
                 <Text className="mt-2 text-xs leading-4 text-slate-500">
@@ -1171,15 +1226,16 @@ export default function IngredientDetailScreen() {
               />
 
               {!form.alwaysAvailable && (
-                <>
+                <View {...lowStockSection.wrapperProps}>
                   <FieldLabel text="Low stock threshold" />
                   <FormInput
                     value={form.lowStockThreshold}
                     placeholder={`Alert when total falls below this (${form.defaultPortionUnit || "units"})`}
                     keyboardType="decimal-pad"
+                    onFocus={lowStockSection.trigger}
                     onChangeText={(v) => updateForm("lowStockThreshold", v)}
                   />
-                </>
+                </View>
               )}
 
               <Pressable
@@ -1209,7 +1265,7 @@ export default function IngredientDetailScreen() {
               </Pressable>
 
               {nutritionExpanded && (
-                <>
+                <View {...nutritionSection.wrapperProps}>
                   <View className="mt-4 flex-row">
                     <View className="mr-3 flex-1">
                       <FieldLabel text="Calories" />
@@ -1217,6 +1273,7 @@ export default function IngredientDetailScreen() {
                         value={form.calories}
                         placeholder="N/A"
                         keyboardType="decimal-pad"
+                        onFocus={nutritionSection.trigger}
                         onChangeText={(v) => updateForm("calories", v)}
                       />
                     </View>
@@ -1226,6 +1283,7 @@ export default function IngredientDetailScreen() {
                         value={form.protein}
                         placeholder="N/A"
                         keyboardType="decimal-pad"
+                        onFocus={nutritionSection.trigger}
                         onChangeText={(v) => updateForm("protein", v)}
                       />
                     </View>
@@ -1238,6 +1296,7 @@ export default function IngredientDetailScreen() {
                         value={form.carbs}
                         placeholder="N/A"
                         keyboardType="decimal-pad"
+                        onFocus={nutritionSection.trigger}
                         onChangeText={(v) => updateForm("carbs", v)}
                       />
                     </View>
@@ -1247,6 +1306,7 @@ export default function IngredientDetailScreen() {
                         value={form.fats}
                         placeholder="N/A"
                         keyboardType="decimal-pad"
+                        onFocus={nutritionSection.trigger}
                         onChangeText={(v) => updateForm("fats", v)}
                       />
                     </View>
@@ -1259,6 +1319,7 @@ export default function IngredientDetailScreen() {
                         value={form.fiber}
                         placeholder="N/A"
                         keyboardType="decimal-pad"
+                        onFocus={nutritionSection.trigger}
                         onChangeText={(v) => updateForm("fiber", v)}
                       />
                     </View>
@@ -1268,11 +1329,12 @@ export default function IngredientDetailScreen() {
                         value={form.sodium}
                         placeholder="N/A"
                         keyboardType="decimal-pad"
+                        onFocus={nutritionSection.trigger}
                         onChangeText={(v) => updateForm("sodium", v)}
                       />
                     </View>
                   </View>
-                </>
+                </View>
               )}
 
               <Pressable
@@ -1321,13 +1383,14 @@ export default function IngredientDetailScreen() {
                     </Pressable>
                   )}
                   {wantsDefaultLocation && (
-                    <>
+                    <View {...defaultStorageLocationSection.wrapperProps}>
                       <FieldLabel text="Default storage location" />
                       <SearchableObjectDropdown<SelectOption>
                         options={storageLocations}
                         selectedId={form.defaultStorageLocationId}
                         selectedName={form.defaultStorageLocationName}
                         placeholder="Search or type a location"
+                        onOpen={defaultStorageLocationSection.trigger}
                         onTextChange={(value) => {
                           if (value !== form.defaultStorageLocationName) {
                             updateForm("defaultStorageLocationId", "");
@@ -1340,7 +1403,7 @@ export default function IngredientDetailScreen() {
                           setDefaultLocationDraft(option.name);
                         }}
                       />
-                    </>
+                    </View>
                   )}
 
                   <ToggleRow
@@ -1363,15 +1426,16 @@ export default function IngredientDetailScreen() {
                     </Pressable>
                   )}
                   {wantsDefaultExpiry && (
-                    <>
+                    <View {...defaultExpirySection.wrapperProps}>
                       <FieldLabel text="Default expiry duration" />
                       <DurationValueInput
                         amount={form.defaultExpiryDurationAmount}
                         unit={form.defaultExpiryDurationUnit}
                         onChangeAmount={(v) => updateForm("defaultExpiryDurationAmount", v)}
                         onChangeUnit={(v) => updateForm("defaultExpiryDurationUnit", v)}
+                        onFocus={defaultExpirySection.trigger}
                       />
-                    </>
+                    </View>
                   )}
                 </>
               )}
@@ -1983,26 +2047,29 @@ export default function IngredientDetailScreen() {
 
               {/* Quick-add new entry */}
               <View className="mt-1 rounded-2xl border border-slate-200 bg-white px-5 py-4">
-                <FieldLabel text="Storage location" />
-                <SearchableObjectDropdown<SelectOption>
-                  options={storageLocations}
-                  selectedId={quickAddLocationId}
-                  selectedName={quickAddLocationName}
-                  placeholder="Search or type a new location"
-                  onTextChange={(value) => {
-                    if (value !== quickAddLocationName) {
-                      setQuickAddLocationId("");
-                    }
-                    setQuickAddLocationDraft(value);
-                    setQuickAddLocationTouched(true);
-                  }}
-                  onSelect={(option) => {
-                    setQuickAddLocationId(option._id);
-                    setQuickAddLocationName(option.name);
-                    setQuickAddLocationDraft(option.name);
-                    setQuickAddLocationTouched(true);
-                  }}
-                />
+                <View {...quickAddLocationSection.wrapperProps}>
+                  <FieldLabel text="Storage location" />
+                  <SearchableObjectDropdown<SelectOption>
+                    options={storageLocations}
+                    selectedId={quickAddLocationId}
+                    selectedName={quickAddLocationName}
+                    placeholder="Search or type a new location"
+                    onOpen={quickAddLocationSection.trigger}
+                    onTextChange={(value) => {
+                      if (value !== quickAddLocationName) {
+                        setQuickAddLocationId("");
+                      }
+                      setQuickAddLocationDraft(value);
+                      setQuickAddLocationTouched(true);
+                    }}
+                    onSelect={(option) => {
+                      setQuickAddLocationId(option._id);
+                      setQuickAddLocationName(option.name);
+                      setQuickAddLocationDraft(option.name);
+                      setQuickAddLocationTouched(true);
+                    }}
+                  />
+                </View>
 
                 {effectiveLocation && !quickAddLocationTouched ? (
                   <Text className="mt-2 text-xs leading-4 text-slate-500">
@@ -2014,7 +2081,7 @@ export default function IngredientDetailScreen() {
                   </Text>
                 ) : null}
 
-                <View className="mt-3">
+                <View className="mt-3" {...quickAddQuantitySection.wrapperProps}>
                   <FieldLabel text="Quantity" />
                   <QuantityServingInput
                     quantityAvailable={quickAddQuantity}
@@ -2028,15 +2095,17 @@ export default function IngredientDetailScreen() {
                     entryCount={quickAddEntryCount}
                     onChangeEntryCount={setQuickAddEntryCount}
                     customUnitConversions={getIngredientConversions(ingredient, customUnitConversions)}
+                    onFocus={quickAddQuantitySection.trigger}
                   />
                 </View>
 
-                <View className="mt-3 flex-row">
+                <View className="mt-3 flex-row" {...quickAddDatesSection.wrapperProps}>
                   <View className="mr-3 flex-1">
                     <FieldLabel text="Purchase date" />
                     <DateTextInput
                       className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900"
                       value={quickAddPurchaseDate}
+                      onFocus={quickAddDatesSection.trigger}
                       onChangeText={setQuickAddPurchaseDate}
                     />
                   </View>
@@ -2045,6 +2114,7 @@ export default function IngredientDetailScreen() {
                     <DateTextInput
                       className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900"
                       value={quickAddExpiryDate}
+                      onFocus={quickAddDatesSection.trigger}
                       onChangeText={(value) => {
                         setQuickAddExpiryDate(value);
                         setQuickAddExpiryTouched(true);
@@ -2064,7 +2134,7 @@ export default function IngredientDetailScreen() {
                   </Text>
                 ) : null}
 
-                <View className="mt-2">
+                <View className="mt-2" {...quickAddDurationSection.wrapperProps}>
                   <FieldLabel text="Or set expiry from purchase date" />
                   <DurationExpiryInput
                     purchaseDate={quickAddPurchaseDate}
@@ -2076,6 +2146,7 @@ export default function IngredientDetailScreen() {
                       setQuickAddExpiryDate(value);
                       setQuickAddExpiryTouched(true);
                     }}
+                    onFocus={quickAddDurationSection.trigger}
                   />
                 </View>
 
@@ -2084,13 +2155,14 @@ export default function IngredientDetailScreen() {
                 quickAddStoreDraft.trim() ||
                 quickAddPrice.trim() ? (
                   <>
-                    <View className="mt-2">
+                    <View className="mt-2" {...quickAddStoreSection.wrapperProps}>
                       <FieldLabel text="Store (optional)" />
                       <SearchableObjectDropdown<SelectOption>
                         options={stores}
                         selectedId={quickAddStoreId}
                         selectedName={quickAddStoreName}
                         placeholder="Search or type a new store"
+                        onOpen={quickAddStoreSection.trigger}
                         onTextChange={(value) => {
                           if (value !== quickAddStoreName) {
                             setQuickAddStoreId("");
@@ -2112,9 +2184,13 @@ export default function IngredientDetailScreen() {
                       ) : null}
                     </View>
 
-                    <View className="mt-2">
+                    <View className="mt-2" {...quickAddPriceSection.wrapperProps}>
                       <FieldLabel text="Price paid (optional)" />
-                      <PriceInput value={quickAddPrice} onChangeText={setQuickAddPrice} />
+                      <PriceInput
+                        value={quickAddPrice}
+                        onChangeText={setQuickAddPrice}
+                        onFocus={quickAddPriceSection.trigger}
+                      />
                     </View>
                   </>
                 ) : (
@@ -2129,12 +2205,13 @@ export default function IngredientDetailScreen() {
                   </Pressable>
                 )}
 
-                <View className="mt-2">
+                <View className="mt-2" {...quickAddNotesSection.wrapperProps}>
                   <FieldLabel text="Notes (optional)" />
                   <FormInput
                     value={quickAddNotes}
                     placeholder="e.g. Half-used, keep away from the window"
                     onChangeText={setQuickAddNotes}
+                    onFocus={quickAddNotesSection.trigger}
                     multiline
                   />
                 </View>

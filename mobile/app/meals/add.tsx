@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -20,6 +20,7 @@ import { createMeal, type MealType } from "@/src/services/mealApi";
 import { createTag, getTags, type SelectOption } from "@/src/services/optionsApi";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
+import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 
 const MEAL_TYPE_OPTIONS: { value: MealType; label: string; icon: string; available: boolean }[] = [
   { value: "course", label: "Course-based", icon: "list-outline", available: true },
@@ -57,6 +58,18 @@ export default function AddMealScreen() {
 
   const [allTags, setAllTags] = useState<SelectOption[]>([]);
   const [selectedTags, setSelectedTags] = useState<SelectOption[]>([]);
+
+  // Scrolls whichever field was just focused/opened into view — see
+  // useScrollFocusSection for why zIndex has to descend in on-screen order
+  // (only the fields that can show a dropdown need one; plain text fields
+  // default to 0 and don't need to be listed here). Tags is the only
+  // dropdown-capable field on this page.
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollAnchorRef = useRef<View>(null);
+  const nameSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const tagsSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
+  const coursesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
 
   useEffect(() => {
     let cancelled = false;
@@ -185,11 +198,13 @@ export default function AddMealScreen() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           className="flex-1"
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 80 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <View ref={scrollAnchorRef} collapsable={false} />
           <SectionTitle
             first
             icon="restaurant-outline"
@@ -247,31 +262,38 @@ export default function AddMealScreen() {
           </View>
 
           {/* Meal name */}
+          <View {...nameSection.wrapperProps}>
           <FieldLabel text="Meal name" required />
           <FormInput
             value={name}
             onChangeText={setName}
+            onFocus={nameSection.trigger}
             placeholder="e.g. Sunday Dinner"
             className="mb-5"
           />
+          </View>
 
           {/* Notes */}
+          <View {...notesSection.wrapperProps}>
           <FieldLabel text="Notes (optional)" />
           <FormInput
             value={notes}
             onChangeText={setNotes}
+            onFocus={notesSection.trigger}
             placeholder="Any notes about this meal"
             multiline
             className="mb-6"
           />
+          </View>
 
           {/* Tags */}
           <FieldLabel text="Tags (optional)" />
-          <View className="mb-5">
+          <View className="mb-5" {...tagsSection.wrapperProps}>
             <CreatableMultiTagDropdown
               options={allTags}
               selectedItems={selectedTags}
               placeholder="Add a tag…"
+              onOpen={tagsSection.trigger}
               onAdd={(option: SelectOption) => {
                 const isDuplicate = option._id
                   ? selectedTags.some(t => t._id === option._id)
@@ -329,6 +351,7 @@ export default function AddMealScreen() {
             description={`${courses.length} ${courses.length === 1 ? "course" : "courses"} in this meal.`}
           />
 
+          <View {...coursesSection.wrapperProps}>
           {courses.map((course, index) => (
             <View key={course.id} className="mb-3 rounded-2xl border border-slate-200 bg-white p-4">
               <View className="mb-3 flex-row items-center justify-between">
@@ -380,6 +403,7 @@ export default function AddMealScreen() {
               <TextInput
                 value={course.servings}
                 onChangeText={v => updateCourse(course.id, { servings: v })}
+                onFocus={coursesSection.trigger}
                 keyboardType="decimal-pad"
                 placeholder="1"
                 placeholderTextColor="#94A3B8"
@@ -387,6 +411,7 @@ export default function AddMealScreen() {
               />
             </View>
           ))}
+          </View>
 
           <Pressable
             className="mt-1 flex-row items-center justify-center rounded-3xl border border-dashed border-blue-400 bg-blue-50 py-4 active:bg-blue-100"

@@ -4,6 +4,7 @@ interface PriceInputProps {
   value: string;
   onChangeText: (value: string) => void;
   disabled?: boolean;
+  onFocus?: () => void;
   // A shorter, tighter rendering (40px vs. the default 56px) for cramped
   // layouts — e.g. alongside other compact fields in a tight row.
   compact?: boolean;
@@ -11,7 +12,7 @@ interface PriceInputProps {
 
 // What was paid for a pantry entry — optional, purely for future price
 // tracking, so it stays out of the way of the required fields around it.
-export function PriceInput({ value, onChangeText, disabled = false, compact = false }: PriceInputProps) {
+export function PriceInput({ value, onChangeText, disabled = false, onFocus, compact = false }: PriceInputProps) {
   return (
     <View
       style={{ height: compact ? 40 : 56 }}
@@ -23,6 +24,7 @@ export function PriceInput({ value, onChangeText, disabled = false, compact = fa
       <TextInput
         value={value}
         onChangeText={onChangeText}
+        onFocus={onFocus}
         editable={!disabled}
         keyboardType="decimal-pad"
         placeholder="0.00"

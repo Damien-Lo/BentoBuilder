@@ -23,6 +23,10 @@ interface SearchableObjectDropdownProps<T extends BaseDropdownOption> {
 
   onSelect: (option: T) => void;
   onTextChange?: (value: string) => void;
+  // Fires whenever the field gains focus and its option list opens — lets a
+  // caller scroll this field into view the same way it would for a plain
+  // TextInput's onFocus.
+  onOpen?: () => void;
 
   // When provided, a "Create '<query>'" row replaces the plain "No matching
   // options" message once nothing matches the typed text — lets the caller
@@ -44,6 +48,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
   compact = false,
   onSelect,
   onTextChange,
+  onOpen,
   onCreateNew,
   renderSubtitle,
 }: SearchableObjectDropdownProps<T>) {
@@ -84,6 +89,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
   function openDropdown() {
     if (!disabled) {
       setOpen(true);
+      onOpen?.();
     }
   }
 
@@ -149,6 +155,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
           onFocus={openDropdown}
           onChangeText={handleTextChange}
           onSubmitEditing={closeDropdown}
+          onBlur={closeDropdown}
         />
 
         {query.length > 0 && !disabled ? (

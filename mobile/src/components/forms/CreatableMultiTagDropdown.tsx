@@ -11,6 +11,10 @@ interface CreatableMultiTagDropdownProps {
   disabled?: boolean;
   onAdd: (option: SelectOption) => void;
   onRemove: (id: string) => void;
+  // Fires whenever the field gains focus and its option list opens — lets a
+  // caller scroll this field into view the same way it would for a plain
+  // TextInput's onFocus.
+  onOpen?: () => void;
 }
 
 export function CreatableMultiTagDropdown({
@@ -20,6 +24,7 @@ export function CreatableMultiTagDropdown({
   disabled = false,
   onAdd,
   onRemove,
+  onOpen,
 }: CreatableMultiTagDropdownProps) {
   const safeOptions = useMemo(
     () => (Array.isArray(options) ? options : []),
@@ -131,7 +136,13 @@ export function CreatableMultiTagDropdown({
           autoCapitalize="words"
           autoCorrect={false}
           className="ml-3 flex-1 text-base text-slate-950"
-          onFocus={() => { if (!disabled) setOpen(true); }}
+          onFocus={() => {
+            if (!disabled) {
+              setOpen(true);
+              onOpen?.();
+            }
+          }}
+          onBlur={() => setOpen(false)}
           onChangeText={handleTextChange}
           onSubmitEditing={handleSubmit}
         />

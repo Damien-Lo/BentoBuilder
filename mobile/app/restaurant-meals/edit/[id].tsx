@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +21,7 @@ import {
   SectionTitle,
 } from "@/src/components/forms";
 
+import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { createTag, getTags, type SelectOption } from "@/src/services/optionsApi";
 import {
   getRestaurantMealById,
@@ -71,6 +72,140 @@ function parseOptionalNumber(text: string): number | null | undefined {
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
+// One dish card in the menu list — its own scroll-focus sections (declared
+// here, per row, rather than once for the whole page) so each card's fields
+// scroll themselves into view within the *shared* page-level ScrollView
+// regardless of which card they're in. None of this card's fields are
+// dropdown-capable, so every section omits zIndex (defaults to 0).
+function DishCard({
+  dish,
+  index,
+  scrollRef,
+  scrollAnchorRef,
+  updateDish,
+  removeDish,
+}: {
+  dish: DishRow;
+  index: number;
+  scrollRef: RefObject<ScrollView | null>;
+  scrollAnchorRef: RefObject<View | null>;
+  updateDish: (key: string, patch: Partial<DishRow>) => void;
+  removeDish: (key: string) => void;
+}) {
+  const nameSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const priceSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const nutritionSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+
+  return (
+    <View className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+      <View className="mb-2 flex-row items-center justify-between">
+        <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">
+          Dish {index + 1}
+        </Text>
+        <Pressable hitSlop={8} onPress={() => removeDish(dish.key)}>
+          <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
+        </Pressable>
+      </View>
+
+      <View {...nameSection.wrapperProps}>
+        <FieldLabel text="Dish name" required />
+        <FormInput
+          value={dish.name}
+          placeholder="e.g. Burrito bowl"
+          onFocus={nameSection.trigger}
+          onChangeText={(text) => updateDish(dish.key, { name: text })}
+        />
+      </View>
+
+      <View {...notesSection.wrapperProps}>
+        <FieldLabel text="Notes" />
+        <FormInput
+          value={dish.notes}
+          placeholder="e.g. Extra hot salsa, no rice…"
+          onFocus={notesSection.trigger}
+          onChangeText={(text) => updateDish(dish.key, { notes: text })}
+        />
+      </View>
+
+      <View {...priceSection.wrapperProps}>
+        <FieldLabel text="Price" />
+        <PriceInput
+          value={dish.price}
+          onChangeText={(text) => updateDish(dish.key, { price: text })}
+          onFocus={priceSection.trigger}
+        />
+      </View>
+
+      <View {...nutritionSection.wrapperProps}>
+        <FieldLabel text="Nutrition (optional estimate)" />
+        <View className="flex-row flex-wrap gap-x-3">
+          <View style={{ width: "47%" }}>
+            <Text className="mb-1 text-xs text-slate-400">Calories</Text>
+            <FormInput
+              value={dish.calories}
+              placeholder="kcal"
+              keyboardType="decimal-pad"
+              onFocus={nutritionSection.trigger}
+              onChangeText={(text) => updateDish(dish.key, { calories: text })}
+            />
+          </View>
+          <View style={{ width: "47%" }}>
+            <Text className="mb-1 text-xs text-slate-400">Protein (g)</Text>
+            <FormInput
+              value={dish.protein}
+              placeholder="g"
+              keyboardType="decimal-pad"
+              onFocus={nutritionSection.trigger}
+              onChangeText={(text) => updateDish(dish.key, { protein: text })}
+            />
+          </View>
+          <View style={{ width: "47%" }}>
+            <Text className="mb-1 text-xs text-slate-400">Carbs (g)</Text>
+            <FormInput
+              value={dish.carbs}
+              placeholder="g"
+              keyboardType="decimal-pad"
+              onFocus={nutritionSection.trigger}
+              onChangeText={(text) => updateDish(dish.key, { carbs: text })}
+            />
+          </View>
+          <View style={{ width: "47%" }}>
+            <Text className="mb-1 text-xs text-slate-400">Fats (g)</Text>
+            <FormInput
+              value={dish.fats}
+              placeholder="g"
+              keyboardType="decimal-pad"
+              onFocus={nutritionSection.trigger}
+              onChangeText={(text) => updateDish(dish.key, { fats: text })}
+            />
+          </View>
+          <View style={{ width: "47%" }}>
+            <Text className="mb-1 text-xs text-slate-400">Fiber (g)</Text>
+            <FormInput
+              value={dish.fiber}
+              placeholder="g"
+              keyboardType="decimal-pad"
+              onFocus={nutritionSection.trigger}
+              onChangeText={(text) => updateDish(dish.key, { fiber: text })}
+            />
+          </View>
+          <View style={{ width: "47%" }}>
+            <Text className="mb-1 text-xs text-slate-400">Sodium (mg)</Text>
+            <FormInput
+              value={dish.sodium}
+              placeholder="mg"
+              keyboardType="decimal-pad"
+              onFocus={nutritionSection.trigger}
+              onChangeText={(text) => updateDish(dish.key, { sodium: text })}
+            />
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function EditRestaurantMealPage() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -92,6 +227,16 @@ export default function EditRestaurantMealPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Scrolls whichever field was just focused/opened into view — see
+  // useScrollFocusSection. Tags is the only dropdown-capable field on this
+  // page, so it's the only section that needs a (nominal) positive zIndex;
+  // everything else defaults to 0.
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollAnchorRef = useRef<View>(null);
+  const restaurantNameSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const tagsSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
+  const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
 
   useEffect(() => {
     if (!id) return;
@@ -257,36 +402,47 @@ export default function EditRestaurantMealPage() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           className="flex-1"
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80, paddingTop: 20 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <View ref={scrollAnchorRef} collapsable={false} />
           <SectionTitle first title="Restaurant" description="" />
 
-          <FieldLabel text="Restaurant name" required />
-          <FormInput
-            value={restaurantName}
-            placeholder="e.g. Chipotle"
-            onChangeText={setRestaurantName}
-          />
+          <View {...restaurantNameSection.wrapperProps}>
+            <FieldLabel text="Restaurant name" required />
+            <FormInput
+              value={restaurantName}
+              placeholder="e.g. Chipotle"
+              onFocus={restaurantNameSection.trigger}
+              onChangeText={setRestaurantName}
+            />
+          </View>
 
-          <FieldLabel text="Tags" />
-          <CreatableMultiTagDropdown
-            options={allTags}
-            selectedItems={selectedTags}
-            placeholder="Add a tag…"
-            onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
-            onRemove={(id2) => setSelectedTags((prev) => prev.filter((t) => t._id !== id2))}
-          />
+          <View {...tagsSection.wrapperProps}>
+            <FieldLabel text="Tags" />
+            <CreatableMultiTagDropdown
+              options={allTags}
+              selectedItems={selectedTags}
+              placeholder="Add a tag…"
+              onOpen={tagsSection.trigger}
+              onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
+              onRemove={(id2) => setSelectedTags((prev) => prev.filter((t) => t._id !== id2))}
+            />
+          </View>
 
-          <FieldLabel text="Notes" />
-          <FormInput
-            value={notes}
-            placeholder="e.g. The one near work, ask for extra sauce…"
-            multiline
-            onChangeText={setNotes}
-          />
+          <View {...notesSection.wrapperProps}>
+            <FieldLabel text="Notes" />
+            <FormInput
+              value={notes}
+              placeholder="e.g. The one near work, ask for extra sauce…"
+              multiline
+              onFocus={notesSection.trigger}
+              onChangeText={setNotes}
+            />
+          </View>
 
           {/* ── Dishes ── */}
           <SectionTitle
@@ -295,94 +451,15 @@ export default function EditRestaurantMealPage() {
           />
 
           {dishes.map((dish, index) => (
-            <View key={dish.key} className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
-              <View className="mb-2 flex-row items-center justify-between">
-                <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                  Dish {index + 1}
-                </Text>
-                <Pressable hitSlop={8} onPress={() => removeDish(dish.key)}>
-                  <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
-                </Pressable>
-              </View>
-
-              <FieldLabel text="Dish name" required />
-              <FormInput
-                value={dish.name}
-                placeholder="e.g. Burrito bowl"
-                onChangeText={(text) => updateDish(dish.key, { name: text })}
-              />
-
-              <FieldLabel text="Notes" />
-              <FormInput
-                value={dish.notes}
-                placeholder="e.g. Extra hot salsa, no rice…"
-                onChangeText={(text) => updateDish(dish.key, { notes: text })}
-              />
-
-              <FieldLabel text="Price" />
-              <PriceInput
-                value={dish.price}
-                onChangeText={(text) => updateDish(dish.key, { price: text })}
-              />
-
-              <FieldLabel text="Nutrition (optional estimate)" />
-              <View className="flex-row flex-wrap gap-x-3">
-                <View style={{ width: "47%" }}>
-                  <Text className="mb-1 text-xs text-slate-400">Calories</Text>
-                  <FormInput
-                    value={dish.calories}
-                    placeholder="kcal"
-                    keyboardType="decimal-pad"
-                    onChangeText={(text) => updateDish(dish.key, { calories: text })}
-                  />
-                </View>
-                <View style={{ width: "47%" }}>
-                  <Text className="mb-1 text-xs text-slate-400">Protein (g)</Text>
-                  <FormInput
-                    value={dish.protein}
-                    placeholder="g"
-                    keyboardType="decimal-pad"
-                    onChangeText={(text) => updateDish(dish.key, { protein: text })}
-                  />
-                </View>
-                <View style={{ width: "47%" }}>
-                  <Text className="mb-1 text-xs text-slate-400">Carbs (g)</Text>
-                  <FormInput
-                    value={dish.carbs}
-                    placeholder="g"
-                    keyboardType="decimal-pad"
-                    onChangeText={(text) => updateDish(dish.key, { carbs: text })}
-                  />
-                </View>
-                <View style={{ width: "47%" }}>
-                  <Text className="mb-1 text-xs text-slate-400">Fats (g)</Text>
-                  <FormInput
-                    value={dish.fats}
-                    placeholder="g"
-                    keyboardType="decimal-pad"
-                    onChangeText={(text) => updateDish(dish.key, { fats: text })}
-                  />
-                </View>
-                <View style={{ width: "47%" }}>
-                  <Text className="mb-1 text-xs text-slate-400">Fiber (g)</Text>
-                  <FormInput
-                    value={dish.fiber}
-                    placeholder="g"
-                    keyboardType="decimal-pad"
-                    onChangeText={(text) => updateDish(dish.key, { fiber: text })}
-                  />
-                </View>
-                <View style={{ width: "47%" }}>
-                  <Text className="mb-1 text-xs text-slate-400">Sodium (mg)</Text>
-                  <FormInput
-                    value={dish.sodium}
-                    placeholder="mg"
-                    keyboardType="decimal-pad"
-                    onChangeText={(text) => updateDish(dish.key, { sodium: text })}
-                  />
-                </View>
-              </View>
-            </View>
+            <DishCard
+              key={dish.key}
+              dish={dish}
+              index={index}
+              scrollRef={scrollRef}
+              scrollAnchorRef={scrollAnchorRef}
+              updateDish={updateDish}
+              removeDish={removeDish}
+            />
           ))}
 
           <Pressable

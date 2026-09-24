@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarcodeScannerModal,
   type ScannedProduct,
@@ -61,6 +61,7 @@ import { barcodesMatch } from "@/src/utils/barcode";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { todayDateInputString } from "@/src/utils/date";
 import { loadSettings } from "@/src/services/settingsService";
+import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import {
   convertAmountForUnitChange,
   getIngredientConversions,
@@ -345,6 +346,9 @@ export default function AddManualPantryItemScreen() {
         brandName: params.scannedBrand ?? "",
         quantityAvailable: params.scannedQuantity ?? "",
         quantityUnit: params.scannedQuantityUnit || params.scannedServingUnit || "",
+        // scannedServingSize is only set by PantryMainPage when the scan
+        // had a real declared serving — see servingIsEstimated on
+        // ScannedProduct — so an absent param already means "leave blank".
         defaultPortionAmount: params.scannedServingSize ?? "",
         calories: params.scannedCalories ?? "",
         protein: params.scannedProtein ?? "",
@@ -409,6 +413,33 @@ export default function AddManualPantryItemScreen() {
 
   const [units, setUnits] = useState<string[]>([]);
   const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
+
+  // Scrolls whichever field was just focused/opened into view — see
+  // useScrollFocusSection for why zIndex has to descend in on-screen order
+  // (only the fields that can show a dropdown need one, each higher than
+  // every one after it; plain text fields default to 0 and don't need to be
+  // listed here).
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollAnchorRef = useRef<View>(null);
+  const nameSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 130);
+  const genericBrandSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 120);
+  const descriptionSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const barcodeSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const categorySection = useScrollFocusSection(scrollRef, scrollAnchorRef, 110);
+  const tagsSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 100);
+  const servingUnitSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const pieceLabelSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const lowStockSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const nutritionSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const defaultStorageLocationSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 90);
+  const defaultExpirySection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const storageLocationSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 80);
+  const quantitySection = useScrollFocusSection(scrollRef, scrollAnchorRef, 70);
+  const purchaseDateSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const expiryDateSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const expiryDurationSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const storeSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 60);
+  const priceSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
 
   const genericIngredientOptions = ingredients.filter(
     (option) => option.isGeneric,
@@ -575,7 +606,14 @@ export default function AddManualPantryItemScreen() {
       brandName: product.brand ?? current.brandName,
       quantityAvailable: product.packageQuantity != null ? String(product.packageQuantity) : current.quantityAvailable,
       quantityUnit: product.packageUnit || product.servingUnit,
-      defaultPortionAmount: String(product.servingSize),
+      // Only trust a real declared serving — a 100g/100ml fallback isn't a
+      // genuine per-use amount for most products (least of all anything
+      // measured by volume, like a spice), so leave whatever was already
+      // there (blank, for a brand-new ingredient) rather than overwrite it
+      // with a number that looks authoritative but isn't real.
+      defaultPortionAmount: product.servingIsEstimated
+        ? current.defaultPortionAmount
+        : String(product.servingSize),
       calories: product.calories != null ? String(Math.round(product.calories)) : current.calories,
       protein: product.protein != null ? String(Math.round(product.protein * 10) / 10) : current.protein,
       carbs: product.carbs != null ? String(Math.round(product.carbs * 10) / 10) : current.carbs,
@@ -1253,6 +1291,7 @@ export default function AddManualPantryItemScreen() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           className="flex-1"
           contentContainerStyle={{
             paddingHorizontal: 16,
@@ -1263,6 +1302,7 @@ export default function AddManualPantryItemScreen() {
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}
         >
+          <View ref={scrollAnchorRef} collapsable={false} />
           <SectionTitle
             first
             icon="pricetag-outline"
@@ -1300,6 +1340,7 @@ export default function AddManualPantryItemScreen() {
                   : "A specific ingredient (e.g. \"Kikkoman Soy Sauce\") is a particular product, usually with a brand."}
           </Text>
 
+          <View {...nameSection.wrapperProps}>
           <FieldLabel text="Name" required />
 
           <SearchableObjectDropdown<IngredientOption>
@@ -1308,6 +1349,7 @@ export default function AddManualPantryItemScreen() {
             selectedName={form.ingredientName}
             placeholder="Search for an ingredient"
             showAllWhenEmpty={false}
+            onOpen={nameSection.trigger}
             onTextChange={(value: string) => {
               const selectedIngredient = ingredients.find(
                 (ingredient) => ingredient._id === form.ingredientId,
@@ -1323,10 +1365,11 @@ export default function AddManualPantryItemScreen() {
             }}
             onSelect={applySelectedIngredient}
           />
+          </View>
 
           {!form.isGeneric && (
             <>
-              <View className="flex-row">
+              <View className="flex-row" {...genericBrandSection.wrapperProps}>
                 <View className="mr-3 flex-1">
                   <FieldLabel text="Generic ingredient" />
 
@@ -1335,6 +1378,7 @@ export default function AddManualPantryItemScreen() {
                     selectedId={form.genericParentId}
                     selectedName={form.genericParentName}
                     placeholder="Search or new"
+                    onOpen={genericBrandSection.trigger}
                     onTextChange={(value: string) => {
                       if (value !== form.genericParentName) {
                         updateForm("genericParentId", "");
@@ -1372,6 +1416,7 @@ export default function AddManualPantryItemScreen() {
                     selectedId={form.brandId}
                     selectedName={form.brandName}
                     placeholder="Search or new"
+                    onOpen={genericBrandSection.trigger}
                     onTextChange={(value: string) => {
                       if (value !== form.brandName) {
                         updateForm("brandId", "");
@@ -1398,17 +1443,20 @@ export default function AddManualPantryItemScreen() {
             </>
           )}
 
+          <View {...descriptionSection.wrapperProps}>
           <FieldLabel text="Description" />
 
           <FormInput
             value={form.description}
             placeholder="Optional description"
             multiline
+            onFocus={descriptionSection.trigger}
             onChangeText={(value) => updateForm("description", value)}
           />
+          </View>
 
           {!form.isGeneric && (
-            <>
+            <View {...barcodeSection.wrapperProps}>
               <FieldLabel text="Barcode" />
 
               <FormInput
@@ -1416,15 +1464,17 @@ export default function AddManualPantryItemScreen() {
                 placeholder="Optional barcode"
                 autoCapitalize="none"
                 keyboardType="numbers-and-punctuation"
+                onFocus={barcodeSection.trigger}
                 onChangeText={(value) => updateForm("barcode", value)}
               />
               <Text className="mt-2 text-xs leading-4 text-slate-500">
                 Scanning a barcode fills this in automatically — type one here if
                 a scan came back empty, so it&apos;s recognized next time.
               </Text>
-            </>
+            </View>
           )}
 
+          <View {...categorySection.wrapperProps}>
           <FieldLabel text="Category" required />
 
           <SearchableObjectDropdown<SelectOption>
@@ -1432,6 +1482,7 @@ export default function AddManualPantryItemScreen() {
             selectedId={form.categoryId}
             selectedName={form.categoryName}
             placeholder="Search or type a new category"
+            onOpen={categorySection.trigger}
             onTextChange={(value) => {
               if (value !== form.categoryName) {
                 updateForm("categoryId", "");
@@ -1445,16 +1496,20 @@ export default function AddManualPantryItemScreen() {
               setCategoryDraft(option.name);
             }}
           />
+          </View>
 
+          <View {...tagsSection.wrapperProps}>
           <FieldLabel text="Tags" />
 
           <CreatableMultiTagDropdown
             options={allTags}
             selectedItems={selectedTags}
             placeholder="Add a tag…"
+            onOpen={tagsSection.trigger}
             onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
             onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
           />
+          </View>
 
           <SectionTitle
             icon="scale-outline"
@@ -1462,7 +1517,7 @@ export default function AddManualPantryItemScreen() {
             description="Define a serving size and when to flag low stock."
           />
 
-          <View className="flex-row">
+          <View className="flex-row" {...servingUnitSection.wrapperProps}>
             <View className="mr-3 flex-1">
               <FieldLabel text="Serving size" />
 
@@ -1470,6 +1525,7 @@ export default function AddManualPantryItemScreen() {
                 value={form.defaultPortionAmount}
                 placeholder="1"
                 keyboardType="decimal-pad"
+                onFocus={servingUnitSection.trigger}
                 onChangeText={(value) => updateForm("defaultPortionAmount", value)}
               />
             </View>
@@ -1491,11 +1547,12 @@ export default function AddManualPantryItemScreen() {
             120 g spice bottle) — nutrition below should match that amount.
           </Text>
 
-          <View className="mt-4">
+          <View className="mt-4" {...pieceLabelSection.wrapperProps}>
             <FieldLabel text="Piece label (optional)" />
             <FormInput
               value={form.pieceLabel}
               placeholder="e.g. steak, fillet, cut"
+              onFocus={pieceLabelSection.trigger}
               onChangeText={(value) => updateForm("pieceLabel", value)}
             />
             <Text className="mt-2 text-xs leading-4 text-slate-500">
@@ -1515,13 +1572,14 @@ export default function AddManualPantryItemScreen() {
           />
 
           {!form.alwaysAvailable && (
-            <>
+            <View {...lowStockSection.wrapperProps}>
               <FieldLabel text="Low-stock threshold" />
 
               <FormInput
                 value={form.lowStockThreshold}
                 placeholder="0"
                 keyboardType="decimal-pad"
+                onFocus={lowStockSection.trigger}
                 onChangeText={(value) => updateForm("lowStockThreshold", value)}
               />
 
@@ -1529,7 +1587,7 @@ export default function AddManualPantryItemScreen() {
                 Warn when total stock falls below this many{" "}
                 {form.quantityUnit.trim() || "units"}.
               </Text>
-            </>
+            </View>
           )}
 
           <Pressable
@@ -1559,7 +1617,7 @@ export default function AddManualPantryItemScreen() {
           </Pressable>
 
           {nutritionExpanded && (
-            <>
+            <View {...nutritionSection.wrapperProps}>
               <View className="mt-4 flex-row">
                 <View className="mr-3 flex-1">
                   <FieldLabel text="Calories" />
@@ -1568,6 +1626,7 @@ export default function AddManualPantryItemScreen() {
                     value={form.calories}
                     keyboardType="decimal-pad"
                     placeholder="N/A"
+                    onFocus={nutritionSection.trigger}
                     onChangeText={(value) => updateForm("calories", value)}
                   />
                 </View>
@@ -1579,6 +1638,7 @@ export default function AddManualPantryItemScreen() {
                     value={form.protein}
                     keyboardType="decimal-pad"
                     placeholder="N/A"
+                    onFocus={nutritionSection.trigger}
                     onChangeText={(value) => updateForm("protein", value)}
                   />
                 </View>
@@ -1592,6 +1652,7 @@ export default function AddManualPantryItemScreen() {
                     value={form.carbs}
                     keyboardType="decimal-pad"
                     placeholder="N/A"
+                    onFocus={nutritionSection.trigger}
                     onChangeText={(value) => updateForm("carbs", value)}
                   />
                 </View>
@@ -1603,6 +1664,7 @@ export default function AddManualPantryItemScreen() {
                     value={form.fats}
                     keyboardType="decimal-pad"
                     placeholder="N/A"
+                    onFocus={nutritionSection.trigger}
                     onChangeText={(value) => updateForm("fats", value)}
                   />
                 </View>
@@ -1616,6 +1678,7 @@ export default function AddManualPantryItemScreen() {
                     value={form.fiber}
                     keyboardType="decimal-pad"
                     placeholder="N/A"
+                    onFocus={nutritionSection.trigger}
                     onChangeText={(value) => updateForm("fiber", value)}
                   />
                 </View>
@@ -1627,11 +1690,12 @@ export default function AddManualPantryItemScreen() {
                     value={form.sodium}
                     keyboardType="decimal-pad"
                     placeholder="N/A"
+                    onFocus={nutritionSection.trigger}
                     onChangeText={(value) => updateForm("sodium", value)}
                   />
                 </View>
               </View>
-            </>
+            </View>
           )}
 
           <Pressable
@@ -1708,13 +1772,14 @@ export default function AddManualPantryItemScreen() {
                 onChange={setWantsDefaultLocation}
               />
               {wantsDefaultLocation && (
-                <>
+                <View {...defaultStorageLocationSection.wrapperProps}>
                   <FieldLabel text="Default storage location" />
                   <SearchableObjectDropdown<SelectOption>
                     options={storageLocations}
                     selectedId={form.defaultStorageLocationId}
                     selectedName={form.defaultStorageLocationName}
                     placeholder="Search or type a location"
+                    onOpen={defaultStorageLocationSection.trigger}
                     onTextChange={(value) => {
                       if (value !== form.defaultStorageLocationName) {
                         updateForm("defaultStorageLocationId", "");
@@ -1727,7 +1792,7 @@ export default function AddManualPantryItemScreen() {
                       setDefaultLocationDraft(option.name);
                     }}
                   />
-                </>
+                </View>
               )}
 
               <ToggleRow
@@ -1737,15 +1802,16 @@ export default function AddManualPantryItemScreen() {
                 onChange={setWantsDefaultExpiry}
               />
               {wantsDefaultExpiry && (
-                <>
+                <View {...defaultExpirySection.wrapperProps}>
                   <FieldLabel text="Default expiry duration" />
                   <DurationValueInput
                     amount={form.defaultExpiryDurationAmount}
                     unit={form.defaultExpiryDurationUnit}
                     onChangeAmount={(value) => updateForm("defaultExpiryDurationAmount", value)}
                     onChangeUnit={(value) => updateForm("defaultExpiryDurationUnit", value)}
+                    onFocus={defaultExpirySection.trigger}
                   />
-                </>
+                </View>
               )}
             </>
           )}
@@ -1788,6 +1854,7 @@ export default function AddManualPantryItemScreen() {
 
           {pantryInventoryExpanded && (
             <>
+              <View {...storageLocationSection.wrapperProps}>
               <FieldLabel text="Storage location" required />
 
               <SearchableObjectDropdown<SelectOption>
@@ -1795,6 +1862,7 @@ export default function AddManualPantryItemScreen() {
                 selectedId={form.storageLocationId}
                 selectedName={form.storageLocationName}
                 placeholder="Search or type a new storage location"
+                onOpen={storageLocationSection.trigger}
                 onTextChange={(value) => {
                   if (value !== form.storageLocationName) {
                     updateForm("storageLocationId", "");
@@ -1808,9 +1876,11 @@ export default function AddManualPantryItemScreen() {
                   setStorageLocationDraft(option.name);
                 }}
               />
+              </View>
 
               <FieldLabel text="Quantity" required />
 
+              <View {...quantitySection.wrapperProps}>
               <QuantityServingInput
                 quantityAvailable={form.quantityAvailable}
                 quantityUnit={form.quantityUnit}
@@ -1823,8 +1893,11 @@ export default function AddManualPantryItemScreen() {
                 entryCount={form.entryCount}
                 onChangeEntryCount={(value) => updateForm("entryCount", value)}
                 customUnitConversions={resolvedConversions}
+                onFocus={quantitySection.trigger}
               />
+              </View>
 
+              <View {...purchaseDateSection.wrapperProps}>
               <FieldLabel text="Purchase date" />
 
               <DateTextInput
@@ -1832,8 +1905,11 @@ export default function AddManualPantryItemScreen() {
                 style={{ height: 56 }}
                 className="rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 onChangeText={(value) => updateForm("purchaseDate", value)}
+                onFocus={purchaseDateSection.trigger}
               />
+              </View>
 
+              <View {...expiryDateSection.wrapperProps}>
               <FieldLabel text="Expiry date" />
 
               <DateTextInput
@@ -1841,20 +1917,27 @@ export default function AddManualPantryItemScreen() {
                 style={{ height: 56 }}
                 className="rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 onChangeText={(value) => updateForm("expiryDate", value)}
+                onFocus={expiryDateSection.trigger}
               />
+              </View>
 
+              <View {...expiryDurationSection.wrapperProps}>
               <FieldLabel text="Or set expiry from purchase date" />
               <DurationExpiryInput
                 purchaseDate={form.purchaseDate}
                 onApply={(expiryDate) => updateForm("expiryDate", expiryDate)}
+                onFocus={expiryDurationSection.trigger}
               />
+              </View>
 
+              <View {...storeSection.wrapperProps}>
               <FieldLabel text="Store (optional)" />
               <SearchableObjectDropdown<SelectOption>
                 options={stores}
                 selectedId={form.storeId}
                 selectedName={form.storeName}
                 placeholder="Search or type a new store"
+                onOpen={storeSection.trigger}
                 onTextChange={(value) => {
                   if (value !== form.storeName) {
                     updateForm("storeId", "");
@@ -1868,12 +1951,16 @@ export default function AddManualPantryItemScreen() {
                   setStoreDraft(option.name);
                 }}
               />
+              </View>
 
+              <View {...priceSection.wrapperProps}>
               <FieldLabel text="Price paid (optional)" />
               <PriceInput
                 value={form.purchasePrice}
                 onChangeText={(value) => updateForm("purchasePrice", value)}
+                onFocus={priceSection.trigger}
               />
+              </View>
             </>
           )}
         </ScrollView>

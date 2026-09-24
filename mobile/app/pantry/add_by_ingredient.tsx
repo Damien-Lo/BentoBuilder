@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -39,6 +39,7 @@ import {
 } from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
+import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
   recentPantryEntries,
@@ -152,10 +153,18 @@ function SelectedIngredientCard({
 
 export default function AddPantryItemByIngredientScreen() {
   const router = useRouter();
-  const { locationId, locationName, ingredientId } = useLocalSearchParams<{
+  const { locationId, locationName, ingredientId, scannedQuantity, scannedQuantityUnit } = useLocalSearchParams<{
     locationId?: string;
     locationName?: string;
     ingredientId?: string;
+    // Set only when arriving from a barcode scan that matched an existing
+    // ingredient (see PantryMainPage's scanner handler) — the real scanned
+    // package amount, e.g. "473" / "ml" for a bottle. Takes priority over
+    // the ingredient's own defaultPortionAmount/Unit (a single-serving
+    // size, e.g. "15 ml" for fish sauce) below, which is only a sane
+    // default for the no-scan manual-add case.
+    scannedQuantity?: string;
+    scannedQuantityUnit?: string;
   }>();
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -194,6 +203,20 @@ export default function AddPantryItemByIngredientScreen() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Scrolls whichever field was just focused/opened into view — see
+  // useScrollFocusSection for why zIndex has to descend in on-screen order
+  // (only the fields that can show a dropdown need one; plain text fields
+  // default to 0 and don't need to be listed here). Store is the only
+  // dropdown-capable field on this page.
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollAnchorRef = useRef<View>(null);
+  const quantitySection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const datesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const expiryDurationSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const storeSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
+  const priceSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
 
   useEffect(() => {
     let cancelled = false;
@@ -239,8 +262,8 @@ export default function AddPantryItemByIngredientScreen() {
             setSelectedIngredient(match);
             setQuantityRows([
               {
-                amount: match.defaultPortionAmount != null ? String(match.defaultPortionAmount) : "1",
-                unit: match.defaultPortionUnit ?? "item",
+                amount: scannedQuantity ?? (match.defaultPortionAmount != null ? String(match.defaultPortionAmount) : "1"),
+                unit: scannedQuantityUnit || match.defaultPortionUnit || "item",
               },
             ]);
           }
@@ -708,7 +731,8 @@ export default function AddPantryItemByIngredientScreen() {
           </View>
         ) : (
           <View className="flex-1 px-5 pt-5">
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <View ref={scrollAnchorRef} collapsable={false} />
             <SelectedIngredientCard
               ingredient={selectedIngredient}
               onClear={() => {
@@ -718,6 +742,7 @@ export default function AddPantryItemByIngredientScreen() {
             />
 
             {/* Quantity */}
+            <View {...quantitySection.wrapperProps}>
             <Text className="mb-2 mt-6 text-sm font-semibold text-slate-700">
               Quantity
             </Text>
@@ -727,6 +752,7 @@ export default function AddPantryItemByIngredientScreen() {
                 <TextInput
                   value={row.amount}
                   onChangeText={(value) => updateQuantityRowAmount(index, value)}
+                  onFocus={quantitySection.trigger}
                   keyboardType="decimal-pad"
                   placeholder="0"
                   placeholderTextColor="#94A3B8"
@@ -790,6 +816,7 @@ export default function AddPantryItemByIngredientScreen() {
                   : "Add another entry"}
               </Text>
             </Pressable>
+            </View>
 
             {/* Storage location */}
             <Text className="mb-2 mt-6 text-sm font-semibold text-slate-700">
@@ -865,7 +892,7 @@ export default function AddPantryItemByIngredientScreen() {
             </View>
 
             {/* Dates */}
-            <View className="mt-6 flex-row">
+            <View className="mt-6 flex-row" {...datesSection.wrapperProps}>
               <View className="mr-3 flex-1">
                 <Text className="mb-2 text-sm font-semibold text-slate-700">
                   Purchase date
@@ -873,6 +900,7 @@ export default function AddPantryItemByIngredientScreen() {
                 <DateTextInput
                   value={purchaseDate}
                   onChangeText={setPurchaseDate}
+                  onFocus={datesSection.trigger}
                   className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 />
               </View>
@@ -886,6 +914,7 @@ export default function AddPantryItemByIngredientScreen() {
                     setExpiryDate(value);
                     setExpiryTouched(true);
                   }}
+                  onFocus={datesSection.trigger}
                   className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 />
               </View>
@@ -902,6 +931,7 @@ export default function AddPantryItemByIngredientScreen() {
               </Text>
             ) : null}
 
+            <View {...expiryDurationSection.wrapperProps}>
             <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
               Or set expiry from purchase date
             </Text>
@@ -915,10 +945,13 @@ export default function AddPantryItemByIngredientScreen() {
                 setExpiryDate(value);
                 setExpiryTouched(true);
               }}
+              onFocus={expiryDurationSection.trigger}
             />
+            </View>
 
             {showMoreDetails || storeId || storeDraft.trim() || purchasePrice.trim() ? (
               <>
+                <View {...storeSection.wrapperProps}>
                 <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
                   Store (optional)
                 </Text>
@@ -932,6 +965,7 @@ export default function AddPantryItemByIngredientScreen() {
                   selectedId={storeId}
                   selectedName={storeName}
                   placeholder="Search or type a new store"
+                  onOpen={storeSection.trigger}
                   onTextChange={(value) => {
                     if (value !== storeName) setStoreId("");
                     setStoreDraft(value);
@@ -944,11 +978,18 @@ export default function AddPantryItemByIngredientScreen() {
                     setStoreTouched(true);
                   }}
                 />
+                </View>
 
+                <View {...priceSection.wrapperProps}>
                 <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
                   Price paid (optional)
                 </Text>
-                <PriceInput value={purchasePrice} onChangeText={setPurchasePrice} />
+                <PriceInput
+                  value={purchasePrice}
+                  onChangeText={setPurchasePrice}
+                  onFocus={priceSection.trigger}
+                />
+                </View>
               </>
             ) : (
               <Pressable
@@ -962,18 +1003,21 @@ export default function AddPantryItemByIngredientScreen() {
               </Pressable>
             )}
 
+            <View {...notesSection.wrapperProps}>
             <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
               Notes (optional)
             </Text>
             <TextInput
               value={notes}
               onChangeText={setNotes}
+              onFocus={notesSection.trigger}
               placeholder="e.g. Half-used, keep away from the window"
               placeholderTextColor="#94A3B8"
               multiline
               textAlignVertical="top"
               className="min-h-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
             />
+            </View>
           </ScrollView>
 
             <View className="pb-6 pt-4">

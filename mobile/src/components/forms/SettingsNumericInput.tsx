@@ -6,11 +6,13 @@ export function SettingsNumericInput({
   onChange,
   placeholder,
   unit,
+  onFocus,
 }: {
   value: number | null;
   onChange: (v: number | null) => void;
   placeholder: string;
   unit?: string;
+  onFocus?: () => void;
 }) {
   const [text, setText] = useState(value != null ? String(value) : "");
 
@@ -31,6 +33,7 @@ export function SettingsNumericInput({
         value={text}
         onChangeText={setText}
         onBlur={() => commit(text)}
+        onFocus={onFocus}
         placeholder={placeholder}
         placeholderTextColor="#94A3B8"
         keyboardType="numeric"
