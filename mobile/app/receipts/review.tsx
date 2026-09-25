@@ -80,6 +80,7 @@ import {
   getIngredientConversions,
   type CustomUnitConversion,
 } from "@/src/utils/unitConversion";
+import { scaleNutrition, toNutritionInput, unknownNutrition } from "@/src/utils/nutrition";
 import {
   clearReviewDraft,
   loadReviewDraft,
@@ -151,14 +152,7 @@ interface ReviewRow {
 // nullable numbers (so an empty editable field has a clear "unset" value) —
 // this just bridges the two.
 function toReceiptNutrition(nutrition?: IngredientNutrition): ReceiptNutrition {
-  return {
-    calories: nutrition?.calories ?? null,
-    protein: nutrition?.protein ?? null,
-    carbs: nutrition?.carbs ?? null,
-    fats: nutrition?.fats ?? null,
-    fiber: nutrition?.fiber ?? null,
-    sodium: nutrition?.sodium ?? null,
-  };
+  return scaleNutrition(nutrition, 1);
 }
 
 // A row has one single unit throughout (quantity bought and serving size
@@ -1103,9 +1097,7 @@ export default function ReceiptReviewPage() {
             // item" anyway, and is purely how much was bought).
             const portionNutrition = matched
               ? toReceiptNutrition(matched.nutrition)
-              : proposal?.estimatedNutrition ?? {
-                  calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null,
-                };
+              : proposal?.estimatedNutrition ?? unknownNutrition();
 
             // Gemini reports the real net weight/volume of ONE unit of this
             // product separately from the printed count (e.g. "1 item" that's
@@ -1396,9 +1388,7 @@ export default function ReceiptReviewPage() {
             genericParentId: "",
             genericName: "",
             barcode: null,
-            nutrition: {
-              calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null,
-            },
+            nutrition: unknownNutrition(),
             defaultPortionAmount: "1",
             unitConversions: [],
             expirySuggestion: null,
@@ -1539,14 +1529,7 @@ export default function ReceiptReviewPage() {
       ...(product.servingIsEstimated
         ? {}
         : { defaultPortionAmount: String(convertPortionAmount(product.servingSize, product.servingUnit, resultingUnit)) }),
-      nutrition: {
-        calories: product.calories ?? null,
-        protein: product.protein ?? null,
-        carbs: product.carbs ?? null,
-        fats: product.fats ?? null,
-        fiber: product.fiber ?? null,
-        sodium: product.sodium ?? null,
-      },
+      nutrition: product.nutrition ?? unknownNutrition(),
       unitConversions: [],
       expirySuggestion: null,
       error: undefined,
@@ -1592,7 +1575,7 @@ export default function ReceiptReviewPage() {
       genericParentId: "",
       genericName: "",
       barcode: null,
-      nutrition: { calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null },
+      nutrition: unknownNutrition(),
       defaultPortionAmount: "1",
       unitConversions: [],
     };
@@ -1751,14 +1734,7 @@ export default function ReceiptReviewPage() {
                 row.isGeneric || row.genericParentId ? undefined : row.genericName || undefined,
               defaultPortionAmount: Number(row.defaultPortionAmount) || 1,
               defaultPortionUnit: row.unit || "item",
-              nutrition: {
-                calories: row.nutrition.calories ?? undefined,
-                protein: row.nutrition.protein ?? undefined,
-                carbs: row.nutrition.carbs ?? undefined,
-                fats: row.nutrition.fats ?? undefined,
-                fiber: row.nutrition.fiber ?? undefined,
-                sodium: row.nutrition.sodium ?? undefined,
-              },
+              nutrition: toNutritionInput(row.nutrition),
               unitConversions: row.unitConversions,
             });
             ingredientId = newIngredient._id;

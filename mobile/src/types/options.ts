@@ -1,5 +1,6 @@
 import type { DurationUnit } from "@/src/utils/date";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
+import type { PartialNutrition } from "@/src/types/nutrition";
 
 export interface SelectOption {
   _id: string;
@@ -31,12 +32,7 @@ export interface IngredientOption
   defaultExpiryDurationAmount?: number;
   defaultExpiryDurationUnit?: DurationUnit;
 
-  calories?: number;
-  protein?: number;
-  carbs?: number;
-  fat?: number;
-  fiber?: number;
-  sodium?: number;
+  nutrition?: PartialNutrition;
 
   categoryId?: string;
   categoryName?: string;

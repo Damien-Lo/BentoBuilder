@@ -1,8 +1,10 @@
 import {
+  ALL_NUTRITION_FIELDS,
   CORE_NUTRITION_FIELDS,
   EXTENDED_NUTRITION_FIELDS,
   NUTRITION_FIELD_META,
   type NullableNutrition,
+  type NutritionInput,
   type NutritionTotals,
   type PartialNutrition,
 } from "@/src/types/nutrition";
@@ -45,6 +47,17 @@ export function scaleNutrition(
     if (value != null) scaled[field] = value * factor;
   }
   return scaled;
+}
+
+// A create/update payload: unknown (null) values are omitted rather than
+// sent, so the server stores its own null default instead of a value.
+export function toNutritionInput(source: PartialNutrition): NutritionInput {
+  const input: NutritionInput = {};
+  for (const field of ALL_NUTRITION_FIELDS) {
+    const value = source[field];
+    if (value != null) input[field] = value;
+  }
+  return input;
 }
 
 // Adds `nutrition` into `totals` in place. A known extended 0 (e.g. "0 g

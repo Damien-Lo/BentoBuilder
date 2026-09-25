@@ -12,6 +12,42 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
+import {
+  ALL_NUTRITION_FIELDS,
+  CORE_NUTRITION_FIELDS,
+  NUTRITION_FIELD_META,
+  type NullableNutrition,
+  type NutritionField,
+} from "@/src/types/nutrition";
+
+// Open Food Facts' own nutriment key for each of our fields, and the factor
+// from OFF's normalized unit to ours. OFF's `_100g`/`_serving` values are
+// always normalized to grams (kcal for energy) regardless of what unit the
+// contributor typed in — checked against real products (e.g. a Mars bar's
+// vitamin-a_100g = 4.94e-05, i.e. 49.4 mcg; skyr's calcium_100g = 0.11,
+// i.e. 110 mg) — so mg fields are x1000 and vitamin A (mcg) is x1e6. Typed
+// as a full Record so adding a nutrient to types/nutrition.ts won't compile
+// until it's mapped here too.
+const OFF_NUTRIENTS: Record<NutritionField, { key: string; factor: number }> = {
+  calories:           { key: "energy-kcal",         factor: 1 },
+  protein:            { key: "proteins",            factor: 1 },
+  carbs:              { key: "carbohydrates",       factor: 1 },
+  fats:               { key: "fat",                 factor: 1 },
+  fiber:              { key: "fiber",               factor: 1 },
+  sodium:             { key: "sodium",              factor: 1000 },
+  sugar:              { key: "sugars",              factor: 1 },
+  saturatedFat:       { key: "saturated-fat",       factor: 1 },
+  polyunsaturatedFat: { key: "polyunsaturated-fat", factor: 1 },
+  monounsaturatedFat: { key: "monounsaturated-fat", factor: 1 },
+  transFat:           { key: "trans-fat",           factor: 1 },
+  cholesterol:        { key: "cholesterol",         factor: 1000 },
+  potassium:          { key: "potassium",           factor: 1000 },
+  vitaminA:           { key: "vitamin-a",           factor: 1_000_000 },
+  vitaminC:           { key: "vitamin-c",           factor: 1000 },
+  calcium:            { key: "calcium",             factor: 1000 },
+  iron:               { key: "iron",                factor: 1000 },
+};
+
 export interface ScannedProduct {
   name: string;
   barcode: string;
@@ -30,12 +66,10 @@ export interface ScannedProduct {
   // package's own unit is) is not a real serving for most products, and
   // is actively wrong for anything not naturally measured by weight.
   servingIsEstimated: boolean;
-  calories?: number;
-  protein?: number;
-  carbs?: number;
-  fats?: number;
-  fiber?: number;
-  sodium?: number;
+  // Per servingSize/servingUnit above, already in our own units and
+  // rounded per NUTRITION_FIELD_META. Absent when the lookup found nothing
+  // usable (not found / no name / network failure).
+  nutrition?: NullableNutrition;
 }
 
 interface Props {
@@ -142,7 +176,15 @@ export function BarcodeScannerModal({
         return undefined;
       }
 
-      const sodiumG = getNum("sodium");
+      const nutrition = {} as NullableNutrition;
+      for (const field of CORE_NUTRITION_FIELDS) nutrition[field] = null;
+      for (const field of ALL_NUTRITION_FIELDS) {
+        const { key, factor } = OFF_NUTRIENTS[field];
+        const raw = getNum(key);
+        if (raw == null) continue;
+        const decimals = 10 ** NUTRITION_FIELD_META[field].decimals;
+        nutrition[field] = Math.round(raw * factor * decimals) / decimals;
+      }
 
       // Brand — take the first brand when multiple are comma-separated
       const rawBrand = String(p.brands ?? "").trim();
@@ -194,13 +236,7 @@ export function BarcodeScannerModal({
         // unaffected - Open Food Facts' own _100g-suffixed fields are that
         // convention regardless of product type.
         servingUnit: hasServing ? pkgUnit : "g",
-        calories: getNum("energy-kcal"),
-        protein: getNum("proteins"),
-        carbs: getNum("carbohydrates"),
-        fats: getNum("fat"),
-        fiber: getNum("fiber"),
-        // Open Food Facts stores sodium in g; our model uses mg
-        sodium: sodiumG != null ? Math.round(sodiumG * 1000) : undefined,
+        nutrition,
       });
       onClose();
     } catch {

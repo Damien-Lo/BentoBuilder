@@ -57,6 +57,15 @@ import { updateGroceryItem } from "@/src/services/groceryListApi";
 
 import type { IngredientOption, SelectOption } from "@/src/types/options";
 import type { PantryItem } from "@/src/types/pantry";
+import {
+  ALL_NUTRITION_FIELDS,
+  CORE_NUTRITION_FIELDS,
+  EXTENDED_NUTRITION_FIELDS,
+  NUTRITION_FIELD_META,
+  type NutritionField,
+  type NutritionInput,
+  type PartialNutrition,
+} from "@/src/types/nutrition";
 import { barcodesMatch } from "@/src/utils/barcode";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { todayDateInputString } from "@/src/utils/date";
@@ -114,12 +123,45 @@ interface FormState {
   defaultExpiryDurationAmount: string;
   defaultExpiryDurationUnit: DurationUnit;
 
-  calories: string;
-  protein: string;
-  carbs: string;
-  fats: string;
-  fiber: string;
-  sodium: string;
+  nutrition: NutritionForm;
+}
+
+// Every nutrient (core and extended) as its own raw text field — "" means
+// unknown, same as the core fields always did.
+type NutritionForm = Record<NutritionField, string>;
+
+function nutritionToForm(nutrition?: PartialNutrition | null): NutritionForm {
+  const form = {} as NutritionForm;
+  for (const field of ALL_NUTRITION_FIELDS) {
+    const value = nutrition?.[field];
+    form[field] = value != null ? String(value) : "";
+  }
+  return form;
+}
+
+// A scan fills in whichever fields it actually reported; anything it
+// didn't keeps what was already typed.
+function mergeNutritionForm(current: NutritionForm, incoming?: PartialNutrition | null): NutritionForm {
+  const merged = { ...current };
+  for (const field of ALL_NUTRITION_FIELDS) {
+    const value = incoming?.[field];
+    if (value != null) merged[field] = String(value);
+  }
+  return merged;
+}
+
+function parseNutritionParam(raw?: string): PartialNutrition | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as PartialNutrition;
+  } catch {
+    return null;
+  }
+}
+
+function nutritionFieldLabel(field: NutritionField): string {
+  const { label, unit } = NUTRITION_FIELD_META[field];
+  return unit === "kcal" ? label : `${label} (${unit})`;
 }
 
 const initialForm: FormState = {
@@ -163,12 +205,7 @@ const initialForm: FormState = {
   defaultExpiryDurationAmount: "",
   defaultExpiryDurationUnit: "week",
 
-  calories: "",
-  protein: "",
-  carbs: "",
-  fats: "",
-  fiber: "",
-  sodium: "",
+  nutrition: nutritionToForm(),
 };
 
 function optionalNumber(value: string): number | undefined {
@@ -263,17 +300,7 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
     defaultExpiryDurationAmount: ingredient.defaultExpiryDurationAmount ?? undefined,
     defaultExpiryDurationUnit: ingredient.defaultExpiryDurationUnit ?? undefined,
 
-    calories: ingredient.nutrition?.calories,
-
-    protein: ingredient.nutrition?.protein,
-
-    carbs: ingredient.nutrition?.carbs,
-
-    fat: ingredient.nutrition?.fats,
-
-    fiber: ingredient.nutrition?.fiber,
-
-    sodium: ingredient.nutrition?.sodium,
+    nutrition: ingredient.nutrition,
 
     categoryId:
       category?._id ??
@@ -300,12 +327,8 @@ export default function AddManualPantryItemScreen() {
     scannedQuantityUnit?: string;
     scannedServingSize?: string;
     scannedServingUnit?: string;
-    scannedCalories?: string;
-    scannedProtein?: string;
-    scannedCarbs?: string;
-    scannedFats?: string;
-    scannedFiber?: string;
-    scannedSodium?: string;
+    // JSON-encoded PartialNutrition — every nutrient the scan reported.
+    scannedNutrition?: string;
     // Present when arriving from "add as a new ingredient" on a grocery
     // list item that isn't directly loggable — completes that item once
     // this ingredient + a mandatory pantry entry are saved.
@@ -350,12 +373,7 @@ export default function AddManualPantryItemScreen() {
         // had a real declared serving — see servingIsEstimated on
         // ScannedProduct — so an absent param already means "leave blank".
         defaultPortionAmount: params.scannedServingSize ?? "",
-        calories: params.scannedCalories ?? "",
-        protein: params.scannedProtein ?? "",
-        carbs: params.scannedCarbs ?? "",
-        fats: params.scannedFats ?? "",
-        fiber: params.scannedFiber ?? "",
-        sodium: params.scannedSodium ?? "",
+        nutrition: nutritionToForm(parseNutritionParam(params.scannedNutrition)),
       };
     }
     return initialForm;
@@ -373,6 +391,10 @@ export default function AddManualPantryItemScreen() {
 
   // Collapsed by default — nutrition is optional and often filled in later.
   const [nutritionExpanded, setNutritionExpanded] = useState(false);
+
+  // Collapsed by default even within the nutrition section — the extended
+  // nutrients are tracked in the background, not front-and-center.
+  const [moreNutrientsExpanded, setMoreNutrientsExpanded] = useState(false);
 
   // Collapsed by default — smart defaults are optional.
   const [smartDefaultsExpanded, setSmartDefaultsExpanded] = useState(false);
@@ -569,6 +591,42 @@ export default function AddManualPantryItemScreen() {
     }));
   }
 
+  function updateNutritionField(field: NutritionField, value: string) {
+    setForm((current) => ({
+      ...current,
+      nutrition: { ...current.nutrition, [field]: value },
+    }));
+  }
+
+  const filledExtendedCount = EXTENDED_NUTRITION_FIELDS.filter(
+    (field) => form.nutrition[field].trim() !== "",
+  ).length;
+
+  // Two fields per row, same layout the six core fields always used; an odd
+  // last field gets an empty spacer so it stays half-width.
+  function renderNutritionFields(fields: readonly NutritionField[]) {
+    const rows: NutritionField[][] = [];
+    for (let i = 0; i < fields.length; i += 2) rows.push(fields.slice(i, i + 2));
+
+    return rows.map((pair) => (
+      <View key={pair[0]} className="flex-row">
+        {pair.map((field, index) => (
+          <View key={field} className={index === 0 ? "mr-3 flex-1" : "flex-1"}>
+            <FieldLabel text={nutritionFieldLabel(field)} />
+            <FormInput
+              value={form.nutrition[field]}
+              keyboardType="decimal-pad"
+              placeholder="N/A"
+              onFocus={nutritionSection.trigger}
+              onChangeText={(value) => updateNutritionField(field, value)}
+            />
+          </View>
+        ))}
+        {pair.length === 1 && <View className="flex-1" />}
+      </View>
+    ));
+  }
+
   function applyScannedProduct(product: ScannedProduct) {
     // Scanning a barcode that's already in the catalog should log a pantry
     // entry for that ingredient, not offer to create a duplicate.
@@ -614,12 +672,7 @@ export default function AddManualPantryItemScreen() {
       defaultPortionAmount: product.servingIsEstimated
         ? current.defaultPortionAmount
         : String(product.servingSize),
-      calories: product.calories != null ? String(Math.round(product.calories)) : current.calories,
-      protein: product.protein != null ? String(Math.round(product.protein * 10) / 10) : current.protein,
-      carbs: product.carbs != null ? String(Math.round(product.carbs * 10) / 10) : current.carbs,
-      fats: product.fats != null ? String(Math.round(product.fats * 10) / 10) : current.fats,
-      fiber: product.fiber != null ? String(Math.round(product.fiber * 10) / 10) : current.fiber,
-      sodium: product.sodium != null ? String(product.sodium) : current.sodium,
+      nutrition: mergeNutritionForm(current.nutrition, product.nutrition),
     }));
 
     if (product.brand) {
@@ -652,17 +705,7 @@ export default function AddManualPantryItemScreen() {
           : "0",
       alwaysAvailable: option.isAlwaysAvailable ?? false,
 
-      calories: numberToFormValue(option.calories),
-
-      protein: numberToFormValue(option.protein),
-
-      carbs: numberToFormValue(option.carbs),
-
-      fats: numberToFormValue(option.fat),
-
-      fiber: numberToFormValue(option.fiber),
-
-      sodium: numberToFormValue(option.sodium),
+      nutrition: nutritionToForm(option.nutrition),
 
       categoryId: option.categoryId ?? option.category?._id ?? "",
 
@@ -1017,14 +1060,11 @@ export default function AddManualPantryItemScreen() {
         ? optionalNumber(form.defaultExpiryDurationAmount)
         : undefined;
 
-      const nutrition = {
-        calories: optionalNumber(form.calories),
-        protein: optionalNumber(form.protein),
-        carbs: optionalNumber(form.carbs),
-        fats: optionalNumber(form.fats),
-        fiber: optionalNumber(form.fiber),
-        sodium: optionalNumber(form.sodium),
-      };
+      const nutrition: NutritionInput = {};
+      for (const field of ALL_NUTRITION_FIELDS) {
+        const value = optionalNumber(form.nutrition[field]);
+        if (value !== undefined) nutrition[field] = value;
+      }
 
       const normalizedName = form.ingredientName.trim().toLowerCase();
 
@@ -1618,83 +1658,30 @@ export default function AddManualPantryItemScreen() {
 
           {nutritionExpanded && (
             <View {...nutritionSection.wrapperProps}>
-              <View className="mt-4 flex-row">
+              <View className="mt-4">{renderNutritionFields(CORE_NUTRITION_FIELDS)}</View>
+
+              <Pressable
+                className="mt-6 flex-row items-center justify-between"
+                onPress={() => setMoreNutrientsExpanded((current) => !current)}
+              >
                 <View className="mr-3 flex-1">
-                  <FieldLabel text="Calories" />
-
-                  <FormInput
-                    value={form.calories}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("calories", value)}
-                  />
+                  <Text className="text-sm font-semibold text-slate-800">
+                    More nutrients
+                    {filledExtendedCount > 0 ? ` · ${filledExtendedCount} filled` : ""}
+                  </Text>
+                  <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                    Optional — sugar, fat breakdown, cholesterol, potassium,
+                    vitamins and minerals.
+                  </Text>
                 </View>
+                <Ionicons
+                  name={moreNutrientsExpanded ? "chevron-up" : "chevron-down"}
+                  size={20}
+                  color="#64748B"
+                />
+              </Pressable>
 
-                <View className="flex-1">
-                  <FieldLabel text="Protein (g)" />
-
-                  <FormInput
-                    value={form.protein}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("protein", value)}
-                  />
-                </View>
-              </View>
-
-              <View className="flex-row">
-                <View className="mr-3 flex-1">
-                  <FieldLabel text="Carbs (g)" />
-
-                  <FormInput
-                    value={form.carbs}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("carbs", value)}
-                  />
-                </View>
-
-                <View className="flex-1">
-                  <FieldLabel text="Fats (g)" />
-
-                  <FormInput
-                    value={form.fats}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("fats", value)}
-                  />
-                </View>
-              </View>
-
-              <View className="flex-row">
-                <View className="mr-3 flex-1">
-                  <FieldLabel text="Fiber (g)" />
-
-                  <FormInput
-                    value={form.fiber}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("fiber", value)}
-                  />
-                </View>
-
-                <View className="flex-1">
-                  <FieldLabel text="Sodium (mg)" />
-
-                  <FormInput
-                    value={form.sodium}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("sodium", value)}
-                  />
-                </View>
-              </View>
+              {moreNutrientsExpanded && renderNutritionFields(EXTENDED_NUTRITION_FIELDS)}
             </View>
           )}
 

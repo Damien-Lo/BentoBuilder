@@ -1826,12 +1826,9 @@ export default function PantryMainPage() {
             // its absence as "leave the default-portion field blank".
             ...(product.servingIsEstimated ? {} : { scannedServingSize: String(product.servingSize) }),
             scannedServingUnit: product.servingUnit,
-            scannedCalories: product.calories != null ? String(Math.round(product.calories)) : "",
-            scannedProtein: product.protein != null ? String(Math.round(product.protein * 10) / 10) : "",
-            scannedCarbs: product.carbs != null ? String(Math.round(product.carbs * 10) / 10) : "",
-            scannedFats: product.fats != null ? String(Math.round(product.fats * 10) / 10) : "",
-            scannedFiber: product.fiber != null ? String(Math.round(product.fiber * 10) / 10) : "",
-            scannedSodium: product.sodium != null ? String(product.sodium) : "",
+            // One JSON param for every nutrient (core and extended) rather
+            // than one string param each — add_manual.tsx parses it back.
+            ...(product.nutrition ? { scannedNutrition: JSON.stringify(product.nutrition) } : {}),
           };
 
           const match = ingredients.find((i) => barcodesMatch(i.barcode, product.barcode));
