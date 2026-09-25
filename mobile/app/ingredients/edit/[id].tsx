@@ -22,6 +22,7 @@ import {
   DurationValueInput,
   FieldLabel,
   FormInput,
+  NutritionFieldsEditor,
   PriceInput,
   QuantityServingInput,
   SearchableObjectDropdown,
@@ -29,6 +30,12 @@ import {
   ToggleRow,
   UnitConversionsEditor,
 } from "@/src/components/forms";
+import {
+  hasAnyNutrition,
+  nutritionFormToInput,
+  nutritionToForm,
+  type NutritionFormValues,
+} from "@/src/utils/nutritionForm";
 
 import {
   getBrands,
@@ -121,9 +128,7 @@ function optionalNumber(value: string): number | undefined {
 }
 
 function hasNutritionData(form: FormState): boolean {
-  return [form.calories, form.protein, form.carbs, form.fats, form.fiber, form.sodium].some(
-    (value) => value.trim() !== "",
-  );
+  return hasAnyNutrition(form.nutrition);
 }
 
 interface FormState {
@@ -148,12 +153,11 @@ interface FormState {
   defaultStorageLocationName: string;
   defaultExpiryDurationAmount: string;
   defaultExpiryDurationUnit: DurationUnit;
-  calories: string;
-  protein: string;
-  carbs: string;
-  fats: string;
-  fiber: string;
-  sodium: string;
+  // Every nutrient, core and extended — the update route replaces the
+  // whole nutrition sub-document, so the form has to load and send back
+  // all of them or a save here would wipe values set elsewhere (e.g. a
+  // barcode scan's extended nutrients).
+  nutrition: NutritionFormValues;
   unitConversions: CustomUnitConversion[];
 }
 
@@ -184,30 +188,7 @@ function ingredientToForm(ingredient: Ingredient): FormState {
         ? String(ingredient.defaultExpiryDurationAmount)
         : "",
     defaultExpiryDurationUnit: ingredient.defaultExpiryDurationUnit ?? "week",
-    calories:
-      ingredient.nutrition?.calories != null
-        ? String(ingredient.nutrition.calories)
-        : "",
-    protein:
-      ingredient.nutrition?.protein != null
-        ? String(ingredient.nutrition.protein)
-        : "",
-    carbs:
-      ingredient.nutrition?.carbs != null
-        ? String(ingredient.nutrition.carbs)
-        : "",
-    fats:
-      ingredient.nutrition?.fats != null
-        ? String(ingredient.nutrition.fats)
-        : "",
-    fiber:
-      ingredient.nutrition?.fiber != null
-        ? String(ingredient.nutrition.fiber)
-        : "",
-    sodium:
-      ingredient.nutrition?.sodium != null
-        ? String(ingredient.nutrition.sodium)
-        : "",
+    nutrition: nutritionToForm(ingredient.nutrition),
     unitConversions: ingredient.unitConversions ?? [],
   };
 }
@@ -675,14 +656,7 @@ export default function IngredientDetailScreen() {
         defaultExpiryDurationAmount: defaultExpiryDurationAmount ?? null,
         defaultExpiryDurationUnit:
           defaultExpiryDurationAmount != null ? form.defaultExpiryDurationUnit : null,
-        nutrition: {
-          calories: optionalNumber(form.calories),
-          protein: optionalNumber(form.protein),
-          carbs: optionalNumber(form.carbs),
-          fats: optionalNumber(form.fats),
-          fiber: optionalNumber(form.fiber),
-          sodium: optionalNumber(form.sodium),
-        },
+        nutrition: nutritionFormToInput(form.nutrition),
         unitConversions: form.unitConversions,
         tags: tagIds,
       });
@@ -1266,74 +1240,11 @@ export default function IngredientDetailScreen() {
 
               {nutritionExpanded && (
                 <View {...nutritionSection.wrapperProps}>
-                  <View className="mt-4 flex-row">
-                    <View className="mr-3 flex-1">
-                      <FieldLabel text="Calories" />
-                      <FormInput
-                        value={form.calories}
-                        placeholder="N/A"
-                        keyboardType="decimal-pad"
-                        onFocus={nutritionSection.trigger}
-                        onChangeText={(v) => updateForm("calories", v)}
-                      />
-                    </View>
-                    <View className="flex-1">
-                      <FieldLabel text="Protein (g)" />
-                      <FormInput
-                        value={form.protein}
-                        placeholder="N/A"
-                        keyboardType="decimal-pad"
-                        onFocus={nutritionSection.trigger}
-                        onChangeText={(v) => updateForm("protein", v)}
-                      />
-                    </View>
-                  </View>
-
-                  <View className="flex-row">
-                    <View className="mr-3 flex-1">
-                      <FieldLabel text="Carbs (g)" />
-                      <FormInput
-                        value={form.carbs}
-                        placeholder="N/A"
-                        keyboardType="decimal-pad"
-                        onFocus={nutritionSection.trigger}
-                        onChangeText={(v) => updateForm("carbs", v)}
-                      />
-                    </View>
-                    <View className="flex-1">
-                      <FieldLabel text="Fats (g)" />
-                      <FormInput
-                        value={form.fats}
-                        placeholder="N/A"
-                        keyboardType="decimal-pad"
-                        onFocus={nutritionSection.trigger}
-                        onChangeText={(v) => updateForm("fats", v)}
-                      />
-                    </View>
-                  </View>
-
-                  <View className="flex-row">
-                    <View className="mr-3 flex-1">
-                      <FieldLabel text="Fiber (g)" />
-                      <FormInput
-                        value={form.fiber}
-                        placeholder="N/A"
-                        keyboardType="decimal-pad"
-                        onFocus={nutritionSection.trigger}
-                        onChangeText={(v) => updateForm("fiber", v)}
-                      />
-                    </View>
-                    <View className="flex-1">
-                      <FieldLabel text="Sodium (mg)" />
-                      <FormInput
-                        value={form.sodium}
-                        placeholder="N/A"
-                        keyboardType="decimal-pad"
-                        onFocus={nutritionSection.trigger}
-                        onChangeText={(v) => updateForm("sodium", v)}
-                      />
-                    </View>
-                  </View>
+                  <NutritionFieldsEditor
+                    values={form.nutrition}
+                    onChange={(field, value) => updateForm("nutrition", { ...form.nutrition, [field]: value })}
+                    onFocus={nutritionSection.trigger}
+                  />
                 </View>
               )}
 

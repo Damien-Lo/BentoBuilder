@@ -1,16 +1,13 @@
 import { z } from "zod";
 
+import {
+  GEMINI_NUTRITION_JSON_SCHEMA,
+  GeminiNutritionSchema,
+  NUTRITION_UNITS_INSTRUCTION,
+} from "./geminiNutritionSchema.js";
+
 const MODEL = "gemini-3.6-flash";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-
-const NutritionSchema = z.object({
-  calories: z.number().nullable(),
-  protein: z.number().nullable(),
-  carbs: z.number().nullable(),
-  fats: z.number().nullable(),
-  fiber: z.number().nullable(),
-  sodium: z.number().nullable(),
-});
 
 const ProposedIngredientSchema = z.object({
   name: z.string(),
@@ -19,7 +16,7 @@ const ProposedIngredientSchema = z.object({
   isGeneric: z.boolean(),
   genericName: z.string().nullable(),
   brandName: z.string().nullable(),
-  estimatedNutrition: NutritionSchema,
+  estimatedNutrition: GeminiNutritionSchema,
   defaultPortionAmount: z.number(),
   defaultPortionUnit: z.string(),
 });
@@ -52,20 +49,8 @@ export const ReceiptParseSchema = z.object({
 // "nullable: true" alongside a base type, not JSON Schema's type-array union
 // style). Kept in sync with ReceiptParseSchema above by hand; the schema is
 // small enough that duplicating it once is simpler than adding a Zod->JSON
-// Schema conversion dependency for this one call site.
-const NUTRITION_JSON_SCHEMA = {
-  type: "object",
-  properties: {
-    calories: { type: "number", nullable: true },
-    protein: { type: "number", nullable: true },
-    carbs: { type: "number", nullable: true },
-    fats: { type: "number", nullable: true },
-    fiber: { type: "number", nullable: true },
-    sodium: { type: "number", nullable: true },
-  },
-  required: ["calories", "protein", "carbs", "fats", "fiber", "sodium"],
-};
-
+// Schema conversion dependency for this one call site. (The nutrition part
+// is shared — see geminiNutritionSchema.js.)
 const RECEIPT_JSON_SCHEMA = {
   type: "object",
   properties: {
@@ -88,7 +73,7 @@ const RECEIPT_JSON_SCHEMA = {
               isGeneric: { type: "boolean" },
               genericName: { type: "string", nullable: true },
               brandName: { type: "string", nullable: true },
-              estimatedNutrition: NUTRITION_JSON_SCHEMA,
+              estimatedNutrition: GEMINI_NUTRITION_JSON_SCHEMA,
               defaultPortionAmount: { type: "number" },
               defaultPortionUnit: { type: "string" },
             },
@@ -143,6 +128,8 @@ For each purchased product line on the receipt (skip tax, subtotal, total, tende
 4. Extract quantity, unit (best guess, e.g. "lb", "item", "oz"), and price per line as printed.
 5. If the printed unit is just a discrete count ("item", "ea", "pk", or similar - not already a real mass/volume unit like "lb" or "oz"), also try to determine the real net weight/volume of ONE of that product as packageQuantity/packageUnit — e.g. a receipt line "PASTE ... 1" for a product you recognize as a standard 500g box becomes packageQuantity: 500, packageUnit: "g". Use OCR text near the product name if the size is printed on the receipt itself, otherwise your general knowledge of that specific product's typical packaging - only when reasonably confident, not a wild guess. Leave both null when the unit is already a real mass/volume unit, or when you can't determine a package size with reasonable confidence.
 6. Also extract the store name and purchase date from the receipt header if visible.
+
+estimatedNutrition is per the proposed ingredient's own defaultPortionAmount/defaultPortionUnit (one serving), not per the whole quantity bought. ${NUTRITION_UNITS_INSTRUCTION}
 
 IMPORTANT — do not transcribe any payment card numbers, loyalty/rewards account numbers, phone numbers, or email addresses into your output, even if visible on the receipt. Only extract product/purchase information.`;
 }
