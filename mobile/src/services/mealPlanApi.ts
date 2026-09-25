@@ -3,6 +3,7 @@ import type { Meal } from "./mealApi";
 import type { Recipe } from "./recipeApi";
 import type { Ingredient } from "./ingredientApi";
 import type { RestaurantMeal } from "./restaurantMealApi";
+import type { NutritionTotals } from "@/src/types/nutrition";
 
 export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
 
@@ -39,14 +40,7 @@ export interface ManualPieceEntry {
 // row, the day total, a weekly report) shows the exact same number without
 // needing to re-derive it. null while planned, or for an entry confirmed
 // before this field existed.
-export interface ConfirmedNutrition {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fats: number;
-  fiber: number;
-  sodium: number;
-}
+export type ConfirmedNutrition = NutritionTotals;
 
 // Which dish (by RestaurantMeal.dishes subdocument _id) and how many of it
 // were had on one specific visit — quantity defaults to 1 server-side, but

@@ -1,15 +1,12 @@
 import { Text, View } from "react-native";
 
 import { hexToRgba, pct, type DayNutrition } from "@/src/utils/mealPlan";
+import type { CoreNutritionField } from "@/src/types/nutrition";
 
-export interface NutritionLimits {
-  calories: number | null;
-  protein: number | null;
-  carbs: number | null;
-  fats: number | null;
-  fiber: number | null;
-  sodium: number | null;
-}
+// Core-only on purpose — this card is the "main 6" summary; extended
+// nutrients (and any goals for them) belong to the secondary all-nutrients
+// view, not here.
+export type NutritionLimits = Record<CoreNutritionField, number | null>;
 
 // Shared nutrition summary card — a calorie bar plus per-macro bars, each
 // showing a solid "confirmed" segment with a lighter "+planned" segment

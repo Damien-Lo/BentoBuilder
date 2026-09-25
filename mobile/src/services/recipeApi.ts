@@ -1,17 +1,11 @@
 import { API_BASE_URL } from "@/src/config/api";
 import type { SelectOption } from "@/src/services/optionsApi";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
+import type { PartialNutrition } from "@/src/types/nutrition";
 
 export type MealCategory = "breakfast" | "lunch" | "dinner" | "snack";
 
-export interface RecipeNutrition {
-  calories?: number | null;
-  protein?: number | null;
-  carbs?: number | null;
-  fats?: number | null;
-  fiber?: number | null;
-  sodium?: number | null;
-}
+export type RecipeNutrition = PartialNutrition;
 
 export interface RecipeCategory {
   _id: string;

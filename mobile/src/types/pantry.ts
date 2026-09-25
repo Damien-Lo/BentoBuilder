@@ -1,13 +1,7 @@
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
+import type { NullableNutrition } from "@/src/types/nutrition";
 
-export interface Nutrition {
-  calories: number | null;
-  protein: number | null;
-  carbs: number | null;
-  fats: number | null;
-  fiber: number | null;
-  sodium: number | null;
-}
+export type Nutrition = NullableNutrition;
 
 export interface Ingredient {
   _id: string;

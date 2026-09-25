@@ -64,7 +64,6 @@ import {
   computeConfirmedRecipeNutrition,
   computeConfirmNutrition,
   computeDayNutrition,
-  divideNutrition,
   friendlyDayLabel,
   getEntryAvailability,
   getIngredientKcal,
@@ -81,6 +80,7 @@ import {
   toDateStr,
   weekRangeLabel,
 } from "@/src/utils/mealPlan";
+import { divideNutritionTotals } from "@/src/utils/nutrition";
 import {
   buildIngredientRequirements,
   getDefaultDeductionInstructions,
@@ -366,11 +366,11 @@ export default function HomeScreen() {
   // nutrition-card page - divides the 7-day totals down to a daily figure
   // so it can be read against the same daily limits as the "today" card.
   const avgConfirmedNutrition = useMemo(
-    () => divideNutrition(last7ConfirmedNutrition, last7Dates.length),
+    () => divideNutritionTotals(last7ConfirmedNutrition, last7Dates.length),
     [last7ConfirmedNutrition, last7Dates.length],
   );
   const avgPlannedNutrition = useMemo(
-    () => divideNutrition(last7PlannedNutrition, last7Dates.length),
+    () => divideNutritionTotals(last7PlannedNutrition, last7Dates.length),
     [last7PlannedNutrition, last7Dates.length],
   );
 

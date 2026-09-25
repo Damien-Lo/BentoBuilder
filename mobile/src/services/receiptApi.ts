@@ -1,15 +1,9 @@
 import { File } from "expo-file-system";
 
 import { API_BASE_URL } from "@/src/config/api";
+import type { NullableNutrition } from "@/src/types/nutrition";
 
-export interface ReceiptNutrition {
-  calories: number | null;
-  protein: number | null;
-  carbs: number | null;
-  fats: number | null;
-  fiber: number | null;
-  sodium: number | null;
-}
+export type ReceiptNutrition = NullableNutrition;
 
 export interface ProposedIngredient {
   name: string;

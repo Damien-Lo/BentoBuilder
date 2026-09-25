@@ -2,8 +2,36 @@ import express from "express";
 import MealPlanEntry from "../models/MealPlanEntry.js";
 import PantryItem from "../models/PantryItem.js";
 import { removeMealPlanEntryContributions } from "../services/groceryContributions.js";
+import {
+  CORE_NUTRITION_FIELD_NAMES,
+  EXTENDED_NUTRITION_FIELD_NAMES,
+} from "../models/nutritionSchema.js";
 
 const router = express.Router();
+
+// All six core fields must be real numbers or the snapshot is rejected
+// outright (same rule as before extended tracking existed); extended fields
+// are copied through individually when present and finite, and simply
+// omitted otherwise, since an ingredient with no extended data on file is
+// the normal case, not an error.
+function parseConfirmedNutrition(nutrition) {
+  if (!nutrition) return null;
+  if (!CORE_NUTRITION_FIELD_NAMES.every((key) => Number.isFinite(Number(nutrition[key])))) {
+    return null;
+  }
+
+  const result = {};
+  for (const key of CORE_NUTRITION_FIELD_NAMES) {
+    result[key] = Number(nutrition[key]);
+  }
+  for (const key of EXTENDED_NUTRITION_FIELD_NAMES) {
+    const value = nutrition[key];
+    if (value != null && Number.isFinite(Number(value))) {
+      result[key] = Number(value);
+    }
+  }
+  return result;
+}
 
 function round(n) {
   return Math.round(n * 1000) / 1000;
@@ -279,18 +307,7 @@ router.post("/:id/confirm", async (req, res) => {
       .map(({ ingredient, weight, weightUnit }) => ({ ingredient, weight: Number(weight), weightUnit }))
       .filter(({ ingredient, weight, weightUnit }) => ingredient && Number.isFinite(weight) && weight > 0 && weightUnit);
 
-    const nutrition = req.body.confirmedNutrition;
-    const confirmedNutrition = nutrition && ["calories", "protein", "carbs", "fats", "fiber", "sodium"]
-      .every((key) => Number.isFinite(Number(nutrition[key])))
-      ? {
-          calories: Number(nutrition.calories),
-          protein: Number(nutrition.protein),
-          carbs: Number(nutrition.carbs),
-          fats: Number(nutrition.fats),
-          fiber: Number(nutrition.fiber),
-          sodium: Number(nutrition.sodium),
-        }
-      : null;
+    const confirmedNutrition = parseConfirmedNutrition(req.body.confirmedNutrition);
 
     entry.stockDeductions = ledger;
     entry.manualPieceEntries = manualLedger;

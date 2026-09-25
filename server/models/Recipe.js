@@ -1,16 +1,7 @@
 import mongoose from "mongoose";
+import { createNutritionSchema } from "./nutritionSchema.js";
 
-const nutritionSchema = new mongoose.Schema(
-  {
-    calories: { type: Number, min: 0, default: null },
-    protein: { type: Number, min: 0, default: null },
-    carbs: { type: Number, min: 0, default: null },
-    fats: { type: Number, min: 0, default: null },
-    fiber: { type: Number, min: 0, default: null },
-    sodium: { type: Number, min: 0, default: null },
-  },
-  { _id: false },
-);
+const nutritionSchema = createNutritionSchema();
 
 const ingredientEntrySchema = new mongoose.Schema(
   {

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { createConfirmedNutritionSchema } from "./nutritionSchema.js";
 
 const stockDeductionSchema = new mongoose.Schema(
   {
@@ -29,17 +30,7 @@ const manualPieceEntrySchema = new mongoose.Schema(
 // stockDeductions/manualPieceEntries — the client decides, this just
 // applies/stores it) so every reader shows the same number without
 // re-deriving it from a partial view of the data.
-const confirmedNutritionSchema = new mongoose.Schema(
-  {
-    calories: { type: Number, required: true },
-    protein:  { type: Number, required: true },
-    carbs:    { type: Number, required: true },
-    fats:     { type: Number, required: true },
-    fiber:    { type: Number, required: true },
-    sodium:   { type: Number, required: true },
-  },
-  { _id: false },
-);
+const confirmedNutritionSchema = createConfirmedNutritionSchema();
 
 const restaurantDishSelectionSchema = new mongoose.Schema(
   {
