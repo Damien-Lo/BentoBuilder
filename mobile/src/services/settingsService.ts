@@ -1,5 +1,11 @@
 import { API_BASE_URL } from "@/src/config/api";
+import { EXTENDED_NUTRITION_FIELDS, type ExtendedNutritionField } from "@/src/types/nutrition";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
+
+// Daily goals for the background-tracked nutrients, in the same absolute
+// units as the nutrition values (vitamin A in mcg, vitamin C/calcium/iron in
+// mg — even though those display as %DV). Missing/null = no goal set.
+export type ExtendedNutrientGoals = Partial<Record<ExtendedNutritionField, number | null>>;
 
 export interface AppSettings {
   displayName: string;
@@ -9,6 +15,7 @@ export interface AppSettings {
   dailyFatsLimit: number | null;
   dailyFiberLimit: number | null;
   dailySodiumLimit: number | null;
+  extendedNutrientGoals: ExtendedNutrientGoals;
   // 0 = Sunday … 6 = Saturday, matching JS Date#getDay()
   weekStartDay: number;
   // Custom conversions on top of the app's built-in mass/volume table.
@@ -20,7 +27,9 @@ export interface AppSettings {
   goalWeight: number | null;
 }
 
-const DEFAULTS: AppSettings = {
+// Also the initial state for screens that show settings before loadSettings
+// resolves.
+export const DEFAULT_SETTINGS: AppSettings = {
   displayName: "",
   dailyCalorieLimit: null,
   dailyProteinLimit: null,
@@ -28,12 +37,25 @@ const DEFAULTS: AppSettings = {
   dailyFatsLimit: null,
   dailyFiberLimit: null,
   dailySodiumLimit: null,
+  extendedNutrientGoals: {},
   weekStartDay: 1,
   unitConversions: [],
   startingWeight: null,
   startingWeightDate: null,
   goalWeight: null,
 };
+const DEFAULTS = DEFAULT_SETTINGS;
+
+function parseExtendedNutrientGoals(raw: unknown): ExtendedNutrientGoals {
+  const goals: ExtendedNutrientGoals = {};
+  if (!raw || typeof raw !== "object") return goals;
+  const obj = raw as Record<string, unknown>;
+  for (const field of EXTENDED_NUTRITION_FIELDS) {
+    const v = obj[field];
+    if (typeof v === "number" && Number.isFinite(v)) goals[field] = v;
+  }
+  return goals;
+}
 
 async function parseResponse<T>(res: Response): Promise<T> {
   const json = await res.json() as { success: boolean; message?: string };
@@ -55,18 +77,22 @@ export async function loadSettings(): Promise<AppSettings> {
       dailyFatsLimit:    typeof d.dailyFatsLimit    === "number" ? d.dailyFatsLimit    : DEFAULTS.dailyFatsLimit,
       dailyFiberLimit:   typeof d.dailyFiberLimit   === "number" ? d.dailyFiberLimit   : DEFAULTS.dailyFiberLimit,
       dailySodiumLimit:  typeof d.dailySodiumLimit  === "number" ? d.dailySodiumLimit  : DEFAULTS.dailySodiumLimit,
-      weekStartDay:      typeof d.weekStartDay      === "number" ? d.weekStartDay      : DEFAULTS.weekStartDay,
+      extendedNutrientGoals: parseExtendedNutrientGoals(d.extendedNutrientGoals),
+      weekStartDay:     typeof d.weekStartDay      === "number" ? d.weekStartDay      : DEFAULTS.weekStartDay,
       unitConversions:   Array.isArray(d.unitConversions)        ? (d.unitConversions as CustomUnitConversion[]) : DEFAULTS.unitConversions,
       startingWeight:     typeof d.startingWeight     === "number" ? d.startingWeight     : DEFAULTS.startingWeight,
       startingWeightDate: typeof d.startingWeightDate === "string" ? d.startingWeightDate : DEFAULTS.startingWeightDate,
       goalWeight:         typeof d.goalWeight         === "number" ? d.goalWeight         : DEFAULTS.goalWeight,
     };
   } catch {
-    return { ...DEFAULTS };
+    return { ...DEFAULTS, extendedNutrientGoals: {} };
   }
 }
 
-export async function saveSettings(settings: AppSettings): Promise<void> {
+// The server $sets only the fields sent — screens that stay mounted (the
+// Nutrition tab) should send just the fields they edit, so their possibly-
+// stale copy of everything else can't overwrite a change made elsewhere.
+export async function saveSettings(settings: Partial<AppSettings>): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/api/profile`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

@@ -61,6 +61,20 @@ export function createNutritionSchema() {
   return new mongoose.Schema(fields, { _id: false });
 }
 
+// UserProfile.extendedNutrientGoals — a daily goal per extended nutrient,
+// in the same absolute units as the nutrition values themselves (vitamins/
+// minerals included, even though the app displays those as %DV — the goal
+// is stored in mcg/mg and converted at display time, same as the totals).
+// null = no goal set. The core 6's goals stay as UserProfile's existing flat
+// dailyXLimit fields.
+export function createExtendedNutrientGoalsSchema() {
+  const fields = {};
+  for (const name of EXTENDED_NUTRITION_FIELD_NAMES) {
+    fields[name] = optionalNumberField();
+  }
+  return new mongoose.Schema(fields, { _id: false });
+}
+
 // MealPlanEntry.confirmedNutrition is a snapshot computed once, client-side,
 // at confirm time (see mobile's computeConfirmNutrition) — the core 6 are
 // always computed and stored (`required: true`, matching the pre-existing

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
 import { SettingsNumericInput, SettingsRow, SettingsSectionHeader } from "@/src/components/forms";
 import { getMealPlanForDate, type MealPlanEntry } from "@/src/services/mealPlanApi";
-import { loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
 import { computeDayNutrition, todayStr } from "@/src/utils/mealPlan";
 
 interface MoreRow {
@@ -30,6 +30,7 @@ interface MoreRow {
 // dedicated Health section once there's more than nutrition under it (gym
 // tracker, etc.), so their routes stay under /health/ rather than /nutrition/.
 const MORE_ROWS: MoreRow[] = [
+  { id: "nutrients", label: "All Nutrients", icon: "nutrition-outline", route: "/health/nutrients" },
   { id: "goals", label: "Goals", icon: "locate-outline", route: "/health/goals" },
   { id: "weight", label: "Weight & Measurements", icon: "bar-chart-outline", route: "/health/weight" },
   { id: "weekly-report", label: "My Weekly Report", icon: "stats-chart-outline", route: "/health/weekly-report" },
@@ -40,29 +41,21 @@ export default function NutritionScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [entries, setEntries] = useState<MealPlanEntry[]>([]);
-  const [settings, setSettings] = useState<AppSettings>({
-    displayName: "",
-    dailyCalorieLimit: null,
-    dailyProteinLimit: null,
-    dailyCarbsLimit: null,
-    dailyFatsLimit: null,
-    dailyFiberLimit: null,
-    dailySodiumLimit: null,
-    weekStartDay: 1,
-    unitConversions: [],
-    startingWeight: null,
-    startingWeightDate: null,
-    goalWeight: null,
-  });
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
-  useEffect(() => {
-    Promise.all([loadSettings(), getMealPlanForDate(todayStr())])
-      .then(([loadedSettings, loadedEntries]) => {
-        setSettings(loadedSettings);
-        setEntries(loadedEntries);
-      })
-      .finally(() => setIsLoading(false));
-  }, []);
+  // Reloaded on every focus, not just mount — this tab stays mounted, and
+  // goals/meals can change from the screens pushed on top of it (All
+  // Nutrients, the planner).
+  useFocusEffect(
+    useCallback(() => {
+      Promise.all([loadSettings(), getMealPlanForDate(todayStr())])
+        .then(([loadedSettings, loadedEntries]) => {
+          setSettings(loadedSettings);
+          setEntries(loadedEntries);
+        })
+        .finally(() => setIsLoading(false));
+    }, []),
+  );
 
   function patch(partial: Partial<AppSettings>) {
     setSettings(prev => ({ ...prev, ...partial }));
@@ -71,7 +64,14 @@ export default function NutritionScreen() {
   async function handleSave() {
     try {
       setIsSaving(true);
-      await saveSettings(settings);
+      await saveSettings({
+        dailyCalorieLimit: settings.dailyCalorieLimit,
+        dailyProteinLimit: settings.dailyProteinLimit,
+        dailyCarbsLimit: settings.dailyCarbsLimit,
+        dailyFatsLimit: settings.dailyFatsLimit,
+        dailyFiberLimit: settings.dailyFiberLimit,
+        dailySodiumLimit: settings.dailySodiumLimit,
+      });
       Alert.alert("Saved", "Your nutrition goals have been saved.");
     } catch {
       Alert.alert("Error", "Could not save your goals. Please try again.");

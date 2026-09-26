@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 
+// null = blank; undefined = not a valid (finite, non-negative) number.
+function parse(raw: string): number | null | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
 export function SettingsNumericInput({
   value,
   onChange,
@@ -16,22 +24,34 @@ export function SettingsNumericInput({
 }) {
   const [text, setText] = useState(value != null ? String(value) : "");
 
+  // Resync from `value` only when it actually differs from what's typed —
+  // so reporting "1." as 1 mid-typing doesn't snap the text back to "1".
   useEffect(() => {
-    setText(value != null ? String(value) : "");
+    setText(prev => (parse(prev) === value ? prev : value != null ? String(value) : ""));
   }, [value]);
 
+  // Valid values are reported as they're typed, not just on blur — a Save
+  // button tapped while this field still has focus (keyboardShouldPersistTaps
+  // ="handled" keeps it focused) would otherwise save the pre-edit value.
+  function handleChangeText(raw: string) {
+    setText(raw);
+    const n = parse(raw);
+    if (n !== undefined) onChange(n);
+  }
+
+  // On blur, anything invalid left in the field snaps back to the last
+  // good value.
   function commit(raw: string) {
-    const trimmed = raw.trim();
-    if (!trimmed) { onChange(null); return; }
-    const n = Number(trimmed);
-    onChange(Number.isFinite(n) && n >= 0 ? n : value);
+    const n = parse(raw);
+    onChange(n !== undefined ? n : value);
+    if (n === undefined) setText(value != null ? String(value) : "");
   }
 
   return (
     <View className="flex-row items-center">
       <TextInput
         value={text}
-        onChangeText={setText}
+        onChangeText={handleChangeText}
         onBlur={() => commit(text)}
         onFocus={onFocus}
         placeholder={placeholder}

@@ -40,10 +40,12 @@ export type NutritionField = CoreNutritionField | ExtendedNutritionField;
 
 // Stored as real absolute amounts in these units (same as the server) —
 // vitamins/minerals are *not* stored as %DV; any %DV display is computed
-// from these at render time.
+// from these at render time. `dailyValue` (FDA adult Daily Value, in the
+// field's own unit) marks the fields shown as %DV rather than absolute
+// amounts, the way MyFitnessPal shows vitamins/minerals.
 export const NUTRITION_FIELD_META: Record<
   NutritionField,
-  { label: string; unit: "kcal" | "g" | "mg" | "mcg"; decimals: number }
+  { label: string; unit: "kcal" | "g" | "mg" | "mcg"; decimals: number; dailyValue?: number }
 > = {
   calories:           { label: "Calories",            unit: "kcal", decimals: 0 },
   protein:            { label: "Protein",             unit: "g",    decimals: 1 },
@@ -58,10 +60,10 @@ export const NUTRITION_FIELD_META: Record<
   transFat:           { label: "Trans Fat",           unit: "g",    decimals: 1 },
   cholesterol:        { label: "Cholesterol",         unit: "mg",   decimals: 0 },
   potassium:          { label: "Potassium",           unit: "mg",   decimals: 0 },
-  vitaminA:           { label: "Vitamin A",           unit: "mcg",  decimals: 0 },
-  vitaminC:           { label: "Vitamin C",           unit: "mg",   decimals: 1 },
-  calcium:            { label: "Calcium",             unit: "mg",   decimals: 0 },
-  iron:               { label: "Iron",                unit: "mg",   decimals: 1 },
+  vitaminA:           { label: "Vitamin A",           unit: "mcg",  decimals: 0, dailyValue: 900 },
+  vitaminC:           { label: "Vitamin C",           unit: "mg",   decimals: 1, dailyValue: 90 },
+  calcium:            { label: "Calcium",             unit: "mg",   decimals: 0, dailyValue: 1300 },
+  iron:               { label: "Iron",                unit: "mg",   decimals: 1, dailyValue: 18 },
 };
 
 type ExtendedPart = { [K in ExtendedNutritionField]?: number | null };

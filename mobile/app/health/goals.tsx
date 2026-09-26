@@ -15,26 +15,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DateTextInput, SettingsNumericInput, SettingsRow, SettingsSectionHeader } from "@/src/components/forms";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
-import { loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
 
 export default function GoalsScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [settings, setSettings] = useState<AppSettings>({
-    displayName: "",
-    dailyCalorieLimit: null,
-    dailyProteinLimit: null,
-    dailyCarbsLimit: null,
-    dailyFatsLimit: null,
-    dailyFiberLimit: null,
-    dailySodiumLimit: null,
-    weekStartDay: 1,
-    unitConversions: [],
-    startingWeight: null,
-    startingWeightDate: null,
-    goalWeight: null,
-  });
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   // Scrolls whichever field was just focused into view — see
   // useScrollFocusSection. No dropdown-capable fields on this page, so
