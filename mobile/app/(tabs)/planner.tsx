@@ -57,6 +57,7 @@ import {
 import { sortAlphabetically, sortByLastUsed } from "@/src/utils/lastUsedSort";
 import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
+import { DishQuantityStepper } from "@/src/components/planner/DishQuantityStepper";
 import { RateAndConfirmModal } from "@/src/components/planner/RateAndConfirmModal";
 import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
 import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
@@ -1180,7 +1181,7 @@ export default function HomeScreen() {
         ? `Eating out · ${eatenDishes
             .map(d => {
               const qty = quantityByDish.get(d._id) ?? 1;
-              return qty > 1 ? `${d.name} ×${qty}` : d.name;
+              return qty !== 1 ? `${d.name} ×${qty}` : d.name;
             })
             .join(", ")}`
         : "Eating out";
@@ -1722,35 +1723,19 @@ export default function HomeScreen() {
                         {checked && (
                           <View className="mt-2 flex-row items-center justify-end">
                             <Text className="mr-2 text-xs font-medium text-slate-400">Quantity</Text>
-                            <Pressable
-                              hitSlop={8}
-                              onPress={() =>
+                            <DishQuantityStepper
+                              value={qty}
+                              onChange={next =>
+                                setEditDishQuantities(prev => new Map(prev).set(dish._id, next))
+                              }
+                              onRemove={() =>
                                 setEditDishQuantities(prev => {
                                   const next = new Map(prev);
-                                  const current = next.get(dish._id) ?? 1;
-                                  if (current <= 1) next.delete(dish._id);
-                                  else next.set(dish._id, current - 1);
+                                  next.delete(dish._id);
                                   return next;
                                 })
                               }
-                              className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
-                            >
-                              <Ionicons name="remove" size={14} color="#475569" />
-                            </Pressable>
-                            <Text className="mx-2 text-sm font-semibold text-slate-700">{qty}</Text>
-                            <Pressable
-                              hitSlop={8}
-                              onPress={() =>
-                                setEditDishQuantities(prev => {
-                                  const next = new Map(prev);
-                                  next.set(dish._id, (next.get(dish._id) ?? 1) + 1);
-                                  return next;
-                                })
-                              }
-                              className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
-                            >
-                              <Ionicons name="add" size={14} color="#475569" />
-                            </Pressable>
+                            />
                           </View>
                         )}
                       </View>
@@ -2248,35 +2233,19 @@ export default function HomeScreen() {
                       {checked && (
                         <View className="mt-2 flex-row items-center justify-end">
                           <Text className="mr-2 text-xs font-medium text-slate-400">Quantity</Text>
-                          <Pressable
-                            hitSlop={8}
-                            onPress={() =>
+                          <DishQuantityStepper
+                            value={qty}
+                            onChange={next =>
+                              setSelectedDishQuantities(prev => new Map(prev).set(dish._id, next))
+                            }
+                            onRemove={() =>
                               setSelectedDishQuantities(prev => {
                                 const next = new Map(prev);
-                                const current = next.get(dish._id) ?? 1;
-                                if (current <= 1) next.delete(dish._id);
-                                else next.set(dish._id, current - 1);
+                                next.delete(dish._id);
                                 return next;
                               })
                             }
-                            className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
-                          >
-                            <Ionicons name="remove" size={14} color="#475569" />
-                          </Pressable>
-                          <Text className="mx-2 text-sm font-semibold text-slate-700">{qty}</Text>
-                          <Pressable
-                            hitSlop={8}
-                            onPress={() =>
-                              setSelectedDishQuantities(prev => {
-                                const next = new Map(prev);
-                                next.set(dish._id, (next.get(dish._id) ?? 1) + 1);
-                                return next;
-                              })
-                            }
-                            className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
-                          >
-                            <Ionicons name="add" size={14} color="#475569" />
-                          </Pressable>
+                          />
                         </View>
                       )}
                     </View>
@@ -2324,34 +2293,12 @@ export default function HomeScreen() {
 
                       <View className="mt-2 flex-row items-center justify-end">
                         <Text className="mr-2 text-xs font-medium text-slate-400">Quantity</Text>
-                        <Pressable
-                          hitSlop={8}
-                          onPress={() =>
-                            setSelectedDishQuantities(prev => {
-                              const next = new Map(prev);
-                              const current = next.get(dish.key) ?? 1;
-                              next.set(dish.key, Math.max(1, current - 1));
-                              return next;
-                            })
+                        <DishQuantityStepper
+                          value={qty}
+                          onChange={next =>
+                            setSelectedDishQuantities(prev => new Map(prev).set(dish.key, next))
                           }
-                          className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
-                        >
-                          <Ionicons name="remove" size={14} color="#475569" />
-                        </Pressable>
-                        <Text className="mx-2 text-sm font-semibold text-slate-700">{qty}</Text>
-                        <Pressable
-                          hitSlop={8}
-                          onPress={() =>
-                            setSelectedDishQuantities(prev => {
-                              const next = new Map(prev);
-                              next.set(dish.key, (next.get(dish.key) ?? 1) + 1);
-                              return next;
-                            })
-                          }
-                          className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
-                        >
-                          <Ionicons name="add" size={14} color="#475569" />
-                        </Pressable>
+                        />
                       </View>
                     </View>
                   );

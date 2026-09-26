@@ -382,7 +382,7 @@ export default function RestaurantMealDetailPage() {
                                 <View key={d._id} className="flex-row items-center justify-between py-1.5">
                                   <Text className="text-sm text-slate-700">
                                     {d.name}
-                                    {qty > 1 ? ` ×${qty}` : ""}
+                                    {qty !== 1 ? ` ×${qty}` : ""}
                                   </Text>
                                   {d.nutrition?.calories != null && (
                                     <Text className="text-xs text-slate-400">
