@@ -83,12 +83,14 @@ import {
 } from "@/src/utils/mealPlan";
 import { divideNutritionTotals } from "@/src/utils/nutrition";
 import {
+  applyAmountOverrides,
   buildIngredientRequirements,
   getDefaultDeductionInstructions,
   getExpandedRows,
   getResolvedDeductionInstructions,
   hasAmbiguity,
   requirementNeedsResolution,
+  type AmountOverride,
   type DeductionInstruction,
   type IngredientRequirement,
   type ManualPieceInput,
@@ -856,21 +858,29 @@ export default function HomeScreen() {
   async function handleResolvedConfirm(
     selections: Record<string, string[]>,
     manualPieceEntries: ManualPieceInput[],
+    amountOverrides: Record<string, AmountOverride>,
   ) {
     if (!pendingConfirmEntry) return;
     setResolvingSaving(true);
     try {
-      // pendingRequirements (the FULL list, not just the ambiguous subset
-      // rendered in the overlay) so requirements that never needed a
-      // choice still get auto-drained here — passing only the ambiguous
-      // ones would silently skip deducting everything else.
-      const instructions = getResolvedDeductionInstructions(pendingRequirements, selections);
       const conversions = appSettings?.unitConversions ?? [];
-      const rows = getExpandedRows(
-        pendingConfirmEntry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions,
+      // Amounts typed in for askAmount lines replace the recipe's nominal
+      // ones for both the deduction and the nutrition snapshot.
+      const { requirements, rows } = applyAmountOverrides(
+        pendingRequirements,
+        getExpandedRows(pendingConfirmEntry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions),
+        amountOverrides,
+        ingredientMap,
+        allIngredients,
+        conversions,
       );
+      // The FULL requirement list (not just the ambiguous subset rendered
+      // in the overlay) so requirements that never needed a choice still
+      // get auto-drained here — passing only the ambiguous ones would
+      // silently skip deducting everything else.
+      const instructions = getResolvedDeductionInstructions(requirements, selections);
       const confirmedNutrition = computeConfirmNutrition(
-        pendingRequirements, rows, instructions, manualPieceEntries, ingredientMap, pantryItems, conversions,
+        requirements, rows, instructions, manualPieceEntries, ingredientMap, pantryItems, conversions,
       );
       const entry = pendingConfirmEntry;
       const rateFirst = pendingRateFirst;
@@ -2873,7 +2883,9 @@ export default function HomeScreen() {
           setPendingRequirements([]);
           setPendingRateFirst(false);
         }}
-        onConfirm={(selections, manualPieceEntries) => void handleResolvedConfirm(selections, manualPieceEntries)}
+        onConfirm={(selections, manualPieceEntries, amountOverrides) =>
+          void handleResolvedConfirm(selections, manualPieceEntries, amountOverrides)
+        }
       />
 
       <PhotoCaptureModal

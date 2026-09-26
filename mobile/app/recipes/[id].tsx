@@ -46,10 +46,12 @@ import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveI
 import { DateTextInput, DurationExpiryInput, FieldLabel, FormInput, SearchableObjectDropdown } from "@/src/components/forms";
 import type { MealPlanEntry } from "@/src/services/mealPlanApi";
 import {
+  applyAmountOverrides,
   buildIngredientRequirements,
   getDefaultDeductionInstructions,
   getResolvedDeductionInstructions,
   hasAmbiguity,
+  type AmountOverride,
   type DeductionInstruction,
   type IngredientRequirement,
 } from "@/src/utils/pantryDeduction";
@@ -421,7 +423,7 @@ export default function RecipeDetailPage() {
 
     if (hasAmbiguity(requirements)) {
       setPendingRequirements(requirements);
-      setAmbiguousRequirements(requirements.filter((r) => r.groups.length > 1));
+      setAmbiguousRequirements(requirements.filter((r) => r.groups.length > 1 || !!r.askAmount));
       setShowResolveModal(true);
       return;
     }
@@ -429,8 +431,22 @@ export default function RecipeDetailPage() {
     openBatchCard(getDefaultDeductionInstructions(requirements));
   }
 
-  function handleResolvedConfirm(selections: Record<string, string[]>) {
-    const instructions = getResolvedDeductionInstructions(pendingRequirements, selections);
+  function handleResolvedConfirm(
+    selections: Record<string, string[]>,
+    _manualPieceEntries: unknown,
+    amountOverrides: Record<string, AmountOverride>,
+  ) {
+    // Rows only matter for nutrition, which a batch cook doesn't record —
+    // just the overridden requirements are needed for the deduction.
+    const { requirements } = applyAmountOverrides(
+      pendingRequirements,
+      [],
+      amountOverrides,
+      ingredientMap,
+      allIngredients,
+      customUnitConversions,
+    );
+    const instructions = getResolvedDeductionInstructions(requirements, selections);
     setShowResolveModal(false);
     setPendingRequirements([]);
     openBatchCard(instructions);
@@ -934,6 +950,7 @@ export default function RecipeDetailPage() {
                           {entry.nutritionFactor != null && entry.nutritionFactor !== 1
                             ? ` · ${Math.round(entry.nutritionFactor * 100)}% counted`
                             : ""}
+                          {entry.askAmount ? " · asks amount when cooking" : ""}
                         </Text>
                         {ing?.nutrition?.calories != null && (() => {
                           // A "wholePiece" line has no real amount in

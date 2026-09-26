@@ -56,6 +56,9 @@ export interface RecipeIngredientEntry {
   pieceMinWeight?: number | null;
   pieceMaxWeight?: number | null;
   pieceWeightUnit?: string;
+  // "quantity" lines only — prompt for the real amount used when the
+  // recipe is confirmed (see Recipe.js's askAmount).
+  askAmount?: boolean;
 }
 
 export interface RecipeScore {
@@ -105,6 +108,9 @@ export interface RecipeIngredientInput {
   pieceMinWeight?: number | null;
   pieceMaxWeight?: number | null;
   pieceWeightUnit?: string;
+  // "quantity" lines only — prompt for the real amount used when the
+  // recipe is confirmed (see Recipe.js's askAmount).
+  askAmount?: boolean;
 }
 
 export interface CreateRecipeInput {
