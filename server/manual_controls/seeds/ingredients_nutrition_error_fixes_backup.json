@@ -1,0 +1,250 @@
+[
+  {
+    "_id": "6a680fb925be1fa8f50016fd",
+    "name": "Roasted Black Sesame Seeds",
+    "defaultPortionAmount": 1,
+    "defaultPortionUnit": "tbsp",
+    "nutrition": {
+      "calories": 270,
+      "protein": 0,
+      "carbs": 0,
+      "fats": 15,
+      "fiber": 0,
+      "sodium": 0
+    }
+  },
+  {
+    "_id": "6a691c670f94cb20253ba706",
+    "name": "Toban Djan",
+    "defaultPortionAmount": 2,
+    "defaultPortionUnit": "tbsp",
+    "nutrition": {
+      "calories": 10,
+      "protein": 0,
+      "carbs": 1,
+      "fats": 0,
+      "fiber": 0,
+      "sodium": 540,
+      "calcium": 4,
+      "cholesterol": 0,
+      "iron": 0.2,
+      "monounsaturatedFat": 0,
+      "polyunsaturatedFat": 0,
+      "potassium": 18,
+      "saturatedFat": 0,
+      "sugar": 0.7,
+      "transFat": 0,
+      "vitaminA": 12,
+      "vitaminC": 0.1
+    }
+  },
+  {
+    "_id": "6a70b81a121d0b38050808dc",
+    "name": "Chicken Thigh",
+    "defaultPortionAmount": 140,
+    "defaultPortionUnit": "g",
+    "nutrition": {
+      "calories": 165,
+      "protein": 2,
+      "carbs": 0,
+      "fats": 8,
+      "fiber": 0,
+      "sodium": 0,
+      "calcium": 10,
+      "cholesterol": 132,
+      "iron": 1,
+      "monounsaturatedFat": 2.5,
+      "polyunsaturatedFat": 1.8,
+      "potassium": 374,
+      "saturatedFat": 2,
+      "sugar": 0,
+      "transFat": 0.1,
+      "vitaminA": 15,
+      "vitaminC": 0
+    }
+  },
+  {
+    "_id": "6a8b445c7787e51b73ad9e00",
+    "name": "Chicken Katsu",
+    "defaultPortionAmount": 3,
+    "defaultPortionUnit": "piece",
+    "nutrition": {
+      "calories": 180,
+      "protein": 15,
+      "carbs": 25,
+      "fats": 2.5,
+      "fiber": 0,
+      "sodium": 450,
+      "calcium": 23,
+      "cholesterol": 45,
+      "iron": 1.1,
+      "monounsaturatedFat": 0.8,
+      "polyunsaturatedFat": 1.1,
+      "potassium": 282,
+      "saturatedFat": 0.4,
+      "sugar": 1.7,
+      "transFat": 0,
+      "vitaminA": 11,
+      "vitaminC": 0
+    }
+  },
+  {
+    "_id": "6a8b445d7787e51b73ad9e01",
+    "name": "Formed White Chicken Fritter Uncooked",
+    "defaultPortionAmount": 3,
+    "defaultPortionUnit": "piece",
+    "nutrition": {
+      "calories": 180,
+      "protein": 15,
+      "carbs": 25,
+      "fats": 2.5,
+      "fiber": 0,
+      "sodium": 450,
+      "calcium": 23,
+      "cholesterol": 45,
+      "iron": 1.1,
+      "monounsaturatedFat": 0.7,
+      "polyunsaturatedFat": 0.9,
+      "potassium": 282,
+      "saturatedFat": 0.9,
+      "sugar": 3,
+      "transFat": 0,
+      "vitaminA": 11,
+      "vitaminC": 0
+    }
+  },
+  {
+    "_id": "6a9a0a50f783c1565133ee09",
+    "name": "Spring Onion",
+    "defaultPortionAmount": 1,
+    "defaultPortionUnit": "g",
+    "nutrition": {
+      "calories": null,
+      "protein": null,
+      "carbs": null,
+      "fats": null,
+      "fiber": null,
+      "sodium": null
+    }
+  },
+  {
+    "_id": "6aaeb9d07ac379360e1a5370",
+    "name": "Roasted Sushi Nori Seaweed Original",
+    "defaultPortionAmount": 1,
+    "defaultPortionUnit": "sheet",
+    "nutrition": {
+      "calories": 400,
+      "protein": 40,
+      "carbs": 40,
+      "fats": 0,
+      "fiber": 0,
+      "sodium": 800
+    }
+  },
+  {
+    "_id": "6aaebbaf7ac379360e1a5390",
+    "name": "Crushed red pepper",
+    "defaultPortionAmount": 10,
+    "defaultPortionUnit": "g",
+    "nutrition": {
+      "calories": 10,
+      "protein": 1,
+      "carbs": 3,
+      "fats": 1,
+      "fiber": 0,
+      "sodium": 0
+    }
+  },
+  {
+    "_id": "6ab0483019b0b581fd458648",
+    "name": "Wasabi Paste",
+    "defaultPortionAmount": 6,
+    "defaultPortionUnit": "tsp",
+    "nutrition": {
+      "calories": 15,
+      "protein": 0,
+      "carbs": 3,
+      "fats": 0.5,
+      "fiber": 0,
+      "sodium": 240,
+      "calcium": 4,
+      "cholesterol": 0,
+      "iron": 0.1,
+      "monounsaturatedFat": 0.2,
+      "polyunsaturatedFat": 0.2,
+      "potassium": 15,
+      "saturatedFat": 0.1,
+      "sugar": 1.5,
+      "transFat": 0,
+      "vitaminA": 2,
+      "vitaminC": 1.2
+    }
+  },
+  {
+    "_id": "6ab0483019b0b581fd458649",
+    "name": "Wasabi Family Siㄷ",
+    "defaultPortionAmount": 6,
+    "defaultPortionUnit": "tsp",
+    "nutrition": {
+      "calories": 15,
+      "protein": 0,
+      "carbs": 3,
+      "fats": 0.5,
+      "fiber": 0,
+      "sodium": 240,
+      "calcium": 4,
+      "cholesterol": 0,
+      "iron": 0.1,
+      "monounsaturatedFat": 0.2,
+      "polyunsaturatedFat": 0.2,
+      "potassium": 15,
+      "saturatedFat": 0,
+      "sugar": 0,
+      "transFat": 0,
+      "vitaminA": 2,
+      "vitaminC": 1.2
+    }
+  },
+  {
+    "_id": "6ab0483119b0b581fd45864b",
+    "name": "XO Sauce",
+    "defaultPortionAmount": 1,
+    "defaultPortionUnit": "g",
+    "nutrition": {
+      "calories": 100,
+      "protein": 2,
+      "carbs": 8,
+      "fats": 9,
+      "fiber": null,
+      "sodium": 112
+    }
+  },
+  {
+    "_id": "6ab0483119b0b581fd45864c",
+    "name": "Xo sauce",
+    "defaultPortionAmount": 1,
+    "defaultPortionUnit": "g",
+    "nutrition": {
+      "calories": 100,
+      "protein": 2,
+      "carbs": 8,
+      "fats": 9,
+      "fiber": null,
+      "sodium": 112
+    }
+  },
+  {
+    "_id": "6ab0483819b0b581fd458656",
+    "name": "Seasoned Fresh Crabs",
+    "defaultPortionAmount": 1,
+    "defaultPortionUnit": "g",
+    "nutrition": {
+      "calories": 340,
+      "protein": 38,
+      "carbs": 19,
+      "fats": 16,
+      "fiber": 7,
+      "sodium": 1480
+    }
+  }
+]

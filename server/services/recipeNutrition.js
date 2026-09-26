@@ -84,15 +84,18 @@ export async function calcNutrition(recipe) {
 // A produced ingredient's nutrition is a derived value, not something
 // manually edited once linked — keep it permanently in sync with whatever
 // this recipe's own (already-automatic) nutrition computes to, every time
-// the recipe is saved (or self-healed on read).
+// the recipe is saved (or self-healed on read). Updates *every* ingredient
+// linked to the recipe — an archived duplicate can still point at it, and
+// syncing only the first match (as this used to) could keep updating the
+// archived copy while the live one went stale.
 export async function syncProducedIngredientNutrition(recipe, nutrition) {
   if (!nutrition) return;
 
-  const producedIngredient = await Ingredient.findOne({ productionRecipe: recipe._id });
-  if (!producedIngredient) return;
-
-  producedIngredient.nutrition = nutrition;
-  await producedIngredient.save();
+  await Ingredient.updateMany(
+    { productionRecipe: recipe._id },
+    { $set: { nutrition } },
+    { runValidators: true },
+  );
 }
 
 // True if any tracked field differs — used to skip a write when a recompute
