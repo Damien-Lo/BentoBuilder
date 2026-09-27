@@ -5,6 +5,7 @@ import { Pressable, Text, View } from "react-native";
 import {
   CORE_NUTRITION_FIELDS,
   EXTENDED_NUTRITION_FIELDS,
+  EXTENDED_NUTRITION_GROUPS,
   NUTRITION_FIELD_META,
   type NutritionField,
 } from "@/src/types/nutrition";
@@ -57,6 +58,11 @@ export function NutritionFieldsEditor({
               onFocus={onFocus}
               onChangeText={(value) => onChange(field, value)}
             />
+            {field === "vitaminD" && (
+              <Text className="mt-1 text-xs text-slate-400">
+                Label in IU? Divide by 40 (e.g. 2000 IU = 50 mcg)
+              </Text>
+            )}
           </View>
         ))}
       </View>
@@ -78,15 +84,23 @@ export function NutritionFieldsEditor({
           </Text>
           {!compact && (
             <Text className="mt-0.5 text-xs leading-4 text-slate-500">
-              Optional — sugar, fat breakdown, cholesterol, potassium, vitamins
-              and minerals.
+              Optional — sugars, fat breakdown, vitamins, minerals and
+              caffeine.
             </Text>
           )}
         </View>
         <Ionicons name={moreExpanded ? "chevron-up" : "chevron-down"} size={20} color="#64748B" />
       </Pressable>
 
-      {moreExpanded && renderFields(EXTENDED_NUTRITION_FIELDS)}
+      {moreExpanded &&
+        EXTENDED_NUTRITION_GROUPS.map((group) => (
+          <View key={group.title} className="mt-4">
+            <Text className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              {group.title}
+            </Text>
+            {renderFields(group.fields)}
+          </View>
+        ))}
     </View>
   );
 }

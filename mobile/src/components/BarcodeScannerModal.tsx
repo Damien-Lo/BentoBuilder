@@ -25,27 +25,50 @@ import {
 // always normalized to grams (kcal for energy) regardless of what unit the
 // contributor typed in — checked against real products (e.g. a Mars bar's
 // vitamin-a_100g = 4.94e-05, i.e. 49.4 mcg; skyr's calcium_100g = 0.11,
-// i.e. 110 mg) — so mg fields are x1000 and vitamin A (mcg) is x1e6. Typed
-// as a full Record so adding a nutrient to types/nutrition.ts won't compile
+// i.e. 110 mg) — so mg fields are x1000 and mcg fields x1e6. A list of keys
+// is summed (omega3 = EPA + DHA, which OFF keeps separately). Typed as a
+// full Record so adding a nutrient to types/nutrition.ts won't compile
 // until it's mapped here too.
-const OFF_NUTRIENTS: Record<NutritionField, { key: string; factor: number }> = {
+const MG = 1000;
+const MCG = 1_000_000;
+const OFF_NUTRIENTS: Record<NutritionField, { key: string | string[]; factor: number }> = {
   calories:           { key: "energy-kcal",         factor: 1 },
   protein:            { key: "proteins",            factor: 1 },
   carbs:              { key: "carbohydrates",       factor: 1 },
   fats:               { key: "fat",                 factor: 1 },
   fiber:              { key: "fiber",               factor: 1 },
-  sodium:             { key: "sodium",              factor: 1000 },
+  sodium:             { key: "sodium",              factor: MG },
   sugar:              { key: "sugars",              factor: 1 },
+  addedSugar:         { key: "added-sugars",        factor: 1 },
   saturatedFat:       { key: "saturated-fat",       factor: 1 },
   polyunsaturatedFat: { key: "polyunsaturated-fat", factor: 1 },
   monounsaturatedFat: { key: "monounsaturated-fat", factor: 1 },
   transFat:           { key: "trans-fat",           factor: 1 },
-  cholesterol:        { key: "cholesterol",         factor: 1000 },
-  potassium:          { key: "potassium",           factor: 1000 },
-  vitaminA:           { key: "vitamin-a",           factor: 1_000_000 },
-  vitaminC:           { key: "vitamin-c",           factor: 1000 },
-  calcium:            { key: "calcium",             factor: 1000 },
-  iron:               { key: "iron",                factor: 1000 },
+  omega3:             { key: ["eicosapentaenoic-acid", "docosahexaenoic-acid"], factor: MG },
+  cholesterol:        { key: "cholesterol",         factor: MG },
+  potassium:          { key: "potassium",           factor: MG },
+  vitaminA:           { key: "vitamin-a",           factor: MCG },
+  vitaminC:           { key: "vitamin-c",           factor: MG },
+  vitaminD:           { key: "vitamin-d",           factor: MCG },
+  vitaminE:           { key: "vitamin-e",           factor: MG },
+  vitaminK:           { key: "vitamin-k",           factor: MCG },
+  thiamin:            { key: "vitamin-b1",          factor: MG },
+  riboflavin:         { key: "vitamin-b2",          factor: MG },
+  niacin:             { key: "vitamin-pp",          factor: MG },
+  vitaminB6:          { key: "vitamin-b6",          factor: MG },
+  folate:             { key: "vitamin-b9",          factor: MCG },
+  vitaminB12:         { key: "vitamin-b12",         factor: MCG },
+  choline:            { key: "choline",             factor: MG },
+  calcium:            { key: "calcium",             factor: MG },
+  iron:               { key: "iron",                factor: MG },
+  magnesium:          { key: "magnesium",           factor: MG },
+  phosphorus:         { key: "phosphorus",          factor: MG },
+  zinc:               { key: "zinc",                factor: MG },
+  selenium:           { key: "selenium",            factor: MCG },
+  iodine:             { key: "iodine",              factor: MCG },
+  copper:             { key: "copper",              factor: MG },
+  manganese:          { key: "manganese",           factor: MG },
+  caffeine:           { key: "caffeine",            factor: MG },
 };
 
 export interface ScannedProduct {
@@ -180,8 +203,11 @@ export function BarcodeScannerModal({
       for (const field of CORE_NUTRITION_FIELDS) nutrition[field] = null;
       for (const field of ALL_NUTRITION_FIELDS) {
         const { key, factor } = OFF_NUTRIENTS[field];
-        const raw = getNum(key);
-        if (raw == null) continue;
+        const parts = (Array.isArray(key) ? key : [key])
+          .map((k) => getNum(k))
+          .filter((n): n is number => n != null);
+        if (parts.length === 0) continue;
+        const raw = parts.reduce((sum, n) => sum + n, 0);
         const decimals = 10 ** NUTRITION_FIELD_META[field].decimals;
         nutrition[field] = Math.round(raw * factor * decimals) / decimals;
       }

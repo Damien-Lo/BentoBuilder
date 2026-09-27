@@ -17,7 +17,12 @@ import { SettingsNumericInput } from "@/src/components/forms";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { getMealPlanForDate, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
-import { CORE_NUTRITION_FIELDS, NUTRITION_FIELD_META, type NutritionField } from "@/src/types/nutrition";
+import {
+  CORE_NUTRITION_FIELDS,
+  EXTENDED_NUTRITION_GROUPS,
+  NUTRITION_FIELD_META,
+  type NutritionField,
+} from "@/src/types/nutrition";
 import {
   computeDayNutrition,
   friendlyDayLabel,
@@ -28,28 +33,38 @@ import {
 } from "@/src/utils/mealPlan";
 import { getEffectiveNutrientGoal, getSetNutrientGoal, withNutrientGoal } from "@/src/utils/nutritionGoals";
 
-// Nutrition-label order, same as MyFitnessPal's Nutrients tab — sub-nutrients
-// indented under their parent (fiber/sugar under carbs, the fat breakdown
-// under fat).
-const ROWS: { field: NutritionField; indent?: boolean }[] = [
-  { field: "calories" },
-  { field: "protein" },
-  { field: "carbs" },
-  { field: "fiber", indent: true },
-  { field: "sugar", indent: true },
-  { field: "fats" },
-  { field: "saturatedFat", indent: true },
-  { field: "polyunsaturatedFat", indent: true },
-  { field: "monounsaturatedFat", indent: true },
-  { field: "transFat", indent: true },
-  { field: "cholesterol" },
-  { field: "sodium" },
-  { field: "potassium" },
-  { field: "vitaminA" },
-  { field: "vitaminC" },
-  { field: "calcium" },
-  { field: "iron" },
+type Row = { field: NutritionField; indent?: boolean };
+
+// Nutrition-label order, same as MyFitnessPal's Nutrients tab: the label
+// block first (sub-nutrients indented under their parent — fiber/sugars
+// under carbs, the fat breakdown under fat), then the remaining groups in
+// the shared EXTENDED_NUTRITION_GROUPS order, each under its own heading.
+const SECTIONS: { title: string | null; rows: Row[] }[] = [
+  {
+    title: null,
+    rows: [
+      { field: "calories" },
+      { field: "protein" },
+      { field: "carbs" },
+      { field: "fiber", indent: true },
+      { field: "sugar", indent: true },
+      { field: "addedSugar", indent: true },
+      { field: "fats" },
+      { field: "saturatedFat", indent: true },
+      { field: "polyunsaturatedFat", indent: true },
+      { field: "monounsaturatedFat", indent: true },
+      { field: "transFat", indent: true },
+      { field: "omega3", indent: true },
+      { field: "cholesterol" },
+      { field: "sodium" },
+    ],
+  },
+  ...EXTENDED_NUTRITION_GROUPS
+    .filter((group) => group.title !== "Sugars & fats")
+    .map((group) => ({ title: group.title, rows: group.fields.map((field) => ({ field })) })),
 ];
+
+const ROWS: Row[] = SECTIONS.flatMap((section) => section.rows);
 
 function shiftDate(dateStr: string, days: number): string {
   const d = parseLocalDate(dateStr);
@@ -209,16 +224,21 @@ export default function NutrientsScreen() {
           {isEditing ? (
             <>
               <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                {ROWS.map(({ field, indent }) => (
-                  <GoalEditRow
-                    key={field}
-                    field={field}
-                    indent={indent}
-                    goal={getSetNutrientGoal(draft, field)}
-                    onChange={goal => setDraft(prev => prev && withNutrientGoal(prev, field, goal))}
-                    scrollRef={scrollRef}
-                    anchorRef={scrollAnchorRef}
-                  />
+                {SECTIONS.map(section => (
+                  <View key={section.title ?? "label"}>
+                    {section.title && <SectionHeading title={section.title} />}
+                    {section.rows.map(({ field, indent }) => (
+                      <GoalEditRow
+                        key={field}
+                        field={field}
+                        indent={indent}
+                        goal={getSetNutrientGoal(draft, field)}
+                        onChange={goal => setDraft(prev => prev && withNutrientGoal(prev, field, goal))}
+                        scrollRef={scrollRef}
+                        anchorRef={scrollAnchorRef}
+                      />
+                    ))}
+                  </View>
                 ))}
               </View>
               <Text className="mt-3 px-1 text-xs leading-5 text-slate-400">
@@ -268,17 +288,22 @@ export default function NutrientsScreen() {
                   <Text className="w-16 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Left</Text>
                 </View>
 
-                {ROWS.map(({ field, indent }, i) => (
-                  <NutrientRow
-                    key={field}
-                    field={field}
-                    indent={indent}
-                    total={totals[field] ?? null}
-                    goal={getEffectiveNutrientGoal(settings, field)}
-                    covered={coverage[field] ?? 0}
-                    entryCount={confirmedEntries.length}
-                    isLast={i === ROWS.length - 1}
-                  />
+                {SECTIONS.map(section => (
+                  <View key={section.title ?? "label"}>
+                    {section.title && <SectionHeading title={section.title} />}
+                    {section.rows.map(({ field, indent }) => (
+                      <NutrientRow
+                        key={field}
+                        field={field}
+                        indent={indent}
+                        total={totals[field] ?? null}
+                        goal={getEffectiveNutrientGoal(settings, field)}
+                        covered={coverage[field] ?? 0}
+                        entryCount={confirmedEntries.length}
+                        isLast={field === ROWS[ROWS.length - 1].field}
+                      />
+                    ))}
+                  </View>
                 ))}
               </View>
 
@@ -294,6 +319,14 @@ export default function NutrientsScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+function SectionHeading({ title }: { title: string }) {
+  return (
+    <View className="border-b border-slate-100 bg-slate-50 px-4 py-2">
+      <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">{title}</Text>
+    </View>
   );
 }
 
