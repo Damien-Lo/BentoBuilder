@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -33,6 +33,7 @@ import {
 import { loadSettings } from "@/src/services/settingsService";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { toDateOnly } from "@/src/utils/date";
+import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
 type ReferenceObject = { _id?: string; id?: string; name?: string };
@@ -113,6 +114,20 @@ export default function EditPantryItemScreen() {
   const [saving, setSaving] = useState(false);
 
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+
+  // Scrolls whichever field was just focused/opened into view — see
+  // useScrollFocusSection for why zIndex has to descend in on-screen order
+  // (only the fields that can show a dropdown need one; plain text fields
+  // default to 0 and don't need to be listed here). Store is the only
+  // dropdown-capable field on this page.
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollAnchorRef = useRef<View>(null);
+  const quantitySection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const datesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const expiryDurationSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const storeSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
+  const priceSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
 
   useEffect(() => {
     let cancelled = false;
@@ -289,6 +304,7 @@ export default function EditPantryItemScreen() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           className="flex-1"
           contentContainerStyle={{
             paddingHorizontal: 20,
@@ -298,6 +314,7 @@ export default function EditPantryItemScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          <View ref={scrollAnchorRef} collapsable={false} />
           {/* Ingredient info link */}
           {ingredientId ? (
             <Pressable
@@ -328,7 +345,7 @@ export default function EditPantryItemScreen() {
           <Text className="mb-1.5 text-sm font-semibold text-slate-700">
             Quantity
           </Text>
-          <View className="mb-5">
+          <View className="mb-5" {...quantitySection.wrapperProps}>
             <QuantityServingInput
               quantityAvailable={form.quantityAvailable}
               quantityUnit={form.quantityUnit}
@@ -348,6 +365,7 @@ export default function EditPantryItemScreen() {
               defaultPortionUnit={item.ingredient?.defaultPortionUnit}
               initialMode="total"
               customUnitConversions={getIngredientConversions(item.ingredient, customUnitConversions)}
+              onFocus={quantitySection.trigger}
             />
           </View>
 
@@ -402,7 +420,7 @@ export default function EditPantryItemScreen() {
           </View>
 
           {/* Dates */}
-          <View className="mb-5 flex-row">
+          <View className="mb-5 flex-row" {...datesSection.wrapperProps}>
             <View className="mr-3 flex-1">
               <Text className="mb-1.5 text-sm font-semibold text-slate-700">
                 Purchase date
@@ -410,6 +428,7 @@ export default function EditPantryItemScreen() {
               <DateTextInput
                 value={form.purchaseDate}
                 onChangeText={(v) => update("purchaseDate", v)}
+                onFocus={datesSection.trigger}
                 className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
               />
             </View>
@@ -420,6 +439,7 @@ export default function EditPantryItemScreen() {
               <DateTextInput
                 value={form.expiryDate}
                 onChangeText={(v) => update("expiryDate", v)}
+                onFocus={datesSection.trigger}
                 className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
               />
             </View>
@@ -428,10 +448,11 @@ export default function EditPantryItemScreen() {
           <Text className="mb-1.5 text-sm font-semibold text-slate-700">
             Set expiry from purchase date
           </Text>
-          <View className="mb-5">
+          <View className="mb-5" {...expiryDurationSection.wrapperProps}>
             <DurationExpiryInput
               purchaseDate={form.purchaseDate}
               onApply={(expiryDate) => update("expiryDate", expiryDate)}
+              onFocus={expiryDurationSection.trigger}
             />
           </View>
 
@@ -439,12 +460,13 @@ export default function EditPantryItemScreen() {
           <Text className="mb-1.5 text-sm font-semibold text-slate-700">
             Store (optional)
           </Text>
-          <View className="mb-5">
+          <View className="mb-5" {...storeSection.wrapperProps}>
             <SearchableObjectDropdown<SelectOption>
               options={stores}
               selectedId={form.storeId}
               selectedName={form.storeName}
               placeholder="Search or type a new store"
+              onOpen={storeSection.trigger}
               onTextChange={(value) => {
                 if (value !== form.storeName) update("storeId", "");
                 setStoreDraft(value);
@@ -461,10 +483,11 @@ export default function EditPantryItemScreen() {
           <Text className="mb-1.5 text-sm font-semibold text-slate-700">
             Price paid (optional)
           </Text>
-          <View className="mb-5">
+          <View className="mb-5" {...priceSection.wrapperProps}>
             <PriceInput
               value={form.purchasePrice}
               onChangeText={(v) => update("purchasePrice", v)}
+              onFocus={priceSection.trigger}
             />
           </View>
 
@@ -472,9 +495,11 @@ export default function EditPantryItemScreen() {
           <Text className="mb-1.5 text-sm font-semibold text-slate-700">
             Notes
           </Text>
+          <View {...notesSection.wrapperProps}>
           <TextInput
             value={form.notes}
             onChangeText={(v) => update("notes", v)}
+            onFocus={notesSection.trigger}
             placeholder="Optional notes"
             placeholderTextColor="#94A3B8"
             multiline
@@ -482,6 +507,7 @@ export default function EditPantryItemScreen() {
             textAlignVertical="top"
             className="min-h-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
           />
+          </View>
 
           <Pressable
             disabled={saving}

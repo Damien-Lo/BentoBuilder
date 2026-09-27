@@ -24,6 +24,30 @@ export interface StockDeduction {
   amount: number;
 }
 
+// A wholePiece ingredient the user says they used but never logged into
+// pantry — no real pantry item backs this, so nutrition is computed
+// straight from the ingredient's own rate at this real typed weight.
+export interface ManualPieceEntry {
+  ingredient: Ingredient;
+  weight: number;
+  weightUnit: string;
+}
+
+// The real, final nutrition for a confirmed entry — computed once, with
+// full context, at the moment of confirming (see mobile's
+// computeConfirmNutrition) and stored here so every reader (the planner
+// row, the day total, a weekly report) shows the exact same number without
+// needing to re-derive it. null while planned, or for an entry confirmed
+// before this field existed.
+export interface ConfirmedNutrition {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+  fiber: number;
+  sodium: number;
+}
+
 // Which dish (by RestaurantMeal.dishes subdocument _id) and how many of it
 // were had on one specific visit — quantity defaults to 1 server-side, but
 // is always present once populated back from the API.
@@ -58,6 +82,12 @@ export interface MealPlanEntry {
   // Exactly what confirming this entry deducted from the pantry — replayed
   // in reverse on unconfirm/delete. Empty while planned.
   stockDeductions?: StockDeduction[];
+  // wholePiece ingredients confirmed with a typed weight instead of a real
+  // pantry item — see ManualPieceEntry. Cleared on unconfirm, same as
+  // stockDeductions (nothing to reverse — no stock was ever touched).
+  manualPieceEntries?: ManualPieceEntry[];
+  // See ConfirmedNutrition. Cleared on unconfirm.
+  confirmedNutrition?: ConfirmedNutrition | null;
 
   notes?: string;
   createdAt?: string;
@@ -156,19 +186,29 @@ export async function updateMealPlanEntryQuantity(
 // Confirming deducts pantry stock — the caller works out which pantry items
 // to draw from (brother-grouping, expiry order, any manual choice) and
 // sends the flat result here. The server clamps each amount to what's
-// actually available and never blocks on a shortfall.
+// actually available and never blocks on a shortfall. manualPieceEntries
+// covers a wholePiece ingredient with nothing in pantry to draw from at
+// all — a typed weight instead of a pantry item, so nutrition still comes
+// from a real number rather than a shortfall being silently left out.
 export async function confirmMealPlanEntry(
   id: string,
   instructions: { pantryItemId: string; amount: number }[],
+  manualPieceEntries: { ingredientId: string; weight: number; unit: string }[] = [],
+  confirmedNutrition?: ConfirmedNutrition,
 ): Promise<MealPlanEntry> {
   const deductions: StockDeduction[] = instructions.map((i) => ({
     pantryItem: i.pantryItemId,
     amount: i.amount,
   }));
+  const manual = manualPieceEntries.map((m) => ({
+    ingredient: m.ingredientId,
+    weight: m.weight,
+    weightUnit: m.unit,
+  }));
   const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ deductions }),
+    body: JSON.stringify({ deductions, manualPieceEntries: manual, confirmedNutrition }),
   });
   const result = await parseResponse<{ success: boolean; data: MealPlanEntry }>(res);
   return result.data;

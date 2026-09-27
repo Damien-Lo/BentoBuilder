@@ -1171,9 +1171,16 @@ export default function PantryMainPage() {
                           return (
                             <PantryItemCard
                               key={pantryItem._id}
+                              pantryItemId={pantryItem._id}
                               ingredientName={ingName}
                               quantityAvailable={pantryItem.quantityAvailable}
                               quantityUnit={pantryItem.quantityUnit}
+                              storageLocationName={getReferenceName(pantryItem.storageLocation)}
+                              purchaseDate={pantryItem.purchaseDate}
+                              expiryDate={pantryItem.expiryDate}
+                              purchasePrice={pantryItem.purchasePrice}
+                              storeName={getReferenceName(pantryItem.store)}
+                              notes={pantryItem.notes}
                               busy={busyPantryItemId === pantryItem._id}
                               rightBadge={
                                 expiryState === "expired" ? (
@@ -1188,7 +1195,7 @@ export default function PantryMainPage() {
                                   </View>
                                 ) : undefined
                               }
-                              onPress={() =>
+                              onEdit={() =>
                                 router.push({ pathname: "/pantry/edit/[id]", params: { id: pantryItem._id } })
                               }
                               onDelete={() => handleDeletePantryEntry(pantryItem._id)}
@@ -1814,7 +1821,10 @@ export default function PantryMainPage() {
             scannedBrand: product.brand ?? "",
             scannedQuantity: product.packageQuantity != null ? String(product.packageQuantity) : "",
             scannedQuantityUnit: product.packageUnit ?? "",
-            scannedServingSize: String(product.servingSize),
+            // Omitted (not just "") when the serving is only an estimated
+            // 100g/100ml reference, not a real one — add_manual.tsx reads
+            // its absence as "leave the default-portion field blank".
+            ...(product.servingIsEstimated ? {} : { scannedServingSize: String(product.servingSize) }),
             scannedServingUnit: product.servingUnit,
             scannedCalories: product.calories != null ? String(Math.round(product.calories)) : "",
             scannedProtein: product.protein != null ? String(Math.round(product.protein * 10) / 10) : "",
@@ -1830,7 +1840,18 @@ export default function PantryMainPage() {
             if (match) {
               router.push({
                 pathname: "/pantry/add_by_ingredient",
-                params: { ingredientId: match._id },
+                params: {
+                  ingredientId: match._id,
+                  // The real scanned package amount (from OFF's
+                  // product_quantity, a reliable field — unlike
+                  // servingSize/serving_quantity, see servingIsEstimated)
+                  // so the quantity form defaults to "how much is in this
+                  // bottle" instead of the ingredient's own single-serving
+                  // default.
+                  ...(product.packageQuantity != null
+                    ? { scannedQuantity: String(product.packageQuantity), scannedQuantityUnit: product.packageUnit ?? "" }
+                    : {}),
+                },
               });
             } else {
               Alert.alert(

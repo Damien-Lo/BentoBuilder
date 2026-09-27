@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +27,7 @@ import {
   UnitFamilyDropdown,
 } from "@/src/components/forms";
 
+import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { getIngredients, updateIngredient, type Ingredient } from "@/src/services/ingredientApi";
 import { createTag, getTags, getUnitSuggestions, type SelectOption } from "@/src/services/optionsApi";
 import {
@@ -154,6 +155,53 @@ function populatedToRow(
   };
 }
 
+// One instruction step — its own scroll-focus section (declared here, per
+// row, rather than once for the whole page) so each step's TextInput scrolls
+// itself into view within the shared page-level ScrollView regardless of
+// which step it is. No dropdown involved, so no zIndex is needed.
+function StepRow({
+  step,
+  index,
+  scrollRef,
+  scrollAnchorRef,
+  updateStep,
+  removeStep,
+}: {
+  step: string;
+  index: number;
+  scrollRef: RefObject<ScrollView | null>;
+  scrollAnchorRef: RefObject<View | null>;
+  updateStep: (index: number, value: string) => void;
+  removeStep: (index: number) => void;
+}) {
+  const stepSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+
+  return (
+    <View className="mb-3 flex-row items-start">
+      <View className="mt-3 h-7 w-7 items-center justify-center rounded-full bg-blue-100">
+        <Text className="text-xs font-bold text-blue-700">{index + 1}</Text>
+      </View>
+
+      <View className="ml-3 flex-1" {...stepSection.wrapperProps}>
+        <TextInput
+          value={step}
+          onChangeText={(text) => updateStep(index, text)}
+          onFocus={stepSection.trigger}
+          placeholder={`Step ${index + 1}`}
+          placeholderTextColor="#94a3b8"
+          multiline
+          className="rounded-2xl bg-white px-4 py-3 text-base text-slate-900"
+          style={{ minHeight: 56 }}
+        />
+      </View>
+
+      <Pressable className="ml-2 mt-3 p-1" onPress={() => removeStep(index)}>
+        <Ionicons name="trash-outline" size={20} color="#94A3B8" />
+      </Pressable>
+    </View>
+  );
+}
+
 export default function EditRecipePage() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -228,6 +276,28 @@ export default function EditRecipePage() {
   const [recipeCategories, setRecipeCategories] = useState<RecipeCategory[]>([]);
   const [units, setUnits] = useState<string[]>([]);
   const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
+
+  // Scrolls whichever field was just focused/opened into view — see
+  // useScrollFocusSection. zIndex descends in on-screen top-to-bottom order
+  // across the four dropdown-capable fields on this page (Category, Tags,
+  // the "Prepares" ingredient picker, and the ingredient-row picker card's
+  // own search field) so each one's open option list paints over whatever
+  // comes after it in the scroll; every other (plain) field omits zIndex.
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollAnchorRef = useRef<View>(null);
+  const nameSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const categorySection = useScrollFocusSection(scrollRef, scrollAnchorRef, 80);
+  const descriptionSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const tagsSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 60);
+  const servingsSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const prepCookTimeSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const producedIngredientSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 40);
+  const produceYieldSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const pickerIngredientSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
+  const pickerAmountSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const pickerNutritionFactorSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const pickerPieceWeightSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
 
   // Load recipe + options in parallel
   useEffect(() => {
@@ -696,12 +766,14 @@ export default function EditRecipePage() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           className="flex-1"
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80, paddingTop: 20 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}
         >
+          <View ref={scrollAnchorRef} collapsable={false} />
           {/* ── Recipe Details ── */}
           <SectionTitle
             first
@@ -709,8 +781,15 @@ export default function EditRecipePage() {
             description="Give your recipe a name and tell us when it's eaten."
           />
 
-          <FieldLabel text="Recipe name" required />
-          <FormInput value={name} placeholder="e.g. Avocado toast" onChangeText={setName} />
+          <View {...nameSection.wrapperProps}>
+            <FieldLabel text="Recipe name" required />
+            <FormInput
+              value={name}
+              placeholder="e.g. Avocado toast"
+              onFocus={nameSection.trigger}
+              onChangeText={setName}
+            />
+          </View>
 
           <FieldLabel text="Meal type" required={!producesIngredient} />
           <View className="mt-1 mb-4 flex-row overflow-hidden rounded-2xl border border-slate-200">
@@ -774,57 +853,70 @@ export default function EditRecipePage() {
             </Pressable>
           </View>
 
-          <FieldLabel text="Category" />
-          <SearchableObjectDropdown<RecipeCategory>
-            options={recipeCategories}
-            selectedId={recipeCategoryId}
-            selectedName={recipeCategoryName}
-            placeholder="Search or type a new category"
-            onTextChange={(value) => {
-              if (value !== recipeCategoryName) {
-                setRecipeCategoryId("");
-              }
-              setRecipeCategoryDraft(value);
-            }}
-            onSelect={(option) => {
-              setRecipeCategoryId(option._id);
-              setRecipeCategoryName(option.name);
-              setRecipeCategoryDraft(option.name);
-            }}
-          />
+          <View {...categorySection.wrapperProps}>
+            <FieldLabel text="Category" />
+            <SearchableObjectDropdown<RecipeCategory>
+              options={recipeCategories}
+              selectedId={recipeCategoryId}
+              selectedName={recipeCategoryName}
+              placeholder="Search or type a new category"
+              onOpen={categorySection.trigger}
+              onTextChange={(value) => {
+                if (value !== recipeCategoryName) {
+                  setRecipeCategoryId("");
+                }
+                setRecipeCategoryDraft(value);
+              }}
+              onSelect={(option) => {
+                setRecipeCategoryId(option._id);
+                setRecipeCategoryName(option.name);
+                setRecipeCategoryDraft(option.name);
+              }}
+            />
+          </View>
 
-          <FieldLabel text="Description" />
-          <FormInput
-            value={description}
-            placeholder="What makes this recipe special?"
-            multiline
-            onChangeText={setDescription}
-          />
+          <View {...descriptionSection.wrapperProps}>
+            <FieldLabel text="Description" />
+            <FormInput
+              value={description}
+              placeholder="What makes this recipe special?"
+              multiline
+              onFocus={descriptionSection.trigger}
+              onChangeText={setDescription}
+            />
+          </View>
 
-          <FieldLabel text="Tags" />
-          <CreatableMultiTagDropdown
-            options={allTags}
-            selectedItems={selectedTags}
-            placeholder="Add a tag…"
-            onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
-            onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
-          />
+          <View {...tagsSection.wrapperProps}>
+            <FieldLabel text="Tags" />
+            <CreatableMultiTagDropdown
+              options={allTags}
+              selectedItems={selectedTags}
+              placeholder="Add a tag…"
+              onOpen={tagsSection.trigger}
+              onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
+              onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
+            />
+          </View>
 
-          <FieldLabel text="Servings" />
-          <FormInput
-            value={servings}
-            placeholder="1"
-            keyboardType="number-pad"
-            onChangeText={setServings}
-          />
+          <View {...servingsSection.wrapperProps}>
+            <FieldLabel text="Servings" />
+            <FormInput
+              value={servings}
+              placeholder="1"
+              keyboardType="number-pad"
+              onFocus={servingsSection.trigger}
+              onChangeText={setServings}
+            />
+          </View>
 
-          <View className="mt-4 flex-row gap-3">
+          <View className="mt-4 flex-row gap-3" {...prepCookTimeSection.wrapperProps}>
             <View className="flex-1">
               <FieldLabel text="Prep time (min)" />
               <FormInput
                 value={prepTimeMinutes}
                 placeholder="e.g. 15"
                 keyboardType="number-pad"
+                onFocus={prepCookTimeSection.trigger}
                 onChangeText={setPrepTimeMinutes}
               />
             </View>
@@ -834,6 +926,7 @@ export default function EditRecipePage() {
                 value={cookTimeMinutes}
                 placeholder="e.g. 20"
                 keyboardType="number-pad"
+                onFocus={prepCookTimeSection.trigger}
                 onChangeText={setCookTimeMinutes}
               />
             </View>
@@ -863,33 +956,37 @@ export default function EditRecipePage() {
                   : "A component other recipes can use (falling back to these ingredients if you're short), e.g. Dashi Stock."}
               </Text>
 
-              <FieldLabel text="Prepares" required />
-              <SearchableObjectDropdown<IngredientOption>
-                options={ingredientOptions}
-                selectedId={produceIngredientId}
-                selectedName={produceIngredientName}
-                placeholder="Search existing ingredients"
-                showAllWhenEmpty={false}
-                onTextChange={(value) => {
-                  if (value !== produceIngredientName) {
-                    setProduceIngredientId("");
-                  }
-                  setProduceIngredientName(value);
-                }}
-                onSelect={(option) => {
-                  setProduceIngredientId(option._id);
-                  setProduceIngredientName(option.name);
-                }}
-                onCreateNew={() => setShowCreateProducedIngredient(true)}
-              />
+              <View {...producedIngredientSection.wrapperProps}>
+                <FieldLabel text="Prepares" required />
+                <SearchableObjectDropdown<IngredientOption>
+                  options={ingredientOptions}
+                  selectedId={produceIngredientId}
+                  selectedName={produceIngredientName}
+                  placeholder="Search existing ingredients"
+                  showAllWhenEmpty={false}
+                  onOpen={producedIngredientSection.trigger}
+                  onTextChange={(value) => {
+                    if (value !== produceIngredientName) {
+                      setProduceIngredientId("");
+                    }
+                    setProduceIngredientName(value);
+                  }}
+                  onSelect={(option) => {
+                    setProduceIngredientId(option._id);
+                    setProduceIngredientName(option.name);
+                  }}
+                  onCreateNew={() => setShowCreateProducedIngredient(true)}
+                />
+              </View>
 
               <FieldLabel text="1 serving makes" required />
               <View className="flex-row">
-                <View className="mr-3 flex-1">
+                <View className="mr-3 flex-1" {...produceYieldSection.wrapperProps}>
                   <FormInput
                     value={produceYieldAmount}
                     placeholder="1"
                     keyboardType="decimal-pad"
+                    onFocus={produceYieldSection.trigger}
                     onChangeText={setProduceYieldAmount}
                   />
                 </View>
@@ -916,44 +1013,55 @@ export default function EditRecipePage() {
             description="Add ingredients and how many servings of each you use."
           />
 
-          {/* Picker card */}
-          <View className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
-            <FieldLabel text="Search ingredient" />
-            <SearchableObjectDropdown<IngredientOption>
-              options={ingredientOptions}
-              selectedId={pickerIngredientId}
-              selectedName={pickerIngredientName}
-              placeholder="Search existing ingredients"
-              showAllWhenEmpty={false}
-              onTextChange={(value) => {
-                if (value !== pickerIngredientName) {
-                  setPickerIngredientId("");
-                  setPickerSelected(null);
-                  setPickerUnit("");
+          {/* Picker card — the "Search ingredient" dropdown lives nested one
+              level inside this card, which is itself the direct ScrollView
+              sibling, so its zIndex has to go on this outer card (matching
+              review.tsx's brandGenericSection pattern) while the ref/trigger
+              that actually gets measured stay on the inner wrapper below. */}
+          <View
+            className="mb-4 rounded-2xl border border-slate-200 bg-white p-4"
+            style={pickerIngredientSection.wrapperProps.style}
+          >
+            <View {...pickerIngredientSection.wrapperProps}>
+              <FieldLabel text="Search ingredient" />
+              <SearchableObjectDropdown<IngredientOption>
+                options={ingredientOptions}
+                selectedId={pickerIngredientId}
+                selectedName={pickerIngredientName}
+                placeholder="Search existing ingredients"
+                showAllWhenEmpty={false}
+                onOpen={pickerIngredientSection.trigger}
+                onTextChange={(value) => {
+                  if (value !== pickerIngredientName) {
+                    setPickerIngredientId("");
+                    setPickerSelected(null);
+                    setPickerUnit("");
+                  }
+                  setPickerIngredientName(value);
+                }}
+                onSelect={(option) => {
+                  setPickerIngredientId(option._id);
+                  setPickerIngredientName(option.name);
+                  setPickerSelected(option);
+                  setPickerUnit(option.unit);
+                }}
+                onCreateNew={() => setShowCreateIngredient(true)}
+                renderSubtitle={(option) =>
+                  option.isGeneric ? (
+                    <Text className="mt-0.5 text-xs font-medium text-violet-600">Generic</Text>
+                  ) : null
                 }
-                setPickerIngredientName(value);
-              }}
-              onSelect={(option) => {
-                setPickerIngredientId(option._id);
-                setPickerIngredientName(option.name);
-                setPickerSelected(option);
-                setPickerUnit(option.unit);
-              }}
-              onCreateNew={() => setShowCreateIngredient(true)}
-              renderSubtitle={(option) =>
-                option.isGeneric ? (
-                  <Text className="mt-0.5 text-xs font-medium text-violet-600">Generic</Text>
-                ) : null
-              }
-            />
+              />
+            </View>
 
-            <View className="mt-3 flex-row items-end">
+            <View className="mt-3 flex-row items-end" {...pickerAmountSection.wrapperProps}>
               <View className="mr-3 flex-1">
                 <FieldLabel text="Amount" />
                 <FormInput
                   value={pickerQuantity}
                   placeholder="1"
                   keyboardType="decimal-pad"
+                  onFocus={pickerAmountSection.trigger}
                   onChangeText={setPickerQuantity}
                 />
               </View>
@@ -1027,12 +1135,13 @@ export default function EditRecipePage() {
             </Pressable>
 
             {showNutritionFactor && (
-              <View className="mt-2 flex-row items-center">
+              <View className="mt-2 flex-row items-center" {...pickerNutritionFactorSection.wrapperProps}>
                 <View style={{ width: 80 }}>
                   <FormInput
                     value={pickerNutritionPercent}
                     placeholder="100"
                     keyboardType="number-pad"
+                    onFocus={pickerNutritionFactorSection.trigger}
                     onChangeText={setPickerNutritionPercent}
                   />
                 </View>
@@ -1073,13 +1182,14 @@ export default function EditRecipePage() {
                   Amount above is how many whole pieces this line needs — a real pantry
                   item whose own weight falls in this range is used whole, never split.
                 </Text>
-                <View className="mt-2 flex-row items-end gap-2">
+                <View className="mt-2 flex-row items-end gap-2" {...pickerPieceWeightSection.wrapperProps}>
                   <View className="flex-1">
                     <FieldLabel text="Min weight" />
                     <FormInput
                       value={pickerPieceMinWeight}
                       placeholder="150"
                       keyboardType="decimal-pad"
+                      onFocus={pickerPieceWeightSection.trigger}
                       onChangeText={setPickerPieceMinWeight}
                     />
                   </View>
@@ -1089,6 +1199,7 @@ export default function EditRecipePage() {
                       value={pickerPieceMaxWeight}
                       placeholder="250"
                       keyboardType="decimal-pad"
+                      onFocus={pickerPieceWeightSection.trigger}
                       onChangeText={setPickerPieceMaxWeight}
                     />
                   </View>
@@ -1097,6 +1208,7 @@ export default function EditRecipePage() {
                     <FormInput
                       value={pickerPieceWeightUnit}
                       placeholder="g"
+                      onFocus={pickerPieceWeightSection.trigger}
                       onChangeText={setPickerPieceWeightUnit}
                     />
                   </View>
@@ -1195,27 +1307,15 @@ export default function EditRecipePage() {
           <SectionTitle title="Instructions" description="Add step-by-step cooking instructions." />
 
           {steps.map((step, index) => (
-            <View key={index} className="mb-3 flex-row items-start">
-              <View className="mt-3 h-7 w-7 items-center justify-center rounded-full bg-blue-100">
-                <Text className="text-xs font-bold text-blue-700">{index + 1}</Text>
-              </View>
-
-              <View className="ml-3 flex-1">
-                <TextInput
-                  value={step}
-                  onChangeText={(text) => updateStep(index, text)}
-                  placeholder={`Step ${index + 1}`}
-                  placeholderTextColor="#94a3b8"
-                  multiline
-                  className="rounded-2xl bg-white px-4 py-3 text-base text-slate-900"
-                  style={{ minHeight: 56 }}
-                />
-              </View>
-
-              <Pressable className="ml-2 mt-3 p-1" onPress={() => removeStep(index)}>
-                <Ionicons name="trash-outline" size={20} color="#94A3B8" />
-              </Pressable>
-            </View>
+            <StepRow
+              key={index}
+              step={step}
+              index={index}
+              scrollRef={scrollRef}
+              scrollAnchorRef={scrollAnchorRef}
+              updateStep={updateStep}
+              removeStep={removeStep}
+            />
           ))}
 
           <Pressable
@@ -1229,12 +1329,15 @@ export default function EditRecipePage() {
           {/* ── Notes ── */}
           <SectionTitle title="Notes" description="Any tips, variations, or extra context." />
 
-          <FormInput
-            value={notes}
-            placeholder="e.g. Best served fresh, substitute oat milk for dairy-free…"
-            multiline
-            onChangeText={setNotes}
-          />
+          <View {...notesSection.wrapperProps}>
+            <FormInput
+              value={notes}
+              placeholder="e.g. Best served fresh, substitute oat milk for dairy-free…"
+              multiline
+              onFocus={notesSection.trigger}
+              onChangeText={setNotes}
+            />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

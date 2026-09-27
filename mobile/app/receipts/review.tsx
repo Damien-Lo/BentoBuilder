@@ -35,6 +35,7 @@ import {
 import {
   getIngredients,
   createIngredient,
+  updateIngredient,
   type Ingredient,
   type IngredientNutrition,
 } from "@/src/services/ingredientApi";
@@ -72,6 +73,7 @@ import {
   type GroceryItem,
 } from "@/src/services/groceryListApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
+import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
   convertUnits,
@@ -386,6 +388,21 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
 
   const [showDurationPicker, setShowDurationPicker] = useState(false);
 
+  // Scrolls whichever field was just focused/opened into view within this
+  // card's own ScrollView — nested inside the horizontal pager the way this
+  // card is, RN doesn't do that automatically, so a lower field can end up
+  // hidden behind the keyboard or the draggable item-list panel with no way
+  // to see what's being typed. zIndex descends in on-screen order — see
+  // useScrollFocusSection for why that matters for the dropdown sections.
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollAnchorRef = useRef<View>(null);
+  const categorySection = useScrollFocusSection(scrollRef, scrollAnchorRef, 60);
+  const quantitySection = useScrollFocusSection(scrollRef, scrollAnchorRef, 50);
+  const storageLocationSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 40);
+  const brandGenericSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 30);
+  const servingSizeSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
+  const expirySection = useScrollFocusSection(scrollRef, scrollAnchorRef, 10);
+
   const isNew = !row.matchedIngredientId;
   const hasPendingGroceryItems = pendingGroceryItems.length > 0;
   const linkedGroceryItem = row.matchedGroceryItemId
@@ -518,6 +535,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           the draggable item-list panel that overlays the bottom of the
           screen, so the last field can still be scrolled clear of it. */}
       <ScrollView
+        ref={scrollRef}
         className="flex-1"
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -526,11 +544,15 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           paddingBottom: COLLAPSED_LIST_HEIGHT + LIST_HANDLE_AREA_HEIGHT + 24,
         }}
       >
+      {/* Zero-size anchor at the very top of the scrollable content — see
+          useScrollToFocusedField, which measures fields against this rather
+          than the ScrollView itself. */}
+      <View ref={scrollAnchorRef} collapsable={false} />
       {/* Category alone, ahead of the purchase details below — the rest of
           the new-ingredient classification (Specific/Generic, Brand,
           Generic parent) stays with Storage location further down. */}
       {isNew && (
-        <View className="mt-2">
+        <View className="mt-2" {...categorySection.wrapperProps}>
           <Text className="text-xs font-semibold text-slate-600">Category</Text>
           <View className="mt-1">
             <SearchableObjectDropdown<SelectOption>
@@ -539,6 +561,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
               selectedName={row.categoryName}
               compact
               placeholder="Category"
+              onOpen={categorySection.trigger}
               onTextChange={(value) => {
                 if (value !== row.categoryName) updateRow(row.key, { categoryId: "" });
                 updateRow(row.key, { categoryName: value });
@@ -554,13 +577,17 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
       {/* How much was actually bought — feeds the pantry item's stock
           directly, independent of the serving size nutrition is defined
           for below. Editing this never touches nutrition. */}
-      <View className={isNew ? "mt-2 border-t border-slate-100 pt-2" : "mt-2"}>
+      <View
+        className={isNew ? "mt-2 border-t border-slate-100 pt-2" : "mt-2"}
+        {...quantitySection.wrapperProps}
+      >
         <Text className="text-xs font-semibold text-slate-600">Quantity bought</Text>
         <View className="mt-1 flex-row gap-2">
           <View className="w-14">
             <TextInput
               value={row.quantity}
               onChangeText={(value) => updateRow(row.key, { quantity: value })}
+              onFocus={quantitySection.trigger}
               keyboardType="decimal-pad"
               placeholder="Qty"
               placeholderTextColor="#94A3B8"
@@ -572,6 +599,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             <TextInput
               value={row.unit}
               onChangeText={(value) => updateRow(row.key, { unit: value })}
+              onFocus={quantitySection.trigger}
               placeholder="Unit"
               placeholderTextColor="#94A3B8"
               autoCapitalize="none"
@@ -580,28 +608,36 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             />
           </View>
           <View style={{ flex: 1 }}>
-            <PriceInput compact value={row.price} onChangeText={(value) => updateRow(row.key, { price: value })} />
+            <PriceInput
+              compact
+              value={row.price}
+              onChangeText={(value) => updateRow(row.key, { price: value })}
+              onFocus={quantitySection.trigger}
+            />
           </View>
         </View>
       </View>
 
-      <Text className="mt-2 text-xs font-semibold text-slate-600">Storage location</Text>
-      <View className="mt-1">
-        <SearchableObjectDropdown<SelectOption>
-          options={storageLocations}
-          selectedId={row.storageLocationId}
-          selectedName={row.storageLocationName}
-          compact
-          placeholder="Location"
-          onTextChange={(value) => updateRow(row.key, { storageLocationName: value })}
-          onSelect={(option) =>
-            updateRow(row.key, { storageLocationId: option._id, storageLocationName: option.name })
-          }
-        />
+      <View {...storageLocationSection.wrapperProps}>
+        <Text className="mt-2 text-xs font-semibold text-slate-600">Storage location</Text>
+        <View className="mt-1">
+          <SearchableObjectDropdown<SelectOption>
+            options={storageLocations}
+            selectedId={row.storageLocationId}
+            selectedName={row.storageLocationName}
+            compact
+            placeholder="Location"
+            onOpen={storageLocationSection.trigger}
+            onTextChange={(value) => updateRow(row.key, { storageLocationName: value })}
+            onSelect={(option) =>
+              updateRow(row.key, { storageLocationId: option._id, storageLocationName: option.name })
+            }
+          />
+        </View>
       </View>
 
       {isNew && (
-        <View className="mt-2 border-t border-slate-100 pt-2">
+        <View className="mt-2 border-t border-slate-100 pt-2" style={brandGenericSection.wrapperProps.style}>
           <SegmentedToggle<boolean>
             compact
             value={row.isGeneric}
@@ -620,7 +656,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           />
 
           {!row.isGeneric && (
-            <View className="mt-1.5 flex-row gap-2">
+            <View className="mt-1.5 flex-row gap-2" {...brandGenericSection.wrapperProps}>
               <View className="flex-1">
                 <SearchableObjectDropdown<SelectOption>
                   options={brands}
@@ -628,6 +664,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                   selectedName={row.brandName}
                   compact
                   placeholder="Brand"
+                  onOpen={brandGenericSection.trigger}
                   onTextChange={(value) => {
                     if (value !== row.brandName) updateRow(row.key, { brandId: "" });
                     updateRow(row.key, { brandName: value });
@@ -644,6 +681,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                   selectedName={row.genericName}
                   compact
                   placeholder="Generic"
+                  onOpen={brandGenericSection.trigger}
                   onTextChange={(value) => {
                     if (value !== row.genericName) updateRow(row.key, { genericParentId: "" });
                     updateRow(row.key, { genericName: value });
@@ -667,6 +705,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           ingredient's catalog default portion for a brand-new ingredient,
           so it should read like "5 cal per 1 <unit>," not "however much I
           bought today." */}
+      <View {...servingSizeSection.wrapperProps}>
       <View className="mt-2 flex-row items-center gap-2">
         <Text className="flex-1 text-xs font-semibold text-slate-600">
           Serving size ({row.unit || "unit"} — nutrition is per this much)
@@ -675,6 +714,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           <TextInput
             value={row.defaultPortionAmount}
             onChangeText={(value) => updateRow(row.key, { defaultPortionAmount: value })}
+            onFocus={servingSizeSection.trigger}
             keyboardType="decimal-pad"
             placeholder="Amt"
             placeholderTextColor="#94A3B8"
@@ -707,6 +747,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                   },
                 });
               }}
+              onFocus={servingSizeSection.trigger}
               keyboardType="decimal-pad"
               placeholder="0"
               placeholderTextColor="#94A3B8"
@@ -714,6 +755,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             />
           </View>
         ))}
+      </View>
       </View>
 
       {/* Read-only, derived preview only — never stored. Purely "here's
@@ -742,7 +784,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         );
       })()}
 
-      <View className="mt-2 flex-row items-end gap-2">
+      <View className="mt-2 flex-row items-end gap-2" {...expirySection.wrapperProps}>
         <View className="flex-1">
           <View className="mb-1 flex-row items-center justify-between">
             <Text className="text-xs font-semibold text-slate-600">Expiry date</Text>
@@ -753,6 +795,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           <DateTextInput
             value={row.expiryDate}
             onChangeText={(value) => updateRow(row.key, { expiryDate: value, expiryTouched: true })}
+            onFocus={expirySection.trigger}
             placeholder="YYYY-MM-DD"
             className="rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950"
             style={{ height: 40 }}
@@ -779,21 +822,22 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         </View>
       )}
 
-      {/* Only meaningful for a brand-new ingredient — a matched ingredient's
-          conversions live on its own catalog record (edit it from the
-          ingredient page instead), not on this one-off receipt row. */}
-      {isNew && (
-        <View className="mt-3 border-t border-slate-100 pt-2">
-          <Text className="mb-1.5 text-xs font-semibold text-slate-600">
-            Unit conversions ({row.unit || "unit"} ↔ other units)
-          </Text>
-          <UnitConversionsEditor
-            compact
-            conversions={row.unitConversions}
-            onChange={(conversions) => updateRow(row.key, { unitConversions: conversions })}
-          />
-        </View>
-      )}
+      {/* Available for a matched ingredient too, not just a brand-new one —
+          a receipt is often the first time an ingredient's real conversion
+          (e.g. "1 box = 340g") turns up, and editing it here saves straight
+          back to that ingredient's own catalog record on Confirm (see
+          handleConfirm) rather than being a one-off, thrown away after this
+          review the way it used to be. */}
+      <View className="mt-3 border-t border-slate-100 pt-2">
+        <Text className="mb-1.5 text-xs font-semibold text-slate-600">
+          Unit conversions ({row.unit || "unit"} ↔ other units)
+        </Text>
+        <UnitConversionsEditor
+          compact
+          conversions={row.unitConversions}
+          onChange={(conversions) => updateRow(row.key, { unitConversions: conversions })}
+        />
+      </View>
 
       {row.error && <Text className="mt-2 text-xs text-red-600">{row.error}</Text>}
       </ScrollView>
@@ -1432,6 +1476,18 @@ export default function ReceiptReviewPage() {
       return;
     }
 
+    // The barcode isn't in our own catalog, and the scan itself came up
+    // empty too (not found in the lookup database, no name on file, or the
+    // lookup failed outright — see BarcodeScannerModal, which reports all
+    // three the same way: an empty name). There's nothing usable to apply in
+    // that case, just a barcode worth remembering for next time — attach it
+    // and stop, rather than overwriting whatever name/nutrition/etc. the
+    // receipt's own AI parse already prefilled with a blank proposal.
+    if (!product.name) {
+      updateRow(rowKey, { barcode: product.barcode, error: undefined });
+      return;
+    }
+
     // No existing ingredient has this barcode — this row becomes a proposal
     // to create a new specific/branded ingredient with real label data. If
     // the row was already matched to something, carry that connection
@@ -1477,7 +1533,12 @@ export default function ReceiptReviewPage() {
       ...(product.packageQuantity != null
         ? { quantity: String(product.packageQuantity), unit: resultingUnit }
         : {}),
-      defaultPortionAmount: String(convertPortionAmount(product.servingSize, product.servingUnit, resultingUnit)),
+      // Only a real declared serving is meaningful to convert/apply here —
+      // an estimated 100g/100ml reference isn't a genuine per-use amount,
+      // so leave the row's existing defaultPortionAmount untouched instead.
+      ...(product.servingIsEstimated
+        ? {}
+        : { defaultPortionAmount: String(convertPortionAmount(product.servingSize, product.servingUnit, resultingUnit)) }),
       nutrition: {
         calories: product.calories ?? null,
         protein: product.protein ?? null,
@@ -1701,6 +1762,22 @@ export default function ReceiptReviewPage() {
               unitConversions: row.unitConversions,
             });
             ingredientId = newIngredient._id;
+          } else {
+            // A matched ingredient's unit-conversions editor above edits its
+            // real catalog record, not a one-off proposal — only worth a
+            // write when it's actually changed from what was already there,
+            // so confirming a row nobody touched the editor on doesn't fire
+            // an update for nothing.
+            const matchedIngredient = ingredients.find((ing) => ing._id === ingredientId);
+            const storedConversions = matchedIngredient?.unitConversions ?? [];
+            if (JSON.stringify(row.unitConversions) !== JSON.stringify(storedConversions)) {
+              await updateIngredient(ingredientId, { unitConversions: row.unitConversions });
+              setIngredients((prev) =>
+                prev.map((ing) =>
+                  ing._id === ingredientId ? { ...ing, unitConversions: row.unitConversions } : ing,
+                ),
+              );
+            }
           }
 
           const newPantryItem = await addIngredientToPantry({

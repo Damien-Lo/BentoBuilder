@@ -43,6 +43,11 @@ interface QuantityServingInputProps {
   // rescale the entered amount to the equivalent value, instead of leaving
   // the number as-is under a now-mismatched unit.
   customUnitConversions?: CustomUnitConversion[];
+  // Fires when any of this widget's own text fields gains focus — same
+  // purpose as a plain TextInput's onFocus, just applied to whichever one of
+  // the several fields here (servings, total, entry count, per-piece) the
+  // user actually taps into.
+  onFocus?: () => void;
 }
 
 // Lets the user record how much of an ingredient they have either as a
@@ -65,6 +70,7 @@ export function QuantityServingInput({
   perEntryAmounts,
   onChangePerEntryAmounts,
   customUnitConversions = [],
+  onFocus,
 }: QuantityServingInputProps) {
   const hasPortionInfo =
     defaultPortionAmount != null && defaultPortionAmount > 0 && !!defaultPortionUnit;
@@ -206,6 +212,7 @@ export function QuantityServingInput({
             <TextInput
               value={servingsText}
               onChangeText={handleServingsChange}
+              onFocus={onFocus}
               editable={!disabled}
               keyboardType="decimal-pad"
               placeholder="0"
@@ -227,6 +234,7 @@ export function QuantityServingInput({
           <TextInput
             value={quantityAvailable}
             onChangeText={onChangeQuantity}
+            onFocus={onFocus}
             editable={!disabled}
             keyboardType="decimal-pad"
             placeholder="0"
@@ -268,6 +276,7 @@ export function QuantityServingInput({
             <TextInput
               value={entryCount}
               onChangeText={handleEntryCountTextChange}
+              onFocus={onFocus}
               editable={!disabled}
               keyboardType="number-pad"
               className="mx-2 h-11 w-16 rounded-2xl border border-slate-200 bg-white text-center text-base text-slate-950"
@@ -313,6 +322,7 @@ export function QuantityServingInput({
                   <TextInput
                     value={perEntryAmounts?.[index] ?? ""}
                     onChangeText={(value) => updatePerEntryAmount(index, value)}
+                    onFocus={onFocus}
                     editable={!disabled}
                     keyboardType="decimal-pad"
                     placeholder="0"

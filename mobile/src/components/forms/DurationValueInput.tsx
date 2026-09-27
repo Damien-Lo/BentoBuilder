@@ -15,6 +15,7 @@ interface DurationValueInputProps {
   onChangeAmount: (value: string) => void;
   onChangeUnit: (unit: DurationUnit) => void;
   disabled?: boolean;
+  onFocus?: () => void;
 }
 
 // A plain "N days/weeks/months/years" value — unlike DurationExpiryInput,
@@ -26,6 +27,7 @@ export function DurationValueInput({
   onChangeAmount,
   onChangeUnit,
   disabled = false,
+  onFocus,
 }: DurationValueInputProps) {
   const parsedAmount = Number(amount);
 
@@ -34,6 +36,7 @@ export function DurationValueInput({
       <TextInput
         value={amount}
         onChangeText={onChangeAmount}
+        onFocus={onFocus}
         editable={!disabled}
         keyboardType="number-pad"
         placeholder="e.g. 2"

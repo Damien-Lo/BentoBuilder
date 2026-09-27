@@ -19,7 +19,7 @@ import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture
 
 import { getMeals, type Meal } from "@/src/services/mealApi";
 import { addRecipeScore, getRecipeById, getRecipes, type Recipe } from "@/src/services/recipeApi";
-import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import { addIngredientScore, getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import {
   estimateDishesFromPhoto,
@@ -48,18 +48,21 @@ import {
   type CreateMealPlanEntryInput,
   type LastEntryBySlot,
   type LastUsedMap,
+  type ConfirmedNutrition,
   type MealPlanEntry,
   type MealPlanEntryStatus,
   type MealSlot,
   type RestaurantDishSelection,
 } from "@/src/services/mealPlanApi";
 import { sortAlphabetically, sortByLastUsed } from "@/src/utils/lastUsedSort";
+import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { RateAndConfirmModal } from "@/src/components/planner/RateAndConfirmModal";
 import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
 import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
 import {
   computeConfirmedRecipeNutrition,
+  computeConfirmNutrition,
   computeDayNutrition,
   divideNutrition,
   friendlyDayLabel,
@@ -81,10 +84,13 @@ import {
 import {
   buildIngredientRequirements,
   getDefaultDeductionInstructions,
+  getExpandedRows,
   getResolvedDeductionInstructions,
   hasAmbiguity,
+  requirementNeedsResolution,
   type DeductionInstruction,
   type IngredientRequirement,
+  type ManualPieceInput,
 } from "@/src/utils/pantryDeduction";
 import { getIngredientConversions } from "@/src/utils/unitConversion";
 
@@ -215,17 +221,38 @@ export default function HomeScreen() {
   const [infoLoading, setInfoLoading] = useState(false);
 
   // Rate-then-confirm overlay for a planned recipe entry — swiping it reveals
-  // a "Rate" button alongside the plain "Confirm" one.
+  // a "Rate" button alongside the plain "Confirm" one. Also used, in the
+  // opposite order (resolve piece size first, then rate), when adding an
+  // entry directly as confirmed — see handleConfirmEntry's rateFirst param.
   const [rateConfirmEntry, setRateConfirmEntry] = useState<MealPlanEntry | null>(null);
   const [ratingSaving, setRatingSaving] = useState(false);
+  // Set only for the "rate after resolving" order — holds everything
+  // finishRating needs to actually confirm once rating is done/skipped, so
+  // it isn't recomputed (and doesn't need to re-derive whether resolution
+  // was needed) after the rating step closes.
+  const [pendingRatingConfirm, setPendingRatingConfirm] = useState<{
+    entry: MealPlanEntry;
+    instructions: DeductionInstruction[];
+    manualPieceEntries: ManualPieceInput[];
+    confirmedNutrition: ConfirmedNutrition;
+  } | null>(null);
 
   // Resolve-sources overlay — only shown when confirming an entry whose
   // pantry deduction has a genuine choice (2+ possible sources) for at
   // least one ingredient.
   const [pendingConfirmEntry, setPendingConfirmEntry] = useState<MealPlanEntry | null>(null);
+  // The full requirement list for pendingConfirmEntry — needed so resolving
+  // just the ambiguous ones (below) can still auto-drain everything else
+  // instead of silently skipping it. ambiguousRequirements is the filtered
+  // subset actually rendered in the resolve-sources overlay.
+  const [pendingRequirements, setPendingRequirements] = useState<IngredientRequirement[]>([]);
   const [ambiguousRequirements, setAmbiguousRequirements] = useState<IngredientRequirement[]>([]);
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [resolvingSaving, setResolvingSaving] = useState(false);
+  // Whether resolving pendingConfirmEntry's ambiguity should lead straight
+  // to confirming (the manual toggle/swipe path) or to the rating prompt
+  // first (the "just added, already confirmed" path) — see handleConfirmEntry.
+  const [pendingRateFirst, setPendingRateFirst] = useState(false);
 
   const dateStripRef = useRef<FlatList<string>>(null);
   const swipeableRefs = useRef(new Map<string, SwipeableMethods>()).current;
@@ -371,6 +398,21 @@ export default function HomeScreen() {
     return sortAlphabetically(allRecipes.filter(r => r.name.toLowerCase().includes(q)), r => r.name);
   }, [allRecipes, recipeSearch, lastUsed.recipe]);
 
+  // Recipes that produce another ingredient (a raw prep step, e.g. "Sous
+  // Vide Filet Mignon Prep" makes "Vacuum-Sealed Filet Mignon") - flagged
+  // in the add-recipe picker below so it's not confused for the finished,
+  // directly-eaten dish at a glance. Reuses the reverse Ingredient ->
+  // productionRecipe link RecipesMainPage.tsx already keys its own "Meal
+  // Preps" filter tab off of - no new data.
+  const producingRecipeIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const ingredient of allIngredients) {
+      const recipeId = referenceId(ingredient.productionRecipe);
+      if (recipeId) ids.add(recipeId);
+    }
+    return ids;
+  }, [allIngredients]);
+
   const filteredIngredients = useMemo(() => {
     const q = ingredientSearch.trim().toLowerCase();
     if (!q) return sortByLastUsed(allIngredients, lastUsed.ingredient, i => i._id, i => i.name);
@@ -451,12 +493,32 @@ export default function HomeScreen() {
     }
   }
 
+  // Creating directly with status "confirmed" used to skip pantry
+  // deduction and the ambiguity/resolve-sources overlay entirely — only
+  // the separate planned -> confirmed toggle (handleConfirmEntry) ever ran
+  // buildIngredientRequirements. Unified here: always create as "planned",
+  // then — only if the caller actually wanted it confirmed — immediately
+  // run the exact same confirm pipeline that toggle uses, so both paths to
+  // "confirmed" behave identically (real deduction, same overlay when
+  // needed) instead of diverging based on how "confirmed" was reached.
+  async function createEntry(input: CreateMealPlanEntryInput): Promise<MealPlanEntry> {
+    const wantsConfirmed = input.status === "confirmed";
+    const entry = await createMealPlanEntry({ ...input, status: "planned" });
+    setEntries(prev => [...prev, entry]);
+    // rateFirst: true — adding something already-confirmed is exactly the
+    // moment a rating is easiest to forget (there's no separate swipe
+    // gesture prompting for it), so ask here, after any piece-size
+    // resolution and before the pantry actually gets touched. Skippable —
+    // see RateAndConfirmModal's onSkip.
+    if (wantsConfirmed) handleConfirmEntry(entry, true);
+    return entry;
+  }
+
   async function handleAddEntry(meal: Meal) {
     if (saving) return;
     try {
       setSaving(true);
-      const entry = await createMealPlanEntry({ date: selectedDate, slot: addSlot, status: addStatus, meal: meal._id });
-      setEntries(prev => [...prev, entry]);
+      await createEntry({ date: selectedDate, slot: addSlot, status: addStatus, meal: meal._id });
       setShowAdd(false);
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not add meal.");
@@ -483,14 +545,13 @@ export default function HomeScreen() {
     if (saving) return;
     try {
       setSaving(true);
-      const entry = await createMealPlanEntry({
+      await createEntry({
         date: selectedDate,
         slot: addSlot,
         status: addStatus,
         recipe: recipe._id,
         recipeServings: servings,
       });
-      setEntries(prev => [...prev, entry]);
       setShowAdd(false);
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not add recipe.");
@@ -503,14 +564,13 @@ export default function HomeScreen() {
     if (saving || selections.length === 0) return;
     try {
       setSaving(true);
-      const entry = await createMealPlanEntry({
+      await createEntry({
         date: selectedDate,
         slot: addSlot,
         status: addStatus,
         restaurantMeal: restaurantMeal._id,
         restaurantDishSelections: selections,
       });
-      setEntries(prev => [...prev, entry]);
       setPendingRestaurantMeal(null);
       setSelectedDishQuantities(new Map());
       resetDishPickerDrafts();
@@ -646,7 +706,7 @@ export default function HomeScreen() {
     }
     try {
       setSaving(true);
-      const entry = await createMealPlanEntry({
+      await createEntry({
         date: selectedDate,
         slot: addSlot,
         status: addStatus,
@@ -654,7 +714,6 @@ export default function HomeScreen() {
         ingredientQuantity: quantity,
         ingredientUnit: pendingUnit.trim(),
       });
-      setEntries(prev => [...prev, entry]);
       setPendingIngredient(null);
       setShowAdd(false);
     } catch (err) {
@@ -664,10 +723,15 @@ export default function HomeScreen() {
     }
   }
 
-  async function performConfirm(entry: MealPlanEntry, instructions: DeductionInstruction[]) {
+  async function performConfirm(
+    entry: MealPlanEntry,
+    instructions: DeductionInstruction[],
+    manualPieceEntries: ManualPieceInput[] = [],
+    confirmedNutrition?: ConfirmedNutrition,
+  ) {
     swipeableRefs.get(entry._id)?.close();
     try {
-      const updated = await confirmMealPlanEntry(entry._id, instructions);
+      const updated = await confirmMealPlanEntry(entry._id, instructions, manualPieceEntries, confirmedNutrition);
       setEntries(prev => prev.map(e => (e._id === entry._id ? updated : e)));
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not confirm.");
@@ -684,11 +748,38 @@ export default function HomeScreen() {
     }
   }
 
+  // Once instructions/nutrition are settled (no ambiguity, or the overlay
+  // just resolved it), either confirm right away (the manual toggle/swipe
+  // path) or — rateFirst — prompt for a rating first, skippable, since
+  // adding something already-confirmed has no separate gesture prompting
+  // for one and is exactly where a rating is easiest to forget. Recipes and
+  // directly-logged ingredients (e.g. a protein shake) get rated — a
+  // restaurant visit or multi-course meal just confirms.
+  function finishConfirm(
+    entry: MealPlanEntry,
+    instructions: DeductionInstruction[],
+    manualPieceEntries: ManualPieceInput[],
+    confirmedNutrition: ConfirmedNutrition,
+    rateFirst: boolean,
+  ) {
+    if (rateFirst && (entry.recipe || entry.ingredient)) {
+      setPendingRatingConfirm({ entry, instructions, manualPieceEntries, confirmedNutrition });
+      setRateConfirmEntry(entry);
+      return;
+    }
+    void performConfirm(entry, instructions, manualPieceEntries, confirmedNutrition);
+  }
+
   // Confirming deducts pantry stock. Most of the time that's fully
   // automatic (nearest-expiry order) — the resolve-sources overlay only
   // appears when at least one ingredient genuinely has more than one
-  // pantry source to choose from.
-  function handleConfirmEntry(entry: MealPlanEntry) {
+  // pantry source to choose from, or (wholePiece only) an outright
+  // shortfall with nothing in pantry to cover part or all of what's
+  // needed, which is where the overlay's "type a weight instead" fallback
+  // comes in. rateFirst carries through to the resolve overlay too (see
+  // pendingRateFirst) so piece-size resolution always happens before
+  // rating, never after.
+  function handleConfirmEntry(entry: MealPlanEntry, rateFirst = false) {
     const conversions = appSettings?.unitConversions ?? [];
     const requirements = buildIngredientRequirements(
       entry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions,
@@ -697,12 +788,19 @@ export default function HomeScreen() {
     if (hasAmbiguity(requirements)) {
       swipeableRefs.get(entry._id)?.close();
       setPendingConfirmEntry(entry);
-      setAmbiguousRequirements(requirements.filter(r => r.groups.length > 1));
+      setPendingRequirements(requirements);
+      setAmbiguousRequirements(requirements.filter(requirementNeedsResolution));
+      setPendingRateFirst(rateFirst);
       setShowResolveModal(true);
       return;
     }
 
-    void performConfirm(entry, getDefaultDeductionInstructions(requirements));
+    const instructions = getDefaultDeductionInstructions(requirements);
+    const rows = getExpandedRows(entry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions);
+    const confirmedNutrition = computeConfirmNutrition(
+      requirements, rows, instructions, [], ingredientMap, pantryItems, conversions,
+    );
+    finishConfirm(entry, instructions, [], confirmedNutrition, rateFirst);
   }
 
   // Adds this entry's pantry shortfall to the grocery list — a manual,
@@ -754,14 +852,41 @@ export default function HomeScreen() {
     }
   }
 
-  async function handleResolvedConfirm(selections: Record<string, string[]>) {
+  async function handleResolvedConfirm(
+    selections: Record<string, string[]>,
+    manualPieceEntries: ManualPieceInput[],
+  ) {
     if (!pendingConfirmEntry) return;
     setResolvingSaving(true);
     try {
-      const instructions = getResolvedDeductionInstructions(ambiguousRequirements, selections);
-      await performConfirm(pendingConfirmEntry, instructions);
+      // pendingRequirements (the FULL list, not just the ambiguous subset
+      // rendered in the overlay) so requirements that never needed a
+      // choice still get auto-drained here — passing only the ambiguous
+      // ones would silently skip deducting everything else.
+      const instructions = getResolvedDeductionInstructions(pendingRequirements, selections);
+      const conversions = appSettings?.unitConversions ?? [];
+      const rows = getExpandedRows(
+        pendingConfirmEntry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions,
+      );
+      const confirmedNutrition = computeConfirmNutrition(
+        pendingRequirements, rows, instructions, manualPieceEntries, ingredientMap, pantryItems, conversions,
+      );
+      const entry = pendingConfirmEntry;
+      const rateFirst = pendingRateFirst;
       setShowResolveModal(false);
       setPendingConfirmEntry(null);
+      setPendingRequirements([]);
+      setPendingRateFirst(false);
+
+      // rateFirst carried through from handleConfirmEntry — piece-size
+      // resolution just finished, so the rating prompt (skippable) comes
+      // next, before the pantry actually gets touched.
+      if (rateFirst && (entry.recipe || entry.ingredient)) {
+        setPendingRatingConfirm({ entry, instructions, manualPieceEntries, confirmedNutrition });
+        setRateConfirmEntry(entry);
+      } else {
+        await performConfirm(entry, instructions, manualPieceEntries, confirmedNutrition);
+      }
     } finally {
       setResolvingSaving(false);
     }
@@ -772,14 +897,33 @@ export default function HomeScreen() {
     setRateConfirmEntry(entry);
   }
 
+  // Shared by both routes into this modal: the "Rate & Confirm" swipe
+  // action (rates, then resolves + confirms from scratch — pendingRatingConfirm
+  // is null there) and the "add as confirmed" rateFirst path (piece size
+  // already resolved before rating ever showed — everything needed to
+  // confirm is already stashed, so this just finishes it).
+  function finishRating() {
+    const entry = rateConfirmEntry;
+    const pending = pendingRatingConfirm;
+    setRateConfirmEntry(null);
+    setPendingRatingConfirm(null);
+    if (!entry) return;
+    if (pending) {
+      void performConfirm(pending.entry, pending.instructions, pending.manualPieceEntries, pending.confirmedNutrition);
+    } else {
+      handleConfirmEntry(entry);
+    }
+  }
+
   async function handleSubmitRateAndConfirm(value: number) {
-    if (!rateConfirmEntry?.recipe) return;
+    const recipeId = rateConfirmEntry?.recipe?._id;
+    const ingredientId = rateConfirmEntry?.ingredient?._id;
+    if (!recipeId && !ingredientId) return;
     setRatingSaving(true);
     try {
-      await addRecipeScore(rateConfirmEntry.recipe._id, value);
-      const entry = rateConfirmEntry;
-      setRateConfirmEntry(null);
-      handleConfirmEntry(entry);
+      if (recipeId) await addRecipeScore(recipeId, value);
+      else if (ingredientId) await addIngredientScore(ingredientId, value);
+      finishRating();
     } catch (err) {
       Alert.alert(
         "Couldn't save rating",
@@ -788,6 +932,13 @@ export default function HomeScreen() {
     } finally {
       setRatingSaving(false);
     }
+  }
+
+  // Confirms without saving a rating — pantry deduction (or the piece-size
+  // choice already made) still needs to happen either way; only the score
+  // is skipped.
+  function handleSkipRating() {
+    finishRating();
   }
 
   function handleDeleteEntry(id: string) {
@@ -850,8 +1001,7 @@ export default function HomeScreen() {
       } else if (lastEntry.meal) {
         input.meal = lastEntry.meal._id;
       }
-      const entry = await createMealPlanEntry(input);
-      setEntries(prev => [...prev, entry]);
+      await createEntry(input);
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not add this item.");
     } finally {
@@ -935,7 +1085,28 @@ export default function HomeScreen() {
   function handleViewFullItem() {
     if (!editEntry) return;
     if (editEntry.recipe) {
-      router.push({ pathname: "/recipes/[id]", params: { id: editEntry.recipe._id } });
+      // A confirmed entry's real nutrition (computeConfirmNutrition, from
+      // the actual weights used) can differ from the recipe's own generic
+      // cached snapshot (its assumed/authored amounts) — pass it through so
+      // the catalog page can show this specific meal's real numbers instead
+      // of implying the snapshot is what got eaten.
+      const logged = editEntry.status === "confirmed" ? editEntry.confirmedNutrition : null;
+      router.push({
+        pathname: "/recipes/[id]",
+        params: {
+          id: editEntry.recipe._id,
+          ...(logged
+            ? {
+                loggedCalories: String(logged.calories),
+                loggedProtein: String(logged.protein),
+                loggedCarbs: String(logged.carbs),
+                loggedFats: String(logged.fats),
+                loggedFiber: String(logged.fiber),
+                loggedSodium: String(logged.sodium),
+              }
+            : {}),
+        },
+      });
     } else if (editEntry.ingredient) {
       router.push({ pathname: "/ingredients/edit/[id]", params: { id: editEntry.ingredient._id } });
     } else if (editEntry.restaurantMeal) {
@@ -1057,7 +1228,7 @@ export default function HomeScreen() {
           </Pressable>
         )}
         renderRightActions={() =>
-          entry.status === "planned" && entry.recipe ? (
+          entry.status === "planned" && (entry.recipe || entry.ingredient) ? (
             <View className="mb-2 flex-row gap-2">
               <Pressable
                 className="w-20 items-center justify-center rounded-2xl bg-blue-600 active:opacity-80"
@@ -1406,6 +1577,17 @@ export default function HomeScreen() {
           )
         : scaleRecipeNutrition(editEntry.recipe!, q);
 
+    // A confirmed recipe entry's real nutrition (from the actual
+    // ingredients/weights used — see computeConfirmNutrition) can differ
+    // from the recipe's own generic snapshot at its logged servings — show
+    // both, rather than only the generic one this overlay used to display
+    // (which quietly ignored anything confirmed).
+    const isConfirmedRecipe = !isIngredient && !isRestaurant && editEntry.status === "confirmed";
+    const loggedNutrition = isConfirmedRecipe ? (editEntry.confirmedNutrition ?? null) : null;
+    const originalNutrition = isConfirmedRecipe
+      ? scaleRecipeNutrition(editEntry.recipe!, editEntry.recipeServings ?? 1)
+      : null;
+
     // Restaurant nutrition is computed from the whole selection map (each
     // dish x its own quantity), not a single scalar like the other two types.
     const restaurantDishes = isRestaurant ? editEntry.restaurantMeal!.dishes : [];
@@ -1418,23 +1600,35 @@ export default function HomeScreen() {
       ? getRestaurantMealKcal(editEntry.restaurantMeal!, restaurantSelections)
       : null;
 
-    const rows: [string, number | null | undefined, string][] = isRestaurant
+    // Label, true (logged) value, unit, and — only for a confirmed recipe
+    // with a real logged total — the recipe's own original assumed value,
+    // rendered as "original → true log" so it's obvious the two can differ.
+    const rows: [string, number | null | undefined, string, number | null | undefined][] = isRestaurant
       ? [
-          ["Calories", restaurantKcal, "kcal"],
-          ["Protein",  selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.protein ?? 0) * restaurantQtyOf(d), 0), "g"],
-          ["Carbs",    selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.carbs ?? 0) * restaurantQtyOf(d), 0),   "g"],
-          ["Fats",     selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.fats ?? 0) * restaurantQtyOf(d), 0),    "g"],
-          ["Fiber",    selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.fiber ?? 0) * restaurantQtyOf(d), 0),   "g"],
-          ["Sodium",   selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.sodium ?? 0) * restaurantQtyOf(d), 0),  "mg"],
+          ["Calories", restaurantKcal, "kcal", undefined],
+          ["Protein",  selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.protein ?? 0) * restaurantQtyOf(d), 0), "g", undefined],
+          ["Carbs",    selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.carbs ?? 0) * restaurantQtyOf(d), 0),   "g", undefined],
+          ["Fats",     selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.fats ?? 0) * restaurantQtyOf(d), 0),    "g", undefined],
+          ["Fiber",    selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.fiber ?? 0) * restaurantQtyOf(d), 0),   "g", undefined],
+          ["Sodium",   selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.sodium ?? 0) * restaurantQtyOf(d), 0),  "mg", undefined],
         ]
-      : [
-          ["Calories", n?.calories, "kcal"],
-          ["Protein",  n?.protein,  "g"],
-          ["Carbs",    n?.carbs,    "g"],
-          ["Fats",     n?.fats,     "g"],
-          ["Fiber",    n?.fiber,    "g"],
-          ["Sodium",   n?.sodium,   "mg"],
-        ];
+      : loggedNutrition
+        ? [
+            ["Calories", loggedNutrition.calories, "kcal", originalNutrition?.calories],
+            ["Protein",  loggedNutrition.protein,  "g",    originalNutrition?.protein],
+            ["Carbs",    loggedNutrition.carbs,    "g",    originalNutrition?.carbs],
+            ["Fats",     loggedNutrition.fats,     "g",    originalNutrition?.fats],
+            ["Fiber",    loggedNutrition.fiber,    "g",    originalNutrition?.fiber],
+            ["Sodium",   loggedNutrition.sodium,   "mg",   originalNutrition?.sodium],
+          ]
+        : [
+            ["Calories", n?.calories, "kcal", undefined],
+            ["Protein",  n?.protein,  "g", undefined],
+            ["Carbs",    n?.carbs,    "g", undefined],
+            ["Fats",     n?.fats,     "g", undefined],
+            ["Fiber",    n?.fiber,    "g", undefined],
+            ["Sodium",   n?.sodium,   "mg", undefined],
+          ];
 
     // A confirmed recipe entry's *displayed* nutrition actually comes from
     // real stockDeductions (computeConfirmedRecipeNutrition), not
@@ -1480,9 +1674,9 @@ export default function HomeScreen() {
             {recipeConfirmedLocked ? (
               <View className="mb-5 rounded-2xl bg-slate-50 px-4 py-3">
                 <Text className="text-sm text-slate-600">
-                  This meal is confirmed — nutrition shown elsewhere reflects exactly what was deducted
-                  from pantry stock, not the servings number below. Unconfirm the entry first if you need
-                  to change servings and have it actually affect the logged nutrition.
+                  This meal is confirmed — the nutrition below reflects exactly what was really used,
+                  not the servings number below it. Unconfirm the entry first if you need to change
+                  servings and have it actually affect the logged nutrition.
                 </Text>
               </View>
             ) : null}
@@ -1603,22 +1797,41 @@ export default function HomeScreen() {
               </>
             )}
 
-            {/* Live nutrition preview for this entry */}
+            {/* Live nutrition preview for this entry — for a confirmed
+                recipe with a real logged total, "original" is the recipe's
+                own generic estimate at its logged servings, shown only
+                when it actually differs from what was really used. */}
             <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              {rows.map(([label, value, unit], i) => (
-                <View
-                  key={label}
-                  className={`flex-row items-center justify-between px-4 py-3 ${
-                    i < rows.length - 1 ? "border-b border-slate-100" : ""
-                  }`}
-                >
-                  <Text className="text-base text-slate-600">{label}</Text>
-                  <Text className="text-base font-semibold text-slate-900">
-                    {value != null ? `${Math.round(value * 10) / 10} ${unit}` : "—"}
-                  </Text>
-                </View>
-              ))}
+              {rows.map(([label, value, unit, original], i) => {
+                const roundedValue = value != null ? Math.round(value * 10) / 10 : null;
+                const roundedOriginal = original != null ? Math.round(original * 10) / 10 : null;
+                const showComparison = roundedOriginal != null && roundedValue != null
+                  && roundedOriginal !== roundedValue;
+                return (
+                  <View
+                    key={label}
+                    className={`flex-row items-center justify-between px-4 py-3 ${
+                      i < rows.length - 1 ? "border-b border-slate-100" : ""
+                    }`}
+                  >
+                    <Text className="text-base text-slate-600">{label}</Text>
+                    <Text className="text-base font-semibold text-slate-900">
+                      {showComparison
+                        ? `${roundedOriginal} → ${roundedValue} ${unit}`
+                        : roundedValue != null
+                          ? `${roundedValue} ${unit}`
+                          : "—"}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
+            {loggedNutrition && (
+              <Text className="-mt-4 mb-6 text-xs leading-4 text-slate-400">
+                Original → true log: the recipe&apos;s own estimate vs. what you actually
+                confirmed (real weights used, per-ingredient).
+              </Text>
+            )}
 
             {!recipeConfirmedLocked && isIngredient && editEntry.status === "confirmed" && (
               <Text className="mb-4 text-xs text-slate-400">
@@ -2475,6 +2688,7 @@ export default function HomeScreen() {
                     const addServings = getAddServings(recipe);
                     const kcal = getRecipeKcal(recipe, addServings);
                     const slotCfg = SLOT_MAP[addSlot];
+                    const isPrep = producingRecipeIds.has(recipe._id);
                     return (
                       <View className="mb-2 rounded-2xl border border-slate-200 bg-white p-4">
                         <Pressable
@@ -2486,7 +2700,16 @@ export default function HomeScreen() {
                             <Ionicons name="book-outline" size={18} color={slotCfg.iconColor} />
                           </View>
                           <View className="ml-3 flex-1">
-                            <Text className="font-semibold text-slate-900">{recipe.name}</Text>
+                            <View className="flex-row items-center">
+                              <Text className="font-semibold text-slate-900">{recipe.name}</Text>
+                              {isPrep && (
+                                <View className="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5">
+                                  <Text className="text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                                    Prep
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
                             <Text className="mt-0.5 text-sm text-slate-400">
                               {recipe.mealCategory?.join(", ") ?? "Recipe"}
                               {recipe.servings != null && ` · makes ${recipe.servings} servings`}
@@ -2677,9 +2900,19 @@ export default function HomeScreen() {
 
       <RateAndConfirmModal
         visible={!!rateConfirmEntry}
-        recipeName={rateConfirmEntry?.recipe?.name ?? ""}
+        itemName={rateConfirmEntry?.recipe?.name ?? rateConfirmEntry?.ingredient?.name ?? ""}
         saving={ratingSaving}
-        onCancel={() => setRateConfirmEntry(null)}
+        // No "back out" option once this was auto-prompted on top of an
+        // already-decided confirm (adding directly as confirmed) — dismissing
+        // any way then still confirms, via onSkip, same as the explicit
+        // button. The pre-existing swipe-to-rate-and-confirm action (nothing
+        // stashed in pendingRatingConfirm) keeps its real Cancel.
+        allowCancel={!pendingRatingConfirm}
+        onCancel={() => {
+          setRateConfirmEntry(null);
+          setPendingRatingConfirm(null);
+        }}
+        onSkip={handleSkipRating}
         onConfirm={(value) => void handleSubmitRateAndConfirm(value)}
       />
 
@@ -2690,8 +2923,10 @@ export default function HomeScreen() {
         onCancel={() => {
           setShowResolveModal(false);
           setPendingConfirmEntry(null);
+          setPendingRequirements([]);
+          setPendingRateFirst(false);
         }}
-        onConfirm={(selections) => void handleResolvedConfirm(selections)}
+        onConfirm={(selections, manualPieceEntries) => void handleResolvedConfirm(selections, manualPieceEntries)}
       />
 
       <PhotoCaptureModal

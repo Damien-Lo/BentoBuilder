@@ -33,6 +33,10 @@ export interface PopulatedIngredient {
   isAlwaysAvailable?: boolean;
   unitConversions?: CustomUnitConversion[];
   genericParent?: string | { _id: string; name?: string; unitConversions?: CustomUnitConversion[] } | null;
+  // A meal-prep ingredient's own producing recipe — lets the recipe detail
+  // page's ingredient list expand to show what's inside it.
+  productionRecipe?: string | { _id: string; name: string } | null;
+  isMealPrep?: boolean;
 }
 
 // "quantity" (default, may be omitted) is an exact numeric target — split

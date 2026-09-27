@@ -53,7 +53,8 @@ function populateEntry(query) {
     .populate({
       path: "stockDeductions.pantryItem",
       populate: { path: "ingredient" },
-    });
+    })
+    .populate("manualPieceEntries.ingredient");
 }
 
 /**
@@ -218,7 +219,11 @@ router.patch("/:id", async (req, res) => {
 
 /**
  * POST /api/meal-plan/:id/confirm
- * Body: { deductions: [{ pantryItem: "<id>", amount: Number }, ...] }
+ * Body: {
+ *   deductions: [{ pantryItem: "<id>", amount: Number }, ...],
+ *   manualPieceEntries: [{ ingredient: "<id>", weight: Number, weightUnit: String }, ...],
+ *   confirmedNutrition: { calories, protein, carbs, fats, fiber, sodium },
+ * }
  *
  * The client decides WHICH pantry items to draw from (brother-grouping,
  * expiry ordering, any user-resolved ambiguous choices) and sends the flat
@@ -226,6 +231,16 @@ router.patch("/:id", async (req, res) => {
  * stock: each deduction is clamped to whatever that pantry item actually
  * has left (defends against stale client state too), and a pantry item
  * that's missing entirely is skipped rather than failing the whole confirm.
+ *
+ * manualPieceEntries covers a wholePiece ingredient the user says they used
+ * but never logged into pantry — no pantry item exists for these, so
+ * they're stored as-is with no stock mutation at all, purely so the
+ * confirmed entry's nutrition can still reflect the real weight typed in.
+ *
+ * confirmedNutrition is the real, final total the client already computed
+ * from all of the above plus the recipe's own catalog (which this route
+ * doesn't have loaded) — stored as-is, same trust model as the deductions
+ * themselves, so every reader can show it without re-deriving it.
  */
 router.post("/:id/confirm", async (req, res) => {
   try {
@@ -259,7 +274,27 @@ router.post("/:id/confirm", async (req, res) => {
       ledger.push({ pantryItem: pantryItem._id, amount: actualAmount });
     }
 
+    const requestedManual = Array.isArray(req.body.manualPieceEntries) ? req.body.manualPieceEntries : [];
+    const manualLedger = requestedManual
+      .map(({ ingredient, weight, weightUnit }) => ({ ingredient, weight: Number(weight), weightUnit }))
+      .filter(({ ingredient, weight, weightUnit }) => ingredient && Number.isFinite(weight) && weight > 0 && weightUnit);
+
+    const nutrition = req.body.confirmedNutrition;
+    const confirmedNutrition = nutrition && ["calories", "protein", "carbs", "fats", "fiber", "sodium"]
+      .every((key) => Number.isFinite(Number(nutrition[key])))
+      ? {
+          calories: Number(nutrition.calories),
+          protein: Number(nutrition.protein),
+          carbs: Number(nutrition.carbs),
+          fats: Number(nutrition.fats),
+          fiber: Number(nutrition.fiber),
+          sodium: Number(nutrition.sodium),
+        }
+      : null;
+
     entry.stockDeductions = ledger;
+    entry.manualPieceEntries = manualLedger;
+    entry.confirmedNutrition = confirmedNutrition;
     entry.status = "confirmed";
     await entry.save();
 
@@ -283,6 +318,8 @@ router.post("/:id/unconfirm", async (req, res) => {
     }
 
     await reverseStockDeductions(entry);
+    entry.manualPieceEntries = [];
+    entry.confirmedNutrition = null;
     entry.status = "planned";
     await entry.save();
 

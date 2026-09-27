@@ -20,6 +20,7 @@ interface DurationExpiryInputProps {
   // an initial value — editing here doesn't report back until Apply.
   initialAmount?: string;
   initialUnit?: DurationUnit;
+  onFocus?: () => void;
 }
 
 // Lets the user say "expires 3 weeks after purchase" instead of typing a
@@ -31,6 +32,7 @@ export function DurationExpiryInput({
   disabled = false,
   initialAmount,
   initialUnit,
+  onFocus,
 }: DurationExpiryInputProps) {
   const [amount, setAmount] = useState(initialAmount ?? "");
   const [unit, setUnit] = useState<DurationUnit>(initialUnit ?? "week");
@@ -50,6 +52,7 @@ export function DurationExpiryInput({
         <TextInput
           value={amount}
           onChangeText={setAmount}
+          onFocus={onFocus}
           editable={!disabled}
           keyboardType="number-pad"
           placeholder="e.g. 2"

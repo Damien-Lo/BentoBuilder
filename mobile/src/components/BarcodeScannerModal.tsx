@@ -20,6 +20,16 @@ export interface ScannedProduct {
   packageUnit?: string;
   servingSize: number;
   servingUnit: string;
+  // True when Open Food Facts had no usable per-serving data for this
+  // product (or its declared serving was suspiciously close to the whole
+  // package - a common mislabeling for bulk/dry goods, e.g. spice jars),
+  // so servingSize/servingUnit above are just the 100g/100ml nutrition-
+  // label reference amount rather than a real per-use serving. Callers
+  // should generally NOT copy servingSize/servingUnit into a form's own
+  // default-serving field when this is true - 100 (of whatever the
+  // package's own unit is) is not a real serving for most products, and
+  // is actively wrong for anything not naturally measured by weight.
+  servingIsEstimated: boolean;
   calories?: number;
   protein?: number;
   carbs?: number;
@@ -69,7 +79,7 @@ export function BarcodeScannerModal({
             {
               text: "Continue",
               onPress: () => {
-                onProductFound({ name: "", barcode: data, servingSize: 1, servingUnit: "" });
+                onProductFound({ name: "", barcode: data, servingSize: 1, servingUnit: "", servingIsEstimated: true });
                 onClose();
               },
             },
@@ -81,12 +91,30 @@ export function BarcodeScannerModal({
       const p = json.product;
       const nutriments = (p.nutriments ?? {}) as Record<string, unknown>;
 
-      // Serving size — numeric grams per serving
-      const servingQty =
+      // Package total — computed early (moved up from further below) since
+      // the serving-size sanity check just below needs it.
+      const pkgQty = p.product_quantity != null ? parseFloat(String(p.product_quantity)) : NaN;
+      const pkgUnit = String(p.product_quantity_unit ?? "g").trim() || "g";
+
+      // Serving size — numeric grams per serving. A declared serving that's
+      // suspiciously close to (or bigger than) the whole package is almost
+      // always a mislabeled entry rather than a real serving — common for
+      // bulk/dry goods (spice jars, etc.) that don't have a natural
+      // discrete serving, where a contributor enters the container's total
+      // instead. Treat that the same as no serving data at all rather than
+      // let it become "1 serving = the whole product".
+      const rawServingQty =
         p.serving_quantity != null
           ? parseFloat(String(p.serving_quantity))
           : NaN;
-      const hasServing = Number.isFinite(servingQty) && servingQty > 0;
+      const servingLooksLikeWholePackage =
+        Number.isFinite(pkgQty) && pkgQty > 0 && Number.isFinite(rawServingQty) && rawServingQty >= pkgQty * 0.9;
+      const hasServing = Number.isFinite(rawServingQty) && rawServingQty > 0 && !servingLooksLikeWholePackage;
+      const servingQty = hasServing ? rawServingQty : NaN;
+      // Not a real per-serving amount when !hasServing — see
+      // ScannedProduct.servingIsEstimated. Kept at 100 (rather than left
+      // blank) purely so getNum's per-100g scaling below still has a
+      // consistent reference amount to divide by.
       const portionAmount = hasServing ? servingQty : 100;
 
       // Open Food Facts uses several suffix variants depending on product type:
@@ -137,6 +165,7 @@ export function BarcodeScannerModal({
                   brand: brand || undefined,
                   servingSize: 1,
                   servingUnit: "",
+                  servingIsEstimated: true,
                 });
                 onClose();
               },
@@ -146,9 +175,6 @@ export function BarcodeScannerModal({
         return;
       }
 
-      const pkgQty = p.product_quantity != null ? parseFloat(String(p.product_quantity)) : NaN;
-      const pkgUnit = String(p.product_quantity_unit ?? "g").trim() || "g";
-
       onProductFound({
         name,
         barcode: data,
@@ -156,6 +182,7 @@ export function BarcodeScannerModal({
         packageQuantity: Number.isFinite(pkgQty) && pkgQty > 0 ? pkgQty : undefined,
         packageUnit: pkgUnit,
         servingSize: portionAmount,
+        servingIsEstimated: !hasServing,
         // A real declared serving_quantity shares the package's own unit
         // system (g for solids, ml for liquids - Open Food Facts doesn't
         // report a separate unit for serving_quantity, but it's always in
@@ -185,7 +212,7 @@ export function BarcodeScannerModal({
           {
             text: "Continue",
             onPress: () => {
-              onProductFound({ name: "", barcode: data, servingSize: 1, servingUnit: "" });
+              onProductFound({ name: "", barcode: data, servingSize: 1, servingUnit: "", servingIsEstimated: true });
               onClose();
             },
           },

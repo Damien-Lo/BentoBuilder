@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +20,7 @@ import { loadSettings, saveSettings, type AppSettings } from "@/src/services/set
 import { getUnitSuggestions } from "@/src/services/optionsApi";
 import { DAY_ABBREVS } from "@/src/utils/mealPlan";
 import { SettingsSectionHeader as SectionHeader, UnitConversionsEditor } from "@/src/components/forms";
+import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 
 function WeekStartPicker({
   value,
@@ -82,6 +83,15 @@ export default function SettingsScreen() {
 
   const [units, setUnits] = useState<string[]>([]);
 
+  // Scrolls the focused field into view — see useScrollFocusSection. Only
+  // one plain focusable field (Display name) on this page — WeekStartPicker
+  // is buttons, not a text field, and UnitConversionsEditor isn't part of
+  // this rollout (see the other reference pages, which leave it unwired
+  // too). No dropdown fields, so no zIndex is needed.
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollAnchorRef = useRef<View>(null);
+  const displayNameSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+
   useEffect(() => {
     Promise.all([loadSettings(), getUnitSuggestions()])
       .then(([loadedSettings, loadedUnits]) => {
@@ -128,19 +138,22 @@ export default function SettingsScreen() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           className="flex-1"
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 60 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <View ref={scrollAnchorRef} collapsable={false} />
           {/* ── Profile ── */}
           <SectionHeader title="Profile" />
           <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <View className="border-b border-slate-100 px-4 py-3.5">
+            <View className="border-b border-slate-100 px-4 py-3.5" {...displayNameSection.wrapperProps}>
               <Text className="mb-1.5 text-xs font-semibold text-slate-400">Display name</Text>
               <TextInput
                 value={settings.displayName}
                 onChangeText={v => patch({ displayName: v })}
+                onFocus={displayNameSection.trigger}
                 placeholder="e.g. Alex"
                 placeholderTextColor="#94A3B8"
                 autoCapitalize="words"
