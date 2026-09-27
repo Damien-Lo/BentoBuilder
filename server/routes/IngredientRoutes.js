@@ -2,6 +2,7 @@ import express from "express";
 import Ingredient from "../models/Ingredient.js";
 import Recipe from "../models/Recipe.js";
 import { getAvailableStock } from "../services/ingredientAvailability.js";
+import { parseNutritionLabel } from "../services/nutritionLabelParsing.js";
 import { wouldCreateCycle } from "../services/productionCycle.js";
 
 const router = express.Router();
@@ -147,6 +148,36 @@ router.get("/:id/availability", async (req, res) => {
     return res.status(400).json({
       success: false,
       message: "Invalid ingredient ID",
+    });
+  }
+});
+
+/**
+ * POST /api/ingredients/parse-label
+ * Preview only — does not write to the database. Body: { imageBase64,
+ * mediaType }. Transcribes a photographed Nutrition Facts / Supplement
+ * Facts label into per-serving nutrition plus the printed serving, for the
+ * add/edit ingredient form to fill in.
+ */
+router.post("/parse-label", async (req, res) => {
+  try {
+    const { imageBase64, mediaType } = req.body;
+
+    if (typeof imageBase64 !== "string" || !imageBase64) {
+      return res.status(400).json({ success: false, message: "imageBase64 is required." });
+    }
+    if (typeof mediaType !== "string" || !mediaType) {
+      return res.status(400).json({ success: false, message: "mediaType is required." });
+    }
+
+    const data = await parseNutritionLabel({ imageBase64, mediaType });
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Failed to parse nutrition label:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to read the nutrition label.",
     });
   }
 });
