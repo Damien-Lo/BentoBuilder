@@ -139,6 +139,11 @@ export default function RootLayout() {
           }}
         />
 
+        {/* Lists — to-do lists (modelled on Microsoft To Do), from the home page */}
+        <Stack.Screen name="lists/index" options={{ headerShown: false }} />
+        <Stack.Screen name="lists/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="lists/task/[id]" options={{ headerShown: false }} />
+
         {/* Grocery list — reached from the Pantry/Kitchen tabs, not its own tab */}
         <Stack.Screen
           name="grocery-list"
