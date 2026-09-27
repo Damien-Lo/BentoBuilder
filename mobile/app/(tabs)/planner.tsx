@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -258,7 +258,18 @@ export default function HomeScreen() {
   const [pendingRateFirst, setPendingRateFirst] = useState(false);
 
   const dateStripRef = useRef<FlatList<string>>(null);
-  const swipeableRefs = useRef(new Map<string, SwipeableMethods>()).current;
+  // One ref object per entry's swipeable row (ReanimatedSwipeable's `ref`
+  // prop is typed as a ref object, not a callback) — created on first use
+  // and reused across renders, so each row keeps pointing at the same one.
+  const swipeableRefs = useRef(new Map<string, RefObject<SwipeableMethods | null>>()).current;
+  function swipeableRefFor(entryId: string): RefObject<SwipeableMethods | null> {
+    let ref = swipeableRefs.get(entryId);
+    if (!ref) {
+      ref = { current: null };
+      swipeableRefs.set(entryId, ref);
+    }
+    return ref;
+  }
 
   // Load available meals/recipes/ingredients for the add overlay — on every
   // focus, not just mount, so something added elsewhere (a new ingredient
@@ -732,7 +743,7 @@ export default function HomeScreen() {
     manualPieceEntries: ManualPieceInput[] = [],
     confirmedNutrition?: ConfirmedNutrition,
   ) {
-    swipeableRefs.get(entry._id)?.close();
+    swipeableRefs.get(entry._id)?.current?.close();
     try {
       const updated = await confirmMealPlanEntry(entry._id, instructions, manualPieceEntries, confirmedNutrition);
       setEntries(prev => prev.map(e => (e._id === entry._id ? updated : e)));
@@ -742,7 +753,7 @@ export default function HomeScreen() {
   }
 
   async function handleUnconfirmEntry(entry: MealPlanEntry) {
-    swipeableRefs.get(entry._id)?.close();
+    swipeableRefs.get(entry._id)?.current?.close();
     try {
       const updated = await unconfirmMealPlanEntry(entry._id);
       setEntries(prev => prev.map(e => (e._id === entry._id ? updated : e)));
@@ -789,7 +800,7 @@ export default function HomeScreen() {
     );
 
     if (hasAmbiguity(requirements)) {
-      swipeableRefs.get(entry._id)?.close();
+      swipeableRefs.get(entry._id)?.current?.close();
       setPendingConfirmEntry(entry);
       setPendingRequirements(requirements);
       setAmbiguousRequirements(requirements.filter(requirementNeedsResolution));
@@ -904,7 +915,7 @@ export default function HomeScreen() {
   }
 
   function handleOpenRateAndConfirm(entry: MealPlanEntry) {
-    swipeableRefs.get(entry._id)?.close();
+    swipeableRefs.get(entry._id)?.current?.close();
     setRateConfirmEntry(entry);
   }
 
@@ -1223,10 +1234,7 @@ export default function HomeScreen() {
     return (
       <ReanimatedSwipeable
         key={entry._id}
-        ref={r => {
-          if (r) swipeableRefs.set(entry._id, r);
-          else swipeableRefs.delete(entry._id);
-        }}
+        ref={swipeableRefFor(entry._id)}
         friction={2}
         leftThreshold={40}
         rightThreshold={40}
