@@ -212,12 +212,19 @@ router.patch("/:id", async (req, res) => {
     // its own chain, already requires whatever this recipe itself
     // produces) — so this needs the same check IngredientRoutes.js runs
     // when linking, just from the other direction.
+    // Checked against every ingredient linked to this recipe — an archived
+    // duplicate can still point at it, and checking only the first match
+    // could check that one instead of the live ingredient.
     if (req.body.ingredientList) {
-      const producedIngredient = await Ingredient.findOne({ productionRecipe: req.params.id }).select("_id");
-      if (
-        producedIngredient &&
-        (await wouldCreateCycle(producedIngredient._id, req.body.ingredientList))
-      ) {
+      const producedIngredients = await Ingredient.find({ productionRecipe: req.params.id }).select("_id");
+      let createsCycle = false;
+      for (const produced of producedIngredients) {
+        if (await wouldCreateCycle(produced._id, req.body.ingredientList)) {
+          createsCycle = true;
+          break;
+        }
+      }
+      if (createsCycle) {
         return res.status(400).json({
           success: false,
           message:
