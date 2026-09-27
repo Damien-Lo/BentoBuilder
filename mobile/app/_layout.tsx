@@ -54,6 +54,14 @@ export default function RootLayout() {
           }}
         />
 
+        {/* All Nutrients — every tracked nutrient for a day, plus their goals */}
+        <Stack.Screen
+          name="health/nutrients"
+          options={{
+            headerShown: false,
+          }}
+        />
+
         {/* Weight & Measurements — weigh-in log and progress */}
         <Stack.Screen
           name="health/weight"

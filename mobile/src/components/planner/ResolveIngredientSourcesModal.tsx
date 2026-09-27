@@ -2,18 +2,31 @@ import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import type { IngredientRequirement, ManualPieceInput, PantryGroup } from "@/src/utils/pantryDeduction";
+import type {
+  AmountOverride,
+  IngredientRequirement,
+  ManualPieceInput,
+  PantryGroup,
+} from "@/src/utils/pantryDeduction";
 import { wholePieceShortfall } from "@/src/utils/pantryDeduction";
 
 interface ResolveIngredientSourcesModalProps {
   visible: boolean;
-  // Only requirements that actually need input: real ambiguity (2+ groups)
-  // and/or, for wholePiece, an outright shortfall with nothing in pantry to
-  // cover part or all of what's needed.
+  // Only requirements that actually need input: real ambiguity (2+ groups),
+  // for wholePiece an outright shortfall with nothing in pantry to cover
+  // part or all of what's needed, and recipe lines flagged askAmount.
   requirements: IngredientRequirement[];
   saving?: boolean;
   onCancel: () => void;
-  onConfirm: (selections: Record<string, string[]>, manualPieceEntries: ManualPieceInput[]) => void;
+  onConfirm: (
+    selections: Record<string, string[]>,
+    manualPieceEntries: ManualPieceInput[],
+    amountOverrides: Record<string, AmountOverride>,
+  ) => void;
+}
+
+function formatAmount(n: number): string {
+  return String(Math.round(n * 100) / 100);
 }
 
 // A starting point for a shortfall's manual-weight field — the recipe
@@ -68,10 +81,20 @@ export function ResolveIngredientSourcesModal({
   // "skip" (uses that same midpoint as a defensive fallback anyway, but
   // without pretending a real weight was confirmed).
   const [manualWeights, setManualWeights] = useState<Record<string, string[]>>({});
+  // One amount field per askAmount requirement, keyed by ingredientId —
+  // pre-filled with the recipe's own (servings-scaled) amount.
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!visible) return;
     setSelections({});
+    setAmounts(
+      Object.fromEntries(
+        requirements
+          .filter((req) => req.askAmount)
+          .map((req) => [req.ingredientId, formatAmount(req.askAmount!.quantity)] as const),
+      ),
+    );
     setManualWeights(
       Object.fromEntries(
         requirements
@@ -113,7 +136,17 @@ export function ResolveIngredientSourcesModal({
         }
       }
     }
-    onConfirm(selections, manualPieceEntries);
+    // A blank or invalid amount just keeps the recipe's own amount.
+    const amountOverrides: Record<string, AmountOverride> = {};
+    for (const req of requirements) {
+      if (!req.askAmount) continue;
+      const raw = (amounts[req.ingredientId] ?? "").trim().replace(",", ".");
+      const quantity = Number(raw);
+      if (raw && Number.isFinite(quantity) && quantity > 0) {
+        amountOverrides[req.ingredientId] = { quantity, unit: req.askAmount.unit };
+      }
+    }
+    onConfirm(selections, manualPieceEntries, amountOverrides);
   }
 
   return (
@@ -125,9 +158,9 @@ export function ResolveIngredientSourcesModal({
           <ScrollView contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
             <Text className="text-lg font-bold text-slate-950">Confirm what you used</Text>
             <Text className="mt-0.5 mb-5 text-sm text-slate-400">
-              Some ingredients need a bit more info — pick a pantry source if there&apos;s more
-              than one, or type a weight for anything not logged in. Anything left untouched uses
-              the soonest-to-expire source automatically.
+              Some ingredients need a bit more info — enter how much you used, pick a pantry
+              source if there&apos;s more than one, or type a weight for anything not logged in.
+              Anything left untouched uses the soonest-to-expire source automatically.
             </Text>
 
             {requirements.map((req) => {
@@ -147,9 +180,28 @@ export function ResolveIngredientSourcesModal({
                       {req.ingredientName}
                     </Text>
                     <Text className="ml-2 text-xs text-slate-400">
-                      Needs {req.neededQuantity} {req.unit}
+                      {req.askAmount
+                        ? `Recipe: ${formatAmount(req.askAmount.quantity)} ${req.askAmount.unit}`
+                        : `Needs ${req.neededQuantity} ${req.unit}`}
                     </Text>
                   </View>
+
+                  {req.askAmount && (
+                    <View className="mt-3 flex-row items-center">
+                      <Text className="text-sm text-slate-600">Amount used</Text>
+                      <TextInput
+                        value={amounts[req.ingredientId] ?? ""}
+                        onChangeText={(text) => setAmounts((current) => ({ ...current, [req.ingredientId]: text }))}
+                        editable={!saving}
+                        keyboardType="decimal-pad"
+                        selectTextOnFocus
+                        placeholder={formatAmount(req.askAmount.quantity)}
+                        placeholderTextColor="#94A3B8"
+                        className="ml-3 h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-base text-slate-950"
+                      />
+                      <Text className="ml-2 text-sm text-slate-500">{req.askAmount.unit}</Text>
+                    </View>
+                  )}
 
                   {picked.length > 0 && req.groups.length > 1 && (
                     <Text className="mt-1 text-xs font-medium text-slate-500">

@@ -25,6 +25,7 @@ import {
   DurationValueInput,
   FieldLabel,
   FormInput,
+  NutritionFieldsEditor,
   PriceInput,
   QuantityServingInput,
   SearchableObjectDropdown,
@@ -57,6 +58,13 @@ import { updateGroceryItem } from "@/src/services/groceryListApi";
 
 import type { IngredientOption, SelectOption } from "@/src/types/options";
 import type { PantryItem } from "@/src/types/pantry";
+import type { NutritionField, PartialNutrition } from "@/src/types/nutrition";
+import {
+  mergeNutritionForm,
+  nutritionFormToInput,
+  nutritionToForm,
+  type NutritionFormValues,
+} from "@/src/utils/nutritionForm";
 import { barcodesMatch } from "@/src/utils/barcode";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { todayDateInputString } from "@/src/utils/date";
@@ -114,12 +122,16 @@ interface FormState {
   defaultExpiryDurationAmount: string;
   defaultExpiryDurationUnit: DurationUnit;
 
-  calories: string;
-  protein: string;
-  carbs: string;
-  fats: string;
-  fiber: string;
-  sodium: string;
+  nutrition: NutritionFormValues;
+}
+
+function parseNutritionParam(raw?: string): PartialNutrition | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as PartialNutrition;
+  } catch {
+    return null;
+  }
 }
 
 const initialForm: FormState = {
@@ -163,12 +175,7 @@ const initialForm: FormState = {
   defaultExpiryDurationAmount: "",
   defaultExpiryDurationUnit: "week",
 
-  calories: "",
-  protein: "",
-  carbs: "",
-  fats: "",
-  fiber: "",
-  sodium: "",
+  nutrition: nutritionToForm(),
 };
 
 function optionalNumber(value: string): number | undefined {
@@ -263,17 +270,7 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
     defaultExpiryDurationAmount: ingredient.defaultExpiryDurationAmount ?? undefined,
     defaultExpiryDurationUnit: ingredient.defaultExpiryDurationUnit ?? undefined,
 
-    calories: ingredient.nutrition?.calories,
-
-    protein: ingredient.nutrition?.protein,
-
-    carbs: ingredient.nutrition?.carbs,
-
-    fat: ingredient.nutrition?.fats,
-
-    fiber: ingredient.nutrition?.fiber,
-
-    sodium: ingredient.nutrition?.sodium,
+    nutrition: ingredient.nutrition,
 
     categoryId:
       category?._id ??
@@ -300,12 +297,8 @@ export default function AddManualPantryItemScreen() {
     scannedQuantityUnit?: string;
     scannedServingSize?: string;
     scannedServingUnit?: string;
-    scannedCalories?: string;
-    scannedProtein?: string;
-    scannedCarbs?: string;
-    scannedFats?: string;
-    scannedFiber?: string;
-    scannedSodium?: string;
+    // JSON-encoded PartialNutrition — every nutrient the scan reported.
+    scannedNutrition?: string;
     // Present when arriving from "add as a new ingredient" on a grocery
     // list item that isn't directly loggable — completes that item once
     // this ingredient + a mandatory pantry entry are saved.
@@ -350,12 +343,7 @@ export default function AddManualPantryItemScreen() {
         // had a real declared serving — see servingIsEstimated on
         // ScannedProduct — so an absent param already means "leave blank".
         defaultPortionAmount: params.scannedServingSize ?? "",
-        calories: params.scannedCalories ?? "",
-        protein: params.scannedProtein ?? "",
-        carbs: params.scannedCarbs ?? "",
-        fats: params.scannedFats ?? "",
-        fiber: params.scannedFiber ?? "",
-        sodium: params.scannedSodium ?? "",
+        nutrition: nutritionToForm(parseNutritionParam(params.scannedNutrition)),
       };
     }
     return initialForm;
@@ -569,6 +557,13 @@ export default function AddManualPantryItemScreen() {
     }));
   }
 
+  function updateNutritionField(field: NutritionField, value: string) {
+    setForm((current) => ({
+      ...current,
+      nutrition: { ...current.nutrition, [field]: value },
+    }));
+  }
+
   function applyScannedProduct(product: ScannedProduct) {
     // Scanning a barcode that's already in the catalog should log a pantry
     // entry for that ingredient, not offer to create a duplicate.
@@ -614,12 +609,7 @@ export default function AddManualPantryItemScreen() {
       defaultPortionAmount: product.servingIsEstimated
         ? current.defaultPortionAmount
         : String(product.servingSize),
-      calories: product.calories != null ? String(Math.round(product.calories)) : current.calories,
-      protein: product.protein != null ? String(Math.round(product.protein * 10) / 10) : current.protein,
-      carbs: product.carbs != null ? String(Math.round(product.carbs * 10) / 10) : current.carbs,
-      fats: product.fats != null ? String(Math.round(product.fats * 10) / 10) : current.fats,
-      fiber: product.fiber != null ? String(Math.round(product.fiber * 10) / 10) : current.fiber,
-      sodium: product.sodium != null ? String(product.sodium) : current.sodium,
+      nutrition: mergeNutritionForm(current.nutrition, product.nutrition),
     }));
 
     if (product.brand) {
@@ -652,17 +642,7 @@ export default function AddManualPantryItemScreen() {
           : "0",
       alwaysAvailable: option.isAlwaysAvailable ?? false,
 
-      calories: numberToFormValue(option.calories),
-
-      protein: numberToFormValue(option.protein),
-
-      carbs: numberToFormValue(option.carbs),
-
-      fats: numberToFormValue(option.fat),
-
-      fiber: numberToFormValue(option.fiber),
-
-      sodium: numberToFormValue(option.sodium),
+      nutrition: nutritionToForm(option.nutrition),
 
       categoryId: option.categoryId ?? option.category?._id ?? "",
 
@@ -1017,14 +997,7 @@ export default function AddManualPantryItemScreen() {
         ? optionalNumber(form.defaultExpiryDurationAmount)
         : undefined;
 
-      const nutrition = {
-        calories: optionalNumber(form.calories),
-        protein: optionalNumber(form.protein),
-        carbs: optionalNumber(form.carbs),
-        fats: optionalNumber(form.fats),
-        fiber: optionalNumber(form.fiber),
-        sodium: optionalNumber(form.sodium),
-      };
+      const nutrition = nutritionFormToInput(form.nutrition);
 
       const normalizedName = form.ingredientName.trim().toLowerCase();
 
@@ -1618,83 +1591,11 @@ export default function AddManualPantryItemScreen() {
 
           {nutritionExpanded && (
             <View {...nutritionSection.wrapperProps}>
-              <View className="mt-4 flex-row">
-                <View className="mr-3 flex-1">
-                  <FieldLabel text="Calories" />
-
-                  <FormInput
-                    value={form.calories}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("calories", value)}
-                  />
-                </View>
-
-                <View className="flex-1">
-                  <FieldLabel text="Protein (g)" />
-
-                  <FormInput
-                    value={form.protein}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("protein", value)}
-                  />
-                </View>
-              </View>
-
-              <View className="flex-row">
-                <View className="mr-3 flex-1">
-                  <FieldLabel text="Carbs (g)" />
-
-                  <FormInput
-                    value={form.carbs}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("carbs", value)}
-                  />
-                </View>
-
-                <View className="flex-1">
-                  <FieldLabel text="Fats (g)" />
-
-                  <FormInput
-                    value={form.fats}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("fats", value)}
-                  />
-                </View>
-              </View>
-
-              <View className="flex-row">
-                <View className="mr-3 flex-1">
-                  <FieldLabel text="Fiber (g)" />
-
-                  <FormInput
-                    value={form.fiber}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("fiber", value)}
-                  />
-                </View>
-
-                <View className="flex-1">
-                  <FieldLabel text="Sodium (mg)" />
-
-                  <FormInput
-                    value={form.sodium}
-                    keyboardType="decimal-pad"
-                    placeholder="N/A"
-                    onFocus={nutritionSection.trigger}
-                    onChangeText={(value) => updateForm("sodium", value)}
-                  />
-                </View>
-              </View>
+              <NutritionFieldsEditor
+                values={form.nutrition}
+                onChange={updateNutritionField}
+                onFocus={nutritionSection.trigger}
+              />
             </View>
           )}
 

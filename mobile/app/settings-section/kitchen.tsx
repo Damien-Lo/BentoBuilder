@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useRouter } from "expo-router";
 
-import { loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
 import { getUnitSuggestions } from "@/src/services/optionsApi";
 import { DAY_ABBREVS } from "@/src/utils/mealPlan";
 import { SettingsSectionHeader as SectionHeader, UnitConversionsEditor } from "@/src/components/forms";
@@ -66,20 +66,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [settings, setSettings] = useState<AppSettings>({
-    displayName: "",
-    dailyCalorieLimit: null,
-    dailyProteinLimit: null,
-    dailyCarbsLimit: null,
-    dailyFatsLimit: null,
-    dailyFiberLimit: null,
-    dailySodiumLimit: null,
-    weekStartDay: 1,
-    unitConversions: [],
-    startingWeight: null,
-    startingWeightDate: null,
-    goalWeight: null,
-  });
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   const [units, setUnits] = useState<string[]>([]);
 

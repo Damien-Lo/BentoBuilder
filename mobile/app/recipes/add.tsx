@@ -81,6 +81,10 @@ type IngredientRow = {
   pieceMinWeight: number | null;
   pieceMaxWeight: number | null;
   pieceWeightUnit: string;
+  // "quantity" lines only — prompt for the real amount used each time the
+  // recipe is confirmed (e.g. potatoes weighed per batch); quantity/unit
+  // above is then just the pre-filled default.
+  askAmount: boolean;
   calories?: number | null;
   protein?: number | null;
   carbs?: number | null;
@@ -202,6 +206,7 @@ export default function AddRecipePage() {
   const [pickerPieceMinWeight, setPickerPieceMinWeight] = useState("");
   const [pickerPieceMaxWeight, setPickerPieceMaxWeight] = useState("");
   const [pickerPieceWeightUnit, setPickerPieceWeightUnit] = useState("g");
+  const [pickerAskAmount, setPickerAskAmount] = useState(false);
   const [pickerSelected, setPickerSelected] =
     useState<IngredientOption | null>(null);
   const [customUnitConversions, setCustomUnitConversions] = useState<
@@ -436,6 +441,7 @@ export default function AddRecipePage() {
       pieceMinWeight,
       pieceMaxWeight,
       pieceWeightUnit: pickerPieceWeightUnit.trim() || "g",
+      askAmount: pickerMatchMode === "quantity" && pickerAskAmount,
       calories: pickerSelected?.calories ?? null,
       protein: pickerSelected?.protein ?? null,
       carbs: pickerSelected?.carbs ?? null,
@@ -461,6 +467,7 @@ export default function AddRecipePage() {
     setPickerPieceMinWeight("");
     setPickerPieceMaxWeight("");
     setPickerPieceWeightUnit("g");
+    setPickerAskAmount(false);
     setPickerSelected(null);
   }
 
@@ -477,6 +484,7 @@ export default function AddRecipePage() {
     setPickerPieceMinWeight(row.pieceMinWeight != null ? String(row.pieceMinWeight) : "");
     setPickerPieceMaxWeight(row.pieceMaxWeight != null ? String(row.pieceMaxWeight) : "");
     setPickerPieceWeightUnit(row.pieceWeightUnit || "g");
+    setPickerAskAmount(row.askAmount);
     setPickerSelected(option);
   }
 
@@ -492,6 +500,7 @@ export default function AddRecipePage() {
     setPickerPieceMinWeight("");
     setPickerPieceMaxWeight("");
     setPickerPieceWeightUnit("g");
+    setPickerAskAmount(false);
     setPickerSelected(null);
   }
 
@@ -594,6 +603,7 @@ export default function AddRecipePage() {
           pieceMinWeight: row.pieceMinWeight,
           pieceMaxWeight: row.pieceMaxWeight,
           pieceWeightUnit: row.pieceWeightUnit,
+          askAmount: row.askAmount,
         })),
         instructions: steps
           .map((s) => s.trim())
@@ -1135,6 +1145,23 @@ export default function AddRecipePage() {
                 </View>
               </View>
             )}
+
+            {pickerMatchMode === "quantity" && (
+              <Pressable className="mt-3 self-start" onPress={() => setPickerAskAmount((prev) => !prev)}>
+                <Text className="text-xs font-semibold text-blue-600">
+                  {pickerAskAmount
+                    ? "Asks for the real amount when cooking — tap to always use this amount"
+                    : "Amount varies each time (e.g. weighed out)? Ask when cooking"}
+                </Text>
+              </Pressable>
+            )}
+            {pickerMatchMode === "quantity" && pickerAskAmount && (
+              <Text className="mt-1 text-xs leading-4 text-slate-400">
+                Confirming this recipe in the planner will ask how much you actually used, pre-filled
+                with the amount above — what you enter is what gets deducted from your pantry and
+                counted for nutrition.
+              </Text>
+            )}
           </View>
 
           {/* Added ingredient rows */}
@@ -1178,6 +1205,7 @@ export default function AddRecipePage() {
                       {row.nutritionFactor !== 1
                         ? ` · ${Math.round(row.nutritionFactor * 100)}% counted`
                         : ""}
+                      {row.askAmount ? " · asks amount when cooking" : ""}
                     </Text>
                   </View>
 

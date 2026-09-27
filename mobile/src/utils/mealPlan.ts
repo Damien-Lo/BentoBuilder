@@ -6,7 +6,15 @@ import type { Recipe } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
 import type { RestaurantMeal } from "@/src/services/restaurantMealApi";
 import type { PantryItem } from "@/src/types/pantry";
+import type { NullableNutrition, NutritionTotals } from "@/src/types/nutrition";
 import { countQualifyingPantryPieces, getIngredientStockInUnit } from "./ingredientStock";
+import {
+  addNutrition,
+  emptyNutritionTotals,
+  roundNutritionTotals,
+  scaleNutrition,
+  unknownNutrition,
+} from "./nutrition";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
 import type { DeductionInstruction, IngredientRequirement, ManualPieceInput, RawRow } from "./pantryDeduction";
 
@@ -152,26 +160,8 @@ export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal, selections
 
 // ── Recipe nutrition scaling (per-serving nutrition × servings eaten) ──────────
 
-export interface ScaledNutrition {
-  calories: number | null;
-  protein: number | null;
-  carbs: number | null;
-  fats: number | null;
-  fiber: number | null;
-  sodium: number | null;
-}
-
-export function scaleRecipeNutrition(recipe: Recipe, servings: number): ScaledNutrition {
-  const n = recipe.nutrition ?? {};
-  const scale = (v?: number | null) => (v == null ? null : v * servings);
-  return {
-    calories: scale(n.calories),
-    protein:  scale(n.protein),
-    carbs:    scale(n.carbs),
-    fats:     scale(n.fats),
-    fiber:    scale(n.fiber),
-    sodium:   scale(n.sodium),
-  };
+export function scaleRecipeNutrition(recipe: Recipe, servings: number): NullableNutrition {
+  return scaleNutrition(recipe.nutrition, servings);
 }
 
 export function getRecipeKcal(recipe: Recipe, servings: number): number | null {
@@ -193,27 +183,15 @@ export function scaleIngredientNutrition(
   quantity: number,
   unit?: string,
   conversions: CustomUnitConversion[] = [],
-): ScaledNutrition {
-  const n = ingredient.nutrition ?? {};
-
+): NullableNutrition {
   const quantityInNativeUnit = unit
     ? convertUnits(quantity, unit, ingredient.defaultPortionUnit ?? "", conversions)
     : quantity;
 
-  if (quantityInNativeUnit == null) {
-    return { calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null };
-  }
+  if (quantityInNativeUnit == null) return unknownNutrition();
 
   const multiplier = quantityInNativeUnit / (ingredient.defaultPortionAmount || 1);
-  const scale = (v?: number | null) => (v == null ? null : v * multiplier);
-  return {
-    calories: scale(n.calories),
-    protein:  scale(n.protein),
-    carbs:    scale(n.carbs),
-    fats:     scale(n.fats),
-    fiber:    scale(n.fiber),
-    sodium:   scale(n.sodium),
-  };
+  return scaleNutrition(ingredient.nutrition, multiplier);
 }
 
 export function getIngredientKcal(
@@ -228,23 +206,7 @@ export function getIngredientKcal(
 
 // ── Day-level nutrition totals (shared by the planner and Health pages) ────────
 
-export interface DayNutrition {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fats: number;
-  fiber: number;
-  sodium: number;
-}
-
-function addScaled(totals: DayNutrition, n: ScaledNutrition) {
-  if (n.calories) totals.calories += n.calories;
-  if (n.protein)  totals.protein  += n.protein;
-  if (n.carbs)    totals.carbs    += n.carbs;
-  if (n.fats)     totals.fats     += n.fats;
-  if (n.fiber)    totals.fiber    += n.fiber;
-  if (n.sodium)   totals.sodium   += n.sodium;
-}
+export type DayNutrition = NutritionTotals;
 
 // A confirmed recipe entry's real nutrition — reads the snapshot computed
 // once, with full context, right when the entry was confirmed (see
@@ -268,13 +230,13 @@ export function computeConfirmedRecipeNutrition(
   const manualEntries = entry.manualPieceEntries ?? [];
   if (!deductions.length && !manualEntries.length) return null;
 
-  const totals: DayNutrition = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
+  const totals = emptyNutritionTotals();
   let hasAny = false;
   for (const d of deductions) {
     if (typeof d.pantryItem === "string") continue; // not populated — skip rather than guess
     const ingredient = d.pantryItem.ingredient;
     if (!ingredient) continue;
-    addScaled(totals, scaleIngredientNutrition(
+    addNutrition(totals, scaleIngredientNutrition(
       ingredient,
       d.amount,
       d.pantryItem.quantityUnit,
@@ -287,7 +249,7 @@ export function computeConfirmedRecipeNutrition(
   // from the ingredient directly rather than through a pantry item.
   for (const m of manualEntries) {
     if (!m.ingredient) continue;
-    addScaled(totals, scaleIngredientNutrition(
+    addNutrition(totals, scaleIngredientNutrition(
       m.ingredient,
       m.weight,
       m.weightUnit,
@@ -318,7 +280,7 @@ export function computeConfirmNutrition(
   pantryItems: PantryItem[],
   conversions: CustomUnitConversion[],
 ): DayNutrition {
-  const totals: DayNutrition = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
+  const totals = emptyNutritionTotals();
   const pantryItemById = new Map(pantryItems.map((p) => [p._id, p]));
 
   // Quantity-mode nutrition comes from the full expanded row list, not
@@ -331,7 +293,7 @@ export function computeConfirmNutrition(
     if (row.matchMode === "wholePiece") continue;
     const ingredient = ingredientMap.get(row.ingredientId);
     if (!ingredient) continue;
-    addScaled(
+    addNutrition(
       totals,
       scaleIngredientNutrition(ingredient, row.quantity, row.unit, getIngredientConversions(ingredient, conversions)),
     );
@@ -369,11 +331,11 @@ export function computeConfirmNutrition(
     for (const instr of instructionsByIngredient.get(req.ingredientId) ?? []) {
       const item = pantryItemById.get(instr.pantryItemId);
       if (!item) continue;
-      addScaled(totals, scaleIngredientNutrition(ingredient, instr.amount, item.quantityUnit, ingredientConversions));
+      addNutrition(totals, scaleIngredientNutrition(ingredient, instr.amount, item.quantityUnit, ingredientConversions));
       covered += 1;
     }
     for (const manual of manualByIngredient.get(req.ingredientId) ?? []) {
-      addScaled(totals, scaleIngredientNutrition(ingredient, manual.weight, manual.unit, ingredientConversions));
+      addNutrition(totals, scaleIngredientNutrition(ingredient, manual.weight, manual.unit, ingredientConversions));
       covered += 1;
     }
     // Defensive only — the resolve-sources flow should always ask for
@@ -384,7 +346,7 @@ export function computeConfirmNutrition(
     const uncovered = Math.max(0, req.neededQuantity - covered);
     if (uncovered > 0) {
       const midpoint = ((req.pieceMinWeight ?? 0) + (req.pieceMaxWeight ?? 0)) / 2;
-      addScaled(
+      addNutrition(
         totals,
         scaleIngredientNutrition(ingredient, midpoint * uncovered, req.pieceWeightUnit || "g", ingredientConversions),
       );
@@ -395,17 +357,17 @@ export function computeConfirmNutrition(
 }
 
 export function computeDayNutrition(entries: MealPlanEntry[], conversions: CustomUnitConversion[] = []): DayNutrition {
-  const totals: DayNutrition = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
+  const totals = emptyNutritionTotals();
   for (const entry of entries) {
     if (entry.recipe) {
       const confirmed = entry.status === "confirmed"
         ? computeConfirmedRecipeNutrition(entry, conversions)
         : null;
-      addScaled(totals, confirmed ?? scaleRecipeNutrition(entry.recipe, entry.recipeServings ?? 1));
+      addNutrition(totals, confirmed ?? scaleRecipeNutrition(entry.recipe, entry.recipeServings ?? 1));
       continue;
     }
     if (entry.ingredient) {
-      addScaled(totals, scaleIngredientNutrition(
+      addNutrition(totals, scaleIngredientNutrition(
         entry.ingredient,
         entry.ingredientQuantity ?? 0,
         entry.ingredientUnit,
@@ -422,61 +384,17 @@ export function computeDayNutrition(entries: MealPlanEntry[], conversions: Custo
       const quantityByDish = new Map(selections.map(s => [s.dish, s.quantity]));
       const dishes = entry.restaurantMeal.dishes?.filter(d => quantityByDish.has(d._id));
       for (const dish of dishes ?? []) {
-        const n = dish.nutrition;
-        if (!n) continue;
-        const qty = quantityByDish.get(dish._id) ?? 1;
-        addScaled(totals, {
-          calories: n.calories != null ? n.calories * qty : null,
-          protein:  n.protein  != null ? n.protein  * qty : null,
-          carbs:    n.carbs    != null ? n.carbs    * qty : null,
-          fats:     n.fats     != null ? n.fats     * qty : null,
-          fiber:    n.fiber    != null ? n.fiber    * qty : null,
-          sodium:   n.sodium   != null ? n.sodium   * qty : null,
-        });
+        addNutrition(totals, scaleNutrition(dish.nutrition, quantityByDish.get(dish._id) ?? 1));
       }
       continue;
     }
     for (const course of entry.meal?.courses ?? []) {
       const recipe = course.recipe;
       if (!recipe || typeof recipe === "string") continue;
-      const n = (recipe as MealRecipeRef).nutrition;
-      if (!n) continue;
-      const s = course.servings ?? 1;
-      addScaled(totals, {
-        calories: n.calories != null ? n.calories * s : null,
-        protein:  n.protein  != null ? n.protein  * s : null,
-        carbs:    n.carbs    != null ? n.carbs    * s : null,
-        fats:     n.fats     != null ? n.fats     * s : null,
-        fiber:    n.fiber    != null ? n.fiber    * s : null,
-        sodium:   n.sodium   != null ? n.sodium   * s : null,
-      });
+      addNutrition(totals, scaleNutrition((recipe as MealRecipeRef).nutrition, course.servings ?? 1));
     }
   }
-  const { calories, protein, carbs, fats, fiber, sodium } = totals;
-  return {
-    calories: Math.round(calories),
-    protein:  Math.round(protein  * 10) / 10,
-    carbs:    Math.round(carbs    * 10) / 10,
-    fats:     Math.round(fats     * 10) / 10,
-    fiber:    Math.round(fiber    * 10) / 10,
-    sodium:   Math.round(sodium),
-  };
-}
-
-// Scales a totals object down to a per-day average (e.g. a week's totals /
-// 7) - same rounding as computeDayNutrition, so an averaged card reads
-// consistently with a single day's card. `days` of 0 returns all zeros
-// rather than dividing by zero.
-export function divideNutrition(totals: DayNutrition, days: number): DayNutrition {
-  if (days <= 0) return { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0, sodium: 0 };
-  return {
-    calories: Math.round(totals.calories / days),
-    protein:  Math.round((totals.protein / days) * 10) / 10,
-    carbs:    Math.round((totals.carbs   / days) * 10) / 10,
-    fats:     Math.round((totals.fats    / days) * 10) / 10,
-    fiber:    Math.round((totals.fiber   / days) * 10) / 10,
-    sodium:   Math.round(totals.sodium / days),
-  };
+  return roundNutritionTotals(totals);
 }
 
 // Fraction (0–1, clamped) of `limit` that `value` represents — 0 when there's

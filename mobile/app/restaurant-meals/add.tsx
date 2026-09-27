@@ -18,6 +18,7 @@ import {
   CreatableMultiTagDropdown,
   FieldLabel,
   FormInput,
+  NutritionFieldsEditor,
   PriceInput,
   SectionTitle,
 } from "@/src/components/forms";
@@ -33,18 +34,18 @@ import {
 } from "@/src/services/restaurantMealApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { setPendingNewRestaurant } from "@/src/utils/pendingNewRestaurantStore";
+import {
+  nutritionFormToInput,
+  nutritionToForm,
+  type NutritionFormValues,
+} from "@/src/utils/nutritionForm";
 
 type DishRow = {
   key: string;
   name: string;
   notes: string;
   price: string;
-  calories: string;
-  protein: string;
-  carbs: string;
-  fats: string;
-  fiber: string;
-  sodium: string;
+  nutrition: NutritionFormValues;
 };
 
 function newDishRow(): DishRow {
@@ -53,12 +54,7 @@ function newDishRow(): DishRow {
     name: "",
     notes: "",
     price: "",
-    calories: "",
-    protein: "",
-    carbs: "",
-    fats: "",
-    fiber: "",
-    sodium: "",
+    nutrition: nutritionToForm(),
   };
 }
 
@@ -83,12 +79,7 @@ function estimatedDishToRowFields(d: EstimatedDish) {
   return {
     name: d.name,
     notes: d.confidence !== "high" ? `[${d.confidence} confidence] ${d.portionNote}` : d.portionNote,
-    calories: d.estimatedNutrition.calories != null ? String(d.estimatedNutrition.calories) : "",
-    protein:  d.estimatedNutrition.protein  != null ? String(d.estimatedNutrition.protein)  : "",
-    carbs:    d.estimatedNutrition.carbs    != null ? String(d.estimatedNutrition.carbs)    : "",
-    fats:     d.estimatedNutrition.fats     != null ? String(d.estimatedNutrition.fats)     : "",
-    fiber:    d.estimatedNutrition.fiber    != null ? String(d.estimatedNutrition.fiber)    : "",
-    sodium:   d.estimatedNutrition.sodium   != null ? String(d.estimatedNutrition.sodium)   : "",
+    nutrition: nutritionToForm(d.estimatedNutrition),
   };
 }
 
@@ -166,68 +157,14 @@ function DishCard({
 
       <View {...nutritionSection.wrapperProps}>
         <FieldLabel text="Nutrition (optional estimate)" />
-        <View className="flex-row flex-wrap gap-x-3">
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Calories</Text>
-            <FormInput
-              value={dish.calories}
-              placeholder="kcal"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { calories: text })}
-            />
-          </View>
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Protein (g)</Text>
-            <FormInput
-              value={dish.protein}
-              placeholder="g"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { protein: text })}
-            />
-          </View>
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Carbs (g)</Text>
-            <FormInput
-              value={dish.carbs}
-              placeholder="g"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { carbs: text })}
-            />
-          </View>
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Fats (g)</Text>
-            <FormInput
-              value={dish.fats}
-              placeholder="g"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { fats: text })}
-            />
-          </View>
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Fiber (g)</Text>
-            <FormInput
-              value={dish.fiber}
-              placeholder="g"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { fiber: text })}
-            />
-          </View>
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Sodium (mg)</Text>
-            <FormInput
-              value={dish.sodium}
-              placeholder="mg"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { sodium: text })}
-            />
-          </View>
-        </View>
+        <NutritionFieldsEditor
+          compact
+          values={dish.nutrition}
+          onChange={(field, value) =>
+            updateDish(dish.key, { nutrition: { ...dish.nutrition, [field]: value } })
+          }
+          onFocus={nutritionSection.trigger}
+        />
       </View>
     </View>
   );
@@ -371,14 +308,7 @@ export default function AddRestaurantMealPage() {
         name: d.name,
         notes: d.notes.trim() || undefined,
         price: parseOptionalNumber(d.price),
-        nutrition: {
-          calories: parseOptionalNumber(d.calories),
-          protein: parseOptionalNumber(d.protein),
-          carbs: parseOptionalNumber(d.carbs),
-          fats: parseOptionalNumber(d.fats),
-          fiber: parseOptionalNumber(d.fiber),
-          sodium: parseOptionalNumber(d.sodium),
-        },
+        nutrition: nutritionFormToInput(d.nutrition),
       }));
 
       const created = await createRestaurantMeal({

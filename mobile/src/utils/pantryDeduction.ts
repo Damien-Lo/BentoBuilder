@@ -69,6 +69,12 @@ export interface IngredientRequirement {
   pieceMinWeight?: number;
   pieceMaxWeight?: number;
   pieceWeightUnit?: string;
+  // Only set for a quantity-mode requirement built from a recipe line
+  // flagged askAmount — the resolve-sources modal then always shows it with
+  // an amount field, pre-filled with `quantity` in `unit` (the recipe
+  // line's own unit — "400 g" rather than the ingredient's native "0.88
+  // lb"). What's entered replaces neededQuantity via applyAmountOverrides.
+  askAmount?: { quantity: number; unit: string };
   // Sorted soonest-expiry-first, no-expiry last.
   groups: PantryGroup[];
 }
@@ -91,6 +97,7 @@ export interface RawRow {
   pieceMinWeight?: number;
   pieceMaxWeight?: number;
   pieceWeightUnit?: string;
+  askAmount?: boolean;
 }
 
 // A quantity-mode row not tied to any particular recipe line - the default
@@ -132,6 +139,7 @@ function recipeLineToRow(line: Recipe["ingredientList"][number], ratio: number):
     pieceMinWeight: line.pieceMinWeight ?? undefined,
     pieceMaxWeight: line.pieceMaxWeight ?? undefined,
     pieceWeightUnit: line.pieceWeightUnit,
+    askAmount: matchMode === "quantity" && !!line.askAmount,
   };
 }
 
@@ -208,7 +216,10 @@ function expandProducedIngredientRows(
     // "how many whole pieces" row - and nothing produced via a sub-recipe
     // (stocks, minced/prepped ingredients) is naturally a discrete piece
     // anyway, so this is a pass-through rather than a real limitation.
-    if (row.matchMode === "wholePiece" || !ing || !productionRecipeId) {
+    // An askAmount row passes through too: the amount it'll actually need
+    // isn't known until the user enters it at confirm, so splitting it
+    // into stock-covered + sub-recipe rows now would be splitting a guess.
+    if (row.matchMode === "wholePiece" || row.askAmount || !ing || !productionRecipeId) {
       result.push(row);
       continue;
     }
@@ -284,6 +295,11 @@ interface NeededAccumulator {
   // distinct from pieceWeightUnit (e.g. "g"), which is what the range is
   // actually expressed in and what matching converts pantry weights into.
   pieceDisplayUnit?: string;
+  // Set when any row for this ingredient is flagged askAmount — the unit
+  // (that row's own) the prompt is shown in. The prompt's pre-filled
+  // amount is the ingredient's *whole* need converted into it, since what's
+  // entered replaces the whole need (see applyAmountOverrides).
+  askUnit?: string;
 }
 
 // The row-consuming core of buildIngredientRequirements — separated so
@@ -325,6 +341,7 @@ function buildRequirementsFromRows(
     neededByIngredient.set(row.ingredientId, {
       quantity: (current?.quantity ?? 0) + converted,
       matchMode: "quantity",
+      askUnit: current?.askUnit ?? (row.askAmount ? row.unit : undefined),
     });
   }
 
@@ -337,6 +354,10 @@ function buildRequirementsFromRows(
     if (!ing) continue;
     const isWholePiece = needed.matchMode === "wholePiece";
     const unit = isWholePiece ? (needed.pieceDisplayUnit || "piece") : (ing.defaultPortionUnit || "");
+    const askQuantity = needed.askUnit != null
+      // Unrounded, so a 400 g line converted to lb and back is still 400 g.
+      ? convertUnits(needed.quantity, unit, needed.askUnit, getIngredientConversions(ing, globalConversions, allIngredients))
+      : null;
 
     // Generic ingredients are satisfied by their own direct stock plus
     // every specific/branded variant's stock (same pool the availability
@@ -485,6 +506,9 @@ function buildRequirementsFromRows(
       pieceMinWeight: needed.pieceMinWeight,
       pieceMaxWeight: needed.pieceMaxWeight,
       pieceWeightUnit: needed.pieceWeightUnit,
+      askAmount: needed.askUnit != null && askQuantity != null
+        ? { quantity: round(askQuantity), unit: needed.askUnit }
+        : undefined,
       groups,
     });
   }
@@ -551,9 +575,10 @@ export function wholePieceShortfall(req: IngredientRequirement): number {
 // — wholePiece only — an outright shortfall, where some or all of the
 // needed pieces have nothing in pantry to auto-pick at all. The latter is
 // what unlocks the resolve-sources modal's "not in my pantry, type the
-// weight" fallback rather than silently leaving the gap unfulfilled.
+// weight" fallback rather than silently leaving the gap unfulfilled. Or
+// the recipe line asked for it outright (askAmount).
 export function requirementNeedsResolution(req: IngredientRequirement): boolean {
-  return req.groups.length > 1 || wholePieceShortfall(req) > 0;
+  return req.groups.length > 1 || wholePieceShortfall(req) > 0 || !!req.askAmount;
 }
 
 export function hasAmbiguity(requirements: IngredientRequirement[]): boolean {
@@ -684,4 +709,56 @@ export function getResolvedDeductionInstructions(
   }
 
   return mergeInstructions(all);
+}
+
+// The real amount entered for an askAmount requirement (keyed by
+// ingredientId, in whatever unit the prompt was shown in).
+export interface AmountOverride {
+  quantity: number;
+  unit: string;
+}
+
+// Rewrites requirements and rows to use amounts entered at confirm instead
+// of the recipe's nominal ones: each overridden requirement's
+// neededQuantity (so the deduction drains the real amount), and that
+// ingredient's quantity-mode rows collapsed into one row of the real
+// amount (so computeConfirmNutrition, which sums rows, counts it). An
+// override that can't be converted into the requirement's unit is ignored
+// rather than guessed at — the nominal amount stands.
+export function applyAmountOverrides(
+  requirements: IngredientRequirement[],
+  rows: RawRow[],
+  overrides: Record<string, AmountOverride>,
+  ingredientMap: Map<string, Ingredient>,
+  allIngredients: Ingredient[],
+  globalConversions: CustomUnitConversion[],
+): { requirements: IngredientRequirement[]; rows: RawRow[] } {
+  const applied = new Set<string>();
+
+  const nextRequirements = requirements.map((req) => {
+    const override = overrides[req.ingredientId];
+    const ing = ingredientMap.get(req.ingredientId);
+    if (!override || !ing || req.matchMode !== "quantity") return req;
+    const converted = convertUnits(
+      override.quantity,
+      override.unit,
+      req.unit,
+      getIngredientConversions(ing, globalConversions, allIngredients),
+    );
+    if (converted == null) return req;
+    applied.add(req.ingredientId);
+    return { ...req, neededQuantity: round(converted) };
+  });
+
+  const nextRows: RawRow[] = [];
+  for (const row of rows) {
+    if (applied.has(row.ingredientId) && row.matchMode === "quantity") continue;
+    nextRows.push(row);
+  }
+  for (const ingredientId of applied) {
+    const override = overrides[ingredientId];
+    nextRows.push(quantityRow(ingredientId, override.quantity, override.unit));
+  }
+
+  return { requirements: nextRequirements, rows: nextRows };
 }

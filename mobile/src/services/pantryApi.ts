@@ -21,15 +21,6 @@ export interface CreatePantryItemInput {
   // Same null-to-clear/undefined-to-omit convention as expiryDate.
   store?: string | null;
   notes?: string;
-
-  nutrition?: {
-    calories?: number;
-    protein?: number;
-    carbs?: number;
-    fats?: number;
-    fiber?: number;
-    sodium?: number;
-  };
 }
 
 interface PantryListResponse {

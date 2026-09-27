@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  GEMINI_NUTRITION_JSON_SCHEMA,
+  GeminiNutritionSchema,
+  NUTRITION_UNITS_INSTRUCTION,
+} from "./geminiNutritionSchema.js";
+
 // Same model/endpoint/response-schema pattern as receiptParsing.js — kept
 // separate rather than merged into that file since the domain is genuinely
 // different (estimating a dish from a photo of food vs. transcribing a
@@ -7,18 +13,9 @@ import { z } from "zod";
 const MODEL = "gemini-3.6-flash";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
-const NutritionSchema = z.object({
-  calories: z.number().nullable(),
-  protein: z.number().nullable(),
-  carbs: z.number().nullable(),
-  fats: z.number().nullable(),
-  fiber: z.number().nullable(),
-  sodium: z.number().nullable(),
-});
-
 const EstimatedDishSchema = z.object({
   name: z.string(),
-  estimatedNutrition: NutritionSchema,
+  estimatedNutrition: GeminiNutritionSchema,
   // Freeform note on what drove the estimate/what's uncertain (e.g. "assumed
   // ~300g portion, sauce quantity not visible") — shown to the user so an
   // estimate never reads as more confident than it is.
@@ -32,20 +29,8 @@ export const MealPhotoEstimateSchema = z.object({
 
 // Plain JSON Schema (Gemini's responseSchema is an OpenAPI-3.0 subset), kept
 // in sync with the Zod schema above by hand — see receiptParsing.js for why
-// this isn't derived automatically.
-const NUTRITION_JSON_SCHEMA = {
-  type: "object",
-  properties: {
-    calories: { type: "number", nullable: true },
-    protein: { type: "number", nullable: true },
-    carbs: { type: "number", nullable: true },
-    fats: { type: "number", nullable: true },
-    fiber: { type: "number", nullable: true },
-    sodium: { type: "number", nullable: true },
-  },
-  required: ["calories", "protein", "carbs", "fats", "fiber", "sodium"],
-};
-
+// this isn't derived automatically. (The nutrition part is shared — see
+// geminiNutritionSchema.js.)
 const MEAL_PHOTO_JSON_SCHEMA = {
   type: "object",
   properties: {
@@ -55,7 +40,7 @@ const MEAL_PHOTO_JSON_SCHEMA = {
         type: "object",
         properties: {
           name: { type: "string" },
-          estimatedNutrition: NUTRITION_JSON_SCHEMA,
+          estimatedNutrition: GEMINI_NUTRITION_JSON_SCHEMA,
           portionNote: { type: "string" },
           confidence: { type: "string", enum: ["high", "medium", "low"] },
         },
@@ -83,7 +68,9 @@ ${restaurantContext}
 2. For each dish, estimate calories/protein/carbs/fats/fiber/sodium using your general knowledge of similar dishes and visible portion size. Reason about visible ingredients, cooking method (fried/grilled/sauced), and roughly how much is on the plate.
 3. Set portionNote to a short, honest caveat about what's uncertain — e.g. sauce/oil quantity not fully visible, portion size assumed from typical serving, some ingredients possibly hidden under others. Never leave it empty; if you're fairly confident, say what made you confident instead (e.g. "standard-looking single restaurant portion").
 4. Set confidence to "high" only when the dish is clearly identifiable and portion size is easy to judge, "medium" for a reasonable guess with real uncertainty, "low" when you're genuinely unsure what's in it or the portion is hard to judge.
-5. If the photo doesn't clearly show food at all, return an empty dishes array rather than guessing.`;
+5. If the photo doesn't clearly show food at all, return an empty dishes array rather than guessing.
+
+estimatedNutrition is for the whole dish as served (the full visible portion). ${NUTRITION_UNITS_INSTRUCTION}`;
 }
 
 export async function estimateMealPhoto({ imageBase64, mediaType, restaurantName, singleDish }) {

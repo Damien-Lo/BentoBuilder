@@ -17,9 +17,15 @@ import {
   CreatableMultiTagDropdown,
   FieldLabel,
   FormInput,
+  NutritionFieldsEditor,
   PriceInput,
   SectionTitle,
 } from "@/src/components/forms";
+import {
+  nutritionFormToInput,
+  nutritionToForm,
+  type NutritionFormValues,
+} from "@/src/utils/nutritionForm";
 
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { createTag, getTags, type SelectOption } from "@/src/services/optionsApi";
@@ -36,12 +42,9 @@ type DishRow = {
   name: string;
   notes: string;
   price: string;
-  calories: string;
-  protein: string;
-  carbs: string;
-  fats: string;
-  fiber: string;
-  sodium: string;
+  // Every nutrient, core and extended — saving replaces each dish's whole
+  // nutrition object, so the form must load and send back all of them.
+  nutrition: NutritionFormValues;
 };
 
 function newDishRow(): DishRow {
@@ -50,12 +53,7 @@ function newDishRow(): DishRow {
     name: "",
     notes: "",
     price: "",
-    calories: "",
-    protein: "",
-    carbs: "",
-    fats: "",
-    fiber: "",
-    sodium: "",
+    nutrition: nutritionToForm(),
   };
 }
 
@@ -139,68 +137,14 @@ function DishCard({
 
       <View {...nutritionSection.wrapperProps}>
         <FieldLabel text="Nutrition (optional estimate)" />
-        <View className="flex-row flex-wrap gap-x-3">
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Calories</Text>
-            <FormInput
-              value={dish.calories}
-              placeholder="kcal"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { calories: text })}
-            />
-          </View>
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Protein (g)</Text>
-            <FormInput
-              value={dish.protein}
-              placeholder="g"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { protein: text })}
-            />
-          </View>
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Carbs (g)</Text>
-            <FormInput
-              value={dish.carbs}
-              placeholder="g"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { carbs: text })}
-            />
-          </View>
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Fats (g)</Text>
-            <FormInput
-              value={dish.fats}
-              placeholder="g"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { fats: text })}
-            />
-          </View>
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Fiber (g)</Text>
-            <FormInput
-              value={dish.fiber}
-              placeholder="g"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { fiber: text })}
-            />
-          </View>
-          <View style={{ width: "47%" }}>
-            <Text className="mb-1 text-xs text-slate-400">Sodium (mg)</Text>
-            <FormInput
-              value={dish.sodium}
-              placeholder="mg"
-              keyboardType="decimal-pad"
-              onFocus={nutritionSection.trigger}
-              onChangeText={(text) => updateDish(dish.key, { sodium: text })}
-            />
-          </View>
-        </View>
+        <NutritionFieldsEditor
+          compact
+          values={dish.nutrition}
+          onChange={(field, value) =>
+            updateDish(dish.key, { nutrition: { ...dish.nutrition, [field]: value } })
+          }
+          onFocus={nutritionSection.trigger}
+        />
       </View>
     </View>
   );
@@ -265,12 +209,7 @@ export default function EditRestaurantMealPage() {
             name: d.name,
             notes: d.notes ?? "",
             price: numToText(d.price),
-            calories: numToText(d.nutrition?.calories),
-            protein: numToText(d.nutrition?.protein),
-            carbs: numToText(d.nutrition?.carbs),
-            fats: numToText(d.nutrition?.fats),
-            fiber: numToText(d.nutrition?.fiber),
-            sodium: numToText(d.nutrition?.sodium),
+            nutrition: nutritionToForm(d.nutrition),
           })),
         );
       } catch (error) {
@@ -339,14 +278,7 @@ export default function EditRestaurantMealPage() {
       // orphaning every past visit's restaurantDishSelections that
       // reference the old ones.
       const dishInputs: (DishInput | Dish)[] = trimmedDishes.map((d) => {
-        const nutrition = {
-          calories: parseOptionalNumber(d.calories),
-          protein: parseOptionalNumber(d.protein),
-          carbs: parseOptionalNumber(d.carbs),
-          fats: parseOptionalNumber(d.fats),
-          fiber: parseOptionalNumber(d.fiber),
-          sodium: parseOptionalNumber(d.sodium),
-        };
+        const nutrition = nutritionFormToInput(d.nutrition);
         const original = originalDishesById.get(d.key);
         return original
           ? { ...original, name: d.name, notes: d.notes.trim() || undefined, price: parseOptionalNumber(d.price), nutrition }

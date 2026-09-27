@@ -1,0 +1,627 @@
+[
+  {
+    "_id": "6a98d0174129ceec31a00939",
+    "restaurantName": "Wagaya",
+    "dishes": [
+      {
+        "name": "Eel and Avocado Roll",
+        "notes": "",
+        "price": null,
+        "nutrition": {
+          "calories": 479,
+          "protein": 32,
+          "carbs": 35,
+          "fats": 23,
+          "fiber": 3,
+          "sodium": 877,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6aa83c0c39127d92b0c7b78f",
+        "scores": []
+      },
+      {
+        "name": "Nigiri Sushi Set",
+        "notes": "vegetable tempura, California roll, shrimp/yellowtail nigiri, salmon/tuna nigiri",
+        "price": 16,
+        "nutrition": {
+          "calories": 390,
+          "protein": 17,
+          "carbs": 49,
+          "fats": 13,
+          "fiber": 1,
+          "sodium": 578,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6aa83c0c39127d92b0c7b790",
+        "scores": []
+      },
+      {
+        "name": "Nigiri Sushi Set with Yellow Tail Roll Substitution",
+        "notes": "",
+        "price": 18,
+        "nutrition": {
+          "calories": 825,
+          "protein": 50,
+          "carbs": 108,
+          "fats": 31,
+          "fiber": 6,
+          "sodium": 1800,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6aa83c0c39127d92b0c7b791",
+        "scores": [
+          {
+            "value": 8,
+            "ratedAt": "2026-09-14T18:25:22.641Z",
+            "mealPlanEntry": null,
+            "_id": "6aa83c1239127d92b0c7b798",
+            "createdAt": "2026-09-14T18:25:22.640Z",
+            "updatedAt": "2026-09-14T18:25:22.640Z"
+          }
+        ]
+      }
+    ],
+    "tags": [],
+    "notes": "",
+    "isArchived": false,
+    "createdAt": "2026-09-03T01:40:39.594Z",
+    "updatedAt": "2026-09-14T18:25:22.640Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a98d01f4129ceec31a0093c",
+    "restaurantName": "Shoyu Izakaya",
+    "dishes": [
+      {
+        "name": "Shrimp Tempura",
+        "notes": "",
+        "price": 9,
+        "nutrition": {
+          "calories": 207,
+          "protein": 12,
+          "carbs": 13,
+          "fats": 11,
+          "fiber": 0,
+          "sodium": 605,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a98d0ed30498deb30c30eb4",
+        "scores": []
+      },
+      {
+        "name": "Shoya Sushi Assortment Set",
+        "notes": "nigiri/maki/eel/scallop/saba nigiri, tuna & salmon nigiri",
+        "price": 33,
+        "nutrition": {
+          "calories": 723,
+          "protein": 44,
+          "carbs": 90,
+          "fats": 19,
+          "fiber": 2,
+          "sodium": 1180,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a98d0ed30498deb30c30eb5",
+        "scores": []
+      },
+      {
+        "name": "Chicken Karaage",
+        "notes": "",
+        "price": 7,
+        "nutrition": {
+          "calories": 425,
+          "protein": 24,
+          "carbs": 20,
+          "fats": 28,
+          "fiber": 1,
+          "sodium": 584,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a98d0ed30498deb30c30eb6",
+        "scores": []
+      }
+    ],
+    "tags": [],
+    "notes": "",
+    "isArchived": false,
+    "createdAt": "2026-09-03T01:40:47.405Z",
+    "updatedAt": "2026-09-03T01:44:13.937Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a98d57a30498deb30c30eca",
+    "restaurantName": "Cava",
+    "dishes": [
+      {
+        "name": "Chicken Bowl (usual order)",
+        "notes": "Arugula base, red pepper hummus, eggplant + red pepper dip, grilled chicken, corn, tomato & cucumber, tomato & onion, red onion, pickles, 2x fiery broccoli",
+        "price": 12.36,
+        "nutrition": {
+          "calories": 449,
+          "protein": 39,
+          "carbs": 23,
+          "fats": 22,
+          "fiber": 4,
+          "sodium": 1539,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a98d57a30498deb30c30ecb",
+        "scores": []
+      }
+    ],
+    "tags": [],
+    "notes": "",
+    "isArchived": false,
+    "createdAt": "2026-09-03T02:03:38.372Z",
+    "updatedAt": "2026-09-03T02:03:38.372Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a98dba7069d5efdd45f5d53",
+    "restaurantName": "Little Rey",
+    "dishes": [
+      {
+        "name": "Steak Tacos (flour tortilla)",
+        "notes": "1 tacos",
+        "price": null,
+        "nutrition": {
+          "calories": 330,
+          "protein": 19,
+          "carbs": 16,
+          "fats": 21,
+          "fiber": 0,
+          "sodium": 500,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a9c679d08dec8a7013fe74c",
+        "scores": []
+      },
+      {
+        "name": "Salsa Verde",
+        "notes": "",
+        "price": null,
+        "nutrition": {
+          "calories": 34,
+          "protein": 1,
+          "carbs": 6,
+          "fats": 1,
+          "fiber": 2,
+          "sodium": 540,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a9c679d08dec8a7013fe74d",
+        "scores": []
+      },
+      {
+        "name": "Pico de Gallo",
+        "notes": "",
+        "price": null,
+        "nutrition": {
+          "calories": 10,
+          "protein": 0,
+          "carbs": 2,
+          "fats": 0,
+          "fiber": 1,
+          "sodium": 266,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a9c679d08dec8a7013fe74e",
+        "scores": []
+      }
+    ],
+    "tags": [],
+    "notes": "",
+    "isArchived": false,
+    "createdAt": "2026-09-03T02:29:59.707Z",
+    "updatedAt": "2026-09-05T19:03:57.038Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a98dc37069d5efdd45f5d84",
+    "restaurantName": "Okiboru",
+    "dishes": [
+      {
+        "name": "Paitan Tsukemen (chicken)",
+        "notes": "",
+        "price": 20.4,
+        "nutrition": {
+          "calories": 930,
+          "protein": 27,
+          "carbs": 122,
+          "fats": 38,
+          "fiber": 5,
+          "sodium": 710,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a98dc37069d5efdd45f5d85",
+        "scores": []
+      },
+      {
+        "name": "Shoyu Brussels",
+        "notes": "",
+        "price": null,
+        "nutrition": {
+          "calories": 362,
+          "protein": 40,
+          "carbs": 32,
+          "fats": 8,
+          "fiber": 1,
+          "sodium": 1160,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a98dc37069d5efdd45f5d86",
+        "scores": []
+      }
+    ],
+    "tags": [],
+    "notes": "",
+    "isArchived": false,
+    "createdAt": "2026-09-03T02:32:23.941Z",
+    "updatedAt": "2026-09-03T02:32:23.941Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a98e3de069d5efdd45f5e48",
+    "restaurantName": "Chick-fil-A",
+    "dishes": [
+      {
+        "name": "Chicken Sandwich",
+        "notes": "",
+        "price": null,
+        "nutrition": {
+          "calories": 420,
+          "protein": 29,
+          "carbs": 41,
+          "fats": 18,
+          "fiber": 1,
+          "sodium": 1460,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "scores": [],
+        "_id": "6a9a0131a447dd80eb113421"
+      },
+      {
+        "name": "Chick-fil-A Sauce",
+        "notes": "1 packet (1 oz)",
+        "price": null,
+        "nutrition": {
+          "calories": 140,
+          "protein": 0,
+          "carbs": 7,
+          "fats": 13,
+          "fiber": 0,
+          "sodium": 180,
+          "sugar": 6,
+          "saturatedFat": 2,
+          "polyunsaturatedFat": 7.3,
+          "monounsaturatedFat": 3.2,
+          "transFat": 0,
+          "cholesterol": 10,
+          "potassium": 15,
+          "vitaminA": 10,
+          "vitaminC": 0,
+          "calcium": 3,
+          "iron": 0.1
+        },
+        "_id": "6ab6ac8969490fed55170668",
+        "scores": []
+      }
+    ],
+    "tags": [],
+    "notes": "",
+    "isArchived": false,
+    "createdAt": "2026-09-03T03:05:02.401Z",
+    "updatedAt": "2026-09-25T17:16:57.118Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a99e884eaa4ac3b8f255098",
+    "restaurantName": "Ming's BBQ",
+    "dishes": [
+      {
+        "name": "3-Meat Combo (Char Siu, Roast Goose, Crispy Pork)",
+        "notes": "Meats only, no rice. ~100g (3.5oz) of each meat, ~300g total - estimated portion. Per-meat nutrition estimated from generic reference values (char siu: Hawaii Nutrition Center; roast goose: USDA roasted goose meat+skin; crispy pork belly: estimated from USDA raw pork belly, adjusted for roasting), not Ming's-specific data.",
+        "price": 24,
+        "nutrition": {
+          "calories": 1155,
+          "protein": 59,
+          "carbs": 21,
+          "fats": 100,
+          "fiber": 0,
+          "sodium": 1341,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a99e884eaa4ac3b8f255099",
+        "scores": []
+      },
+      {
+        "name": "Beef Brisket Noodle Soup (Ngau Laam Min)",
+        "notes": "Ou lam men - Cantonese beef brisket egg noodle soup.",
+        "price": 14.2,
+        "nutrition": {
+          "calories": 600,
+          "protein": 35,
+          "carbs": 55,
+          "fats": 20,
+          "fiber": 2,
+          "sodium": 1400,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a99e884eaa4ac3b8f25509a",
+        "scores": []
+      }
+    ],
+    "tags": [],
+    "notes": "Hong Kong BBQ/roast meats, Atlanta metro. No published nutrition data - dish nutrition below is estimated from USDA/reference values for the individual meats and typical restaurant noodle-soup composition, not official figures.",
+    "isArchived": false,
+    "createdAt": "2026-09-03T21:37:08.176Z",
+    "updatedAt": "2026-09-03T21:38:40.610Z",
+    "__v": 0
+  },
+  {
+    "_id": "6a9b3a05811c74470f660c10",
+    "restaurantName": "Varuni Napoli",
+    "dishes": [
+      {
+        "name": "Spacca Napoli Mushroom Pixza",
+        "notes": "",
+        "price": 22,
+        "nutrition": {
+          "calories": 1150,
+          "protein": 45,
+          "carbs": 130,
+          "fats": 55,
+          "fiber": 2000,
+          "sodium": 7,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6a9b3a05811c74470f660c11",
+        "scores": []
+      }
+    ],
+    "tags": [
+      "6a9b3a05811c74470f660c0f"
+    ],
+    "notes": "",
+    "isArchived": false,
+    "createdAt": "2026-09-04T21:37:09.769Z",
+    "updatedAt": "2026-09-04T21:37:09.769Z",
+    "__v": 0
+  },
+  {
+    "_id": "6aa8afdce9e4ec39061d7496",
+    "restaurantName": "Chipotle",
+    "dishes": [
+      {
+        "name": "Chicken Burrito",
+        "notes": "Flour tortilla, half white rice, half black beans, chicken, fajita veggies, fresh tomato salsa, roasted chili-corn salsa, tomato green chili salsa (medium), lettuce",
+        "price": null,
+        "nutrition": {
+          "calories": 815,
+          "protein": 46,
+          "carbs": 114,
+          "fats": 19.5,
+          "fiber": 12,
+          "sodium": 2070,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6aa8afdce9e4ec39061d7497",
+        "scores": []
+      }
+    ],
+    "tags": [],
+    "notes": "",
+    "isArchived": false,
+    "createdAt": "2026-09-15T02:39:24.323Z",
+    "updatedAt": "2026-09-15T02:39:24.323Z",
+    "__v": 0
+  },
+  {
+    "_id": "6aa96410e9e4ec39061d752d",
+    "restaurantName": "Lanzhou Ramen Atlanta",
+    "dishes": [
+      {
+        "name": "Beef Stew Knife Cut Noodles",
+        "notes": "Hand-knife-cut wide wheat noodles in beef bone broth, stewed beef chunks, bok choy, scallions. Doraville location, 5231 Buford Hwy NE.",
+        "price": 14.95,
+        "nutrition": {
+          "calories": 850,
+          "protein": 50,
+          "carbs": 88,
+          "fats": 26,
+          "fiber": 5,
+          "sodium": 2000,
+          "sugar": null,
+          "saturatedFat": null,
+          "polyunsaturatedFat": null,
+          "monounsaturatedFat": null,
+          "transFat": null,
+          "cholesterol": null,
+          "potassium": null,
+          "vitaminA": null,
+          "vitaminC": null,
+          "calcium": null,
+          "iron": null
+        },
+        "_id": "6aa96410e9e4ec39061d752e",
+        "scores": []
+      }
+    ],
+    "tags": [],
+    "notes": "",
+    "isArchived": false,
+    "createdAt": "2026-09-15T15:28:16.595Z",
+    "updatedAt": "2026-09-15T15:28:16.595Z",
+    "__v": 0
+  }
+]

@@ -2,15 +2,9 @@ import { File } from "expo-file-system";
 
 import { API_BASE_URL } from "@/src/config/api";
 import type { SelectOption } from "@/src/services/optionsApi";
+import type { PartialNutrition } from "@/src/types/nutrition";
 
-export interface DishNutrition {
-  calories?: number | null;
-  protein?: number | null;
-  carbs?: number | null;
-  fats?: number | null;
-  fiber?: number | null;
-  sodium?: number | null;
-}
+export type DishNutrition = PartialNutrition;
 
 export interface DishScore {
   _id: string;

@@ -2,15 +2,9 @@ import { API_BASE_URL } from "@/src/config/api";
 import type { SelectOption } from "@/src/services/optionsApi";
 import type { DurationUnit } from "@/src/utils/date";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
+import { ALL_NUTRITION_FIELDS, type NutritionInput } from "@/src/types/nutrition";
 
-export interface IngredientNutrition {
-  calories?: number;
-  protein?: number;
-  carbs?: number;
-  fats?: number;
-  fiber?: number;
-  sodium?: number;
-}
+export type IngredientNutrition = NutritionInput;
 
 export interface IngredientScore {
   _id: string;
@@ -273,19 +267,9 @@ export async function createIngredient(
     pieceLabel: input.pieceLabel?.trim() || null,
 
     nutrition: input.nutrition
-      ? {
-          calories: input.nutrition.calories,
-
-          protein: input.nutrition.protein,
-
-          carbs: input.nutrition.carbs,
-
-          fats: input.nutrition.fats,
-
-          fiber: input.nutrition.fiber,
-
-          sodium: input.nutrition.sodium,
-        }
+      ? (Object.fromEntries(
+          ALL_NUTRITION_FIELDS.map((field) => [field, input.nutrition?.[field]]),
+        ) as IngredientNutrition)
       : undefined,
   };
 

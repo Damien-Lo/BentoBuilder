@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "@/src/config/api";
 import type { SelectOption } from "@/src/services/optionsApi";
+import type { PartialNutrition } from "@/src/types/nutrition";
 
 export type MealType = "course" | "bento";
 
@@ -7,14 +8,7 @@ export interface MealRecipeRef {
   _id: string;
   name: string;
   mealCategory?: string[];
-  nutrition?: {
-    calories?: number | null;
-    protein?: number | null;
-    carbs?: number | null;
-    fats?: number | null;
-    fiber?: number | null;
-    sodium?: number | null;
-  } | null;
+  nutrition?: PartialNutrition | null;
   servings?: number;
 }
 

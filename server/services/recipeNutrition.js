@@ -1,5 +1,10 @@
 import UserProfile from "../models/UserProfile.js";
 import Ingredient from "../models/Ingredient.js";
+import {
+  ALL_NUTRITION_FIELD_NAMES,
+  CORE_NUTRITION_FIELD_NAMES,
+  EXTENDED_NUTRITION_FIELD_NAMES,
+} from "../models/nutritionSchema.js";
 import { convertUnits, getIngredientConversions } from "./unitConversion.js";
 
 // Shared by RecipeRoutes.js (create/update/self-heal-on-read) and the
@@ -13,7 +18,14 @@ export async function calcNutrition(recipe) {
   const globalConversions = profile?.unitConversions ?? [];
 
   const servings = Math.max(1, recipe.servings || 1);
-  let calories = 0, protein = 0, carbs = 0, fats = 0, fiber = 0, sodium = 0;
+  const totals = Object.fromEntries(ALL_NUTRITION_FIELD_NAMES.map((field) => [field, 0]));
+  // Extended fields only get a number if at least one contributing
+  // ingredient actually has a value for them — otherwise a recipe built
+  // entirely from ingredients with no extended data on file (the whole
+  // catalog, today) would report "0 cholesterol" as if that were known,
+  // rather than unknown. Core fields keep their existing missing-as-0
+  // behavior unchanged, so existing recipe snapshots don't shift.
+  const extendedFieldsSeen = new Set();
   let hasData = false;
 
   for (const entry of recipe.ingredientList) {
@@ -45,40 +57,54 @@ export async function calcNutrition(recipe) {
     const multiplier =
       (quantityInNativeUnit / (ing.defaultPortionAmount || 1)) *
       (entry.nutritionFactor ?? 1);
-    calories += (ing.nutrition.calories || 0) * multiplier;
-    protein  += (ing.nutrition.protein  || 0) * multiplier;
-    carbs    += (ing.nutrition.carbs    || 0) * multiplier;
-    fats     += (ing.nutrition.fats     || 0) * multiplier;
-    fiber    += (ing.nutrition.fiber    || 0) * multiplier;
-    sodium   += (ing.nutrition.sodium   || 0) * multiplier;
+    for (const field of CORE_NUTRITION_FIELD_NAMES) {
+      totals[field] += (ing.nutrition[field] || 0) * multiplier;
+    }
+    for (const field of EXTENDED_NUTRITION_FIELD_NAMES) {
+      const value = ing.nutrition[field];
+      if (value == null) continue;
+      totals[field] += value * multiplier;
+      extendedFieldsSeen.add(field);
+    }
     hasData = true;
   }
 
   if (!hasData) return null;
   const r = (n) => Math.round(n / servings * 10) / 10;
-  return { calories: r(calories), protein: r(protein), carbs: r(carbs), fats: r(fats), fiber: r(fiber), sodium: r(sodium) };
+  const result = {};
+  for (const field of CORE_NUTRITION_FIELD_NAMES) {
+    result[field] = r(totals[field]);
+  }
+  for (const field of EXTENDED_NUTRITION_FIELD_NAMES) {
+    result[field] = extendedFieldsSeen.has(field) ? r(totals[field]) : null;
+  }
+  return result;
 }
 
 // A produced ingredient's nutrition is a derived value, not something
 // manually edited once linked — keep it permanently in sync with whatever
 // this recipe's own (already-automatic) nutrition computes to, every time
-// the recipe is saved (or self-healed on read).
+// the recipe is saved (or self-healed on read). Updates *every* ingredient
+// linked to the recipe — an archived duplicate can still point at it, and
+// syncing only the first match (as this used to) could keep updating the
+// archived copy while the live one went stale.
 export async function syncProducedIngredientNutrition(recipe, nutrition) {
   if (!nutrition) return;
 
-  const producedIngredient = await Ingredient.findOne({ productionRecipe: recipe._id });
-  if (!producedIngredient) return;
-
-  producedIngredient.nutrition = nutrition;
-  await producedIngredient.save();
+  await Ingredient.updateMany(
+    { productionRecipe: recipe._id },
+    { $set: { nutrition } },
+    { runValidators: true },
+  );
 }
 
-// True if any of the 6 tracked fields differ — used to skip a write when a
-// recompute lands on the same values (e.g. self-heal on a GET that was
-// already up to date).
+// True if any tracked field differs — used to skip a write when a recompute
+// lands on the same values (e.g. self-heal on a GET that was already up to
+// date). A stored document from before extended fields existed reads them
+// as undefined, which `?? null` treats the same as a computed null, so
+// adding the new fields doesn't make every existing recipe look "changed."
 export function nutritionChanged(current, computed) {
   if (!computed) return false;
   if (!current) return true;
-  const fields = ["calories", "protein", "carbs", "fats", "fiber", "sodium"];
-  return fields.some((f) => (current[f] ?? null) !== (computed[f] ?? null));
+  return ALL_NUTRITION_FIELD_NAMES.some((f) => (current[f] ?? null) !== (computed[f] ?? null));
 }

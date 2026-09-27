@@ -80,6 +80,12 @@ import {
   getIngredientConversions,
   type CustomUnitConversion,
 } from "@/src/utils/unitConversion";
+import { scaleNutrition, toNutritionInput, unknownNutrition } from "@/src/utils/nutrition";
+import {
+  EXTENDED_NUTRITION_FIELDS,
+  NUTRITION_FIELD_META,
+  type ExtendedNutritionField,
+} from "@/src/types/nutrition";
 import {
   clearReviewDraft,
   loadReviewDraft,
@@ -151,14 +157,7 @@ interface ReviewRow {
 // nullable numbers (so an empty editable field has a clear "unset" value) —
 // this just bridges the two.
 function toReceiptNutrition(nutrition?: IngredientNutrition): ReceiptNutrition {
-  return {
-    calories: nutrition?.calories ?? null,
-    protein: nutrition?.protein ?? null,
-    carbs: nutrition?.carbs ?? null,
-    fats: nutrition?.fats ?? null,
-    fiber: nutrition?.fiber ?? null,
-    sodium: nutrition?.sodium ?? null,
-  };
+  return scaleNutrition(nutrition, 1);
 }
 
 // A row has one single unit throughout (quantity bought and serving size
@@ -319,6 +318,22 @@ function getMissingFields(row: ReviewRow, hasPendingGroceryItems: boolean): stri
 // How much of a neighboring card peeks in from each side of the top pager,
 // and the empty gap between cards — both a fixed visual hint that the
 // section scrolls horizontally.
+// Short labels for the card's "More nutrients" grid — the full names don't
+// fit four to a row.
+const EXTENDED_SHORT_LABELS: Record<ExtendedNutritionField, string> = {
+  sugar: "Sugar",
+  saturatedFat: "Sat fat",
+  polyunsaturatedFat: "Poly fat",
+  monounsaturatedFat: "Mono fat",
+  transFat: "Trans fat",
+  cholesterol: "Chol",
+  potassium: "Potass",
+  vitaminA: "Vit A",
+  vitaminC: "Vit C",
+  calcium: "Calcium",
+  iron: "Iron",
+};
+
 const CARD_PEEK = 18;
 const CARD_GAP = 12;
 
@@ -333,6 +348,52 @@ const LIST_HANDLE_AREA_HEIGHT = 28;
 
 // The New/Matched/Added status pill, reused by both the full-detail card and
 // the compact summary row so the two stay visually consistent.
+// One nutrition cell. Keeps its own text while typing — the row stores a
+// number, and echoing that straight back would turn "0." into "0" and make
+// decimals impossible to type. Blank = unknown (null); anything that isn't a
+// number is ignored rather than stored.
+function NutritionCellInput({
+  value,
+  onChange,
+  onFocus,
+  editable,
+  placeholder,
+}: {
+  value: number | null | undefined;
+  onChange: (value: number | null) => void;
+  onFocus: () => void;
+  editable: boolean;
+  placeholder: string;
+}) {
+  const [text, setText] = useState(value != null ? String(value) : "");
+
+  useEffect(() => {
+    setText((prev) => {
+      const parsed = prev.trim() === "" ? null : Number(prev);
+      return parsed === (value ?? null) ? prev : value != null ? String(value) : "";
+    });
+  }, [value]);
+
+  return (
+    <TextInput
+      value={text}
+      onChangeText={(raw) => {
+        setText(raw);
+        const parsed = raw.trim() === "" ? null : Number(raw);
+        if (parsed === null || Number.isFinite(parsed)) onChange(parsed);
+      }}
+      onFocus={onFocus}
+      editable={editable}
+      keyboardType="decimal-pad"
+      placeholder={placeholder}
+      placeholderTextColor="#94A3B8"
+      className={`rounded-lg border border-slate-200 px-1 py-1 text-center text-[11px] ${
+        editable ? "bg-white text-slate-950" : "bg-slate-50 text-slate-500"
+      }`}
+    />
+  );
+}
+
 function StatusBadge({ row, isNew }: { row: ReviewRow; isNew: boolean }) {
   return (
     <View
@@ -387,6 +448,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
   } = callbacks;
 
   const [showDurationPicker, setShowDurationPicker] = useState(false);
+  const [showMoreNutrients, setShowMoreNutrients] = useState(false);
 
   // Scrolls whichever field was just focused/opened into view within this
   // card's own ScrollView — nested inside the horizontal pager the way this
@@ -723,6 +785,11 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           />
         </View>
       </View>
+      {!isNew && (
+        <Text className="mt-1 text-[10px] text-slate-400">
+          From your catalog — edit nutrition on the ingredient&apos;s own page.
+        </Text>
+      )}
       <View className="mt-1 flex-row gap-1">
         {(
           [
@@ -736,26 +803,48 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         ).map(([field, label]) => (
           <View key={field} className="flex-1">
             <Text className="mb-0.5 text-[9px] text-slate-400">{label}</Text>
-            <TextInput
-              value={row.nutrition[field] != null ? String(row.nutrition[field]) : ""}
-              onChangeText={(value) => {
-                const parsed = value.trim() === "" ? null : Number(value);
-                updateRow(row.key, {
-                  nutrition: {
-                    ...row.nutrition,
-                    [field]: parsed != null && Number.isNaN(parsed) ? row.nutrition[field] : parsed,
-                  },
-                });
-              }}
+            <NutritionCellInput
+              value={row.nutrition[field]}
+              onChange={(value) => updateRow(row.key, { nutrition: { ...row.nutrition, [field]: value } })}
               onFocus={servingSizeSection.trigger}
-              keyboardType="decimal-pad"
+              editable={isNew}
               placeholder="0"
-              placeholderTextColor="#94A3B8"
-              className="rounded-lg border border-slate-200 bg-white px-1 py-1 text-center text-[11px] text-slate-950"
             />
           </View>
         ))}
       </View>
+
+      {/* The 11 background-tracked nutrients, collapsed by default — usually
+          already filled from a barcode scan or the AI estimate, so this is
+          mostly for checking/correcting them. Same editability rule as the
+          grid above: only a new ingredient's values are saved from here. */}
+      <Pressable
+        className="mt-1.5 flex-row items-center self-start"
+        hitSlop={6}
+        onPress={() => setShowMoreNutrients((current) => !current)}
+      >
+        <Text className="text-[11px] font-medium text-blue-600">
+          {showMoreNutrients ? "Hide more nutrients" : "More nutrients"}
+          {` · ${EXTENDED_NUTRITION_FIELDS.filter((f) => row.nutrition[f] != null).length} of ${EXTENDED_NUTRITION_FIELDS.length} filled`}
+        </Text>
+        <Ionicons name={showMoreNutrients ? "chevron-up" : "chevron-down"} size={12} color="#2563EB" />
+      </Pressable>
+      {showMoreNutrients && (
+        <View className="mt-1 flex-row flex-wrap">
+          {EXTENDED_NUTRITION_FIELDS.map((field) => (
+            <View key={field} className="mb-1 px-0.5" style={{ width: "25%" }}>
+              <Text className="mb-0.5 text-[9px] text-slate-400">{EXTENDED_SHORT_LABELS[field]}</Text>
+              <NutritionCellInput
+                value={row.nutrition[field]}
+                onChange={(value) => updateRow(row.key, { nutrition: { ...row.nutrition, [field]: value } })}
+                onFocus={servingSizeSection.trigger}
+                editable={isNew}
+                placeholder={NUTRITION_FIELD_META[field].unit}
+              />
+            </View>
+          ))}
+        </View>
+      )}
       </View>
 
       {/* Read-only, derived preview only — never stored. Purely "here's
@@ -1103,9 +1192,7 @@ export default function ReceiptReviewPage() {
             // item" anyway, and is purely how much was bought).
             const portionNutrition = matched
               ? toReceiptNutrition(matched.nutrition)
-              : proposal?.estimatedNutrition ?? {
-                  calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null,
-                };
+              : proposal?.estimatedNutrition ?? unknownNutrition();
 
             // Gemini reports the real net weight/volume of ONE unit of this
             // product separately from the printed count (e.g. "1 item" that's
@@ -1396,9 +1483,7 @@ export default function ReceiptReviewPage() {
             genericParentId: "",
             genericName: "",
             barcode: null,
-            nutrition: {
-              calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null,
-            },
+            nutrition: unknownNutrition(),
             defaultPortionAmount: "1",
             unitConversions: [],
             expirySuggestion: null,
@@ -1539,14 +1624,7 @@ export default function ReceiptReviewPage() {
       ...(product.servingIsEstimated
         ? {}
         : { defaultPortionAmount: String(convertPortionAmount(product.servingSize, product.servingUnit, resultingUnit)) }),
-      nutrition: {
-        calories: product.calories ?? null,
-        protein: product.protein ?? null,
-        carbs: product.carbs ?? null,
-        fats: product.fats ?? null,
-        fiber: product.fiber ?? null,
-        sodium: product.sodium ?? null,
-      },
+      nutrition: product.nutrition ?? unknownNutrition(),
       unitConversions: [],
       expirySuggestion: null,
       error: undefined,
@@ -1592,7 +1670,7 @@ export default function ReceiptReviewPage() {
       genericParentId: "",
       genericName: "",
       barcode: null,
-      nutrition: { calories: null, protein: null, carbs: null, fats: null, fiber: null, sodium: null },
+      nutrition: unknownNutrition(),
       defaultPortionAmount: "1",
       unitConversions: [],
     };
@@ -1751,14 +1829,7 @@ export default function ReceiptReviewPage() {
                 row.isGeneric || row.genericParentId ? undefined : row.genericName || undefined,
               defaultPortionAmount: Number(row.defaultPortionAmount) || 1,
               defaultPortionUnit: row.unit || "item",
-              nutrition: {
-                calories: row.nutrition.calories ?? undefined,
-                protein: row.nutrition.protein ?? undefined,
-                carbs: row.nutrition.carbs ?? undefined,
-                fats: row.nutrition.fats ?? undefined,
-                fiber: row.nutrition.fiber ?? undefined,
-                sodium: row.nutrition.sodium ?? undefined,
-              },
+              nutrition: toNutritionInput(row.nutrition),
               unitConversions: row.unitConversions,
             });
             ingredientId = newIngredient._id;

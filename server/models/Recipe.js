@@ -1,16 +1,7 @@
 import mongoose from "mongoose";
+import { createNutritionSchema } from "./nutritionSchema.js";
 
-const nutritionSchema = new mongoose.Schema(
-  {
-    calories: { type: Number, min: 0, default: null },
-    protein: { type: Number, min: 0, default: null },
-    carbs: { type: Number, min: 0, default: null },
-    fats: { type: Number, min: 0, default: null },
-    fiber: { type: Number, min: 0, default: null },
-    sodium: { type: Number, min: 0, default: null },
-  },
-  { _id: false },
-);
+const nutritionSchema = createNutritionSchema();
 
 const ingredientEntrySchema = new mongoose.Schema(
   {
@@ -42,6 +33,16 @@ const ingredientEntrySchema = new mongoose.Schema(
     pieceMinWeight: { type: Number, min: 0, default: null },
     pieceMaxWeight: { type: Number, min: 0, default: null },
     pieceWeightUnit: { type: String, trim: true, default: "g" },
+
+    // "quantity" lines only: ask for the real amount used every time this
+    // recipe is confirmed (e.g. potatoes weighed out per batch) instead of
+    // silently using `quantity`. The confirm flow pre-fills the prompt with
+    // `quantity` (scaled to servings, in this line's `unit`); whatever's
+    // entered drives both the pantry deduction and the confirmed nutrition
+    // snapshot. `quantity` itself stays the recipe's nominal amount (what
+    // the stored recipe nutrition, availability checks, and grocery
+    // shortfalls use).
+    askAmount: { type: Boolean, default: false },
   },
   { _id: false },
 );
