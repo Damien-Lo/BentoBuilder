@@ -24,6 +24,8 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { BarcodeScannerModal, type ScannedProduct } from "@/src/components/BarcodeScannerModal";
+import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
+import { countReadNutrients, labelNutrition, labelServing } from "@/src/utils/nutritionLabel";
 import {
   DateTextInput,
   DurationExpiryInput,
@@ -35,6 +37,7 @@ import {
 import {
   getIngredients,
   createIngredient,
+  parseNutritionLabel,
   updateIngredient,
   type Ingredient,
   type IngredientNutrition,
@@ -260,6 +263,41 @@ function matchPendingGroceryItem(
   return byName.length > 0 ? disambiguate(byName) : null;
 }
 
+// A draft saved by an older version of this page can be missing fields
+// added since (e.g. defaultPortionAmount, unitConversions, the extended
+// nutrients) — fill them with the same defaults a fresh row gets, so
+// resuming it can't crash the page.
+function normalizeDraftRow(row: Partial<ReviewRow>): ReviewRow {
+  const text = (value: unknown) => (typeof value === "string" ? value : value == null ? "" : String(value));
+  return {
+    ...(row as ReviewRow),
+    checked: row.checked ?? true,
+    submitted: row.submitted ?? false,
+    matchedIngredientId: row.matchedIngredientId ?? null,
+    matchedGroceryItemId: row.matchedGroceryItemId ?? null,
+    name: text(row.name),
+    quantity: text(row.quantity),
+    unit: text(row.unit),
+    price: text(row.price),
+    storageLocationId: text(row.storageLocationId),
+    storageLocationName: text(row.storageLocationName),
+    expiryDate: text(row.expiryDate),
+    expiryTouched: row.expiryTouched ?? false,
+    expirySuggestion: row.expirySuggestion ?? null,
+    isGeneric: row.isGeneric ?? true,
+    brandId: text(row.brandId),
+    brandName: text(row.brandName),
+    categoryId: text(row.categoryId),
+    categoryName: text(row.categoryName),
+    genericParentId: text(row.genericParentId),
+    genericName: text(row.genericName),
+    barcode: row.barcode ?? null,
+    nutrition: { ...unknownNutrition(), ...(row.nutrition ?? {}) },
+    defaultPortionAmount: text(row.defaultPortionAmount),
+    unitConversions: Array.isArray(row.unitConversions) ? row.unitConversions : [],
+  };
+}
+
 // What handleConfirm actually requires before this row can become a real
 // pantry item — mirrors its validation exactly. Kept separate from
 // getMissingFields below (which also surfaces non-blocking notes) so
@@ -445,6 +483,10 @@ interface RowCallbacks {
   applyIngredientMatch: (rowKey: string, ingredient: Ingredient) => void;
   handleNameChange: (rowKey: string, value: string) => void;
   onScanBarcode: (rowKey: string) => void;
+  // Photograph this row's nutrition label to fill its nutrition + serving.
+  onScanLabel: (rowKey: string) => void;
+  // The row whose label photo is being read right now, if any.
+  readingLabelRowKey: string | null;
   onDeleteRow: (rowKey: string, rowName: string) => void;
   onOpenGroceryLink: (rowKey: string) => void;
 }
@@ -464,6 +506,8 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
     applyIngredientMatch,
     handleNameChange,
     onScanBarcode,
+    onScanLabel,
+    readingLabelRowKey,
     onDeleteRow,
     onOpenGroceryLink,
   } = callbacks;
@@ -587,6 +631,8 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             selectedName={row.name}
             showAllWhenEmpty={false}
             compact
+            inline
+            inlineLimit={6}
             placeholder="Ingredient name"
             onTextChange={(value) => handleNameChange(row.key, value)}
             onSelect={(option) => applyIngredientMatch(row.key, option)}
@@ -643,6 +689,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
               selectedId={row.categoryId}
               selectedName={row.categoryName}
               compact
+              inline
               placeholder="Category"
               onOpen={categorySection.trigger}
               onTextChange={(value) => {
@@ -709,6 +756,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             selectedId={row.storageLocationId}
             selectedName={row.storageLocationName}
             compact
+            inline
             placeholder="Location"
             onOpen={storageLocationSection.trigger}
             onTextChange={(value) => updateRow(row.key, { storageLocationName: value })}
@@ -746,6 +794,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                   selectedId={row.brandId}
                   selectedName={row.brandName}
                   compact
+                  inline
                   placeholder="Brand"
                   onOpen={brandGenericSection.trigger}
                   onTextChange={(value) => {
@@ -763,6 +812,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                   selectedId={row.genericParentId}
                   selectedName={row.genericName}
                   compact
+                  inline
                   placeholder="Generic"
                   onOpen={brandGenericSection.trigger}
                   onTextChange={(value) => {
@@ -793,6 +843,23 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         <Text className="flex-1 text-xs font-semibold text-slate-600">
           Serving size ({row.unit || "unit"} — nutrition is per this much)
         </Text>
+        {isNew && (
+          <Pressable
+            disabled={readingLabelRowKey === row.key}
+            onPress={() => onScanLabel(row.key)}
+            accessibilityLabel="Scan nutrition label"
+            className="h-10 flex-row items-center rounded-xl bg-blue-50 px-2.5 active:bg-blue-100"
+          >
+            {readingLabelRowKey === row.key ? (
+              <ActivityIndicator size="small" color="#2563EB" />
+            ) : (
+              <Ionicons name="camera-outline" size={14} color="#1D4ED8" />
+            )}
+            <Text className="ml-1 text-[11px] font-semibold text-blue-700">
+              {readingLabelRowKey === row.key ? "Reading…" : "Scan label"}
+            </Text>
+          </Pressable>
+        )}
         <View className="w-14">
           <TextInput
             value={row.defaultPortionAmount}
@@ -1051,6 +1118,8 @@ export default function ReceiptReviewPage() {
   const [receipt, setReceipt] = useState<ReceiptParseResult | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [barcodeScanRowKey, setBarcodeScanRowKey] = useState<string | null>(null);
+  const [labelScanRowKey, setLabelScanRowKey] = useState<string | null>(null);
+  const [readingLabelRowKey, setReadingLabelRowKey] = useState<string | null>(null);
   const [focusedIndex, setFocusedIndex] = useState(0);
 
   const [storeId, setStoreId] = useState("");
@@ -1303,7 +1372,7 @@ export default function ReceiptReviewPage() {
 
       if (draft && draft.rows.length > 0) {
         try {
-          const draftRows = draft.rows as ReviewRow[];
+          const draftRows = (draft.rows as Partial<ReviewRow>[]).map(normalizeDraftRow);
           setRows(draftRows);
           setStoreId(draft.storeId);
           setStoreName(draft.storeName);
@@ -1514,6 +1583,65 @@ export default function ReceiptReviewPage() {
           }
         : {}),
     });
+  }
+
+  // A photographed Nutrition Facts / Supplement Facts panel -> this row's
+  // nutrition (a supplement's unlisted nutrients become 0) and its serving,
+  // expressed in the row's own unit — the same helpers the add-ingredient
+  // page's "Scan label" uses. A serving that can't be put in the row's unit
+  // is flagged rather than guessed.
+  async function handleLabelPhoto(photoUri: string) {
+    const rowKey = labelScanRowKey;
+    setLabelScanRowKey(null);
+    const row = rows.find((r) => r.key === rowKey);
+    if (!rowKey || !row) return;
+
+    setReadingLabelRowKey(rowKey);
+    try {
+      const scan = await parseNutritionLabel(photoUri);
+      if (!scan.isNutritionLabel) {
+        Alert.alert(
+          "No label found",
+          "Couldn't read a nutrition or supplement facts label in that photo. Try again with the whole panel in frame and in focus.",
+        );
+        return;
+      }
+
+      const serving = row.unit.trim() ? labelServing(scan, row.unit, row.unitConversions) : null;
+      setRows((prev) =>
+        prev.map((r) =>
+          r.key === rowKey
+            ? {
+                ...r,
+                nutrition: { ...r.nutrition, ...labelNutrition(scan) },
+                defaultPortionAmount: serving ? String(serving.amount) : r.defaultPortionAmount,
+              }
+            : r,
+        ),
+      );
+
+      const printedServing = [
+        scan.servingAmount != null && scan.servingUnit ? `${scan.servingAmount} ${scan.servingUnit}` : null,
+        scan.servingMetricAmount != null && scan.servingMetricUnit
+          ? `${scan.servingMetricAmount} ${scan.servingMetricUnit}`
+          : null,
+      ].filter(Boolean).join(" / ");
+      const lines = [
+        `Filled ${countReadNutrients(scan)} nutrients` + (serving ? ` per ${serving.amount} ${serving.unit}.` : "."),
+      ];
+      if (!serving && printedServing) {
+        lines.push(
+          `The label's serving (${printedServing}) doesn't convert to ${row.unit || "this item's unit"} — set the serving size to match it, since the nutrition is per that serving.`,
+        );
+      }
+      if (scan.labelType === "supplement_facts") lines.push("Anything not on the supplement label was set to 0.");
+      if (scan.notes.trim()) lines.push(`Note: ${scan.notes.trim()}`);
+      Alert.alert("Label read — check the values", lines.join("\n\n"));
+    } catch (error) {
+      Alert.alert("Couldn't read label", error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setReadingLabelRowKey(null);
+    }
   }
 
   function handleBarcodeScanned(product: ScannedProduct) {
@@ -1978,6 +2106,8 @@ export default function ReceiptReviewPage() {
     applyIngredientMatch,
     handleNameChange,
     onScanBarcode: setBarcodeScanRowKey,
+    onScanLabel: setLabelScanRowKey,
+    readingLabelRowKey,
     onDeleteRow: handleDeleteRow,
     onOpenGroceryLink: setGroceryLinkRowKey,
   };
@@ -2193,6 +2323,14 @@ export default function ReceiptReviewPage() {
         visible={!!barcodeScanRowKey}
         onClose={() => setBarcodeScanRowKey(null)}
         onProductFound={handleBarcodeScanned}
+      />
+
+      <PhotoCaptureModal
+        visible={!!labelScanRowKey}
+        onClose={() => setLabelScanRowKey(null)}
+        onCaptured={(photoUri) => void handleLabelPhoto(photoUri)}
+        subject="nutrition label"
+        instructions="Fit the whole Nutrition Facts or Supplement Facts panel in frame, flat and in focus."
       />
 
       <Modal
