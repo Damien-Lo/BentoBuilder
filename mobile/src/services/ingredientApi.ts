@@ -1,8 +1,10 @@
+import { File } from "expo-file-system";
+
 import { API_BASE_URL } from "@/src/config/api";
 import type { SelectOption } from "@/src/services/optionsApi";
 import type { DurationUnit } from "@/src/utils/date";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
-import { ALL_NUTRITION_FIELDS, type NutritionInput } from "@/src/types/nutrition";
+import { ALL_NUTRITION_FIELDS, type NullableNutrition, type NutritionInput } from "@/src/types/nutrition";
 
 export type IngredientNutrition = NutritionInput;
 
@@ -397,5 +399,36 @@ export async function deleteIngredientScore(
     method: "DELETE",
   });
   const result = await parseResponse<{ success: boolean; data: IngredientScore[] }>(response);
+  return result.data;
+}
+
+// A photographed Nutrition Facts / Supplement Facts panel, transcribed —
+// values per one printed serving, already in the app's units. Anything the
+// label doesn't print is null (the server never estimates here).
+export interface NutritionLabelScan {
+  isNutritionLabel: boolean;
+  labelType: "nutrition_facts" | "supplement_facts" | "other";
+  productName: string | null;
+  // Household measure as printed ("2/3 cup" -> 0.67 + "cup", "2 softgels"
+  // -> 2 + "softgel") and its metric weight/volume when printed.
+  servingAmount: number | null;
+  servingUnit: string | null;
+  servingMetricAmount: number | null;
+  servingMetricUnit: "g" | "ml" | null;
+  servingsPerContainer: number | null;
+  nutrition: NullableNutrition;
+  notes: string;
+}
+
+export async function parseNutritionLabel(photoUri: string): Promise<NutritionLabelScan> {
+  const imageBase64 = await new File(photoUri).base64();
+
+  const response = await fetch(`${API_BASE_URL}/api/ingredients/parse-label`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ imageBase64, mediaType: "image/jpeg" }),
+  });
+
+  const result = await parseResponse<{ success: boolean; data: NutritionLabelScan }>(response);
   return result.data;
 }

@@ -35,7 +35,9 @@ import {
   UnitConversionsEditor,
 } from "@/src/components/forms";
 
-import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import { getIngredients, parseNutritionLabel, type Ingredient } from "@/src/services/ingredientApi";
+import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
+import { countReadNutrients, labelNutrition, labelServing } from "@/src/utils/nutritionLabel";
 import type { DurationUnit } from "@/src/utils/date";
 
 import {
@@ -349,6 +351,8 @@ export default function AddManualPantryItemScreen() {
     return initialForm;
   });
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [labelCameraVisible, setLabelCameraVisible] = useState(false);
+  const [readingLabel, setReadingLabel] = useState(false);
 
   const [saving, setSaving] = useState(false);
 
@@ -562,6 +566,62 @@ export default function AddManualPantryItemScreen() {
       ...current,
       nutrition: { ...current.nutrition, [field]: value },
     }));
+  }
+
+  // Photo of a Nutrition Facts / Supplement Facts panel -> the nutrition
+  // fields plus the serving they're per. Only what the label prints is
+  // filled (a supplement's unlisted nutrients become 0 — see
+  // labelNutrition); the serving is put in this form's own unit when it
+  // already has one, and flagged instead of guessed when it can't be.
+  async function handleLabelPhoto(photoUri: string) {
+    setLabelCameraVisible(false);
+    setReadingLabel(true);
+    try {
+      const scan = await parseNutritionLabel(photoUri);
+      if (!scan.isNutritionLabel) {
+        Alert.alert(
+          "No label found",
+          "Couldn't read a nutrition or supplement facts label in that photo. Try again with the whole panel in frame and in focus.",
+        );
+        return;
+      }
+
+      const serving = labelServing(scan, form.quantityUnit, resolvedConversions);
+      const printedServing = [
+        scan.servingAmount != null && scan.servingUnit ? `${scan.servingAmount} ${scan.servingUnit}` : null,
+        scan.servingMetricAmount != null && scan.servingMetricUnit
+          ? `${scan.servingMetricAmount} ${scan.servingMetricUnit}`
+          : null,
+      ].filter(Boolean).join(" / ");
+
+      setForm((current) => ({
+        ...current,
+        ingredientName: current.ingredientName.trim() ? current.ingredientName : scan.productName ?? "",
+        quantityUnit: serving && !current.quantityUnit.trim() ? serving.unit : current.quantityUnit,
+        defaultPortionAmount: serving ? String(serving.amount) : current.defaultPortionAmount,
+        nutrition: mergeNutritionForm(current.nutrition, labelNutrition(scan)),
+      }));
+      setNutritionExpanded(true);
+
+      const lines = [
+        `Filled ${countReadNutrients(scan)} nutrients` +
+          (serving ? ` per ${serving.amount} ${serving.unit}.` : "."),
+      ];
+      if (!serving && printedServing) {
+        lines.push(
+          `The label's serving (${printedServing}) doesn't convert to ${form.quantityUnit || "this unit"} — set the serving size to match it, since the nutrition is per that serving.`,
+        );
+      }
+      if (scan.labelType === "supplement_facts") {
+        lines.push("Anything not on the supplement label was set to 0.");
+      }
+      if (scan.notes.trim()) lines.push(`Note: ${scan.notes.trim()}`);
+      Alert.alert("Label read — check the values", lines.join("\n\n"));
+    } catch (error) {
+      Alert.alert("Couldn't read label", error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setReadingLabel(false);
+    }
   }
 
   function applyScannedProduct(product: ScannedProduct) {
@@ -1582,6 +1642,22 @@ export default function AddManualPantryItemScreen() {
               </View>
             </View>
 
+            <Pressable
+              className="mr-2 h-9 flex-row items-center rounded-full bg-blue-50 px-3 active:bg-blue-100"
+              disabled={readingLabel}
+              onPress={() => setLabelCameraVisible(true)}
+              accessibilityLabel="Scan nutrition label"
+            >
+              {readingLabel ? (
+                <ActivityIndicator size="small" color="#2563EB" />
+              ) : (
+                <Ionicons name="camera-outline" size={16} color="#2563EB" />
+              )}
+              <Text className="ml-1.5 text-xs font-semibold text-blue-700">
+                {readingLabel ? "Reading…" : "Scan label"}
+              </Text>
+            </Pressable>
+
             <Ionicons
               name={nutritionExpanded ? "chevron-up" : "chevron-down"}
               size={22}
@@ -1871,6 +1947,14 @@ export default function AddManualPantryItemScreen() {
         visible={scannerVisible}
         onClose={() => setScannerVisible(false)}
         onProductFound={applyScannedProduct}
+      />
+
+      <PhotoCaptureModal
+        visible={labelCameraVisible}
+        onClose={() => setLabelCameraVisible(false)}
+        onCaptured={(photoUri) => void handleLabelPhoto(photoUri)}
+        subject="nutrition label"
+        instructions="Fit the whole Nutrition Facts or Supplement Facts panel in frame, flat and in focus."
       />
     </SafeAreaView>
   );

@@ -16,29 +16,87 @@ export const CORE_NUTRITION_FIELD_NAMES = [
 
 // Tracked in the background, not front-and-center — surfaced only in a
 // secondary "all nutrients" view (mirrors MyFitnessPal's Nutrients tab).
-// Units, for every writer (Open Food Facts, Gemini, manual entry) and
-// reader to agree on: sugar/saturatedFat/polyunsaturatedFat/
-// monounsaturatedFat/transFat in grams, cholesterol/potassium/vitaminC/
-// calcium/iron in milligrams, vitaminA in micrograms (mcg RAE, the modern
-// nutrition-label unit — not the older IU). Stored as real absolute
-// amounts, not %DV — %DV (what a MyFitnessPal-style display shows for
-// vitamins/minerals, where the goal is always 100%) is a presentation
-// choice computed from these at display time, not how the data itself is
-// kept, so a stored value stays meaningful regardless of which RDA
-// reference the UI happens to compare it against.
+// Stored as real absolute amounts in the units below (NUTRITION_FIELD_UNITS
+// — every writer: Open Food Facts, Gemini, manual entry, backfills — and
+// reader has to agree on them), never as %DV: %DV (what a MyFitnessPal-
+// style display shows for vitamins/minerals) is computed from these at
+// display time, so a stored value stays meaningful regardless of which
+// reference the UI compares it against.
 export const EXTENDED_NUTRITION_FIELD_NAMES = [
   "sugar",
+  "addedSugar",
   "saturatedFat",
   "polyunsaturatedFat",
   "monounsaturatedFat",
   "transFat",
+  "omega3",
   "cholesterol",
   "potassium",
   "vitaminA",
   "vitaminC",
+  "vitaminD",
+  "vitaminE",
+  "vitaminK",
+  "thiamin",
+  "riboflavin",
+  "niacin",
+  "vitaminB6",
+  "folate",
+  "vitaminB12",
+  "choline",
   "calcium",
   "iron",
+  "magnesium",
+  "phosphorus",
+  "zinc",
+  "selenium",
+  "iodine",
+  "copper",
+  "manganese",
+  "caffeine",
 ];
+
+// omega3 is EPA + DHA only (the long-chain ones fish oil labels lead with),
+// not plant ALA. vitaminA is mcg RAE; folate is mcg DFE; niacin is mg NE.
+export const NUTRITION_FIELD_UNITS = {
+  calories: "kcal",
+  protein: "g",
+  carbs: "g",
+  fats: "g",
+  fiber: "g",
+  sodium: "mg",
+  sugar: "g",
+  addedSugar: "g",
+  saturatedFat: "g",
+  polyunsaturatedFat: "g",
+  monounsaturatedFat: "g",
+  transFat: "g",
+  omega3: "mg",
+  cholesterol: "mg",
+  potassium: "mg",
+  vitaminA: "mcg",
+  vitaminC: "mg",
+  vitaminD: "mcg",
+  vitaminE: "mg",
+  vitaminK: "mcg",
+  thiamin: "mg",
+  riboflavin: "mg",
+  niacin: "mg",
+  vitaminB6: "mg",
+  folate: "mcg",
+  vitaminB12: "mcg",
+  choline: "mg",
+  calcium: "mg",
+  iron: "mg",
+  magnesium: "mg",
+  phosphorus: "mg",
+  zinc: "mg",
+  selenium: "mcg",
+  iodine: "mcg",
+  copper: "mg",
+  manganese: "mg",
+  caffeine: "mg",
+};
 
 export const ALL_NUTRITION_FIELD_NAMES = [
   ...CORE_NUTRITION_FIELD_NAMES,

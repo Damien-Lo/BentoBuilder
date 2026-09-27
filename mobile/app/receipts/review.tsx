@@ -83,6 +83,7 @@ import {
 import { scaleNutrition, toNutritionInput, unknownNutrition } from "@/src/utils/nutrition";
 import {
   EXTENDED_NUTRITION_FIELDS,
+  EXTENDED_NUTRITION_GROUPS,
   NUTRITION_FIELD_META,
   type ExtendedNutritionField,
 } from "@/src/types/nutrition";
@@ -322,16 +323,36 @@ function getMissingFields(row: ReviewRow, hasPendingGroceryItems: boolean): stri
 // fit four to a row.
 const EXTENDED_SHORT_LABELS: Record<ExtendedNutritionField, string> = {
   sugar: "Sugar",
+  addedSugar: "Added sug",
   saturatedFat: "Sat fat",
   polyunsaturatedFat: "Poly fat",
   monounsaturatedFat: "Mono fat",
   transFat: "Trans fat",
+  omega3: "Omega-3",
   cholesterol: "Chol",
   potassium: "Potass",
   vitaminA: "Vit A",
   vitaminC: "Vit C",
+  vitaminD: "Vit D",
+  vitaminE: "Vit E",
+  vitaminK: "Vit K",
+  thiamin: "B1",
+  riboflavin: "B2",
+  niacin: "B3",
+  vitaminB6: "B6",
+  folate: "Folate",
+  vitaminB12: "B12",
+  choline: "Choline",
   calcium: "Calcium",
   iron: "Iron",
+  magnesium: "Magnes",
+  phosphorus: "Phosph",
+  zinc: "Zinc",
+  selenium: "Selenium",
+  iodine: "Iodine",
+  copper: "Copper",
+  manganese: "Mangan",
+  caffeine: "Caffeine",
 };
 
 const CARD_PEEK = 18;
@@ -829,9 +850,11 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         </Text>
         <Ionicons name={showMoreNutrients ? "chevron-up" : "chevron-down"} size={12} color="#2563EB" />
       </Pressable>
-      {showMoreNutrients && (
-        <View className="mt-1 flex-row flex-wrap">
-          {EXTENDED_NUTRITION_FIELDS.map((field) => (
+      {showMoreNutrients && EXTENDED_NUTRITION_GROUPS.map((group) => (
+        <View key={group.title} className="mt-1">
+          <Text className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{group.title}</Text>
+          <View className="flex-row flex-wrap">
+          {group.fields.map((field) => (
             <View key={field} className="mb-1 px-0.5" style={{ width: "25%" }}>
               <Text className="mb-0.5 text-[9px] text-slate-400">{EXTENDED_SHORT_LABELS[field]}</Text>
               <NutritionCellInput
@@ -843,8 +866,9 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
               />
             </View>
           ))}
+          </View>
         </View>
-      )}
+      ))}
       </View>
 
       {/* Read-only, derived preview only — never stored. Purely "here's

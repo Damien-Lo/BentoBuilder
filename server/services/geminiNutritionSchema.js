@@ -4,6 +4,7 @@ import {
   ALL_NUTRITION_FIELD_NAMES,
   CORE_NUTRITION_FIELD_NAMES,
   EXTENDED_NUTRITION_FIELD_NAMES,
+  NUTRITION_FIELD_UNITS,
 } from "../models/nutritionSchema.js";
 
 // Shared by every Gemini call that estimates nutrition (receipt parsing,
@@ -36,5 +37,31 @@ export const GEMINI_NUTRITION_JSON_SCHEMA = {
 // Units must match what the app stores (see models/nutritionSchema.js) —
 // spelled out explicitly since nothing else tells the model, and sodium in
 // grams vs. milligrams is exactly the kind of silent 1000x error that's
-// easy to miss.
-export const NUTRITION_UNITS_INSTRUCTION = `Nutrition units: calories in kcal; protein, carbs, fats, fiber, sugar, saturatedFat, polyunsaturatedFat, monounsaturatedFat, transFat in grams; sodium, cholesterol, potassium, vitaminC, calcium, iron in milligrams; vitaminA in micrograms (mcg RAE). The core values (calories, protein, carbs, fats, fiber, sodium) should always be your best estimate. For the others (sugar, the fat breakdown, cholesterol, potassium, vitamins, minerals), give a value only when you have a reasonable basis (typical label values for that product/dish) — use null rather than a fabricated number when you don't; null is always better than a guess.`;
+// easy to miss. Generated from NUTRITION_FIELD_UNITS so a new nutrient
+// can't be requested without its unit.
+const UNIT_NAMES = { kcal: "kcal", g: "grams", mg: "milligrams", mcg: "micrograms" };
+const UNIT_NOTES = {
+  omega3: "EPA + DHA only, not plant ALA",
+  vitaminA: "mcg RAE",
+  folate: "mcg DFE",
+  niacin: "mg NE",
+  vitaminD: "mcg; 1 mcg = 40 IU",
+};
+
+function describeUnits() {
+  const byUnit = {};
+  for (const field of ALL_NUTRITION_FIELD_NAMES) {
+    const unit = NUTRITION_FIELD_UNITS[field];
+    const note = UNIT_NOTES[field];
+    (byUnit[unit] ??= []).push(note ? `${field} (${note})` : field);
+  }
+  return Object.entries(byUnit)
+    .map(([unit, fields]) => `${fields.join(", ")} in ${UNIT_NAMES[unit]}`)
+    .join("; ");
+}
+
+// Just the units — for callers that transcribe rather than estimate (label
+// reading), where the estimation guidance below would be wrong.
+export const NUTRITION_UNITS = `Nutrition units: ${describeUnits()}.`;
+
+export const NUTRITION_UNITS_INSTRUCTION = `${NUTRITION_UNITS} The core values (calories, protein, carbs, fats, fiber, sodium) should always be your best estimate. For the others (sugars, the fat breakdown, cholesterol, vitamins, minerals, caffeine), give a value only when you have a reasonable basis (typical label or reference values for that product/dish) — use null rather than a fabricated number when you don't; null is always better than a guess. addedSugar is sugar added during processing (0 for whole foods like plain produce, meat or milk).`;
