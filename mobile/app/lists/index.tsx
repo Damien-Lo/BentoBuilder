@@ -9,6 +9,7 @@ import { openListOptions } from "@/src/components/todo/listActions";
 import { applyDrop, computeDrop, rowKey, type DragRow, type DropTarget, type RowLayout } from "@/src/components/todo/listDrag";
 import { TextPromptModal } from "@/src/components/todo/TextPromptModal";
 import { listAccent, showActions, SMART_LISTS, useTodoTheme } from "@/src/components/todo/theme";
+import { getGroceryItems } from "@/src/services/groceryListApi";
 import { loadSettings } from "@/src/services/settingsService";
 import {
   createTodoGroup,
@@ -43,6 +44,7 @@ export default function ListsHomeScreen() {
   const accent = listAccent("blue", theme);
   const [overview, setOverview] = useState<TodoOverview | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [groceryToBuy, setGroceryToBuy] = useState(0);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
 
   const refresh = useCallback(() => {
@@ -55,6 +57,9 @@ export default function ListsHomeScreen() {
     useCallback(() => {
       refresh();
       loadSettings().then((s) => setDisplayName(s.displayName)).catch(() => {});
+      getGroceryItems()
+        .then((items) => setGroceryToBuy(items.filter((item) => item.status === "toBuy").length))
+        .catch(() => {});
     }, [refresh]),
   );
 
@@ -288,6 +293,17 @@ export default function ListsHomeScreen() {
             );
           })}
           {defaultList && listRow(defaultList)}
+          {/* A shortcut to the Kitchen's grocery list — not a to-do list
+              itself, just a way in from here. */}
+          <Pressable
+            onPress={() => router.push("/grocery-list")}
+            className="active:bg-slate-50"
+            style={{ flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: theme.rowDivider }}
+          >
+            <Ionicons name="cart-outline" size={20} color={listAccent("green", theme)} />
+            <Text style={{ flex: 1, marginLeft: 14, fontSize: 16, color: theme.text }}>Grocery List</Text>
+            {groceryToBuy > 0 && <Text style={{ fontSize: 15, color: theme.textFaint }}>{groceryToBuy}</Text>}
+          </Pressable>
         </View>
 
         <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">My lists</Text>
