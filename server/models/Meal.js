@@ -1,10 +1,15 @@
 import mongoose from "mongoose";
 
+// A course is either a recipe (eaten in `servings`) or a single ingredient
+// (eaten as `quantity` `unit`, e.g. 150 g of yogurt) — one or the other.
 const courseSchema = new mongoose.Schema(
   {
     label:   { type: String, trim: true, default: "Course" },
     recipe:  { type: mongoose.Schema.Types.ObjectId, ref: "Recipe", default: null },
     servings: { type: Number, min: 0.5, default: 1 },
+    ingredient: { type: mongoose.Schema.Types.ObjectId, ref: "Ingredient", default: null },
+    quantity:   { type: Number, min: 0, default: null },
+    unit:       { type: String, trim: true, default: "" },
   },
   { _id: true },
 );

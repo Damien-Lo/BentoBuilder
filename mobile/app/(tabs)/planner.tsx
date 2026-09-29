@@ -68,6 +68,9 @@ import {
   friendlyDayLabel,
   getEntryAvailability,
   getIngredientKcal,
+  courseAmountLabel,
+  courseName,
+  courseNutrition,
   getMealKcal,
   getRecipeKcal,
   getRestaurantMealKcal,
@@ -1361,15 +1364,13 @@ export default function HomeScreen() {
           Courses ({meal.courses?.length ?? 0})
         </Text>
         {(meal.courses ?? []).map(course => {
-          const recipe = course.recipe;
-          const populated = recipe && typeof recipe !== "string" ? recipe : null;
-          const courseCal = populated?.nutrition?.calories;
+          const courseCal = courseNutrition(course, appSettings?.unitConversions ?? [])?.calories;
           return (
             <View key={course._id} className="mb-2 rounded-2xl bg-slate-50 px-4 py-3">
               <Text className="text-sm font-semibold text-slate-900">{course.label}</Text>
               <Text className="mt-0.5 text-xs text-slate-500">
-                {populated?.name ?? "No recipe selected"} · {course.servings} {course.servings === 1 ? "serving" : "servings"}
-                {courseCal != null && ` · ${Math.round(courseCal * course.servings)} kcal`}
+                {courseName(course)} · {courseAmountLabel(course)}
+                {courseCal != null && ` · ${Math.round(courseCal)} kcal`}
               </Text>
             </View>
           );

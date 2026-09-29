@@ -10,29 +10,19 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { getMealById, type Meal, type MealRecipeRef } from "@/src/services/mealApi";
+import { getMealById, type Meal } from "@/src/services/mealApi";
+import {
+  courseAmountLabel,
+  courseIngredient,
+  courseName,
+  courseNutrition,
+  courseRecipe,
+} from "@/src/utils/mealPlan";
 
 const MEAL_TYPE_LABEL: Record<string, string> = {
   course: "Course-based",
   bento: "Bento Box",
 };
-
-function getRecipeId(recipe: MealRecipeRef | string | null | undefined): string | null {
-  if (!recipe) return null;
-  if (typeof recipe === "string") return recipe;
-  return recipe._id;
-}
-
-function getRecipeName(recipe: MealRecipeRef | string | null | undefined): string {
-  if (!recipe) return "No recipe selected";
-  if (typeof recipe === "string") return recipe;
-  return recipe.name;
-}
-
-function getRecipeNutrition(recipe: MealRecipeRef | string | null | undefined) {
-  if (!recipe || typeof recipe === "string") return null;
-  return recipe.nutrition ?? null;
-}
 
 export default function MealDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -66,15 +56,14 @@ export default function MealDetailScreen() {
   const totalNutrition = useMemo(() => {
     let calories = 0, protein = 0, carbs = 0, fats = 0, fiber = 0, sodium = 0;
     for (const course of meal?.courses ?? []) {
-      const n = getRecipeNutrition(course.recipe);
+      const n = courseNutrition(course);
       if (!n) continue;
-      const s = course.servings;
-      if (n.calories != null) calories += n.calories * s;
-      if (n.protein  != null) protein  += n.protein  * s;
-      if (n.carbs    != null) carbs    += n.carbs    * s;
-      if (n.fats     != null) fats     += n.fats     * s;
-      if (n.fiber    != null) fiber    += n.fiber    * s;
-      if (n.sodium   != null) sodium   += n.sodium   * s;
+      if (n.calories != null) calories += n.calories;
+      if (n.protein  != null) protein  += n.protein;
+      if (n.carbs    != null) carbs    += n.carbs;
+      if (n.fats     != null) fats     += n.fats;
+      if (n.fiber    != null) fiber    += n.fiber;
+      if (n.sodium   != null) sodium   += n.sodium;
     }
     return { calories, protein, carbs, fats, fiber, sodium };
   }, [meal]);
@@ -175,13 +164,10 @@ export default function MealDetailScreen() {
             </Text>
             <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
               {meal.courses!.map((course, index) => {
-                const recipeId = getRecipeId(course.recipe);
-                const recipeName = getRecipeName(course.recipe);
-                const n = getRecipeNutrition(course.recipe);
-                const cal =
-                  n?.calories != null
-                    ? Math.round(n.calories * course.servings)
-                    : null;
+                const recipeId = courseRecipe(course)?._id ?? null;
+                const ingredientId = courseIngredient(course)?._id ?? null;
+                const calories = courseNutrition(course)?.calories;
+                const cal = calories != null ? Math.round(calories) : null;
 
                 return (
                   <Pressable
@@ -190,12 +176,17 @@ export default function MealDetailScreen() {
                       index < meal.courses!.length - 1
                         ? "border-b border-slate-100"
                         : ""
-                    } ${recipeId ? "active:bg-slate-50" : ""}`}
+                    } ${recipeId || ingredientId ? "active:bg-slate-50" : ""}`}
                     onPress={() => {
                       if (recipeId)
                         router.push({
                           pathname: "/recipes/[id]",
                           params: { id: recipeId },
+                        });
+                      else if (ingredientId)
+                        router.push({
+                          pathname: "/ingredients/edit/[id]",
+                          params: { id: ingredientId },
                         });
                     }}
                   >
@@ -207,11 +198,11 @@ export default function MealDetailScreen() {
 
                     <View className="ml-3 flex-1">
                       <Text className="font-semibold text-slate-900">
-                        {recipeName}
+                        {courseName(course)}
                       </Text>
                       <Text className="mt-0.5 text-sm text-slate-500">
-                        {course.servings}{" "}
-                        {course.servings === 1 ? "serving" : "servings"}
+                        {ingredientId ? "Ingredient · " : ""}
+                        {courseAmountLabel(course)}
                       </Text>
                     </View>
 
@@ -220,7 +211,7 @@ export default function MealDetailScreen() {
                         {cal} kcal
                       </Text>
                     )}
-                    {recipeId && (
+                    {(recipeId || ingredientId) && (
                       <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
                     )}
                   </Pressable>
