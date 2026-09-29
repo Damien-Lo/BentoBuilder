@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BarcodeScannerModal,
   type ScannedProduct,
@@ -20,16 +20,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   CreatableMultiTagDropdown,
   CreatableStringDropdown,
-  DateTextInput,
+  DatePickerField,
   DurationExpiryInput,
   DurationValueInput,
   FieldLabel,
+  FormCard,
   FormInput,
   NutritionFieldsEditor,
   PriceInput,
   QuantityServingInput,
   SearchableObjectDropdown,
-  SectionTitle,
   SegmentedToggle,
   ToggleRow,
   UnitConversionsEditor,
@@ -1304,15 +1304,7 @@ export default function AddManualPantryItemScreen() {
 
           <Pressable
             disabled={saving}
-            className="mr-2 h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-            onPress={() => setScannerVisible(true)}
-          >
-            <Ionicons name="barcode-outline" size={26} color="#2563EB" />
-          </Pressable>
-
-          <Pressable
-            disabled={saving}
-            className={`rounded-xl px-4 py-2 ${
+            className={`h-10 justify-center rounded-xl px-4 ${
               saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
             }`}
             onPress={() => void handleSave()}
@@ -1328,383 +1320,364 @@ export default function AddManualPantryItemScreen() {
           className="flex-1"
           contentContainerStyle={{
             paddingHorizontal: 16,
-            paddingBottom: 64,
-            paddingTop: 20,
+            paddingBottom: 32,
+            paddingTop: 16,
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={false}
         >
           <View ref={scrollAnchorRef} collapsable={false} />
-          <SectionTitle
-            first
+
+          {/* Fill the form from a barcode or a nutrition label photo. */}
+          <View className="mb-3 flex-row gap-3">
+            <ScanActionCard
+              icon="barcode-outline"
+              title="Scan barcode"
+              subtitle="Fill in the product's details"
+              disabled={saving}
+              onPress={() => setScannerVisible(true)}
+            />
+            <ScanActionCard
+              icon="camera-outline"
+              title={readingLabel ? "Reading label…" : "Scan label"}
+              subtitle="Fill in nutrition and serving"
+              loading={readingLabel}
+              disabled={saving || readingLabel}
+              onPress={() => setLabelCameraVisible(true)}
+            />
+          </View>
+
+          <FormCard
             icon="pricetag-outline"
             title="Ingredient"
             description="What it is, and how it's categorized."
-          />
-
-          <FieldLabel text="Type" required />
-
-          <SegmentedToggle<boolean>
-            value={form.isGeneric}
-            disabled={!!form.ingredientId || lockTypeToSpecific}
-            options={[
-              { value: false, label: "Specific / Branded" },
-              { value: true, label: "Generic" },
-            ] as const}
-            onChange={(isGeneric) => {
-              updateForm("isGeneric", isGeneric);
-
-              if (isGeneric) {
-                updateForm("brandId", "");
-                updateForm("brandName", "");
-                setBrandDraft("");
-              }
-            }}
-          />
-
-          <Text className="mt-2 text-xs leading-4 text-slate-500">
-            {form.ingredientId
-              ? "This ingredient already exists, so its type can't be changed here."
-              : lockTypeToSpecific
-                ? "Adding a specific product under an existing generic requires a specific/branded ingredient."
-                : form.isGeneric
-                  ? "A generic ingredient (e.g. \"Soy Sauce\") stands in for any specific product a recipe could use — and can hold its own pantry stock too."
-                  : "A specific ingredient (e.g. \"Kikkoman Soy Sauce\") is a particular product, usually with a brand."}
-          </Text>
-
-          <View {...nameSection.wrapperProps}>
-          <FieldLabel text="Name" required />
-
-          <SearchableObjectDropdown<IngredientOption>
-            options={nameSearchOptions}
-            selectedId={form.ingredientId}
-            selectedName={form.ingredientName}
-            placeholder="Search for an ingredient"
-            showAllWhenEmpty={false}
-            onOpen={nameSection.trigger}
-            onTextChange={(value: string) => {
-              const selectedIngredient = ingredients.find(
-                (ingredient) => ingredient._id === form.ingredientId,
-              );
-
-              const stillMatchesSelection = selectedIngredient?.name === value;
-
-              if (!stillMatchesSelection) {
-                updateForm("ingredientId", "");
-              }
-
-              updateForm("ingredientName", value);
-            }}
-            onSelect={applySelectedIngredient}
-          />
-          </View>
-
-          {!form.isGeneric && (
-            <>
-              <View className="flex-row" {...genericBrandSection.wrapperProps}>
-                <View className="mr-3 flex-1">
-                  <FieldLabel text="Generic ingredient" />
-
-                  <SearchableObjectDropdown<IngredientOption>
-                    options={genericIngredientOptions}
-                    selectedId={form.genericParentId}
-                    selectedName={form.genericParentName}
-                    placeholder="Search or new"
-                    onOpen={genericBrandSection.trigger}
-                    onTextChange={(value: string) => {
-                      if (value !== form.genericParentName) {
-                        updateForm("genericParentId", "");
-                      }
-
-                      setGenericParentDraft(value);
-                    }}
-                    onSelect={(option) => {
-                      updateForm("genericParentId", option._id);
-                      updateForm("genericParentName", option.name);
-                      setGenericParentDraft(option.name);
-
-                      const categoryId = option.categoryId ?? option.category?._id;
-                      const categoryName =
-                        option.categoryName ?? option.category?.name;
-
-                      if (categoryId) {
-                        updateForm("categoryId", categoryId);
-                        updateForm("categoryName", categoryName ?? "");
-                        setCategoryDraft(categoryName ?? "");
-                      }
-
-                      if (option.unit) {
-                        updateForm("quantityUnit", option.unit);
-                      }
-                    }}
-                  />
-                </View>
-
-                <View className="flex-1">
-                  <FieldLabel text="Brand" />
-
-                  <SearchableObjectDropdown<SelectOption>
-                    options={brands}
-                    selectedId={form.brandId}
-                    selectedName={form.brandName}
-                    placeholder="Search or new"
-                    onOpen={genericBrandSection.trigger}
-                    onTextChange={(value: string) => {
-                      if (value !== form.brandName) {
-                        updateForm("brandId", "");
-                      }
-
-                      setBrandDraft(value);
-                    }}
-                    onSelect={(option) => {
-                      updateForm("brandId", option._id);
-
-                      updateForm("brandName", option.name);
-
-                      setBrandDraft(option.name);
-                    }}
-                  />
-                </View>
-              </View>
-
-              <Text className="mt-2 text-xs leading-4 text-slate-500">
-                Generic ingredient optionally links this to a catalog item
-                (e.g. &quot;Soy Sauce&quot;) so recipes calling for it can use
-                this product; typing a new name creates one on save.
-              </Text>
-            </>
-          )}
-
-          <View {...descriptionSection.wrapperProps}>
-          <FieldLabel text="Description" />
-
-          <FormInput
-            value={form.description}
-            placeholder="Optional description"
-            multiline
-            onFocus={descriptionSection.trigger}
-            onChangeText={(value) => updateForm("description", value)}
-          />
-          </View>
-
-          {!form.isGeneric && (
-            <View {...barcodeSection.wrapperProps}>
-              <FieldLabel text="Barcode" />
-
-              <FormInput
-                value={form.barcode}
-                placeholder="Optional barcode"
-                autoCapitalize="none"
-                keyboardType="numbers-and-punctuation"
-                onFocus={barcodeSection.trigger}
-                onChangeText={(value) => updateForm("barcode", value)}
-              />
-              <Text className="mt-2 text-xs leading-4 text-slate-500">
-                Scanning a barcode fills this in automatically — type one here if
-                a scan came back empty, so it&apos;s recognized next time.
-              </Text>
-            </View>
-          )}
-
-          <View {...categorySection.wrapperProps}>
-          <FieldLabel text="Category" required />
-
-          <SearchableObjectDropdown<SelectOption>
-            options={categories}
-            selectedId={form.categoryId}
-            selectedName={form.categoryName}
-            placeholder="Search or type a new category"
-            onOpen={categorySection.trigger}
-            onTextChange={(value) => {
-              if (value !== form.categoryName) {
-                updateForm("categoryId", "");
-              }
-
-              setCategoryDraft(value);
-            }}
-            onSelect={(option) => {
-              updateForm("categoryId", option._id);
-              updateForm("categoryName", option.name);
-              setCategoryDraft(option.name);
-            }}
-          />
-          </View>
-
-          <View {...tagsSection.wrapperProps}>
-          <FieldLabel text="Tags" />
-
-          <CreatableMultiTagDropdown
-            options={allTags}
-            selectedItems={selectedTags}
-            placeholder="Add a tag…"
-            onOpen={tagsSection.trigger}
-            onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
-            onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
-          />
-          </View>
-
-          <SectionTitle
-            icon="scale-outline"
-            title="Serving & stock"
-            description="Define a serving size and when to flag low stock."
-          />
-
-          <View className="flex-row" {...servingUnitSection.wrapperProps}>
-            <View className="mr-3 flex-1">
-              <FieldLabel text="Serving size" />
-
-              <FormInput
-                value={form.defaultPortionAmount}
-                placeholder="1"
-                keyboardType="decimal-pad"
-                onFocus={servingUnitSection.trigger}
-                onChangeText={(value) => updateForm("defaultPortionAmount", value)}
-              />
-            </View>
-
-            <View className="flex-1">
-              <FieldLabel text="Unit" required />
-
-              <CreatableStringDropdown
-                options={units}
-                selectedValue={form.quantityUnit}
-                placeholder="Search or type a new unit"
-                onSelect={handleServingUnitChange}
-              />
-            </View>
-          </View>
-
-          <Text className="mt-2 text-xs leading-4 text-slate-500">
-            How much of the unit above counts as one serving (e.g. 5 g of a
-            120 g spice bottle) — nutrition below should match that amount.
-          </Text>
-
-          <View className="mt-4" {...pieceLabelSection.wrapperProps}>
-            <FieldLabel text="Piece label (optional)" />
-            <FormInput
-              value={form.pieceLabel}
-              placeholder="e.g. steak, fillet, cut"
-              onFocus={pieceLabelSection.trigger}
-              onChangeText={(value) => updateForm("pieceLabel", value)}
-            />
-            <Text className="mt-2 text-xs leading-4 text-slate-500">
-              Only set this if you buy/log it as individual pieces rather than a
-              continuous amount (a steak vs. ground beef) — the pantry list will
-              then show a count (&quot;3 steaks&quot;) instead of a summed weight.
-              Doesn&apos;t set any size limit; a recipe&apos;s own ingredient line
-              still decides what weight range counts as a usable piece.
-            </Text>
-          </View>
-
-          <ToggleRow
-            label="Always available"
-            description="Never shows as low or out of stock (e.g. tap water) — skips stock tracking entirely."
-            value={form.alwaysAvailable}
-            onChange={(value) => updateForm("alwaysAvailable", value)}
-          />
-
-          {!form.alwaysAvailable && (
-            <View {...lowStockSection.wrapperProps}>
-              <FieldLabel text="Low-stock threshold" />
-
-              <FormInput
-                value={form.lowStockThreshold}
-                placeholder="0"
-                keyboardType="decimal-pad"
-                onFocus={lowStockSection.trigger}
-                onChangeText={(value) => updateForm("lowStockThreshold", value)}
-              />
-
-              <Text className="mt-2 text-xs leading-4 text-slate-500">
-                Warn when total stock falls below this many{" "}
-                {form.quantityUnit.trim() || "units"}.
-              </Text>
-            </View>
-          )}
-
-          <Pressable
-            className="mt-8 flex-row items-center justify-between"
-            onPress={() => setNutritionExpanded((current) => !current)}
+            zIndex={60}
           >
-            <View className="mr-3 flex-1 flex-row items-center">
-              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="nutrition-outline" size={18} color="#2563EB" />
+            <FieldLabel text="Type" required />
+
+            <SegmentedToggle<boolean>
+              value={form.isGeneric}
+              disabled={!!form.ingredientId || lockTypeToSpecific}
+              options={[
+                { value: false, label: "Specific / Branded" },
+                { value: true, label: "Generic" },
+              ] as const}
+              onChange={(isGeneric) => {
+                updateForm("isGeneric", isGeneric);
+
+                if (isGeneric) {
+                  updateForm("brandId", "");
+                  updateForm("brandName", "");
+                  setBrandDraft("");
+                }
+              }}
+            />
+
+            <HelpText>
+              {form.ingredientId
+                ? "This ingredient already exists, so its type can't be changed here."
+                : lockTypeToSpecific
+                  ? "Adding a specific product under an existing generic requires a specific/branded ingredient."
+                  : form.isGeneric
+                    ? "A generic ingredient (e.g. \"Soy Sauce\") stands in for any specific product a recipe could use — and can hold its own pantry stock too."
+                    : "A specific ingredient (e.g. \"Kikkoman Soy Sauce\") is a particular product, usually with a brand."}
+            </HelpText>
+
+            <View {...nameSection.wrapperProps}>
+              <FieldLabel text="Name" required />
+
+              <SearchableObjectDropdown<IngredientOption>
+                options={nameSearchOptions}
+                selectedId={form.ingredientId}
+                selectedName={form.ingredientName}
+                placeholder="Search for an ingredient"
+                showAllWhenEmpty={false}
+                onOpen={nameSection.trigger}
+                onTextChange={(value: string) => {
+                  const selectedIngredient = ingredients.find(
+                    (ingredient) => ingredient._id === form.ingredientId,
+                  );
+
+                  const stillMatchesSelection = selectedIngredient?.name === value;
+
+                  if (!stillMatchesSelection) {
+                    updateForm("ingredientId", "");
+                  }
+
+                  updateForm("ingredientName", value);
+                }}
+                onSelect={applySelectedIngredient}
+              />
+            </View>
+
+            {!form.isGeneric && (
+              <>
+                <View className="flex-row gap-3" {...genericBrandSection.wrapperProps}>
+                  <View className="flex-1">
+                    <FieldLabel text="Generic ingredient" />
+
+                    <SearchableObjectDropdown<IngredientOption>
+                      options={genericIngredientOptions}
+                      selectedId={form.genericParentId}
+                      selectedName={form.genericParentName}
+                      placeholder="Search"
+                      onOpen={genericBrandSection.trigger}
+                      onTextChange={(value: string) => {
+                        if (value !== form.genericParentName) {
+                          updateForm("genericParentId", "");
+                        }
+
+                        setGenericParentDraft(value);
+                      }}
+                      onSelect={(option) => {
+                        updateForm("genericParentId", option._id);
+                        updateForm("genericParentName", option.name);
+                        setGenericParentDraft(option.name);
+
+                        const categoryId = option.categoryId ?? option.category?._id;
+                        const categoryName =
+                          option.categoryName ?? option.category?.name;
+
+                        if (categoryId) {
+                          updateForm("categoryId", categoryId);
+                          updateForm("categoryName", categoryName ?? "");
+                          setCategoryDraft(categoryName ?? "");
+                        }
+
+                        if (option.unit) {
+                          updateForm("quantityUnit", option.unit);
+                        }
+                      }}
+                    />
+                  </View>
+
+                  <View className="flex-1">
+                    <FieldLabel text="Brand" />
+
+                    <SearchableObjectDropdown<SelectOption>
+                      options={brands}
+                      selectedId={form.brandId}
+                      selectedName={form.brandName}
+                      placeholder="Search"
+                      onOpen={genericBrandSection.trigger}
+                      onTextChange={(value: string) => {
+                        if (value !== form.brandName) {
+                          updateForm("brandId", "");
+                        }
+
+                        setBrandDraft(value);
+                      }}
+                      onSelect={(option) => {
+                        updateForm("brandId", option._id);
+
+                        updateForm("brandName", option.name);
+
+                        setBrandDraft(option.name);
+                      }}
+                    />
+                  </View>
+                </View>
+
+                <HelpText>
+                  Generic ingredient links this product to a catalog item
+                  (e.g. &quot;Soy Sauce&quot;) so recipes calling for it can use
+                  it; typing a new name creates one on save.
+                </HelpText>
+              </>
+            )}
+
+            <View {...categorySection.wrapperProps}>
+              <FieldLabel text="Category" required />
+
+              <SearchableObjectDropdown<SelectOption>
+                options={categories}
+                selectedId={form.categoryId}
+                selectedName={form.categoryName}
+                placeholder="Search or type a new category"
+                onOpen={categorySection.trigger}
+                onTextChange={(value) => {
+                  if (value !== form.categoryName) {
+                    updateForm("categoryId", "");
+                  }
+
+                  setCategoryDraft(value);
+                }}
+                onSelect={(option) => {
+                  updateForm("categoryId", option._id);
+                  updateForm("categoryName", option.name);
+                  setCategoryDraft(option.name);
+                }}
+              />
+            </View>
+
+            <View {...tagsSection.wrapperProps}>
+              <FieldLabel text="Tags" />
+
+              <CreatableMultiTagDropdown
+                options={allTags}
+                selectedItems={selectedTags}
+                placeholder="Add a tag…"
+                onOpen={tagsSection.trigger}
+                onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
+                onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
+              />
+            </View>
+
+            <View {...descriptionSection.wrapperProps}>
+              <FieldLabel text="Description" />
+
+              <FormInput
+                value={form.description}
+                placeholder="Optional description"
+                multiline
+                onFocus={descriptionSection.trigger}
+                onChangeText={(value) => updateForm("description", value)}
+              />
+            </View>
+
+            {!form.isGeneric && (
+              <View {...barcodeSection.wrapperProps}>
+                <FieldLabel text="Barcode" />
+
+                <FormInput
+                  value={form.barcode}
+                  placeholder="Optional barcode"
+                  autoCapitalize="none"
+                  keyboardType="numbers-and-punctuation"
+                  onFocus={barcodeSection.trigger}
+                  onChangeText={(value) => updateForm("barcode", value)}
+                />
+                <HelpText>
+                  Scanning a barcode fills this in — type one here if a scan
+                  came back empty, so it&apos;s recognized next time.
+                </HelpText>
+              </View>
+            )}
+          </FormCard>
+
+          <FormCard
+            icon="cube-outline"
+            title="Serving & stock"
+            description="How much one serving is, and when to restock."
+            zIndex={50}
+          >
+            <View className="flex-row gap-3" {...servingUnitSection.wrapperProps}>
+              <View className="flex-1">
+                <FieldLabel text="Serving size" />
+
+                <FormInput
+                  value={form.defaultPortionAmount}
+                  placeholder="1"
+                  keyboardType="decimal-pad"
+                  onFocus={servingUnitSection.trigger}
+                  onChangeText={(value) => updateForm("defaultPortionAmount", value)}
+                />
               </View>
 
               <View className="flex-1">
-                <Text className="text-base font-bold text-slate-950">
-                  Nutrition per serving
-                </Text>
-                <Text className="mt-0.5 text-xs leading-4 text-slate-500">
-                  Optional — add now, or fill in later.
-                </Text>
+                <FieldLabel text="Unit" required />
+
+                <CreatableStringDropdown
+                  options={units}
+                  selectedValue={form.quantityUnit}
+                  placeholder="Pick or type a unit"
+                  onSelect={handleServingUnitChange}
+                />
               </View>
             </View>
 
-            <Pressable
-              className="mr-2 h-9 flex-row items-center rounded-full bg-blue-50 px-3 active:bg-blue-100"
-              disabled={readingLabel}
-              onPress={() => setLabelCameraVisible(true)}
-              accessibilityLabel="Scan nutrition label"
-            >
-              {readingLabel ? (
-                <ActivityIndicator size="small" color="#2563EB" />
-              ) : (
-                <Ionicons name="camera-outline" size={16} color="#2563EB" />
+            <HelpText>
+              How much of the unit counts as one serving (e.g. 5 g of a 120 g
+              spice bottle). Nutrition below is per this amount.
+            </HelpText>
+
+            <View className="flex-row gap-3">
+              <View className="flex-1" {...pieceLabelSection.wrapperProps}>
+                <FieldLabel text="Piece label" />
+                <FormInput
+                  value={form.pieceLabel}
+                  placeholder="e.g. steak, fillet"
+                  onFocus={pieceLabelSection.trigger}
+                  onChangeText={(value) => updateForm("pieceLabel", value)}
+                />
+              </View>
+
+              {!form.alwaysAvailable && (
+                <View className="flex-1" {...lowStockSection.wrapperProps}>
+                  <FieldLabel text="Low-stock alert" />
+
+                  <FormInput
+                    value={form.lowStockThreshold}
+                    placeholder="0"
+                    keyboardType="decimal-pad"
+                    onFocus={lowStockSection.trigger}
+                    onChangeText={(value) => updateForm("lowStockThreshold", value)}
+                  />
+                </View>
               )}
-              <Text className="ml-1.5 text-xs font-semibold text-blue-700">
-                {readingLabel ? "Reading…" : "Scan label"}
-              </Text>
-            </Pressable>
+            </View>
 
-            <Ionicons
-              name={nutritionExpanded ? "chevron-up" : "chevron-down"}
-              size={22}
-              color="#64748B"
+            <HelpText>
+              Piece label: only for things bought as individual pieces (a steak,
+              not ground beef), so the pantry shows &quot;3 steaks&quot; instead
+              of a total weight.
+              {!form.alwaysAvailable &&
+                ` Low-stock alert: warn below this many ${form.quantityUnit.trim() || "units"}.`}
+            </HelpText>
+
+            <ToggleRow
+              label="Always available"
+              description="Never shows as low or out of stock (e.g. tap water) — skips stock tracking entirely."
+              value={form.alwaysAvailable}
+              onChange={(value) => updateForm("alwaysAvailable", value)}
             />
-          </Pressable>
+          </FormCard>
 
-          {nutritionExpanded && (
+          <FormCard
+            icon="nutrition-outline"
+            title="Nutrition per serving"
+            description="Optional — add now, or fill in later."
+            expanded={nutritionExpanded}
+            onToggle={() => setNutritionExpanded((current) => !current)}
+            zIndex={40}
+            headerAccessory={
+              <Pressable
+                className="h-8 flex-row items-center rounded-lg bg-blue-50 px-2.5 active:bg-blue-100"
+                disabled={readingLabel}
+                onPress={() => setLabelCameraVisible(true)}
+                accessibilityLabel="Scan nutrition label"
+              >
+                {readingLabel ? (
+                  <ActivityIndicator size="small" color="#2563EB" />
+                ) : (
+                  <Ionicons name="camera-outline" size={15} color="#1D4ED8" />
+                )}
+                <Text className="ml-1.5 text-xs font-semibold text-blue-700">
+                  {readingLabel ? "Reading…" : "Scan label"}
+                </Text>
+              </Pressable>
+            }
+          >
             <View {...nutritionSection.wrapperProps}>
               <NutritionFieldsEditor
+                grid
                 values={form.nutrition}
                 onChange={updateNutritionField}
                 onFocus={nutritionSection.trigger}
               />
             </View>
-          )}
+          </FormCard>
 
-          <Pressable
-            className="mt-8 flex-row items-center justify-between"
-            onPress={() => setUnitConversionsExpanded((current) => !current)}
+          <FormCard
+            icon="swap-horizontal-outline"
+            title="Unit conversions"
+            description="Optional — e.g. 1 tbsp = 10 g, for this ingredient only."
+            expanded={unitConversionsExpanded}
+            onToggle={() => setUnitConversionsExpanded((current) => !current)}
+            zIndex={30}
           >
-            <View className="mr-3 flex-1 flex-row items-center">
-              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="swap-horizontal-outline" size={18} color="#2563EB" />
-              </View>
-
-              <View className="flex-1">
-                <Text className="text-base font-bold text-slate-950">
-                  Unit conversions
-                </Text>
-                <Text className="mt-0.5 text-xs leading-4 text-slate-500">
-                  Optional — e.g. 1 tbsp = 10 g, specific to this ingredient
-                  (density varies, so this doesn&apos;t apply to other
-                  ingredients).
-                </Text>
-              </View>
-            </View>
-
-            <Ionicons
-              name={unitConversionsExpanded ? "chevron-up" : "chevron-down"}
-              size={22}
-              color="#64748B"
-            />
-          </Pressable>
-
-          {unitConversionsExpanded && (
-            <View className="mt-4">
+            <View className="mt-3">
               <UnitConversionsEditor
                 conversions={form.unitConversions}
                 onChange={(conversions) => updateForm("unitConversions", conversions)}
@@ -1712,234 +1685,212 @@ export default function AddManualPantryItemScreen() {
                 disabled={saving}
               />
             </View>
-          )}
+          </FormCard>
 
-          <Pressable
-            className="mt-8 flex-row items-center justify-between"
-            onPress={() => setSmartDefaultsExpanded((current) => !current)}
+          <FormCard
+            icon="options-outline"
+            title="Smart defaults"
+            description="Optional — speeds up logging future purchases."
+            expanded={smartDefaultsExpanded}
+            onToggle={() => setSmartDefaultsExpanded((current) => !current)}
+            zIndex={20}
           >
-            <View className="mr-3 flex-1 flex-row items-center">
-              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="options-outline" size={18} color="#2563EB" />
-              </View>
-
-              <View className="flex-1">
-                <Text className="text-base font-bold text-slate-950">
-                  Smart defaults
-                </Text>
-                <Text className="mt-0.5 text-xs leading-4 text-slate-500">
-                  Optional — speeds up logging future purchases.
-                </Text>
-              </View>
-            </View>
-
-            <Ionicons
-              name={smartDefaultsExpanded ? "chevron-up" : "chevron-down"}
-              size={22}
-              color="#64748B"
+            <ToggleRow
+              label="Set a default storage location"
+              description="Prefills the location when logging a purchase of this ingredient."
+              value={wantsDefaultLocation}
+              onChange={setWantsDefaultLocation}
             />
-          </Pressable>
+            {wantsDefaultLocation && (
+              <View {...defaultStorageLocationSection.wrapperProps}>
+                <FieldLabel text="Default storage location" />
+                <SearchableObjectDropdown<SelectOption>
+                  options={storageLocations}
+                  selectedId={form.defaultStorageLocationId}
+                  selectedName={form.defaultStorageLocationName}
+                  placeholder="Search or type a location"
+                  onOpen={defaultStorageLocationSection.trigger}
+                  onTextChange={(value) => {
+                    if (value !== form.defaultStorageLocationName) {
+                      updateForm("defaultStorageLocationId", "");
+                    }
+                    setDefaultLocationDraft(value);
+                  }}
+                  onSelect={(option) => {
+                    updateForm("defaultStorageLocationId", option._id);
+                    updateForm("defaultStorageLocationName", option.name);
+                    setDefaultLocationDraft(option.name);
+                  }}
+                />
+              </View>
+            )}
 
-          {smartDefaultsExpanded && (
-            <>
-              <ToggleRow
-                label="Set a default storage location"
-                description="Prefills the location when logging a purchase of this ingredient."
-                value={wantsDefaultLocation}
-                onChange={setWantsDefaultLocation}
-              />
-              {wantsDefaultLocation && (
-                <View {...defaultStorageLocationSection.wrapperProps}>
-                  <FieldLabel text="Default storage location" />
+            <ToggleRow
+              label="Set a default expiry duration"
+              description="Prefills the expiry date when logging a purchase of this ingredient."
+              value={wantsDefaultExpiry}
+              onChange={setWantsDefaultExpiry}
+            />
+            {wantsDefaultExpiry && (
+              <View {...defaultExpirySection.wrapperProps}>
+                <FieldLabel text="Default expiry duration" />
+                <DurationValueInput
+                  amount={form.defaultExpiryDurationAmount}
+                  unit={form.defaultExpiryDurationUnit}
+                  onChangeAmount={(value) => updateForm("defaultExpiryDurationAmount", value)}
+                  onChangeUnit={(value) => updateForm("defaultExpiryDurationUnit", value)}
+                  onFocus={defaultExpirySection.trigger}
+                />
+              </View>
+            )}
+          </FormCard>
+
+          <FormCard
+            icon="archive-outline"
+            title="Pantry inventory"
+            description={
+              isResolvingGroceryItem
+                ? "Required — completes the grocery item you're logging."
+                : "Optional — add stock now, or later."
+            }
+            // Always open when completing a grocery item — that's the point.
+            expanded={pantryInventoryExpanded}
+            onToggle={
+              isResolvingGroceryItem
+                ? undefined
+                : () => setPantryInventoryExpanded((current) => !current)
+            }
+            zIndex={10}
+          >
+            {pantryInventoryExpanded && (
+              <>
+                <View {...storageLocationSection.wrapperProps}>
+                  <FieldLabel text="Storage location" required />
+
                   <SearchableObjectDropdown<SelectOption>
                     options={storageLocations}
-                    selectedId={form.defaultStorageLocationId}
-                    selectedName={form.defaultStorageLocationName}
-                    placeholder="Search or type a location"
-                    onOpen={defaultStorageLocationSection.trigger}
+                    selectedId={form.storageLocationId}
+                    selectedName={form.storageLocationName}
+                    placeholder="Search or type a new storage location"
+                    onOpen={storageLocationSection.trigger}
                     onTextChange={(value) => {
-                      if (value !== form.defaultStorageLocationName) {
-                        updateForm("defaultStorageLocationId", "");
+                      if (value !== form.storageLocationName) {
+                        updateForm("storageLocationId", "");
                       }
-                      setDefaultLocationDraft(value);
+
+                      setStorageLocationDraft(value);
                     }}
                     onSelect={(option) => {
-                      updateForm("defaultStorageLocationId", option._id);
-                      updateForm("defaultStorageLocationName", option.name);
-                      setDefaultLocationDraft(option.name);
+                      updateForm("storageLocationId", option._id);
+                      updateForm("storageLocationName", option.name);
+                      setStorageLocationDraft(option.name);
                     }}
                   />
                 </View>
-              )}
 
-              <ToggleRow
-                label="Set a default expiry duration"
-                description="Prefills the expiry date when logging a purchase of this ingredient."
-                value={wantsDefaultExpiry}
-                onChange={setWantsDefaultExpiry}
-              />
-              {wantsDefaultExpiry && (
-                <View {...defaultExpirySection.wrapperProps}>
-                  <FieldLabel text="Default expiry duration" />
-                  <DurationValueInput
-                    amount={form.defaultExpiryDurationAmount}
-                    unit={form.defaultExpiryDurationUnit}
-                    onChangeAmount={(value) => updateForm("defaultExpiryDurationAmount", value)}
-                    onChangeUnit={(value) => updateForm("defaultExpiryDurationUnit", value)}
-                    onFocus={defaultExpirySection.trigger}
+                <FieldLabel text="Quantity" required />
+
+                <View {...quantitySection.wrapperProps}>
+                  <QuantityServingInput
+                    quantityAvailable={form.quantityAvailable}
+                    quantityUnit={form.quantityUnit}
+                    onChangeQuantity={(value) => updateForm("quantityAvailable", value)}
+                    onChangeUnit={handlePantryUnitChange}
+                    unitOptions={units}
+                    onAddUnit={registerUnit}
+                    defaultPortionAmount={optionalNumber(form.defaultPortionAmount)}
+                    defaultPortionUnit={form.quantityUnit.trim() || undefined}
+                    entryCount={form.entryCount}
+                    onChangeEntryCount={(value) => updateForm("entryCount", value)}
+                    customUnitConversions={resolvedConversions}
+                    onFocus={quantitySection.trigger}
                   />
                 </View>
-              )}
-            </>
-          )}
 
-          {isResolvingGroceryItem ? (
-            <SectionTitle
-              icon="archive-outline"
-              title="Pantry inventory"
-              description="Required — completes the grocery item you're logging."
-            />
-          ) : (
-            <Pressable
-              className="mt-8 flex-row items-center justify-between"
-              onPress={() =>
-                setPantryInventoryExpanded((current) => !current)
-              }
-            >
-              <View className="mr-3 flex-1 flex-row items-center">
-                <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                  <Ionicons name="archive-outline" size={18} color="#2563EB" />
+                <View className="flex-row gap-3">
+                  <View className="flex-1" {...purchaseDateSection.wrapperProps}>
+                    <FieldLabel text="Purchase date" />
+                    <DatePickerField
+                      title="Purchase date"
+                      value={form.purchaseDate}
+                      onChange={(value) => updateForm("purchaseDate", value)}
+                      onFocus={purchaseDateSection.trigger}
+                    />
+                  </View>
+
+                  <View className="flex-1" {...expiryDateSection.wrapperProps}>
+                    <FieldLabel text="Expiry date" />
+                    <DatePickerField
+                      title="Expiry date"
+                      value={form.expiryDate}
+                      placeholder="None"
+                      clearable
+                      onChange={(value) => updateForm("expiryDate", value)}
+                      onFocus={expiryDateSection.trigger}
+                    />
+                  </View>
                 </View>
 
-                <View className="flex-1">
-                  <Text className="text-base font-bold text-slate-950">
-                    Pantry inventory
-                  </Text>
-                  <Text className="mt-0.5 text-xs leading-4 text-slate-500">
-                    Optional — add stock now, or later.
-                  </Text>
+                <View
+                  className="mt-3 rounded-2xl bg-blue-50/60 px-3 pb-3 pt-1"
+                  {...expiryDurationSection.wrapperProps}
+                >
+                  <FieldLabel text="Or set expiry from purchase date" />
+                  <DurationExpiryInput
+                    purchaseDate={form.purchaseDate}
+                    onApply={(expiryDate) => updateForm("expiryDate", expiryDate)}
+                    onFocus={expiryDurationSection.trigger}
+                  />
                 </View>
-              </View>
 
-              <Ionicons
-                name={pantryInventoryExpanded ? "chevron-up" : "chevron-down"}
-                size={22}
-                color="#64748B"
-              />
-            </Pressable>
-          )}
+                <View className="flex-row gap-3">
+                  <View className="flex-1" {...storeSection.wrapperProps}>
+                    <FieldLabel text="Store" />
+                    <SearchableObjectDropdown<SelectOption>
+                      options={stores}
+                      selectedId={form.storeId}
+                      selectedName={form.storeName}
+                      placeholder="Optional"
+                      onOpen={storeSection.trigger}
+                      onTextChange={(value) => {
+                        if (value !== form.storeName) {
+                          updateForm("storeId", "");
+                        }
 
-          {pantryInventoryExpanded && (
-            <>
-              <View {...storageLocationSection.wrapperProps}>
-              <FieldLabel text="Storage location" required />
+                        setStoreDraft(value);
+                      }}
+                      onSelect={(option) => {
+                        updateForm("storeId", option._id);
+                        updateForm("storeName", option.name);
+                        setStoreDraft(option.name);
+                      }}
+                    />
+                  </View>
 
-              <SearchableObjectDropdown<SelectOption>
-                options={storageLocations}
-                selectedId={form.storageLocationId}
-                selectedName={form.storageLocationName}
-                placeholder="Search or type a new storage location"
-                onOpen={storageLocationSection.trigger}
-                onTextChange={(value) => {
-                  if (value !== form.storageLocationName) {
-                    updateForm("storageLocationId", "");
-                  }
+                  <View className="flex-1" {...priceSection.wrapperProps}>
+                    <FieldLabel text="Price paid" />
+                    <PriceInput
+                      value={form.purchasePrice}
+                      onChangeText={(value) => updateForm("purchasePrice", value)}
+                      onFocus={priceSection.trigger}
+                    />
+                  </View>
+                </View>
+              </>
+            )}
+          </FormCard>
 
-                  setStorageLocationDraft(value);
-                }}
-                onSelect={(option) => {
-                  updateForm("storageLocationId", option._id);
-                  updateForm("storageLocationName", option.name);
-                  setStorageLocationDraft(option.name);
-                }}
-              />
-              </View>
-
-              <FieldLabel text="Quantity" required />
-
-              <View {...quantitySection.wrapperProps}>
-              <QuantityServingInput
-                quantityAvailable={form.quantityAvailable}
-                quantityUnit={form.quantityUnit}
-                onChangeQuantity={(value) => updateForm("quantityAvailable", value)}
-                onChangeUnit={handlePantryUnitChange}
-                unitOptions={units}
-                onAddUnit={registerUnit}
-                defaultPortionAmount={optionalNumber(form.defaultPortionAmount)}
-                defaultPortionUnit={form.quantityUnit.trim() || undefined}
-                entryCount={form.entryCount}
-                onChangeEntryCount={(value) => updateForm("entryCount", value)}
-                customUnitConversions={resolvedConversions}
-                onFocus={quantitySection.trigger}
-              />
-              </View>
-
-              <View {...purchaseDateSection.wrapperProps}>
-              <FieldLabel text="Purchase date" />
-
-              <DateTextInput
-                value={form.purchaseDate}
-                style={{ height: 56 }}
-                className="rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
-                onChangeText={(value) => updateForm("purchaseDate", value)}
-                onFocus={purchaseDateSection.trigger}
-              />
-              </View>
-
-              <View {...expiryDateSection.wrapperProps}>
-              <FieldLabel text="Expiry date" />
-
-              <DateTextInput
-                value={form.expiryDate}
-                style={{ height: 56 }}
-                className="rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
-                onChangeText={(value) => updateForm("expiryDate", value)}
-                onFocus={expiryDateSection.trigger}
-              />
-              </View>
-
-              <View {...expiryDurationSection.wrapperProps}>
-              <FieldLabel text="Or set expiry from purchase date" />
-              <DurationExpiryInput
-                purchaseDate={form.purchaseDate}
-                onApply={(expiryDate) => updateForm("expiryDate", expiryDate)}
-                onFocus={expiryDurationSection.trigger}
-              />
-              </View>
-
-              <View {...storeSection.wrapperProps}>
-              <FieldLabel text="Store (optional)" />
-              <SearchableObjectDropdown<SelectOption>
-                options={stores}
-                selectedId={form.storeId}
-                selectedName={form.storeName}
-                placeholder="Search or type a new store"
-                onOpen={storeSection.trigger}
-                onTextChange={(value) => {
-                  if (value !== form.storeName) {
-                    updateForm("storeId", "");
-                  }
-
-                  setStoreDraft(value);
-                }}
-                onSelect={(option) => {
-                  updateForm("storeId", option._id);
-                  updateForm("storeName", option.name);
-                  setStoreDraft(option.name);
-                }}
-              />
-              </View>
-
-              <View {...priceSection.wrapperProps}>
-              <FieldLabel text="Price paid (optional)" />
-              <PriceInput
-                value={form.purchasePrice}
-                onChangeText={(value) => updateForm("purchasePrice", value)}
-                onFocus={priceSection.trigger}
-              />
-              </View>
-            </>
-          )}
+          <Pressable
+            disabled={saving}
+            onPress={() => void handleSave()}
+            className={`mt-2 items-center rounded-2xl py-4 ${
+              saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
+            }`}
+          >
+            <Text className="text-base font-semibold text-white">
+              {saving ? "Saving..." : isResolvingGroceryItem ? "Save & log purchase" : "Save ingredient"}
+            </Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -1958,4 +1909,45 @@ export default function AddManualPantryItemScreen() {
       />
     </SafeAreaView>
   );
+}
+
+// One of the two big "fill this in for me" buttons at the top of the page.
+function ScanActionCard({
+  icon,
+  title,
+  subtitle,
+  loading = false,
+  disabled = false,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  loading?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      className="flex-1 flex-row items-center rounded-3xl border border-slate-200 bg-white px-3 py-3 active:bg-slate-50"
+    >
+      <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
+        {loading ? <ActivityIndicator size="small" color="#2563EB" /> : <Ionicons name={icon} size={22} color="#2563EB" />}
+      </View>
+      <View className="ml-2.5 flex-1">
+        <Text className="text-sm font-bold text-slate-950" numberOfLines={1}>
+          {title}
+        </Text>
+        <Text className="mt-0.5 text-[11px] leading-4 text-slate-500" numberOfLines={2}>
+          {subtitle}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function HelpText({ children }: { children: ReactNode }) {
+  return <Text className="mt-2 text-xs leading-4 text-slate-500">{children}</Text>;
 }
