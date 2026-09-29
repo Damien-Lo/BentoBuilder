@@ -24,7 +24,9 @@ import {
 import { deletePantryItem, getPantryItemById, updatePantryItem } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import {
-  DateTextInput,
+  DatePickerField,
+  FieldLabel,
+  FormCard,
   DurationExpiryInput,
   PriceInput,
   QuantityServingInput,
@@ -307,8 +309,8 @@ export default function EditPantryItemScreen() {
           ref={scrollRef}
           className="flex-1"
           contentContainerStyle={{
-            paddingHorizontal: 20,
-            paddingTop: 20,
+            paddingHorizontal: 16,
+            paddingTop: 16,
             paddingBottom: 60,
           }}
           showsVerticalScrollIndicator={false}
@@ -318,7 +320,7 @@ export default function EditPantryItemScreen() {
           {/* Ingredient info link */}
           {ingredientId ? (
             <Pressable
-              className="mb-6 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+              className="mb-3 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
               onPress={() =>
                 router.push({
                   pathname: "/ingredients/edit/[id]",
@@ -341,177 +343,175 @@ export default function EditPantryItemScreen() {
             </Pressable>
           ) : null}
 
-          {/* Quantity row */}
-          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-            Quantity
-          </Text>
-          <View className="mb-5" {...quantitySection.wrapperProps}>
-            <QuantityServingInput
-              quantityAvailable={form.quantityAvailable}
-              quantityUnit={form.quantityUnit}
-              onChangeQuantity={(v) => update("quantityAvailable", v)}
-              onChangeUnit={(v) => update("quantityUnit", v)}
-              unitOptions={unitOptions}
-              onAddUnit={(unit) => {
-                const trimmed = unit.trim();
-                if (!trimmed) return;
-                setUnitOptions((current) =>
-                  current.some((u) => u.toLowerCase() === trimmed.toLowerCase())
-                    ? current
-                    : [...current, trimmed].sort((a, b) => a.localeCompare(b)),
-                );
-              }}
-              defaultPortionAmount={item.ingredient?.defaultPortionAmount}
-              defaultPortionUnit={item.ingredient?.defaultPortionUnit}
-              initialMode="total"
-              customUnitConversions={getIngredientConversions(item.ingredient, customUnitConversions)}
-              onFocus={quantitySection.trigger}
-            />
-          </View>
-
-          {/* Storage location */}
-          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-            Storage location
-          </Text>
-          <View className="relative mb-5">
-            <Pressable
-              className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
-              onPress={() => {
-                setShowLocationPicker((v) => !v);
-              }}
-            >
-              <Ionicons
-                name="file-tray-stacked-outline"
-                size={20}
-                color="#64748B"
+          <FormCard icon="cube-outline" title="Quantity" description="How much of this entry is left." zIndex={30}>
+            <View className="mt-3" {...quantitySection.wrapperProps}>
+              <QuantityServingInput
+                quantityAvailable={form.quantityAvailable}
+                quantityUnit={form.quantityUnit}
+                onChangeQuantity={(v) => update("quantityAvailable", v)}
+                onChangeUnit={(v) => update("quantityUnit", v)}
+                unitOptions={unitOptions}
+                onAddUnit={(unit) => {
+                  const trimmed = unit.trim();
+                  if (!trimmed) return;
+                  setUnitOptions((current) =>
+                    current.some((u) => u.toLowerCase() === trimmed.toLowerCase())
+                      ? current
+                      : [...current, trimmed].sort((a, b) => a.localeCompare(b)),
+                  );
+                }}
+                defaultPortionAmount={item.ingredient?.defaultPortionAmount}
+                defaultPortionUnit={item.ingredient?.defaultPortionUnit}
+                initialMode="total"
+                customUnitConversions={getIngredientConversions(item.ingredient, customUnitConversions)}
+                onFocus={quantitySection.trigger}
               />
-              <Text
-                className={`ml-3 flex-1 text-base ${form.storageLocationId ? "text-slate-950" : "text-slate-400"}`}
-              >
-                {form.storageLocationName || "Choose a location"}
-              </Text>
-              <Ionicons
-                name={showLocationPicker ? "chevron-up" : "chevron-down"}
-                size={18}
-                color="#64748B"
-              />
-            </Pressable>
+            </View>
+          </FormCard>
 
-            {showLocationPicker && (
-              <View
-                className="absolute left-0 right-0 top-16 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
-                style={{ elevation: 20 }}
+          <FormCard icon="calendar-outline" title="Where & when" description="Where it's stored, and when it expires." zIndex={20}>
+            <FieldLabel text="Storage location" />
+            <View className="relative">
+              <Pressable
+                className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
+                style={{ height: 56 }}
+                onPress={() => {
+                  setShowLocationPicker((v) => !v);
+                }}
               >
-                {storageLocations.map((loc) => (
-                  <Pressable
-                    key={loc._id}
-                    className="border-b border-slate-100 px-4 py-4"
-                    onPress={() => {
-                      update("storageLocationId", loc._id);
-                      update("storageLocationName", loc.name);
-                      setShowLocationPicker(false);
-                    }}
-                  >
-                    <Text className="text-base text-slate-800">{loc.name}</Text>
-                  </Pressable>
-                ))}
+                <Ionicons
+                  name="file-tray-stacked-outline"
+                  size={20}
+                  color="#64748B"
+                />
+                <Text
+                  className={`ml-3 flex-1 text-base ${form.storageLocationId ? "text-slate-950" : "text-slate-400"}`}
+                >
+                  {form.storageLocationName || "Choose a location"}
+                </Text>
+                <Ionicons
+                  name={showLocationPicker ? "chevron-up" : "chevron-down"}
+                  size={18}
+                  color="#64748B"
+                />
+              </Pressable>
+
+              {showLocationPicker && (
+                <View
+                  className="absolute left-0 right-0 top-16 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
+                  style={{ elevation: 20 }}
+                >
+                  {storageLocations.map((loc) => (
+                    <Pressable
+                      key={loc._id}
+                      className="border-b border-slate-100 px-4 py-4"
+                      onPress={() => {
+                        update("storageLocationId", loc._id);
+                        update("storageLocationName", loc.name);
+                        setShowLocationPicker(false);
+                      }}
+                    >
+                      <Text className="text-base text-slate-800">{loc.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <View className="flex-row gap-3" {...datesSection.wrapperProps}>
+              <View className="flex-1">
+                <FieldLabel text="Purchase date" />
+                <DatePickerField
+                  title="Purchase date"
+                  value={form.purchaseDate}
+                  placeholder="None"
+                  clearable
+                  onChange={(v) => update("purchaseDate", v)}
+                  onFocus={datesSection.trigger}
+                />
               </View>
-            )}
-          </View>
+              <View className="flex-1">
+                <FieldLabel text="Expiry date" />
+                <DatePickerField
+                  title="Expiry date"
+                  value={form.expiryDate}
+                  placeholder="None"
+                  clearable
+                  onChange={(v) => update("expiryDate", v)}
+                  onFocus={datesSection.trigger}
+                />
+              </View>
+            </View>
 
-          {/* Dates */}
-          <View className="mb-5 flex-row" {...datesSection.wrapperProps}>
-            <View className="mr-3 flex-1">
-              <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-                Purchase date
-              </Text>
-              <DateTextInput
-                value={form.purchaseDate}
-                onChangeText={(v) => update("purchaseDate", v)}
-                onFocus={datesSection.trigger}
-                className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+            <View className="mt-3 rounded-2xl bg-blue-50/60 px-3 pb-3 pt-1" {...expiryDurationSection.wrapperProps}>
+              <FieldLabel text="Or set expiry from purchase date" />
+              <DurationExpiryInput
+                purchaseDate={form.purchaseDate}
+                onApply={(expiryDate) => update("expiryDate", expiryDate)}
+                onFocus={expiryDurationSection.trigger}
               />
             </View>
-            <View className="flex-1">
-              <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-                Expiry date
-              </Text>
-              <DateTextInput
-                value={form.expiryDate}
-                onChangeText={(v) => update("expiryDate", v)}
-                onFocus={datesSection.trigger}
-                className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+          </FormCard>
+
+          <FormCard icon="receipt-outline" title="Purchase details" description="Optional — where you bought it and any notes." zIndex={10}>
+            <View className="flex-row gap-3">
+              <View className="flex-1" {...storeSection.wrapperProps}>
+                <FieldLabel text="Store" />
+                <SearchableObjectDropdown<SelectOption>
+                  options={stores}
+                  selectedId={form.storeId}
+                  selectedName={form.storeName}
+                  placeholder="Search"
+                  onOpen={storeSection.trigger}
+                  onTextChange={(value) => {
+                    if (value !== form.storeName) update("storeId", "");
+                    setStoreDraft(value);
+                  }}
+                  onSelect={(option) => {
+                    update("storeId", option._id);
+                    update("storeName", option.name);
+                    setStoreDraft(option.name);
+                  }}
+                />
+              </View>
+
+              <View className="flex-1" {...priceSection.wrapperProps}>
+                <FieldLabel text="Price paid" />
+                <PriceInput
+                  value={form.purchasePrice}
+                  onChangeText={(v) => update("purchasePrice", v)}
+                  onFocus={priceSection.trigger}
+                />
+              </View>
+            </View>
+
+            <View {...notesSection.wrapperProps}>
+              <FieldLabel text="Notes" />
+              <TextInput
+                value={form.notes}
+                onChangeText={(v) => update("notes", v)}
+                onFocus={notesSection.trigger}
+                placeholder="Optional notes"
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                className="min-h-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
               />
             </View>
-          </View>
-
-          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-            Set expiry from purchase date
-          </Text>
-          <View className="mb-5" {...expiryDurationSection.wrapperProps}>
-            <DurationExpiryInput
-              purchaseDate={form.purchaseDate}
-              onApply={(expiryDate) => update("expiryDate", expiryDate)}
-              onFocus={expiryDurationSection.trigger}
-            />
-          </View>
-
-          {/* Store */}
-          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-            Store (optional)
-          </Text>
-          <View className="mb-5" {...storeSection.wrapperProps}>
-            <SearchableObjectDropdown<SelectOption>
-              options={stores}
-              selectedId={form.storeId}
-              selectedName={form.storeName}
-              placeholder="Search or type a new store"
-              onOpen={storeSection.trigger}
-              onTextChange={(value) => {
-                if (value !== form.storeName) update("storeId", "");
-                setStoreDraft(value);
-              }}
-              onSelect={(option) => {
-                update("storeId", option._id);
-                update("storeName", option.name);
-                setStoreDraft(option.name);
-              }}
-            />
-          </View>
-
-          {/* Price */}
-          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-            Price paid (optional)
-          </Text>
-          <View className="mb-5" {...priceSection.wrapperProps}>
-            <PriceInput
-              value={form.purchasePrice}
-              onChangeText={(v) => update("purchasePrice", v)}
-              onFocus={priceSection.trigger}
-            />
-          </View>
-
-          {/* Notes */}
-          <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-            Notes
-          </Text>
-          <View {...notesSection.wrapperProps}>
-          <TextInput
-            value={form.notes}
-            onChangeText={(v) => update("notes", v)}
-            onFocus={notesSection.trigger}
-            placeholder="Optional notes"
-            placeholderTextColor="#94A3B8"
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-            className="min-h-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
-          />
-          </View>
+          </FormCard>
 
           <Pressable
             disabled={saving}
-            className="mt-8 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
+            onPress={() => void handleSave()}
+            className={`mt-2 items-center rounded-2xl py-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+          >
+            <Text className="text-base font-semibold text-white">{saving ? "Saving..." : "Save changes"}</Text>
+          </Pressable>
+
+          <Pressable
+            disabled={saving}
+            className="mt-3 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
             onPress={handleDelete}
           >
             <Text className="font-semibold text-red-600">Delete pantry entry</Text>

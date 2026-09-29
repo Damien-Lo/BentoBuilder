@@ -41,6 +41,7 @@ import { loadSettings } from "@/src/services/settingsService";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 import { countQualifyingPantryPieces, getIngredientStockInUnit } from "@/src/utils/ingredientStock";
 import { referenceId } from "@/src/utils/pantryDefaults";
+import { getMealKcal } from "@/src/utils/mealPlan";
 
 type SortMode = "category" | "meal" | "mealPrep";
 
@@ -87,12 +88,26 @@ function getMealAvailability(
   if (!meal.courses?.length) return null;
   let overall: "green" | "yellow" | "red" | null = null;
   for (const course of meal.courses) {
+    // An ingredient course checks as a single plain-quantity line.
+    const courseIngredientId = course.ingredient
+      ? typeof course.ingredient === "string" ? course.ingredient : course.ingredient._id
+      : "";
+    const courseIngredientEntry = courseIngredientId
+      ? {
+          ingredient: courseIngredientId,
+          quantity: course.quantity ?? 0,
+          unit: course.unit || ingredientMap.get(courseIngredientId)?.defaultPortionUnit || "",
+          matchMode: "quantity" as const,
+          pieceMinWeight: undefined,
+          pieceMaxWeight: undefined,
+          pieceWeightUnit: undefined,
+        }
+      : null;
     const ref = course.recipe;
-    if (!ref) continue;
-    const recipeId = typeof ref === "string" ? ref : ref._id;
-    const recipe = recipeMap.get(recipeId);
-    if (!recipe?.ingredientList?.length) continue;
-    for (const entry of recipe.ingredientList) {
+    const recipe = ref ? recipeMap.get(typeof ref === "string" ? ref : ref._id) : undefined;
+    const lines = courseIngredientEntry ? [courseIngredientEntry] : recipe?.ingredientList ?? [];
+    if (!lines.length) continue;
+    for (const entry of lines) {
       const ingId = typeof entry.ingredient === "string"
         ? entry.ingredient
         : (entry.ingredient as { _id: string })._id;
@@ -141,18 +156,7 @@ function getMealAvailability(
 }
 
 function getMealCalories(meal: Meal): number | null {
-  if (!meal.courses?.length) return null;
-  let total = 0;
-  let hasAny = false;
-  for (const course of meal.courses) {
-    const recipe = course.recipe;
-    if (!recipe || typeof recipe === "string") continue;
-    if (recipe.nutrition?.calories != null) {
-      total += recipe.nutrition.calories * course.servings;
-      hasAny = true;
-    }
-  }
-  return hasAny ? Math.round(total) : null;
+  return getMealKcal(meal);
 }
 
 export default function RecipesMainPage() {

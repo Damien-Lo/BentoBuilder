@@ -161,6 +161,13 @@ function gatherRows(entry: MealPlanEntry, recipeMap: Map<string, Recipe>): RawRo
 
   if (entry.meal) {
     for (const course of entry.meal.courses ?? []) {
+      // An ingredient course is one plain amount of that ingredient.
+      const ingredientId = extractId(course.ingredient ?? null);
+      if (ingredientId) {
+        const unit = course.unit || (typeof course.ingredient === "object" ? course.ingredient?.defaultPortionUnit : "") || "";
+        rows.push(quantityRow(ingredientId, course.quantity ?? 0, unit));
+        continue;
+      }
       const ref = course.recipe;
       if (!ref || typeof ref === "string") continue;
       // A course's own recipe ref is a thin projection with no

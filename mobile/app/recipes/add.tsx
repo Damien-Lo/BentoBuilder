@@ -19,9 +19,9 @@ import {
   CreatableStringDropdown,
   CreateGenericIngredientModal,
   FieldLabel,
+  FormCard,
   FormInput,
   SearchableObjectDropdown,
-  SectionTitle,
   SegmentedToggle,
   ToggleRow,
   UnitFamilyDropdown,
@@ -703,11 +703,7 @@ export default function AddRecipePage() {
         >
           <View ref={scrollAnchorRef} collapsable={false} />
           {/* ── Recipe Details ── */}
-          <SectionTitle
-            first
-            title="Recipe details"
-            description="Give your recipe a name and tell us when it's eaten."
-          />
+          <FormCard icon="book-outline" title="Recipe details" description="Give your recipe a name and tell us when it's eaten." zIndex={60}>
 
           <View {...nameSection.wrapperProps}>
             <FieldLabel text="Recipe name" required />
@@ -826,20 +822,19 @@ export default function AddRecipePage() {
             />
           </View>
 
-          <View {...servingsSection.wrapperProps}>
-            <FieldLabel text="Servings" />
-            <FormInput
+          <View className="flex-row gap-3" {...prepCookTimeSection.wrapperProps}>
+            <View className="flex-1" {...servingsSection.wrapperProps}>
+              <FieldLabel text="Servings" />
+              <FormInput
               value={servings}
               placeholder="1"
               keyboardType="number-pad"
               onFocus={servingsSection.trigger}
               onChangeText={setServings}
             />
-          </View>
-
-          <View className="mt-4 flex-row gap-3" {...prepCookTimeSection.wrapperProps}>
+            </View>
             <View className="flex-1">
-              <FieldLabel text="Prep time (min)" />
+              <FieldLabel text="Prep (min)" />
               <FormInput
                 value={prepTimeMinutes}
                 placeholder="e.g. 15"
@@ -849,7 +844,7 @@ export default function AddRecipePage() {
               />
             </View>
             <View className="flex-1">
-              <FieldLabel text="Cook time (min)" />
+              <FieldLabel text="Cook (min)" />
               <FormInput
                 value={cookTimeMinutes}
                 placeholder="e.g. 20"
@@ -859,6 +854,10 @@ export default function AddRecipePage() {
               />
             </View>
           </View>
+
+          </FormCard>
+
+          <FormCard icon="archive-outline" title="Makes something" description="Optional — for stocks, sauces and meal preps that go into your pantry." zIndex={50}>
 
           <ToggleRow
             label="This recipe prepares something"
@@ -935,11 +934,10 @@ export default function AddRecipePage() {
             </>
           )}
 
+          </FormCard>
+
           {/* ── Ingredients ── */}
-          <SectionTitle
-            title="Ingredients"
-            description="Add ingredients and how many servings of each you use."
-          />
+          <FormCard icon="basket-outline" title="Ingredients" description="Add ingredients and how many servings of each you use." zIndex={40}>
 
           {/* Picker card — the "Search ingredient" dropdown lives nested one
               level inside this card, which is itself the direct ScrollView
@@ -947,7 +945,7 @@ export default function AddRecipePage() {
               review.tsx's brandGenericSection pattern) while the ref/trigger
               that actually gets measured stay on the inner wrapper below. */}
           <View
-            className="mb-4 rounded-2xl border border-slate-200 bg-white p-4"
+            className="mb-3 mt-3 rounded-2xl bg-slate-50 p-3"
             style={pickerIngredientSection.wrapperProps.style}
           >
             <View {...pickerIngredientSection.wrapperProps}>
@@ -1166,7 +1164,7 @@ export default function AddRecipePage() {
 
           {/* Added ingredient rows */}
           {ingredientRows.length > 0 && (
-            <View className="mb-4 rounded-2xl border border-slate-200 bg-white overflow-hidden">
+            <View className="mb-3 overflow-hidden rounded-2xl border border-slate-100 bg-white">
               {ingredientRows.map((row, index) => (
                 <Pressable
                   key={row.key}
@@ -1231,12 +1229,12 @@ export default function AddRecipePage() {
           {/* Nutrition summary */}
           {hasNutritionData && (
             <>
-              <Text className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+              <Text className="mb-2 mt-1 text-xs font-bold uppercase tracking-wide text-slate-400">
                 Estimated nutrition
                 {Number(servings) > 1 ? ` · per serving (${servings})` : ""}
               </Text>
 
-              <View className="mb-4 rounded-2xl border border-slate-200 bg-white overflow-hidden">
+              <View className="mb-3 overflow-hidden rounded-2xl border border-slate-100 bg-white">
                 {(
                   [
                     ["Calories", perServingNutrition.calories, "kcal"],
@@ -1265,11 +1263,11 @@ export default function AddRecipePage() {
             </>
           )}
 
+          </FormCard>
+
           {/* ── Instructions ── */}
-          <SectionTitle
-            title="Instructions"
-            description="Add step-by-step cooking instructions."
-          />
+          <FormCard icon="list-outline" title="Instructions" description="Add step-by-step cooking instructions." zIndex={30}>
+          <View className="h-3" />
 
           {steps.map((step, index) => (
             <StepRow
@@ -1291,11 +1289,11 @@ export default function AddRecipePage() {
             <Text className="ml-2 font-semibold text-blue-700">Add step</Text>
           </Pressable>
 
+          </FormCard>
+
           {/* ── Notes ── */}
-          <SectionTitle
-            title="Notes"
-            description="Any tips, variations, or extra context."
-          />
+          <FormCard icon="document-text-outline" title="Notes" description="Any tips, variations, or extra context." zIndex={20}>
+          <View className="h-3" />
 
           <View {...notesSection.wrapperProps}>
             <FormInput
@@ -1306,6 +1304,15 @@ export default function AddRecipePage() {
               onChangeText={setNotes}
             />
           </View>
+          </FormCard>
+
+          <Pressable
+            disabled={saving}
+            onPress={() => void handleSave()}
+            className={`mt-2 items-center rounded-2xl py-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+          >
+            <Text className="text-base font-semibold text-white">{saving ? "Saving..." : "Save recipe"}</Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

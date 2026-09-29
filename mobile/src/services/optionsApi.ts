@@ -353,8 +353,12 @@ const DEFAULT_UNITS = [
 ];
 
 export async function getUnitSuggestions(): Promise<string[]> {
-  const pantryItems = await getPantryItems();
+  return unitSuggestionsFrom(await getPantryItems());
+}
 
+// The same list from pantry items already loaded — for screens that fetch
+// them anyway, to skip a second request.
+export function unitSuggestionsFrom(pantryItems: { quantityUnit?: string }[]): string[] {
   const previouslyUsedUnits = pantryItems
     .map((item) => item.quantityUnit?.trim())
     .filter((unit): unit is string => Boolean(unit));

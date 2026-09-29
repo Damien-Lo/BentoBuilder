@@ -18,6 +18,11 @@ export interface AppSettings {
   extendedNutrientGoals: ExtendedNutrientGoals;
   // 0 = Sunday … 6 = Saturday, matching JS Date#getDay()
   weekStartDay: number;
+  // Waits (in days) for the planner's automatic rating prompt — see
+  // utils/ratingPrompt.ts.
+  ratingCooldownDays: number;
+  ratingSettledCooldownDays: number;
+  ratingSkipBackoffDays: number;
   // Custom conversions on top of the app's built-in mass/volume table.
   unitConversions: CustomUnitConversion[];
   // Weight goal tracking — a single starting point and a target, not a full
@@ -39,6 +44,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dailySodiumLimit: null,
   extendedNutrientGoals: {},
   weekStartDay: 1,
+  ratingCooldownDays: 10,
+  ratingSettledCooldownDays: 30,
+  ratingSkipBackoffDays: 60,
   unitConversions: [],
   startingWeight: null,
   startingWeightDate: null,
@@ -79,6 +87,9 @@ export async function loadSettings(): Promise<AppSettings> {
       dailySodiumLimit:  typeof d.dailySodiumLimit  === "number" ? d.dailySodiumLimit  : DEFAULTS.dailySodiumLimit,
       extendedNutrientGoals: parseExtendedNutrientGoals(d.extendedNutrientGoals),
       weekStartDay:     typeof d.weekStartDay      === "number" ? d.weekStartDay      : DEFAULTS.weekStartDay,
+      ratingCooldownDays:        typeof d.ratingCooldownDays        === "number" ? d.ratingCooldownDays        : DEFAULTS.ratingCooldownDays,
+      ratingSettledCooldownDays: typeof d.ratingSettledCooldownDays === "number" ? d.ratingSettledCooldownDays : DEFAULTS.ratingSettledCooldownDays,
+      ratingSkipBackoffDays:     typeof d.ratingSkipBackoffDays     === "number" ? d.ratingSkipBackoffDays     : DEFAULTS.ratingSkipBackoffDays,
       unitConversions:   Array.isArray(d.unitConversions)        ? (d.unitConversions as CustomUnitConversion[]) : DEFAULTS.unitConversions,
       startingWeight:     typeof d.startingWeight     === "number" ? d.startingWeight     : DEFAULTS.startingWeight,
       startingWeightDate: typeof d.startingWeightDate === "string" ? d.startingWeightDate : DEFAULTS.startingWeightDate,

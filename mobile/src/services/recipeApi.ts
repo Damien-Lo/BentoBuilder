@@ -2,6 +2,7 @@ import { API_BASE_URL } from "@/src/config/api";
 import type { SelectOption } from "@/src/services/optionsApi";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 import type { PartialNutrition } from "@/src/types/nutrition";
+import type { RatingPromptState } from "@/src/utils/ratingPrompt";
 
 export type MealCategory = "breakfast" | "lunch" | "dinner" | "snack";
 
@@ -93,6 +94,10 @@ export interface Recipe {
   // Raw rating history, most-recent last — "current score" is an average
   // computed over the tail of this array, not a stored field.
   scores?: RecipeScore[];
+  // When the planner auto-asks for a rating — see utils/ratingPrompt.ts.
+  ratingPrompt?: RatingPromptState;
+  // Last time the ingredient list or servings changed.
+  contentChangedAt?: string | null;
   ingredientList: RecipeIngredientEntry[];
   instructions: string[];
   createdAt?: string;

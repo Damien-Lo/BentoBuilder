@@ -1,3 +1,4 @@
+import type { RatingPromptState } from "@/src/utils/ratingPrompt";
 import { File } from "expo-file-system";
 
 import { API_BASE_URL } from "@/src/config/api";
@@ -88,6 +89,8 @@ export interface Ingredient {
   // own meal-plan entry (eaten directly, e.g. a protein shake) rather than
   // one that only ever shows up as a line inside a recipe.
   scores?: IngredientScore[];
+  // When the planner auto-asks for a rating — see utils/ratingPrompt.ts.
+  ratingPrompt?: RatingPromptState;
 
   createdAt?: string;
   updatedAt?: string;

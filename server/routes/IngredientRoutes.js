@@ -1,4 +1,5 @@
 import express from "express";
+import { ratingPromptHandler } from "../services/ratingPrompt.js";
 import Ingredient from "../models/Ingredient.js";
 import Recipe from "../models/Recipe.js";
 import { getAvailableStock } from "../services/ingredientAvailability.js";
@@ -369,6 +370,12 @@ router.delete("/:id", async (req, res) => {
  * same reasoning as the recipe route (the client merges this in rather
  * than replacing the whole ingredient with an unpopulated one).
  */
+/**
+ * POST /api/ingredients/:id/rating-prompt  { action: "skip" | "disable" | "enable" }
+ * Records a skipped auto rating prompt, or turns the prompt off/on.
+ */
+router.post("/:id/rating-prompt", ratingPromptHandler(Ingredient, "Ingredient"));
+
 router.post("/:id/scores", async (req, res) => {
   try {
     const parsedValue = Number(req.body.value);
@@ -389,6 +396,8 @@ router.post("/:id/scores", async (req, res) => {
             mealPlanEntry: req.body.mealPlanEntry || null,
           },
         },
+        // A real rating ends any run of skipped prompts.
+        $set: { "ratingPrompt.skipCount": 0 },
       },
       { new: true, runValidators: true },
     );

@@ -64,6 +64,7 @@ function populateEntry(query) {
       populate: [
         { path: "tags" },
         { path: "courses.recipe", select: "name mealCategory nutrition servings" },
+        { path: "courses.ingredient", select: "name nutrition defaultPortionAmount defaultPortionUnit unitConversions" },
       ],
     })
     .populate("recipe")

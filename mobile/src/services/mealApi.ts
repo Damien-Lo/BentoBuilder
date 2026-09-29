@@ -1,6 +1,7 @@
 import { API_BASE_URL } from "@/src/config/api";
 import type { SelectOption } from "@/src/services/optionsApi";
 import type { PartialNutrition } from "@/src/types/nutrition";
+import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 export type MealType = "course" | "bento";
 
@@ -12,11 +13,27 @@ export interface MealRecipeRef {
   servings?: number;
 }
 
+// Just what a meal needs of an ingredient course's ingredient: its name and
+// the nutrition per its own default portion (plus conversions to scale it).
+export interface MealIngredientRef {
+  _id: string;
+  name: string;
+  nutrition?: PartialNutrition | null;
+  defaultPortionAmount?: number;
+  defaultPortionUnit?: string;
+  unitConversions?: CustomUnitConversion[];
+}
+
+// A course is a recipe (eaten in `servings`) or one ingredient (eaten as
+// `quantity` `unit`) — whichever of `recipe` / `ingredient` is set.
 export interface CourseEntry {
   _id: string;
   label: string;
   recipe: MealRecipeRef | string | null;
   servings: number;
+  ingredient?: MealIngredientRef | string | null;
+  quantity?: number | null;
+  unit?: string;
 }
 
 export interface BentoSection {
@@ -25,7 +42,11 @@ export interface BentoSection {
   col: number;
   rowSpan?: number;
   colSpan?: number;
+  // A recipe, or one ingredient in quantity/unit — same as a course.
   recipe: MealRecipeRef | string | null;
+  ingredient?: MealIngredientRef | string | null;
+  quantity?: number | null;
+  unit?: string;
   label?: string;
   color?: string;
 }
@@ -55,6 +76,9 @@ export interface CourseInput {
   label?: string;
   recipe?: string | null;
   servings?: number;
+  ingredient?: string | null;
+  quantity?: number | null;
+  unit?: string;
 }
 
 export interface BentoSectionInput {
@@ -63,6 +87,9 @@ export interface BentoSectionInput {
   rowSpan?: number;
   colSpan?: number;
   recipe?: string | null;
+  ingredient?: string | null;
+  quantity?: number | null;
+  unit?: string;
   label?: string;
   color?: string;
 }

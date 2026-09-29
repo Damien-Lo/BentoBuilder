@@ -2,6 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
+// Inline mode lists at most this many matches; the rest are reached by
+// typing (the page itself does the scrolling, so an unbounded list of a
+// few hundred catalog items would bury everything below the field).
+const INLINE_LIMIT = 40;
+
 interface BaseDropdownOption {
   _id: string;
   name: string;
@@ -20,6 +25,20 @@ interface SearchableObjectDropdownProps<T extends BaseDropdownOption> {
   // A shorter, tighter rendering (44px vs. the default 56px, smaller icon
   // and text) for cramped layouts — e.g. two fields sharing one row.
   compact?: boolean;
+
+  // Open the options in the normal layout flow (pushing what's below down,
+  // scrolling with the page) instead of as a floating box with its own
+  // scroll. For fields inside nested scrolling containers — the receipt
+  // review card sits in its own ScrollView inside a horizontal pager, with
+  // a panel over the bottom of the screen — where a floating box can be
+  // clipped or covered and its own scroll loses the gesture to the page's.
+  inline?: boolean;
+  // Most matches an inline list shows before "keep typing" (default 40) —
+  // lower for a field that isn't itself in a scrolling area.
+  inlineLimit?: number;
+  // Just the text field — no box, border or search icon — for embedding in
+  // a host's own card (e.g. the receipt review's Store card).
+  bare?: boolean;
 
   onSelect: (option: T) => void;
   onTextChange?: (value: string) => void;
@@ -46,6 +65,9 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
   showAllWhenEmpty = true,
   disabled = false,
   compact = false,
+  inline = false,
+  inlineLimit = INLINE_LIMIT,
+  bare = false,
   onSelect,
   onTextChange,
   onOpen,
@@ -123,6 +145,57 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
     }
   }
 
+  function renderOptions(visible: T[]) {
+    return (
+      <>
+        {visible.map((option) => {
+          const isSelected = option._id === selectedId;
+
+          return (
+            <Pressable
+              key={option._id}
+              className="flex-row items-center border-b border-slate-100 px-4 py-4 active:bg-slate-50"
+              onPress={() => handleSelect(option)}
+            >
+              <View className="flex-1">
+                <Text className="text-base text-slate-900">
+                  {option.name}
+                </Text>
+                {renderSubtitle?.(option)}
+              </View>
+
+              {isSelected && (
+                <Ionicons name="checkmark" size={20} color="#2563EB" />
+              )}
+            </Pressable>
+          );
+        })}
+
+        {visible.length === 0 &&
+          (onCreateNew && normalizedQuery ? (
+            <Pressable
+              className="flex-row items-center px-4 py-4 active:bg-slate-50"
+              onPress={() => {
+                setOpen(false);
+                onCreateNew(query.trim());
+              }}
+            >
+              <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
+              <Text className="ml-2 text-base font-semibold text-blue-600">
+                Create &quot;{query.trim()}&quot;
+              </Text>
+            </Pressable>
+          ) : (
+            <View className="px-4 py-5">
+              <Text className="text-center text-sm text-slate-500">
+                No matching options
+              </Text>
+            </View>
+          ))}
+      </>
+    );
+  }
+
   return (
     <View
       className="relative"
@@ -133,16 +206,20 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
       }}
     >
       <View
-        style={{ height: compact ? 44 : 56 }}
-        className={`flex-row items-center rounded-2xl border bg-white ${compact ? "px-3" : "px-4"} ${
-          disabled
-            ? "border-slate-100 opacity-60"
-            : open
-              ? "border-blue-500"
-              : "border-slate-200"
-        }`}
+        style={{ height: bare ? 26 : compact ? 44 : 56 }}
+        className={
+          bare
+            ? `flex-row items-center ${disabled ? "opacity-60" : ""}`
+            : `flex-row items-center rounded-2xl border bg-white ${compact ? "px-3" : "px-4"} ${
+                disabled
+                  ? "border-slate-100 opacity-60"
+                  : open
+                    ? "border-blue-500"
+                    : "border-slate-200"
+              }`
+        }
       >
-        <Ionicons name="search-outline" size={compact ? 16 : 20} color="#64748B" />
+        {!bare && <Ionicons name="search-outline" size={compact ? 16 : 20} color="#64748B" />}
 
         <TextInput
           value={query}
@@ -151,7 +228,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
           placeholderTextColor="#94A3B8"
           autoCapitalize="words"
           autoCorrect={false}
-          className={`flex-1 text-slate-950 ${compact ? "ml-2 text-sm" : "ml-3 text-base"}`}
+          className={`flex-1 text-slate-950 ${bare ? "text-base" : compact ? "ml-2 text-sm" : "ml-3 text-base"}`}
           onFocus={openDropdown}
           onChangeText={handleTextChange}
           onSubmitEditing={closeDropdown}
@@ -183,11 +260,11 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
         )}
       </View>
 
-      {open && !disabled && (
+      {open && !disabled && !inline && (
         <View
           className="absolute left-0 right-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
           style={{
-            top: compact ? 48 : 60,
+            top: bare ? 34 : compact ? 48 : 60,
             maxHeight: 260,
             zIndex: 1001,
             elevation: 20,
@@ -198,51 +275,19 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
             keyboardShouldPersistTaps="always"
             showsVerticalScrollIndicator={false}
           >
-            {filteredOptions.map((option) => {
-              const isSelected = option._id === selectedId;
-
-              return (
-                <Pressable
-                  key={option._id}
-                  className="flex-row items-center border-b border-slate-100 px-4 py-4 active:bg-slate-50"
-                  onPress={() => handleSelect(option)}
-                >
-                  <View className="flex-1">
-                    <Text className="text-base text-slate-900">
-                      {option.name}
-                    </Text>
-                    {renderSubtitle?.(option)}
-                  </View>
-
-                  {isSelected && (
-                    <Ionicons name="checkmark" size={20} color="#2563EB" />
-                  )}
-                </Pressable>
-              );
-            })}
-
-            {filteredOptions.length === 0 &&
-              (onCreateNew && normalizedQuery ? (
-                <Pressable
-                  className="flex-row items-center px-4 py-4 active:bg-slate-50"
-                  onPress={() => {
-                    setOpen(false);
-                    onCreateNew(query.trim());
-                  }}
-                >
-                  <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
-                  <Text className="ml-2 text-base font-semibold text-blue-600">
-                    Create &quot;{query.trim()}&quot;
-                  </Text>
-                </Pressable>
-              ) : (
-                <View className="px-4 py-5">
-                  <Text className="text-center text-sm text-slate-500">
-                    No matching options
-                  </Text>
-                </View>
-              ))}
+            {renderOptions(filteredOptions)}
           </ScrollView>
+        </View>
+      )}
+
+      {open && !disabled && inline && (
+        <View className="mt-1 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          {renderOptions(filteredOptions.slice(0, inlineLimit))}
+          {filteredOptions.length > inlineLimit && (
+            <Text className="px-4 py-3 text-center text-xs text-slate-400">
+              {filteredOptions.length - inlineLimit} more — keep typing to narrow it down
+            </Text>
+          )}
         </View>
       )}
     </View>

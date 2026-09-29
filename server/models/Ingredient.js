@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ratingPromptSchema } from "../services/ratingPrompt.js";
 import { createNutritionSchema } from "./nutritionSchema.js";
 
 const nutritionSchema = createNutritionSchema();
@@ -225,6 +226,9 @@ const ingredientSchema = new mongoose.Schema(
       type: [scoreEntrySchema],
       default: [],
     },
+
+    // See services/ratingPrompt.js.
+    ratingPrompt: { type: ratingPromptSchema, default: () => ({}) },
   },
   {
     timestamps: true,

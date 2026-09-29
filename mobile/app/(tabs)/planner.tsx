@@ -59,8 +59,10 @@ import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { DishQuantityStepper } from "@/src/components/planner/DishQuantityStepper";
 import { RateAndConfirmModal } from "@/src/components/planner/RateAndConfirmModal";
+import { shouldAutoPromptRating, updateRatingPrompt, type RatingPromptAction } from "@/src/utils/ratingPrompt";
 import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
-import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
+import { NutritionSummaryCard, type NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
+import { NutritionDetailOverlay, type NutritionDetailPage } from "@/src/components/planner/NutritionDetailOverlay";
 import {
   computeConfirmedRecipeNutrition,
   computeConfirmNutrition,
@@ -68,6 +70,9 @@ import {
   friendlyDayLabel,
   getEntryAvailability,
   getIngredientKcal,
+  courseAmountLabel,
+  courseName,
+  courseNutrition,
   getMealKcal,
   getRecipeKcal,
   getRestaurantMealKcal,
@@ -387,6 +392,53 @@ export default function HomeScreen() {
     () => divideNutritionTotals(last7PlannedNutrition, last7Dates.length),
     [last7PlannedNutrition, last7Dates.length],
   );
+
+  // The three nutrition cards (day / last 7 days / 7-day daily average) —
+  // shared by the swipeable cards and the tap-to-expand overlay.
+  const nutritionPages = useMemo<NutritionDetailPage[]>(() => {
+    const dailyLimits = (scale: number): NutritionLimits => {
+      const s = (value: number | null | undefined) => (value != null ? value * scale : null);
+      return {
+        calories: s(appSettings?.dailyCalorieLimit),
+        protein: s(appSettings?.dailyProteinLimit),
+        carbs: s(appSettings?.dailyCarbsLimit),
+        fats: s(appSettings?.dailyFatsLimit),
+        fiber: s(appSettings?.dailyFiberLimit),
+        sodium: s(appSettings?.dailySodiumLimit),
+      };
+    };
+    return [
+      { title: "Daily nutrition", confirmed: confirmedNutrition, planned: plannedNutrition, limits: dailyLimits(1), goalScale: 1 },
+      {
+        title: "Last 7 days",
+        subtitle: weekRangeLabel(last7Dates),
+        confirmed: last7ConfirmedNutrition,
+        planned: last7PlannedNutrition,
+        limits: dailyLimits(7),
+        goalScale: 7,
+      },
+      {
+        title: "Daily average",
+        subtitle: "Last 7 days",
+        confirmed: avgConfirmedNutrition,
+        planned: avgPlannedNutrition,
+        limits: dailyLimits(1),
+        goalScale: 1,
+      },
+    ];
+  }, [
+    appSettings,
+    confirmedNutrition,
+    plannedNutrition,
+    last7Dates,
+    last7ConfirmedNutrition,
+    last7PlannedNutrition,
+    avgConfirmedNutrition,
+    avgPlannedNutrition,
+  ]);
+  // Which card's expanded view is open, if any.
+  const [nutritionDetailPage, setNutritionDetailPage] = useState<number | null>(null);
+  const nutritionPagerRef = useRef<ScrollView>(null);
 
   const entriesBySlot = useMemo(() => {
     const map = new Map<MealSlot, MealPlanEntry[]>();
@@ -762,6 +814,23 @@ export default function HomeScreen() {
     }
   }
 
+  // Whether adding this as already-eaten should ask for a rating: only for a
+  // recipe or directly-logged ingredient, and only when it's due (never
+  // rated, changed since, or not rated for a while — see
+  // utils/ratingPrompt.ts). A meal or restaurant visit just confirms.
+  function wantsAutoRating(entry: MealPlanEntry): boolean {
+    const timing = appSettings
+      ? {
+          cooldownDays: appSettings.ratingCooldownDays,
+          settledCooldownDays: appSettings.ratingSettledCooldownDays,
+          skipBackoffDays: appSettings.ratingSkipBackoffDays,
+        }
+      : undefined;
+    if (entry.recipe) return shouldAutoPromptRating(entry.recipe, Date.now(), timing);
+    if (entry.ingredient) return shouldAutoPromptRating(entry.ingredient, Date.now(), timing);
+    return false;
+  }
+
   // Once instructions/nutrition are settled (no ambiguity, or the overlay
   // just resolved it), either confirm right away (the manual toggle/swipe
   // path) or — rateFirst — prompt for a rating first, skippable, since
@@ -776,7 +845,7 @@ export default function HomeScreen() {
     confirmedNutrition: ConfirmedNutrition,
     rateFirst: boolean,
   ) {
-    if (rateFirst && (entry.recipe || entry.ingredient)) {
+    if (rateFirst && wantsAutoRating(entry)) {
       setPendingRatingConfirm({ entry, instructions, manualPieceEntries, confirmedNutrition });
       setRateConfirmEntry(entry);
       return;
@@ -903,7 +972,7 @@ export default function HomeScreen() {
       // rateFirst carried through from handleConfirmEntry — piece-size
       // resolution just finished, so the rating prompt (skippable) comes
       // next, before the pantry actually gets touched.
-      if (rateFirst && (entry.recipe || entry.ingredient)) {
+      if (rateFirst && wantsAutoRating(entry)) {
         setPendingRatingConfirm({ entry, instructions, manualPieceEntries, confirmedNutrition });
         setRateConfirmEntry(entry);
       } else {
@@ -960,7 +1029,25 @@ export default function HomeScreen() {
   // choice already made) still needs to happen either way; only the score
   // is skipped.
   function handleSkipRating() {
+    // Only a skipped *automatic* prompt counts toward backing off.
+    if (pendingRatingConfirm) recordRatingPrompt(pendingRatingConfirm.entry, "skip");
     finishRating();
+  }
+
+  function handleNeverAskRating() {
+    if (pendingRatingConfirm) recordRatingPrompt(pendingRatingConfirm.entry, "disable");
+    finishRating();
+  }
+
+  // Fire-and-forget: a failure here only means being asked again sooner,
+  // never worth blocking the confirm over.
+  function recordRatingPrompt(entry: MealPlanEntry, action: RatingPromptAction) {
+    const target = entry.recipe
+      ? { kind: "recipe" as const, id: entry.recipe._id }
+      : entry.ingredient
+        ? { kind: "ingredient" as const, id: entry.ingredient._id }
+        : null;
+    if (target) void updateRatingPrompt(target.kind, target.id, action).catch(() => {});
   }
 
   function handleDeleteEntry(id: string) {
@@ -1361,15 +1448,13 @@ export default function HomeScreen() {
           Courses ({meal.courses?.length ?? 0})
         </Text>
         {(meal.courses ?? []).map(course => {
-          const recipe = course.recipe;
-          const populated = recipe && typeof recipe !== "string" ? recipe : null;
-          const courseCal = populated?.nutrition?.calories;
+          const courseCal = courseNutrition(course, appSettings?.unitConversions ?? [])?.calories;
           return (
             <View key={course._id} className="mb-2 rounded-2xl bg-slate-50 px-4 py-3">
               <Text className="text-sm font-semibold text-slate-900">{course.label}</Text>
               <Text className="mt-0.5 text-xs text-slate-500">
-                {populated?.name ?? "No recipe selected"} · {course.servings} {course.servings === 1 ? "serving" : "servings"}
-                {courseCal != null && ` · ${Math.round(courseCal * course.servings)} kcal`}
+                {courseName(course)} · {courseAmountLabel(course)}
+                {courseCal != null && ` · ${Math.round(courseCal)} kcal`}
               </Text>
             </View>
           );
@@ -1923,6 +2008,7 @@ export default function HomeScreen() {
             {/* Daily / last-7-days / daily-average nutrition — swipe to switch */}
             <View className="mb-5">
               <ScrollView
+                ref={nutritionPagerRef}
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
@@ -1932,53 +2018,22 @@ export default function HomeScreen() {
                 }}
                 style={{ width: windowWidth - 32 }}
               >
-                <View style={{ width: windowWidth - 32 }}>
-                  <NutritionSummaryCard
-                    title="Daily nutrition"
-                    confirmed={confirmedNutrition}
-                    planned={plannedNutrition}
-                    limits={{
-                      calories: appSettings?.dailyCalorieLimit ?? null,
-                      protein:  appSettings?.dailyProteinLimit ?? null,
-                      carbs:    appSettings?.dailyCarbsLimit   ?? null,
-                      fats:     appSettings?.dailyFatsLimit    ?? null,
-                      fiber:    appSettings?.dailyFiberLimit   ?? null,
-                      sodium:   appSettings?.dailySodiumLimit  ?? null,
-                    }}
-                  />
-                </View>
-                <View style={{ width: windowWidth - 32 }}>
-                  <NutritionSummaryCard
-                    title="Last 7 days"
-                    subtitle={weekRangeLabel(last7Dates)}
-                    confirmed={last7ConfirmedNutrition}
-                    planned={last7PlannedNutrition}
-                    limits={{
-                      calories: appSettings?.dailyCalorieLimit != null ? appSettings.dailyCalorieLimit * 7 : null,
-                      protein:  appSettings?.dailyProteinLimit != null ? appSettings.dailyProteinLimit * 7 : null,
-                      carbs:    appSettings?.dailyCarbsLimit   != null ? appSettings.dailyCarbsLimit   * 7 : null,
-                      fats:     appSettings?.dailyFatsLimit    != null ? appSettings.dailyFatsLimit    * 7 : null,
-                      fiber:    appSettings?.dailyFiberLimit   != null ? appSettings.dailyFiberLimit   * 7 : null,
-                      sodium:   appSettings?.dailySodiumLimit  != null ? appSettings.dailySodiumLimit  * 7 : null,
-                    }}
-                  />
-                </View>
-                <View style={{ width: windowWidth - 32 }}>
-                  <NutritionSummaryCard
-                    title="Daily average"
-                    subtitle="Last 7 days"
-                    confirmed={avgConfirmedNutrition}
-                    planned={avgPlannedNutrition}
-                    limits={{
-                      calories: appSettings?.dailyCalorieLimit ?? null,
-                      protein:  appSettings?.dailyProteinLimit ?? null,
-                      carbs:    appSettings?.dailyCarbsLimit   ?? null,
-                      fats:     appSettings?.dailyFatsLimit    ?? null,
-                      fiber:    appSettings?.dailyFiberLimit   ?? null,
-                      sodium:   appSettings?.dailySodiumLimit  ?? null,
-                    }}
-                  />
-                </View>
+                {nutritionPages.map((page, index) => (
+                  <Pressable
+                    key={page.title}
+                    style={{ width: windowWidth - 32 }}
+                    className="active:opacity-80"
+                    onPress={() => setNutritionDetailPage(index)}
+                  >
+                    <NutritionSummaryCard
+                      title={page.title}
+                      subtitle={page.subtitle}
+                      confirmed={page.confirmed}
+                      planned={page.planned}
+                      limits={page.limits}
+                    />
+                  </Pressable>
+                ))}
               </ScrollView>
 
               {/* Page dots */}
@@ -2863,6 +2918,19 @@ export default function HomeScreen() {
       {renderInfoOverlay()}
       {renderEditEntryOverlay()}
 
+      <NutritionDetailOverlay
+        visible={nutritionDetailPage != null}
+        pages={nutritionPages}
+        initialPage={nutritionDetailPage ?? 0}
+        settings={appSettings}
+        onClose={(page) => {
+          setNutritionDetailPage(null);
+          // Leave the planner's cards on the view the overlay ended on.
+          setNutritionView(page >= 2 ? 2 : page === 1 ? 1 : 0);
+          nutritionPagerRef.current?.scrollTo({ x: page * (windowWidth - 32), animated: false });
+        }}
+      />
+
       <RateAndConfirmModal
         visible={!!rateConfirmEntry}
         itemName={rateConfirmEntry?.recipe?.name ?? rateConfirmEntry?.ingredient?.name ?? ""}
@@ -2878,6 +2946,7 @@ export default function HomeScreen() {
           setPendingRatingConfirm(null);
         }}
         onSkip={handleSkipRating}
+        onNeverAsk={pendingRatingConfirm ? handleNeverAskRating : undefined}
         onConfirm={(value) => void handleSubmitRateAndConfirm(value)}
       />
 

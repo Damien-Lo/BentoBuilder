@@ -7,7 +7,9 @@ function populateMeal(query) {
   return query
     .populate("tags")
     .populate({ path: "courses.recipe", select: "name mealCategory nutrition servings" })
-    .populate({ path: "bentoLayout.sections.recipe", select: "name mealCategory nutrition servings" });
+    .populate({ path: "courses.ingredient", select: "name nutrition defaultPortionAmount defaultPortionUnit unitConversions" })
+    .populate({ path: "bentoLayout.sections.recipe", select: "name mealCategory nutrition servings" })
+    .populate({ path: "bentoLayout.sections.ingredient", select: "name nutrition defaultPortionAmount defaultPortionUnit unitConversions" });
 }
 
 /**

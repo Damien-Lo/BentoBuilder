@@ -30,7 +30,9 @@ import type { PantryItem } from "@/src/types/pantry";
 import {
   CreatableStringDropdown,
   CreateGenericIngredientModal,
-  DateTextInput,
+  DatePickerField,
+  FieldLabel,
+  FormCard,
   DurationExpiryInput,
   PriceInput,
   SearchableObjectDropdown,
@@ -741,11 +743,9 @@ export default function AddPantryItemByIngredientScreen() {
               }}
             />
 
-            {/* Quantity */}
-            <View {...quantitySection.wrapperProps}>
-            <Text className="mb-2 mt-6 text-sm font-semibold text-slate-700">
-              Quantity
-            </Text>
+            <View className="h-3" />
+            <FormCard icon="cube-outline" title="Quantity" description="How much you're adding." zIndex={30}>
+            <View className="mt-3" {...quantitySection.wrapperProps}>
 
             {quantityRows.map((row, index) => (
               <View key={index} className="mb-2 flex-row items-center">
@@ -756,12 +756,14 @@ export default function AddPantryItemByIngredientScreen() {
                   keyboardType="decimal-pad"
                   placeholder="0"
                   placeholderTextColor="#94A3B8"
-                  className="mr-3 h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+                  className="mr-3 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+                  style={{ height: 56 }}
                 />
 
                 <View className="flex-1">
                   {selectedIngredient.defaultPortionUnit ? (
                     <UnitFamilyDropdown
+                      height={56}
                       unit={row.unit || selectedIngredient.defaultPortionUnit}
                       options={familyUnits}
                       onSelect={(unit) => updateQuantityRowUnit(index, unit)}
@@ -817,11 +819,10 @@ export default function AddPantryItemByIngredientScreen() {
               </Text>
             </Pressable>
             </View>
+            </FormCard>
 
-            {/* Storage location */}
-            <Text className="mb-2 mt-6 text-sm font-semibold text-slate-700">
-              Storage location
-            </Text>
+            <FormCard icon="calendar-outline" title="Where & when" description="Where it's stored, and when it expires." zIndex={20}>
+            <FieldLabel text="Storage location" />
 
             {effectiveLocation && !storageLocationTouched ? (
               <Text className="mb-2 text-xs leading-4 text-slate-500">
@@ -835,7 +836,8 @@ export default function AddPantryItemByIngredientScreen() {
 
             <View className="relative">
               <Pressable
-                className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
+                className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
+                style={{ height: 56 }}
                 onPress={() => {
                   setShowLocationOptions((current) => !current);
                 }}
@@ -892,30 +894,28 @@ export default function AddPantryItemByIngredientScreen() {
             </View>
 
             {/* Dates */}
-            <View className="mt-6 flex-row" {...datesSection.wrapperProps}>
-              <View className="mr-3 flex-1">
-                <Text className="mb-2 text-sm font-semibold text-slate-700">
-                  Purchase date
-                </Text>
-                <DateTextInput
+            <View className="flex-row gap-3" {...datesSection.wrapperProps}>
+              <View className="flex-1">
+                <FieldLabel text="Purchase date" />
+                <DatePickerField
+                  title="Purchase date"
                   value={purchaseDate}
-                  onChangeText={setPurchaseDate}
+                  onChange={setPurchaseDate}
                   onFocus={datesSection.trigger}
-                  className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 />
               </View>
               <View className="flex-1">
-                <Text className="mb-2 text-sm font-semibold text-slate-700">
-                  Expiry date
-                </Text>
-                <DateTextInput
+                <FieldLabel text="Expiry date" />
+                <DatePickerField
+                  title="Expiry date"
                   value={expiryDate}
-                  onChangeText={(value) => {
+                  placeholder="None"
+                  clearable
+                  onChange={(value) => {
                     setExpiryDate(value);
                     setExpiryTouched(true);
                   }}
                   onFocus={datesSection.trigger}
-                  className="h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 />
               </View>
             </View>
@@ -931,10 +931,8 @@ export default function AddPantryItemByIngredientScreen() {
               </Text>
             ) : null}
 
-            <View {...expiryDurationSection.wrapperProps}>
-            <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
-              Or set expiry from purchase date
-            </Text>
+            <View className="mt-3 rounded-2xl bg-blue-50/60 px-3 pb-3 pt-1" {...expiryDurationSection.wrapperProps}>
+            <FieldLabel text="Or set expiry from purchase date" />
             <DurationExpiryInput
               purchaseDate={purchaseDate}
               initialAmount={
@@ -948,23 +946,19 @@ export default function AddPantryItemByIngredientScreen() {
               onFocus={expiryDurationSection.trigger}
             />
             </View>
+            </FormCard>
 
+            <FormCard icon="receipt-outline" title="Purchase details" description="Optional — where you bought it and any notes." zIndex={10}>
             {showMoreDetails || storeId || storeDraft.trim() || purchasePrice.trim() ? (
               <>
-                <View {...storeSection.wrapperProps}>
-                <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
-                  Store (optional)
-                </Text>
-                {suggestedStore && !storeTouched ? (
-                  <Text className="mb-2 text-xs leading-4 text-slate-500">
-                    Auto-filled from recent purchase history.
-                  </Text>
-                ) : null}
+                <View className="flex-row gap-3">
+                <View className="flex-1" {...storeSection.wrapperProps}>
+                <FieldLabel text="Store" />
                 <SearchableObjectDropdown<SelectOption>
                   options={stores}
                   selectedId={storeId}
                   selectedName={storeName}
-                  placeholder="Search or type a new store"
+                  placeholder="Search"
                   onOpen={storeSection.trigger}
                   onTextChange={(value) => {
                     if (value !== storeName) setStoreId("");
@@ -980,16 +974,20 @@ export default function AddPantryItemByIngredientScreen() {
                 />
                 </View>
 
-                <View {...priceSection.wrapperProps}>
-                <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
-                  Price paid (optional)
-                </Text>
+                <View className="flex-1" {...priceSection.wrapperProps}>
+                <FieldLabel text="Price paid" />
                 <PriceInput
                   value={purchasePrice}
                   onChangeText={setPurchasePrice}
                   onFocus={priceSection.trigger}
                 />
                 </View>
+                </View>
+                {suggestedStore && !storeTouched ? (
+                  <Text className="mt-2 text-xs leading-4 text-slate-500">
+                    Store auto-filled from recent purchase history.
+                  </Text>
+                ) : null}
               </>
             ) : (
               <Pressable
@@ -1004,9 +1002,7 @@ export default function AddPantryItemByIngredientScreen() {
             )}
 
             <View {...notesSection.wrapperProps}>
-            <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">
-              Notes (optional)
-            </Text>
+            <FieldLabel text="Notes" />
             <TextInput
               value={notes}
               onChangeText={setNotes}
@@ -1018,14 +1014,16 @@ export default function AddPantryItemByIngredientScreen() {
               className="min-h-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
             />
             </View>
+            </FormCard>
           </ScrollView>
 
             <View className="pb-6 pt-4">
               <Pressable
                 disabled={saving}
-                className={`h-14 items-center justify-center rounded-2xl ${
-                  saving ? "bg-blue-400" : "bg-blue-600"
+                className={`items-center justify-center rounded-2xl ${
+                  saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
                 }`}
+                style={{ height: 56 }}
                 onPress={() => void handleSave()}
               >
                 {saving ? (

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 
-import type { Meal, MealRecipeRef } from "@/src/services/mealApi";
+import type { CourseEntry, Meal, MealIngredientRef, MealRecipeRef } from "@/src/services/mealApi";
 import type { MealPlanEntry, MealSlot, RestaurantDishSelection } from "@/src/services/mealPlanApi";
 import type { Recipe } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
@@ -112,16 +112,55 @@ export const SLOT_MAP = Object.fromEntries(SLOTS.map(s => [s.id, s])) as Record<
 
 // ── Nutrition helper ──────────────────────────────────────────────────────────
 
-export function getMealKcal(meal: Meal): number | null {
+// A meal course's populated recipe or ingredient (null when unpopulated or
+// unset).
+export function courseRecipe(course: CourseEntry): MealRecipeRef | null {
+  return course.recipe && typeof course.recipe !== "string" ? course.recipe : null;
+}
+
+export function courseIngredient(course: CourseEntry): MealIngredientRef | null {
+  return course.ingredient && typeof course.ingredient !== "string" ? course.ingredient : null;
+}
+
+// What one course contributes: a recipe's per-serving nutrition x servings,
+// or an ingredient's nutrition scaled to the course's quantity/unit. Null
+// when there's nothing populated to read.
+export function courseNutrition(
+  course: CourseEntry,
+  conversions: CustomUnitConversion[] = [],
+): NullableNutrition | null {
+  const recipe = courseRecipe(course);
+  if (recipe) return scaleNutrition(recipe.nutrition, course.servings ?? 1);
+  const ingredient = courseIngredient(course);
+  if (ingredient) {
+    return scaleIngredientNutrition(
+      ingredient as unknown as Ingredient,
+      course.quantity ?? 0,
+      course.unit || ingredient.defaultPortionUnit || "",
+      [...(ingredient.unitConversions ?? []), ...conversions],
+    );
+  }
+  return null;
+}
+
+// "Chicken Curry" / "Greek Yogurt", and "2 servings" / "150 g".
+export function courseName(course: CourseEntry): string {
+  return courseRecipe(course)?.name ?? courseIngredient(course)?.name ?? "Nothing selected";
+}
+
+export function courseAmountLabel(course: CourseEntry): string {
+  if (courseIngredient(course)) return `${course.quantity ?? 0} ${course.unit ?? ""}`.trim();
+  return `${course.servings} ${course.servings === 1 ? "serving" : "servings"}`;
+}
+
+export function getMealKcal(meal: Meal, conversions: CustomUnitConversion[] = []): number | null {
   if (!meal.courses?.length) return null;
   let total = 0;
   let hasAny = false;
   for (const course of meal.courses) {
-    const recipe = course.recipe;
-    if (!recipe || typeof recipe === "string") continue;
-    const cal = (recipe as MealRecipeRef).nutrition?.calories;
+    const cal = courseNutrition(course, conversions)?.calories;
     if (cal != null) {
-      total += cal * course.servings;
+      total += cal;
       hasAny = true;
     }
   }
@@ -389,9 +428,8 @@ export function computeDayNutrition(entries: MealPlanEntry[], conversions: Custo
       continue;
     }
     for (const course of entry.meal?.courses ?? []) {
-      const recipe = course.recipe;
-      if (!recipe || typeof recipe === "string") continue;
-      addNutrition(totals, scaleNutrition((recipe as MealRecipeRef).nutrition, course.servings ?? 1));
+      const nutrition = courseNutrition(course, conversions);
+      if (nutrition) addNutrition(totals, nutrition);
     }
   }
   return roundNutritionTotals(totals);
@@ -510,7 +548,7 @@ export function getRecipeAvailability(
 }
 
 // A meal-plan entry can point at a recipe, a bare ingredient, or a meal (a
-// set of recipe courses) — a course's own recipe ref is a thin projection
+// set of recipe / ingredient courses) — a course's own recipe ref is a thin projection
 // with no ingredientList, so it's looked up in `recipeMap` (the full recipe
 // list) to get the real ingredients to check.
 export function getEntryAvailability(
@@ -539,8 +577,23 @@ export function getEntryAvailability(
   if (entry.meal) {
     let availability: AvailabilityState | null = null;
     for (const course of entry.meal.courses ?? []) {
-      const ref = course.recipe;
-      if (!ref || typeof ref === "string") continue;
+      const ingredientRef = courseIngredient(course);
+      if (ingredientRef) {
+        const ingredient = ingredientMap.get(ingredientRef._id);
+        if (!ingredient) continue;
+        const state = ingredientAvailabilityState(
+          ingredient,
+          course.quantity ?? 0,
+          course.unit || ingredient.defaultPortionUnit || "",
+          allIngredients,
+          pantryItems,
+          customConversions,
+        );
+        availability = worseOf(availability, state);
+        continue;
+      }
+      const ref = courseRecipe(course);
+      if (!ref) continue;
       const fullRecipe = recipeMap.get(ref._id);
       if (!fullRecipe) continue;
       const state = getRecipeAvailability(fullRecipe, ingredientMap, allIngredients, pantryItems, customConversions);

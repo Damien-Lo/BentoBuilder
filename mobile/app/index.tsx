@@ -34,6 +34,16 @@ const SECTIONS: Section[] = [
     route: "/planner",
   },
   {
+    id: "lists",
+    name: "Lists",
+    description: "To-dos, reminders & everyday lists",
+    icon: "checkbox-outline",
+    iconColor: "#4B55C9",
+    iconBg: "#EEF0FB",
+    active: true,
+    route: "/lists",
+  },
+  {
     id: "scheduling",
     name: "Scheduling",
     description: "Manage your time & appointments",
