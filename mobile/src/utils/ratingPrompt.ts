@@ -21,15 +21,26 @@ interface RatableItem {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-// Wait this long after the last rating before asking again...
-const COOLDOWN_DAYS = 10;
-// ...or this long once the last few ratings agree (another one adds little).
-const SETTLED_COOLDOWN_DAYS = 30;
+
+// How long to wait, in days — set in Settings (Kitchen → Rating prompts).
+export interface RatingPromptTiming {
+  // After the last rating, before asking again...
+  cooldownDays: number;
+  // ...or this long once the last few ratings agree (another adds little).
+  settledCooldownDays: number;
+  // After SKIP_LIMIT skips in a row.
+  skipBackoffDays: number;
+}
+
+export const DEFAULT_RATING_PROMPT_TIMING: RatingPromptTiming = {
+  cooldownDays: 10,
+  settledCooldownDays: 30,
+  skipBackoffDays: 60,
+};
+
 const SETTLED_RATINGS = 3; // how many recent ratings must agree
 const SETTLED_SPREAD = 1; // agree = within this many points of each other
-// After this many skips in a row, back off for much longer.
-const SKIP_LIMIT = 2;
-const SKIP_BACKOFF_DAYS = 60;
+const SKIP_LIMIT = 2; // skips in a row before the long back-off
 
 // Things that aren't worth rating as a meal.
 const NEVER_ASK_CATEGORY = /supplement|vitamin/i;
@@ -41,7 +52,11 @@ function daysSince(iso: string | null | undefined, now: number): number {
   return Number.isNaN(time) ? Infinity : (now - time) / DAY_MS;
 }
 
-export function shouldAutoPromptRating(item: RatableItem | null | undefined, now = Date.now()): boolean {
+export function shouldAutoPromptRating(
+  item: RatableItem | null | undefined,
+  now = Date.now(),
+  timing: RatingPromptTiming = DEFAULT_RATING_PROMPT_TIMING,
+): boolean {
   if (!item) return false;
   const prompt = item.ratingPrompt ?? {};
   if (prompt.disabled) return false;
@@ -56,12 +71,12 @@ export function shouldAutoPromptRating(item: RatableItem | null | undefined, now
   const settled =
     recent.length === SETTLED_RATINGS &&
     Math.max(...recent.map((s) => s.value)) - Math.min(...recent.map((s) => s.value)) <= SETTLED_SPREAD;
-  const cooldown = settled ? SETTLED_COOLDOWN_DAYS : COOLDOWN_DAYS;
+  const cooldown = settled ? timing.settledCooldownDays : timing.cooldownDays;
 
   // Skipped recently: hold off (much longer after several skips in a row).
   const skipCount = prompt.skipCount ?? 0;
   if (skipCount > 0) {
-    const backoff = skipCount >= SKIP_LIMIT ? SKIP_BACKOFF_DAYS : cooldown;
+    const backoff = skipCount >= SKIP_LIMIT ? timing.skipBackoffDays : cooldown;
     if (daysSince(prompt.lastSkippedAt, now) < backoff) return false;
   }
 

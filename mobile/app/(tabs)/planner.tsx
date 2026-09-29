@@ -819,8 +819,15 @@ export default function HomeScreen() {
   // rated, changed since, or not rated for a while — see
   // utils/ratingPrompt.ts). A meal or restaurant visit just confirms.
   function wantsAutoRating(entry: MealPlanEntry): boolean {
-    if (entry.recipe) return shouldAutoPromptRating(entry.recipe);
-    if (entry.ingredient) return shouldAutoPromptRating(entry.ingredient);
+    const timing = appSettings
+      ? {
+          cooldownDays: appSettings.ratingCooldownDays,
+          settledCooldownDays: appSettings.ratingSettledCooldownDays,
+          skipBackoffDays: appSettings.ratingSkipBackoffDays,
+        }
+      : undefined;
+    if (entry.recipe) return shouldAutoPromptRating(entry.recipe, Date.now(), timing);
+    if (entry.ingredient) return shouldAutoPromptRating(entry.ingredient, Date.now(), timing);
     return false;
   }
 

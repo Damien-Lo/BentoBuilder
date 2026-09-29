@@ -19,7 +19,15 @@ import { useRouter } from "expo-router";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
 import { getUnitSuggestions } from "@/src/services/optionsApi";
 import { DAY_ABBREVS } from "@/src/utils/mealPlan";
-import { SettingsSectionHeader as SectionHeader, UnitConversionsEditor } from "@/src/components/forms";
+import {
+  SettingsNumericInput,
+  SettingsRow,
+  SettingsSectionHeader as SectionHeader,
+  UnitConversionsEditor,
+} from "@/src/components/forms";
+import { getIngredients } from "@/src/services/ingredientApi";
+import { getRecipes } from "@/src/services/recipeApi";
+import { DEFAULT_RATING_PROMPT_TIMING, updateRatingPrompt } from "@/src/utils/ratingPrompt";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 
 function WeekStartPicker({
@@ -69,6 +77,11 @@ export default function SettingsScreen() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   const [units, setUnits] = useState<string[]>([]);
+  // Recipes/ingredients whose automatic rating prompt was turned off
+  // ("Don't ask about this again") — listed so it can be turned back on.
+  const [pausedRatings, setPausedRatings] = useState<
+    { kind: "recipe" | "ingredient"; id: string; name: string }[]
+  >([]);
 
   // Scrolls the focused field into view — see useScrollFocusSection. Only
   // one plain focusable field (Display name) on this page — WeekStartPicker
@@ -86,7 +99,29 @@ export default function SettingsScreen() {
         setUnits(Array.isArray(loadedUnits) ? loadedUnits : []);
       })
       .finally(() => setIsLoading(false));
+
+    Promise.all([getRecipes(), getIngredients()])
+      .then(([recipes, ingredients]) => {
+        setPausedRatings([
+          ...recipes
+            .filter((r) => r.ratingPrompt?.disabled)
+            .map((r) => ({ kind: "recipe" as const, id: r._id, name: r.name })),
+          ...ingredients
+            .filter((i) => i.ratingPrompt?.disabled)
+            .map((i) => ({ kind: "ingredient" as const, id: i._id, name: i.name })),
+        ].sort((a, b) => a.name.localeCompare(b.name)));
+      })
+      .catch(() => {});
   }, []);
+
+  async function resumeRatingPrompt(item: { kind: "recipe" | "ingredient"; id: string; name: string }) {
+    try {
+      await updateRatingPrompt(item.kind, item.id, "enable");
+      setPausedRatings((prev) => prev.filter((p) => p.id !== item.id));
+    } catch {
+      Alert.alert("Error", `Couldn't turn rating prompts back on for ${item.name}.`);
+    }
+  }
 
   function patch(partial: Partial<AppSettings>) {
     setSettings(prev => ({ ...prev, ...partial }));
@@ -170,6 +205,78 @@ export default function SettingsScreen() {
               value={settings.weekStartDay}
               onChange={day => patch({ weekStartDay: day })}
             />
+          </View>
+
+          {/* ── Rating prompts ── */}
+          <SectionHeader title="Rating prompts" />
+          <Text className="mb-2 text-sm text-slate-500">
+            After you log something as eaten, the planner asks how it was — but only when a new
+            rating is useful. Swiping an entry to rate it always works.
+          </Text>
+          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <SettingsRow label="Ask again after">
+              <SettingsNumericInput
+                value={settings.ratingCooldownDays}
+                onChange={(v) => patch({ ratingCooldownDays: v || DEFAULT_RATING_PROMPT_TIMING.cooldownDays })}
+                placeholder={String(DEFAULT_RATING_PROMPT_TIMING.cooldownDays)}
+                unit="days"
+              />
+            </SettingsRow>
+            <SettingsRow label="Once ratings are steady">
+              <SettingsNumericInput
+                value={settings.ratingSettledCooldownDays}
+                onChange={(v) =>
+                  patch({ ratingSettledCooldownDays: v || DEFAULT_RATING_PROMPT_TIMING.settledCooldownDays })
+                }
+                placeholder={String(DEFAULT_RATING_PROMPT_TIMING.settledCooldownDays)}
+                unit="days"
+              />
+            </SettingsRow>
+            <SettingsRow label="After 2 skips in a row">
+              <SettingsNumericInput
+                value={settings.ratingSkipBackoffDays}
+                onChange={(v) => patch({ ratingSkipBackoffDays: v || DEFAULT_RATING_PROMPT_TIMING.skipBackoffDays })}
+                placeholder={String(DEFAULT_RATING_PROMPT_TIMING.skipBackoffDays)}
+                unit="days"
+              />
+            </SettingsRow>
+          </View>
+          <Text className="mb-2 mt-3 text-sm text-slate-500">
+            It always asks about something you&apos;ve never rated, or a recipe whose ingredients changed.
+            &quot;Steady&quot; means your last 3 ratings are within a point of each other.
+          </Text>
+
+          <Text className="mb-1.5 mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Not asking about
+          </Text>
+          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            {pausedRatings.length === 0 ? (
+              <Text className="px-4 py-3.5 text-sm text-slate-400">
+                Nothing — tap &quot;Don&apos;t ask about this again&quot; on a rating prompt to add something here.
+              </Text>
+            ) : (
+              pausedRatings.map((item) => (
+                <View
+                  key={item.id}
+                  className="flex-row items-center border-b border-slate-100 px-4 py-3 last:border-b-0"
+                >
+                  <Ionicons
+                    name={item.kind === "recipe" ? "book-outline" : "nutrition-outline"}
+                    size={18}
+                    color="#475569"
+                  />
+                  <Text className="ml-3 flex-1 text-base text-slate-700" numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Pressable
+                    onPress={() => void resumeRatingPrompt(item)}
+                    className="rounded-full bg-blue-50 px-3 py-1.5 active:bg-blue-100"
+                  >
+                    <Text className="text-xs font-semibold text-blue-700">Ask again</Text>
+                  </Pressable>
+                </View>
+              ))
+            )}
           </View>
 
           {/* ── Unit conversions ── */}

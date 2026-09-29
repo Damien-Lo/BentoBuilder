@@ -17,6 +17,13 @@ const userProfileSchema = new mongoose.Schema(
       type: createExtendedNutrientGoalsSchema(),
       default: () => ({}),
     },
+    // When the planner auto-asks "How was it?" (see the app's
+    // utils/ratingPrompt.ts): wait this many days after the last rating,
+    // this many once the last few ratings agree, and this many after
+    // repeated skips.
+    ratingCooldownDays:        { type: Number, min: 1, default: 10 },
+    ratingSettledCooldownDays: { type: Number, min: 1, default: 30 },
+    ratingSkipBackoffDays:     { type: Number, min: 1, default: 60 },
     // 0 = Sunday … 6 = Saturday, matching JS Date#getDay()
     weekStartDay:      { type: Number,  min: 0, max: 6, default: 1 },
 
