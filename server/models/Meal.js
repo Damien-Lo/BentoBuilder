@@ -20,7 +20,11 @@ const bentoSectionSchema = new mongoose.Schema(
     col:     { type: Number, required: true },
     rowSpan: { type: Number, min: 1, default: 1 },
     colSpan: { type: Number, min: 1, default: 1 },
+    // Like a course: a recipe, or one ingredient in an amount.
     recipe:  { type: mongoose.Schema.Types.ObjectId, ref: "Recipe", default: null },
+    ingredient: { type: mongoose.Schema.Types.ObjectId, ref: "Ingredient", default: null },
+    quantity:   { type: Number, min: 0, default: null },
+    unit:       { type: String, trim: true, default: "" },
     label:   { type: String, trim: true, default: "" },
     color:   { type: String, trim: true, default: "" },
   },

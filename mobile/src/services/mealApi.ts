@@ -42,7 +42,11 @@ export interface BentoSection {
   col: number;
   rowSpan?: number;
   colSpan?: number;
+  // A recipe, or one ingredient in quantity/unit — same as a course.
   recipe: MealRecipeRef | string | null;
+  ingredient?: MealIngredientRef | string | null;
+  quantity?: number | null;
+  unit?: string;
   label?: string;
   color?: string;
 }
@@ -83,6 +87,9 @@ export interface BentoSectionInput {
   rowSpan?: number;
   colSpan?: number;
   recipe?: string | null;
+  ingredient?: string | null;
+  quantity?: number | null;
+  unit?: string;
   label?: string;
   color?: string;
 }
