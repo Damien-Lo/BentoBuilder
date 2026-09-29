@@ -25,6 +25,9 @@ interface RateAndConfirmModalProps {
   // rather than an opt-in swipe action, so rating never blocks confirming.
   onSkip: () => void;
   onConfirm: (value: number) => void;
+  // Shown only for the automatic prompt: stop auto-asking about this item
+  // (then confirms, like skipping).
+  onNeverAsk?: () => void;
 }
 
 // Swiping to confirm a planned recipe entry offers this as an alternative to
@@ -42,6 +45,7 @@ export function RateAndConfirmModal({
   onCancel,
   onSkip,
   onConfirm,
+  onNeverAsk,
 }: RateAndConfirmModalProps) {
   const [value, setValue] = useState(5);
 
@@ -91,6 +95,11 @@ export function RateAndConfirmModal({
           <Pressable disabled={saving} onPress={onSkip} className="mt-3 items-center py-1 active:opacity-60">
             <Text className="text-sm font-semibold text-blue-600">Skip rating, just confirm</Text>
           </Pressable>
+          {onNeverAsk && (
+            <Pressable disabled={saving} onPress={onNeverAsk} className="mt-1 items-center py-1 active:opacity-60">
+              <Text className="text-xs text-slate-400">Don&apos;t ask about this again</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </Modal>

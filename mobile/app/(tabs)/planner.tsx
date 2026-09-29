@@ -59,6 +59,7 @@ import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { DishQuantityStepper } from "@/src/components/planner/DishQuantityStepper";
 import { RateAndConfirmModal } from "@/src/components/planner/RateAndConfirmModal";
+import { shouldAutoPromptRating, updateRatingPrompt, type RatingPromptAction } from "@/src/utils/ratingPrompt";
 import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
 import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
 import {
@@ -765,6 +766,16 @@ export default function HomeScreen() {
     }
   }
 
+  // Whether adding this as already-eaten should ask for a rating: only for a
+  // recipe or directly-logged ingredient, and only when it's due (never
+  // rated, changed since, or not rated for a while — see
+  // utils/ratingPrompt.ts). A meal or restaurant visit just confirms.
+  function wantsAutoRating(entry: MealPlanEntry): boolean {
+    if (entry.recipe) return shouldAutoPromptRating(entry.recipe);
+    if (entry.ingredient) return shouldAutoPromptRating(entry.ingredient);
+    return false;
+  }
+
   // Once instructions/nutrition are settled (no ambiguity, or the overlay
   // just resolved it), either confirm right away (the manual toggle/swipe
   // path) or — rateFirst — prompt for a rating first, skippable, since
@@ -779,7 +790,7 @@ export default function HomeScreen() {
     confirmedNutrition: ConfirmedNutrition,
     rateFirst: boolean,
   ) {
-    if (rateFirst && (entry.recipe || entry.ingredient)) {
+    if (rateFirst && wantsAutoRating(entry)) {
       setPendingRatingConfirm({ entry, instructions, manualPieceEntries, confirmedNutrition });
       setRateConfirmEntry(entry);
       return;
@@ -906,7 +917,7 @@ export default function HomeScreen() {
       // rateFirst carried through from handleConfirmEntry — piece-size
       // resolution just finished, so the rating prompt (skippable) comes
       // next, before the pantry actually gets touched.
-      if (rateFirst && (entry.recipe || entry.ingredient)) {
+      if (rateFirst && wantsAutoRating(entry)) {
         setPendingRatingConfirm({ entry, instructions, manualPieceEntries, confirmedNutrition });
         setRateConfirmEntry(entry);
       } else {
@@ -963,7 +974,25 @@ export default function HomeScreen() {
   // choice already made) still needs to happen either way; only the score
   // is skipped.
   function handleSkipRating() {
+    // Only a skipped *automatic* prompt counts toward backing off.
+    if (pendingRatingConfirm) recordRatingPrompt(pendingRatingConfirm.entry, "skip");
     finishRating();
+  }
+
+  function handleNeverAskRating() {
+    if (pendingRatingConfirm) recordRatingPrompt(pendingRatingConfirm.entry, "disable");
+    finishRating();
+  }
+
+  // Fire-and-forget: a failure here only means being asked again sooner,
+  // never worth blocking the confirm over.
+  function recordRatingPrompt(entry: MealPlanEntry, action: RatingPromptAction) {
+    const target = entry.recipe
+      ? { kind: "recipe" as const, id: entry.recipe._id }
+      : entry.ingredient
+        ? { kind: "ingredient" as const, id: entry.ingredient._id }
+        : null;
+    if (target) void updateRatingPrompt(target.kind, target.id, action).catch(() => {});
   }
 
   function handleDeleteEntry(id: string) {
@@ -2879,6 +2908,7 @@ export default function HomeScreen() {
           setPendingRatingConfirm(null);
         }}
         onSkip={handleSkipRating}
+        onNeverAsk={pendingRatingConfirm ? handleNeverAskRating : undefined}
         onConfirm={(value) => void handleSubmitRateAndConfirm(value)}
       />
 

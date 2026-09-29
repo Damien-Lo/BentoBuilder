@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ratingPromptSchema } from "../services/ratingPrompt.js";
 import { createNutritionSchema } from "./nutritionSchema.js";
 
 const nutritionSchema = createNutritionSchema();
@@ -163,6 +164,14 @@ const recipeSchema = new mongoose.Schema(
       type: [scoreEntrySchema],
       default: [],
     },
+
+    // See services/ratingPrompt.js.
+    ratingPrompt: { type: ratingPromptSchema, default: () => ({}) },
+
+    // Last time the ingredient list or servings actually changed — a
+    // rating older than this was for a different version of the dish, so
+    // the planner asks again.
+    contentChangedAt: { type: Date, default: null },
 
     ingredientList: [ingredientEntrySchema],
 

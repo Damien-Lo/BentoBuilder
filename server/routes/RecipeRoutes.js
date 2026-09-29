@@ -1,4 +1,5 @@
 import express from "express";
+import { ratingPromptHandler } from "../services/ratingPrompt.js";
 import Recipe from "../models/Recipe.js";
 import Ingredient from "../models/Ingredient.js";
 import { wouldCreateCycle } from "../services/productionCycle.js";
@@ -83,6 +84,12 @@ router.get("/:id", async (req, res) => {
  * ingredients) are untouched, so the client merges this in rather than
  * replacing the whole recipe with an unpopulated one.
  */
+/**
+ * POST /api/recipes/:id/rating-prompt  { action: "skip" | "disable" | "enable" }
+ * Records a skipped auto rating prompt, or turns the prompt off/on.
+ */
+router.post("/:id/rating-prompt", ratingPromptHandler(Recipe, "Recipe"));
+
 router.post("/:id/scores", async (req, res) => {
   try {
     const parsedValue = Number(req.body.value);
@@ -103,6 +110,8 @@ router.post("/:id/scores", async (req, res) => {
             mealPlanEntry: req.body.mealPlanEntry || null,
           },
         },
+        // A real rating ends any run of skipped prompts.
+        $set: { "ratingPrompt.skipCount": 0 },
       },
       { new: true, runValidators: true },
     );
@@ -233,6 +242,8 @@ router.patch("/:id", async (req, res) => {
       }
     }
 
+    const before = await Recipe.findById(req.params.id).select("ingredientList servings");
+
     const recipe = await Recipe.findByIdAndUpdate(req.params.id, normalizeMealCategory(req.body), {
       new: true,
       runValidators: true,
@@ -249,6 +260,13 @@ router.patch("/:id", async (req, res) => {
         success: false,
         message: "Recipe not found",
       });
+    }
+
+    // Only a real change to what goes in it (not a rename, rating, notes
+    // edit, ...) counts as a new version of the dish for rating prompts.
+    if (before && contentSignature(before) !== contentSignature(recipe)) {
+      recipe.contentChangedAt = new Date();
+      await recipe.save();
     }
 
     const nutrition = await calcNutrition(recipe);
@@ -269,6 +287,20 @@ router.patch("/:id", async (req, res) => {
     });
   }
 });
+
+// What a recipe is made of, as a comparable string — ingredient, amount and
+// how it's matched for each line, plus the servings it makes.
+function contentSignature(recipe) {
+  const lines = (recipe.ingredientList ?? []).map((line) => [
+    String(line.ingredient?._id ?? line.ingredient ?? ""),
+    line.quantity,
+    line.unit,
+    line.matchMode ?? "",
+    line.pieceMinWeight ?? null,
+    line.pieceMaxWeight ?? null,
+  ]);
+  return JSON.stringify([recipe.servings ?? 1, lines]);
+}
 
 /**
  * DELETE /api/recipes/:id
