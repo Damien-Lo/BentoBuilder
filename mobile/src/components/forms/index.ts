@@ -1,6 +1,7 @@
 export { CreatableMultiTagDropdown } from "./CreatableMultiTagDropdown";
 export { CreatableStringDropdown } from "./CreatableStringDropdown";
 export { CreateGenericIngredientModal } from "./CreateGenericIngredientModal";
+export { DatePickerModal } from "./DatePickerModal";
 export { DateTextInput } from "./DateTextInput";
 export { DurationExpiryInput } from "./DurationExpiryInput";
 export { DurationValueInput } from "./DurationValueInput";

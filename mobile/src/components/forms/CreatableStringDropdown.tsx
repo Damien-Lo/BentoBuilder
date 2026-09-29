@@ -19,6 +19,8 @@ interface CreatableStringDropdownProps {
   // the opened dropdown/search modal stays full-size either way, since it
   // floats above the layout rather than needing to match it.
   compact?: boolean;
+  // A fixed trigger height, to line up with neighbouring fields in a row.
+  height?: number;
 }
 
 interface DropdownPosition {
@@ -34,6 +36,7 @@ export function CreatableStringDropdown({
   disabled = false,
   onSelect,
   compact = false,
+  height,
 }: CreatableStringDropdownProps) {
   const safeOptions = useMemo(
     () => (Array.isArray(options) ? options : []),
@@ -127,6 +130,7 @@ export function CreatableStringDropdown({
     <View ref={anchorRef} collapsable={false}>
       <Pressable
         disabled={disabled}
+        style={height ? { height } : undefined}
         className={`flex-row items-center border bg-white ${
           compact ? "h-10 rounded-xl px-2" : "h-[52px] rounded-2xl px-4"
         } ${

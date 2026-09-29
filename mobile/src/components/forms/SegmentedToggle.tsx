@@ -13,6 +13,8 @@ interface SegmentedToggleProps<T> {
   // A shorter rendering (tighter vertical padding, smaller text) for
   // cramped layouts.
   compact?: boolean;
+  // A fixed outer height, to line up with neighbouring fields in a row.
+  height?: number;
 }
 
 export function SegmentedToggle<T extends string | boolean>({
@@ -21,9 +23,10 @@ export function SegmentedToggle<T extends string | boolean>({
   disabled = false,
   onChange,
   compact = false,
+  height,
 }: SegmentedToggleProps<T>) {
   return (
-    <View className="flex-row rounded-2xl border border-slate-200 bg-white p-1">
+    <View className="flex-row rounded-2xl border border-slate-200 bg-white p-1" style={height ? { height } : undefined}>
       {options.map((option) => {
         const isActive = option.value === value;
 
@@ -32,7 +35,7 @@ export function SegmentedToggle<T extends string | boolean>({
             key={String(option.value)}
             disabled={disabled}
             onPress={() => onChange(option.value)}
-            className={`flex-1 items-center rounded-xl ${compact ? "py-1.5" : "py-3"} ${
+            className={`flex-1 items-center justify-center rounded-xl ${compact ? "py-1.5" : "py-3"} ${
               isActive ? "bg-blue-600" : ""
             } ${disabled && !isActive ? "opacity-50" : ""}`}
           >

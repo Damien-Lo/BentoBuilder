@@ -36,6 +36,9 @@ interface SearchableObjectDropdownProps<T extends BaseDropdownOption> {
   // Most matches an inline list shows before "keep typing" (default 40) —
   // lower for a field that isn't itself in a scrolling area.
   inlineLimit?: number;
+  // Just the text field — no box, border or search icon — for embedding in
+  // a host's own card (e.g. the receipt review's Store card).
+  bare?: boolean;
 
   onSelect: (option: T) => void;
   onTextChange?: (value: string) => void;
@@ -64,6 +67,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
   compact = false,
   inline = false,
   inlineLimit = INLINE_LIMIT,
+  bare = false,
   onSelect,
   onTextChange,
   onOpen,
@@ -202,16 +206,20 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
       }}
     >
       <View
-        style={{ height: compact ? 44 : 56 }}
-        className={`flex-row items-center rounded-2xl border bg-white ${compact ? "px-3" : "px-4"} ${
-          disabled
-            ? "border-slate-100 opacity-60"
-            : open
-              ? "border-blue-500"
-              : "border-slate-200"
-        }`}
+        style={{ height: bare ? 26 : compact ? 44 : 56 }}
+        className={
+          bare
+            ? `flex-row items-center ${disabled ? "opacity-60" : ""}`
+            : `flex-row items-center rounded-2xl border bg-white ${compact ? "px-3" : "px-4"} ${
+                disabled
+                  ? "border-slate-100 opacity-60"
+                  : open
+                    ? "border-blue-500"
+                    : "border-slate-200"
+              }`
+        }
       >
-        <Ionicons name="search-outline" size={compact ? 16 : 20} color="#64748B" />
+        {!bare && <Ionicons name="search-outline" size={compact ? 16 : 20} color="#64748B" />}
 
         <TextInput
           value={query}
@@ -220,7 +228,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
           placeholderTextColor="#94A3B8"
           autoCapitalize="words"
           autoCorrect={false}
-          className={`flex-1 text-slate-950 ${compact ? "ml-2 text-sm" : "ml-3 text-base"}`}
+          className={`flex-1 text-slate-950 ${bare ? "text-base" : compact ? "ml-2 text-sm" : "ml-3 text-base"}`}
           onFocus={openDropdown}
           onChangeText={handleTextChange}
           onSubmitEditing={closeDropdown}
@@ -256,7 +264,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
         <View
           className="absolute left-0 right-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
           style={{
-            top: compact ? 48 : 60,
+            top: bare ? 34 : compact ? 48 : 60,
             maxHeight: 260,
             zIndex: 1001,
             elevation: 20,
