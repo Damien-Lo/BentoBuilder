@@ -58,6 +58,8 @@ import {
 import { referenceId, referenceName } from "@/src/utils/pantryDefaults";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
+import { MoreNutrientsPanel } from "@/src/components/nutrition/MoreNutrientsPanel";
+import { addNutrition, divideNutritionTotals, emptyNutritionTotals, scaleNutrition } from "@/src/utils/nutrition";
 
 const MEAL_CATEGORY_LABEL: Record<string, string> = {
   breakfast: "Breakfast",
@@ -277,7 +279,7 @@ export default function RecipeDetailPage() {
   const totalNutrition = useMemo(() => {
     if (!recipe) return null;
 
-    let calories = 0, protein = 0, carbs = 0, fats = 0, fiber = 0, sodium = 0;
+    const totals = emptyNutritionTotals();
     let hasData = false;
 
     for (const entry of recipe.ingredientList) {
@@ -305,17 +307,14 @@ export default function RecipeDetailPage() {
 
       const multiplier =
         (qtyInNativeUnit / (ing.defaultPortionAmount ?? 1)) * (entry.nutritionFactor ?? 1);
-      calories += (ing.nutrition.calories ?? 0) * multiplier;
-      protein  += (ing.nutrition.protein  ?? 0) * multiplier;
-      carbs    += (ing.nutrition.carbs    ?? 0) * multiplier;
-      fats     += (ing.nutrition.fats     ?? 0) * multiplier;
-      fiber    += (ing.nutrition.fiber    ?? 0) * multiplier;
-      sodium   += (ing.nutrition.sodium   ?? 0) * multiplier;
+      // Every nutrient, not just the main six — the extended ones feed
+      // the "All nutrients & vitamins" panel.
+      addNutrition(totals, scaleNutrition(ing.nutrition, multiplier));
       hasData = true;
     }
 
     if (!hasData) return null;
-    return { calories, protein, carbs, fats, fiber, sodium };
+    return totals;
   }, [recipe, customUnitConversions, allIngredients]);
 
   const displayedNutrition = useMemo(() => {
@@ -329,6 +328,12 @@ export default function RecipeDetailPage() {
       fiber:    round1(totalNutrition.fiber    / s),
       sodium:   round1(totalNutrition.sodium   / s),
     };
+  }, [totalNutrition, showPerServing, recipe]);
+
+  // All nutrients for the same per-serving / whole-recipe view.
+  const displayedAllNutrition = useMemo(() => {
+    if (!totalNutrition || !recipe) return null;
+    return divideNutritionTotals(totalNutrition, showPerServing ? Math.max(1, recipe.servings ?? 1) : 1);
   }, [totalNutrition, showPerServing, recipe]);
 
   // "Current score" is always computed from the last 50 raw entries, never
@@ -1065,6 +1070,9 @@ export default function RecipeDetailPage() {
                   </Text>
                 </View>
               ))}
+              <View className="border-t border-slate-100 p-3">
+                <MoreNutrientsPanel nutrition={displayedAllNutrition} />
+              </View>
             </View>
           </>
         )}

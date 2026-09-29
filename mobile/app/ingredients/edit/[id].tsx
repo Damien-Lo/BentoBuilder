@@ -85,6 +85,7 @@ import {
   suggestStore,
 } from "@/src/utils/pantryDefaults";
 import { loadSettings } from "@/src/services/settingsService";
+import { MoreNutrientsPanel } from "@/src/components/nutrition/MoreNutrientsPanel";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import {
   convertAmountForUnitChange,
@@ -1696,6 +1697,10 @@ export default function IngredientDetailScreen() {
                       </Text>
                       <Text className="mt-0.5 text-xs text-slate-500">Sodium</Text>
                     </View>
+                  </View>
+
+                  <View className="mt-3">
+                    <MoreNutrientsPanel nutrition={nutrition} />
                   </View>
                 </View>
               ) : null}
