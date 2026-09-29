@@ -217,7 +217,8 @@ export function QuantityServingInput({
               keyboardType="decimal-pad"
               placeholder="0"
               placeholderTextColor="#94A3B8"
-              className="h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+              style={{ height: 56 }}
+              className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
             />
             <Text className="ml-3 text-sm text-slate-500">
               × {defaultPortionAmount} {defaultPortionUnit} / serving
@@ -239,11 +240,13 @@ export function QuantityServingInput({
             keyboardType="decimal-pad"
             placeholder="0"
             placeholderTextColor="#94A3B8"
-            className="mr-3 h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+            style={{ height: 56 }}
+            className="mr-3 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
           />
           <View className="flex-1">
             {defaultPortionUnit ? (
               <UnitFamilyDropdown
+                height={56}
                 unit={quantityUnit || defaultPortionUnit}
                 options={familyUnits}
                 disabled={disabled}
@@ -251,6 +254,7 @@ export function QuantityServingInput({
               />
             ) : (
               <CreatableStringDropdown
+                height={56}
                 options={unitOptions}
                 selectedValue={quantityUnit}
                 placeholder="Unit"

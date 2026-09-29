@@ -16,10 +16,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   CreatableMultiTagDropdown,
   FieldLabel,
+  FormCard,
   FormInput,
   NutritionFieldsEditor,
   PriceInput,
-  SectionTitle,
 } from "@/src/components/forms";
 import {
   nutritionFormToInput,
@@ -96,11 +96,9 @@ function DishCard({
   const nutritionSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
 
   return (
-    <View className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
-      <View className="mb-2 flex-row items-center justify-between">
-        <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">
-          Dish {index + 1}
-        </Text>
+    <View className="mb-3 rounded-2xl bg-slate-50 p-3">
+      <View className="flex-row items-center justify-between">
+        <Text className="text-sm font-bold text-slate-700">Dish {index + 1}</Text>
         <Pressable hitSlop={8} onPress={() => removeDish(dish.key)}>
           <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
         </Pressable>
@@ -123,22 +121,25 @@ function DishCard({
           placeholder="e.g. Extra hot salsa, no rice…"
           onFocus={notesSection.trigger}
           onChangeText={(text) => updateDish(dish.key, { notes: text })}
+          multiline
         />
       </View>
 
-      <View {...priceSection.wrapperProps}>
-        <FieldLabel text="Price" />
-        <PriceInput
+      <View style={{ width: 160 }}>
+        <View {...priceSection.wrapperProps}>
+          <FieldLabel text="Price" />
+          <PriceInput
           value={dish.price}
           onChangeText={(text) => updateDish(dish.key, { price: text })}
           onFocus={priceSection.trigger}
         />
+        </View>
       </View>
 
       <View {...nutritionSection.wrapperProps}>
         <FieldLabel text="Nutrition (optional estimate)" />
         <NutritionFieldsEditor
-          compact
+          grid
           values={dish.nutrition}
           onChange={(field, value) =>
             updateDish(dish.key, { nutrition: { ...dish.nutrition, [field]: value } })
@@ -341,7 +342,7 @@ export default function EditRestaurantMealPage() {
           showsVerticalScrollIndicator={false}
         >
           <View ref={scrollAnchorRef} collapsable={false} />
-          <SectionTitle first title="Restaurant" description="" />
+          <FormCard icon="storefront-outline" title="Restaurant" description="The place — log visits to it anytime from the planner." zIndex={60}>
 
           <View {...restaurantNameSection.wrapperProps}>
             <FieldLabel text="Restaurant name" required />
@@ -376,11 +377,11 @@ export default function EditRestaurantMealPage() {
             />
           </View>
 
+          </FormCard>
+
           {/* ── Dishes ── */}
-          <SectionTitle
-            title="Menu (optional)"
-            description="Dishes on this restaurant's menu. Nutrition is optional and can be a rough estimate."
-          />
+          <FormCard icon="fast-food-outline" title="Menu (optional)" description="Dishes on this restaurant's menu. Nutrition is optional and can be a rough estimate." zIndex={50}>
+          <View className="h-3" />
 
           {dishes.map((dish, index) => (
             <DishCard
@@ -395,11 +396,20 @@ export default function EditRestaurantMealPage() {
           ))}
 
           <Pressable
-            className="mb-4 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-4 active:bg-slate-100"
+            className="flex-row items-center justify-center rounded-2xl border border-dashed border-blue-300 bg-blue-50 py-3.5 active:bg-blue-100"
             onPress={() => setDishes((prev) => [...prev, newDishRow()])}
           >
             <Ionicons name="add" size={20} color="#2563EB" />
             <Text className="ml-2 font-semibold text-blue-700">Add dish</Text>
+          </Pressable>
+        </FormCard>
+
+          <Pressable
+            disabled={saving}
+            onPress={() => void handleSave()}
+            className={`mt-2 items-center rounded-2xl py-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+          >
+            <Text className="text-base font-semibold text-white">{saving ? "Saving..." : "Save changes"}</Text>
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>

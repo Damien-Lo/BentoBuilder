@@ -7,6 +7,9 @@ interface UnitFamilyDropdownProps {
   options: string[];
   onSelect: (unit: string) => void;
   disabled?: boolean;
+  // A full-size field (this height, unit text left, chevron right) to line
+  // up with neighbouring inputs; the default is a small inline pill.
+  height?: number;
 }
 
 interface DropdownPosition {
@@ -29,6 +32,7 @@ export function UnitFamilyDropdown({
   options,
   onSelect,
   disabled = false,
+  height,
 }: UnitFamilyDropdownProps) {
   const anchorRef = useRef<View>(null);
   const [open, setOpen] = useState(false);
@@ -54,12 +58,13 @@ export function UnitFamilyDropdown({
     <View ref={anchorRef} collapsable={false}>
       <Pressable
         disabled={disabled}
-        className={`h-12 flex-row items-center rounded-2xl border bg-white px-3 ${
+        style={height ? { height } : undefined}
+        className={`${height ? "px-4" : "h-12 px-3"} flex-row items-center rounded-2xl border bg-white ${
           disabled ? "border-slate-100 opacity-60" : open ? "border-blue-500" : "border-slate-200"
         }`}
         onPress={openDropdown}
       >
-        <Text className="mr-1 text-sm text-slate-800">{unit}</Text>
+        <Text className={height ? "flex-1 text-base text-slate-950" : "mr-1 text-sm text-slate-800"}>{unit}</Text>
         <Ionicons name={open ? "chevron-up" : "chevron-down"} size={16} color="#64748B" />
       </Pressable>
 

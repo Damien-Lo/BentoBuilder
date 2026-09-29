@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { CreatableMultiTagDropdown, FieldLabel, FormInput, SectionTitle } from "@/src/components/forms";
+import { CreatableMultiTagDropdown, FieldLabel, FormCard, FormInput } from "@/src/components/forms";
 import { createMeal, type MealType } from "@/src/services/mealApi";
 import { createTag, getTags, type SelectOption } from "@/src/services/optionsApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
@@ -169,16 +169,11 @@ export default function AddMealScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View ref={scrollAnchorRef} collapsable={false} />
-          <SectionTitle
-            first
-            icon="restaurant-outline"
-            title="Meal details"
-            description="Give your meal a name and pick what it's made of."
-          />
+          <FormCard icon="restaurant-outline" title="Meal details" description="Give your meal a name and pick what it's made of." zIndex={60}>
 
           {/* Meal type dropdown */}
           <FieldLabel text="Meal type" required />
-          <View className="relative mb-5">
+          <View className="relative" style={{ zIndex: 10 }}>
             <Pressable
               className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
               onPress={() => setShowTypePicker(v => !v)}
@@ -233,7 +228,6 @@ export default function AddMealScreen() {
             onChangeText={setName}
             onFocus={nameSection.trigger}
             placeholder="e.g. Sunday Dinner"
-            className="mb-5"
           />
           </View>
 
@@ -246,13 +240,12 @@ export default function AddMealScreen() {
             onFocus={notesSection.trigger}
             placeholder="Any notes about this meal"
             multiline
-            className="mb-6"
           />
           </View>
 
           {/* Tags */}
           <FieldLabel text="Tags (optional)" />
-          <View className="mb-5" {...tagsSection.wrapperProps}>
+          <View {...tagsSection.wrapperProps}>
             <CreatableMultiTagDropdown
               options={allTags}
               selectedItems={selectedTags}
@@ -274,46 +267,11 @@ export default function AddMealScreen() {
               }
             />
           </View>
-
-          {/* Nutrition summary */}
-          <SectionTitle
-            icon="flame-outline"
-            title="Nutrition"
-            description="Totalled automatically from each course's recipe or ingredient."
-          />
-          <View className="mb-6">
-            <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              {(
-                [
-                  ["Calories", totalNutrition.calories, "kcal"],
-                  ["Protein",  totalNutrition.protein,  "g"],
-                  ["Carbs",    totalNutrition.carbs,    "g"],
-                  ["Fats",     totalNutrition.fats,     "g"],
-                  ["Fiber",    totalNutrition.fiber,    "g"],
-                  ["Sodium",   totalNutrition.sodium,   "mg"],
-                ] as [string, number, string][]
-              ).map(([label, value, unit], i, arr) => (
-                <View
-                  key={label}
-                  className={`flex-row items-center justify-between px-4 py-3 ${
-                    i < arr.length - 1 ? "border-b border-slate-100" : ""
-                  }`}
-                >
-                  <Text className="text-base text-slate-600">{label}</Text>
-                  <Text className="text-base font-semibold text-slate-900">
-                    {Math.round(value * 10) / 10} {unit}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
+          </FormCard>
 
           {/* Courses */}
-          <SectionTitle
-            icon="list-outline"
-            title="Courses"
-            description={`${courses.length} ${courses.length === 1 ? "course" : "courses"} in this meal.`}
-          />
+          <FormCard icon="list-outline" title="Courses" description={`${courses.length} ${courses.length === 1 ? "course" : "courses"} in this meal.`} zIndex={50}>
+          <View className="h-3" />
 
           <View {...coursesSection.wrapperProps}>
             <MealCoursesEditor
@@ -324,6 +282,41 @@ export default function AddMealScreen() {
               onFieldFocus={coursesSection.trigger}
             />
           </View>
+          </FormCard>
+
+          {/* Nutrition summary */}
+          <FormCard icon="flame-outline" title="Nutrition" description="Totalled from each course's recipe or ingredient." zIndex={40}>
+            <View className="-mx-1 mt-3 flex-row flex-wrap">
+              {(
+                [
+                  ["Calories", totalNutrition.calories, "kcal"],
+                  ["Protein",  totalNutrition.protein,  "g"],
+                  ["Carbs",    totalNutrition.carbs,    "g"],
+                  ["Fats",     totalNutrition.fats,     "g"],
+                  ["Fiber",    totalNutrition.fiber,    "g"],
+                  ["Sodium",   totalNutrition.sodium,   "mg"],
+                ] as [string, number, string][]
+              ).map(([label, value, unit]) => (
+                <View key={label} className="mb-2 px-1" style={{ width: "33.333%" }}>
+                  <View className="rounded-xl bg-slate-50 px-2.5 py-2">
+                    <Text className="text-xs text-slate-500">{label}</Text>
+                    <Text className="mt-0.5 text-base font-semibold text-slate-900">
+                      {Math.round(value * 10) / 10}
+                      <Text className="text-xs font-normal text-slate-400"> {unit}</Text>
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </FormCard>
+
+          <Pressable
+            disabled={saving}
+            onPress={() => void handleSave()}
+            className={`mt-2 items-center rounded-2xl py-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+          >
+            <Text className="text-base font-semibold text-white">{saving ? "Saving..." : "Save meal"}</Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
 

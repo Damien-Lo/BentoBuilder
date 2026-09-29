@@ -21,17 +21,18 @@ import {
   DurationExpiryInput,
   DurationValueInput,
   FieldLabel,
+  FormCard,
   FormInput,
   NutritionFieldsEditor,
   PriceInput,
   QuantityServingInput,
   SearchableObjectDropdown,
-  SectionTitle,
   ToggleRow,
   UnitConversionsEditor,
 } from "@/src/components/forms";
 import {
   hasAnyNutrition,
+  mergeNutritionForm,
   nutritionFormToInput,
   nutritionToForm,
   type NutritionFormValues,
@@ -56,6 +57,7 @@ import {
   deleteIngredient,
   getIngredientAvailability,
   getIngredientById,
+  parseNutritionLabel,
   updateIngredient,
   type Ingredient,
   type IngredientAvailability,
@@ -86,6 +88,8 @@ import {
 } from "@/src/utils/pantryDefaults";
 import { loadSettings } from "@/src/services/settingsService";
 import { MoreNutrientsPanel } from "@/src/components/nutrition/MoreNutrientsPanel";
+import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
+import { countReadNutrients, labelNutrition, labelServing } from "@/src/utils/nutritionLabel";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import {
   convertAmountForUnitChange,
@@ -209,6 +213,8 @@ export default function IngredientDetailScreen() {
   const [allTags, setAllTags] = useState<SelectOption[]>([]);
   const [selectedTags, setSelectedTags] = useState<SelectOption[]>([]);
   const [units, setUnits] = useState<string[]>([]);
+  const [labelCameraVisible, setLabelCameraVisible] = useState(false);
+  const [readingLabel, setReadingLabel] = useState(false);
   const [customUnitConversions, setCustomUnitConversions] = useState<CustomUnitConversion[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -540,6 +546,66 @@ export default function IngredientDetailScreen() {
     value: FormState[K],
   ) {
     setForm((current) => (current ? { ...current, [field]: value } : current));
+  }
+
+  // Photo of a Nutrition Facts / Supplement Facts panel -> the nutrition
+  // fields plus the serving they're per — same as the add-ingredient page.
+  // The serving is put in this ingredient's own unit when it can be, and
+  // flagged instead of guessed when it can't.
+  async function handleLabelPhoto(photoUri: string) {
+    setLabelCameraVisible(false);
+    if (!form) return;
+    setReadingLabel(true);
+    try {
+      const scan = await parseNutritionLabel(photoUri);
+      if (!scan.isNutritionLabel) {
+        Alert.alert(
+          "No label found",
+          "Couldn't read a nutrition or supplement facts label in that photo. Try again with the whole panel in frame and in focus.",
+        );
+        return;
+      }
+
+      const conversions = getIngredientConversions(
+        { unitConversions: form.unitConversions, genericParent: currentIngredient?.genericParent ?? null },
+        customUnitConversions,
+      );
+      const serving = labelServing(scan, form.defaultPortionUnit, conversions);
+      const printedServing = [
+        scan.servingAmount != null && scan.servingUnit ? `${scan.servingAmount} ${scan.servingUnit}` : null,
+        scan.servingMetricAmount != null && scan.servingMetricUnit
+          ? `${scan.servingMetricAmount} ${scan.servingMetricUnit}`
+          : null,
+      ].filter(Boolean).join(" / ");
+
+      setForm((current) =>
+        current
+          ? {
+              ...current,
+              defaultPortionUnit: serving && !current.defaultPortionUnit.trim() ? serving.unit : current.defaultPortionUnit,
+              defaultPortionAmount: serving ? String(serving.amount) : current.defaultPortionAmount,
+              nutrition: mergeNutritionForm(current.nutrition, labelNutrition(scan)),
+            }
+          : current,
+      );
+      setNutritionExpanded(true);
+
+      const lines = [
+        `Filled ${countReadNutrients(scan)} nutrients` + (serving ? ` per ${serving.amount} ${serving.unit}.` : "."),
+      ];
+      if (!serving && printedServing) {
+        lines.push(
+          `The label's serving (${printedServing}) doesn't convert to ${form.defaultPortionUnit || "this unit"} — set the serving size to match it, since the nutrition is per that serving.`,
+        );
+      }
+      if (scan.labelType === "supplement_facts") lines.push("Anything not on the supplement label was set to 0.");
+      if (scan.notes.trim()) lines.push(`Note: ${scan.notes.trim()}`);
+      Alert.alert("Label read — check the values, then Save", lines.join("\n\n"));
+    } catch (error) {
+      Alert.alert("Couldn't read label", error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setReadingLabel(false);
+    }
   }
 
   function handleCancel() {
@@ -1033,7 +1099,7 @@ export default function IngredientDetailScreen() {
             /* ── Edit form ── */
             <>
               {ingredient.isGeneric && (
-                <View className="mb-4 flex-row items-center rounded-2xl bg-violet-50 px-4 py-3">
+                <View className="mb-3 flex-row items-center rounded-2xl bg-violet-50 px-4 py-3">
                   <Ionicons name="git-branch-outline" size={20} color="#7C3AED" />
                   <View className="ml-3 flex-1">
                     <Text className="text-sm font-bold text-violet-700">
@@ -1047,340 +1113,221 @@ export default function IngredientDetailScreen() {
                 </View>
               )}
 
-              <SectionTitle
-                first
+              <FormCard
                 icon="pricetag-outline"
                 title="Ingredient"
                 description="What it is, and how it's categorized."
-              />
-
-              <View {...nameSection.wrapperProps}>
-                <FieldLabel text="Name" required />
-                <FormInput
-                  value={form.name}
-                  placeholder="e.g. Rolled oats"
-                  onFocus={nameSection.trigger}
-                  onChangeText={(v) => updateForm("name", v)}
-                />
-              </View>
-
-              {!ingredient.isGeneric && (
-                <View {...brandSection.wrapperProps}>
-                  <FieldLabel text="Brand" />
-                  <SearchableObjectDropdown<SelectOption>
-                    options={brands}
-                    selectedId={form.brandId}
-                    selectedName={form.brandName}
-                    placeholder="Search or type a new brand"
-                    onOpen={brandSection.trigger}
-                    onTextChange={(value) => {
-                      if (value !== form.brandName) {
-                        updateForm("brandId", "");
-                      }
-                      setBrandDraft(value);
-                    }}
-                    onSelect={(option) => {
-                      updateForm("brandId", option._id);
-                      updateForm("brandName", option.name);
-                      setBrandDraft(option.name);
-                    }}
-                  />
-                </View>
-              )}
-
-              <View {...categorySection.wrapperProps}>
-                <FieldLabel text="Category" />
-                <SearchableObjectDropdown<SelectOption>
-                  options={categories}
-                  selectedId={form.categoryId}
-                  selectedName={form.categoryName}
-                  placeholder="Search or type a new category"
-                  onOpen={categorySection.trigger}
-                  onTextChange={(value) => {
-                    if (value !== form.categoryName) {
-                      updateForm("categoryId", "");
-                    }
-                    setCategoryDraft(value);
-                  }}
-                  onSelect={(option) => {
-                    updateForm("categoryId", option._id);
-                    updateForm("categoryName", option.name);
-                    setCategoryDraft(option.name);
-                  }}
-                />
-              </View>
-
-              <View {...tagsSection.wrapperProps}>
-                <FieldLabel text="Tags" />
-                <CreatableMultiTagDropdown
-                  options={allTags}
-                  selectedItems={selectedTags}
-                  placeholder="Add a tag…"
-                  onOpen={tagsSection.trigger}
-                  onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
-                  onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
-                />
-              </View>
-
-              <View {...descriptionSection.wrapperProps}>
-                <FieldLabel text="Description" />
-                <FormInput
-                  value={form.description}
-                  placeholder="Optional description"
-                  multiline
-                  onFocus={descriptionSection.trigger}
-                  onChangeText={(v) => updateForm("description", v)}
-                />
-              </View>
-
-              {!ingredient.isGeneric && (
-                <View {...barcodeSection.wrapperProps}>
-                  <FieldLabel text="Barcode" />
-                  <FormInput
-                    value={form.barcode}
-                    placeholder="Optional barcode"
-                    autoCapitalize="none"
-                    keyboardType="numbers-and-punctuation"
-                    onFocus={barcodeSection.trigger}
-                    onChangeText={(v) => updateForm("barcode", v)}
-                  />
-                </View>
-              )}
-
-              <SectionTitle
-                icon="scale-outline"
-                title="Serving & stock"
-                description="Define a serving size and when to flag low stock."
-              />
-
-              <View className="flex-row" {...portionSection.wrapperProps}>
-                <View className="mr-3 flex-1">
-                  <FieldLabel text="Default portion" />
-                  <FormInput
-                    value={form.defaultPortionAmount}
-                    placeholder="0"
-                    keyboardType="decimal-pad"
-                    onFocus={portionSection.trigger}
-                    onChangeText={(v) => updateForm("defaultPortionAmount", v)}
-                  />
-                </View>
-                <View className="flex-1">
-                  <FieldLabel text="Unit" />
-                  <CreatableStringDropdown
-                    options={units}
-                    selectedValue={form.defaultPortionUnit}
-                    placeholder="Search or type a new unit"
-                    onSelect={handleAddUnit}
-                  />
-                </View>
-              </View>
-
-              <View className="mt-4" {...pieceLabelSection.wrapperProps}>
-                <FieldLabel text="Piece label (optional)" />
-                <FormInput
-                  value={form.pieceLabel}
-                  placeholder="e.g. steak, fillet, cut"
-                  onFocus={pieceLabelSection.trigger}
-                  onChangeText={(v) => updateForm("pieceLabel", v)}
-                />
-                <Text className="mt-2 text-xs leading-4 text-slate-500">
-                  Only set this if you buy/log it as individual pieces rather than
-                  a continuous amount (a steak vs. ground beef) — the pantry list
-                  will then show a count (&quot;3 steaks&quot;) instead of a summed
-                  weight. Doesn&apos;t set any size limit; a recipe&apos;s own
-                  ingredient line still decides what weight range counts as a
-                  usable piece.
-                </Text>
-              </View>
-
-              <ToggleRow
-                label="Always available"
-                description="Never shows as low or out of stock (e.g. tap water) — skips stock tracking entirely."
-                value={form.alwaysAvailable}
-                onChange={(v) => updateForm("alwaysAvailable", v)}
-              />
-
-              {!form.alwaysAvailable && (
-                <View {...lowStockSection.wrapperProps}>
-                  <FieldLabel text="Low stock threshold" />
-                  <FormInput
-                    value={form.lowStockThreshold}
-                    placeholder={`Alert when total falls below this (${form.defaultPortionUnit || "units"})`}
-                    keyboardType="decimal-pad"
-                    onFocus={lowStockSection.trigger}
-                    onChangeText={(v) => updateForm("lowStockThreshold", v)}
-                  />
-                </View>
-              )}
-
-              <Pressable
-                className="mt-8 flex-row items-center justify-between"
-                onPress={() => setNutritionExpanded((current) => !current)}
+                zIndex={60}
               >
-                <View className="mr-3 flex-1 flex-row items-center">
-                  <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                    <Ionicons name="nutrition-outline" size={18} color="#2563EB" />
-                  </View>
+                <View {...nameSection.wrapperProps}>
+                  <FieldLabel text="Name" required />
+                  <FormInput
+                    value={form.name}
+                    placeholder="e.g. Rolled oats"
+                    onFocus={nameSection.trigger}
+                    onChangeText={(v) => updateForm("name", v)}
+                  />
+                </View>
+
+                <View className="flex-row gap-3" {...categorySection.wrapperProps}>
+                  {!ingredient.isGeneric && (
+                    <View className="flex-1" {...brandSection.wrapperProps}>
+                      <FieldLabel text="Brand" />
+                      <SearchableObjectDropdown<SelectOption>
+                        options={brands}
+                        selectedId={form.brandId}
+                        selectedName={form.brandName}
+                        placeholder="Search"
+                        onOpen={brandSection.trigger}
+                        onTextChange={(value) => {
+                          if (value !== form.brandName) {
+                            updateForm("brandId", "");
+                          }
+                          setBrandDraft(value);
+                        }}
+                        onSelect={(option) => {
+                          updateForm("brandId", option._id);
+                          updateForm("brandName", option.name);
+                          setBrandDraft(option.name);
+                        }}
+                      />
+                    </View>
+                  )}
 
                   <View className="flex-1">
-                    <Text className="text-base font-bold text-slate-950">
-                      Nutrition per serving
-                    </Text>
-                    <Text className="mt-0.5 text-xs leading-4 text-slate-500">
-                      Optional — add now, or fill in later.
-                    </Text>
+                    <FieldLabel text="Category" />
+                    <SearchableObjectDropdown<SelectOption>
+                      options={categories}
+                      selectedId={form.categoryId}
+                      selectedName={form.categoryName}
+                      placeholder="Search"
+                      onOpen={categorySection.trigger}
+                      onTextChange={(value) => {
+                        if (value !== form.categoryName) {
+                          updateForm("categoryId", "");
+                        }
+                        setCategoryDraft(value);
+                      }}
+                      onSelect={(option) => {
+                        updateForm("categoryId", option._id);
+                        updateForm("categoryName", option.name);
+                        setCategoryDraft(option.name);
+                      }}
+                    />
                   </View>
                 </View>
 
-                <Ionicons
-                  name={nutritionExpanded ? "chevron-up" : "chevron-down"}
-                  size={22}
-                  color="#64748B"
-                />
-              </Pressable>
+                <View {...tagsSection.wrapperProps}>
+                  <FieldLabel text="Tags" />
+                  <CreatableMultiTagDropdown
+                    options={allTags}
+                    selectedItems={selectedTags}
+                    placeholder="Add a tag…"
+                    onOpen={tagsSection.trigger}
+                    onAdd={(option) => setSelectedTags((prev) => [...prev, option])}
+                    onRemove={(id) => setSelectedTags((prev) => prev.filter((t) => t._id !== id))}
+                  />
+                </View>
 
-              {nutritionExpanded && (
+                <View {...descriptionSection.wrapperProps}>
+                  <FieldLabel text="Description" />
+                  <FormInput
+                    value={form.description}
+                    placeholder="Optional description"
+                    multiline
+                    onFocus={descriptionSection.trigger}
+                    onChangeText={(v) => updateForm("description", v)}
+                  />
+                </View>
+
+                {!ingredient.isGeneric && (
+                  <View {...barcodeSection.wrapperProps}>
+                    <FieldLabel text="Barcode" />
+                    <FormInput
+                      value={form.barcode}
+                      placeholder="Optional barcode"
+                      autoCapitalize="none"
+                      keyboardType="numbers-and-punctuation"
+                      onFocus={barcodeSection.trigger}
+                      onChangeText={(v) => updateForm("barcode", v)}
+                    />
+                  </View>
+                )}
+              </FormCard>
+
+              <FormCard
+                icon="cube-outline"
+                title="Serving & stock"
+                description="How much one serving is, and when to restock."
+                zIndex={50}
+              >
+                <View className="flex-row gap-3" {...portionSection.wrapperProps}>
+                  <View className="flex-1">
+                    <FieldLabel text="Serving size" />
+                    <FormInput
+                      value={form.defaultPortionAmount}
+                      placeholder="0"
+                      keyboardType="decimal-pad"
+                      onFocus={portionSection.trigger}
+                      onChangeText={(v) => updateForm("defaultPortionAmount", v)}
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <FieldLabel text="Unit" />
+                    <CreatableStringDropdown
+                      options={units}
+                      selectedValue={form.defaultPortionUnit}
+                      placeholder="Pick or type a unit"
+                      onSelect={handleAddUnit}
+                    />
+                  </View>
+                </View>
+
+                <View className="flex-row gap-3">
+                  <View className="flex-1" {...pieceLabelSection.wrapperProps}>
+                    <FieldLabel text="Piece label" />
+                    <FormInput
+                      value={form.pieceLabel}
+                      placeholder="e.g. steak, fillet"
+                      onFocus={pieceLabelSection.trigger}
+                      onChangeText={(v) => updateForm("pieceLabel", v)}
+                    />
+                  </View>
+
+                  {!form.alwaysAvailable && (
+                    <View className="flex-1" {...lowStockSection.wrapperProps}>
+                      <FieldLabel text="Low-stock alert" />
+                      <FormInput
+                        value={form.lowStockThreshold}
+                        placeholder="0"
+                        keyboardType="decimal-pad"
+                        onFocus={lowStockSection.trigger}
+                        onChangeText={(v) => updateForm("lowStockThreshold", v)}
+                      />
+                    </View>
+                  )}
+                </View>
+
+                <Text className="mt-2 text-xs leading-4 text-slate-500">
+                  Piece label: only for things bought as individual pieces (a
+                  steak, not ground beef), so the pantry shows &quot;3 steaks&quot;
+                  instead of a total weight.
+                  {!form.alwaysAvailable &&
+                    ` Low-stock alert: warn below this many ${form.defaultPortionUnit || "units"}.`}
+                </Text>
+
+                <ToggleRow
+                  label="Always available"
+                  description="Never shows as low or out of stock (e.g. tap water) — skips stock tracking entirely."
+                  value={form.alwaysAvailable}
+                  onChange={(v) => updateForm("alwaysAvailable", v)}
+                />
+              </FormCard>
+
+              <FormCard
+                icon="nutrition-outline"
+                title="Nutrition per serving"
+                description="Optional — add now, or fill in later."
+                expanded={nutritionExpanded}
+                onToggle={() => setNutritionExpanded((current) => !current)}
+                zIndex={40}
+                headerAccessory={
+                  <Pressable
+                    className="h-8 flex-row items-center rounded-lg bg-blue-50 px-2.5 active:bg-blue-100"
+                    disabled={readingLabel}
+                    onPress={() => setLabelCameraVisible(true)}
+                    accessibilityLabel="Scan nutrition label"
+                  >
+                    {readingLabel ? (
+                      <ActivityIndicator size="small" color="#2563EB" />
+                    ) : (
+                      <Ionicons name="camera-outline" size={15} color="#1D4ED8" />
+                    )}
+                    <Text className="ml-1.5 text-xs font-semibold text-blue-700">
+                      {readingLabel ? "Reading…" : "Scan label"}
+                    </Text>
+                  </Pressable>
+                }
+              >
                 <View {...nutritionSection.wrapperProps}>
                   <NutritionFieldsEditor
+                    grid
                     values={form.nutrition}
                     onChange={(field, value) => updateForm("nutrition", { ...form.nutrition, [field]: value })}
                     onFocus={nutritionSection.trigger}
                   />
                 </View>
-              )}
+              </FormCard>
 
-              <Pressable
-                className="mt-8 flex-row items-center justify-between"
-                onPress={() => setSmartDefaultsExpanded((current) => !current)}
+              <FormCard
+                icon="swap-horizontal-outline"
+                title="Unit conversions"
+                description="Optional — e.g. 1 tbsp = 10 g, for this ingredient only."
+                expanded={unitConversionsExpanded}
+                onToggle={() => setUnitConversionsExpanded((current) => !current)}
+                zIndex={30}
               >
-                <View className="mr-3 flex-1 flex-row items-center">
-                  <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                    <Ionicons name="options-outline" size={18} color="#2563EB" />
-                  </View>
-
-                  <View className="flex-1">
-                    <Text className="text-base font-bold text-slate-950">
-                      Smart defaults
-                    </Text>
-                    <Text className="mt-0.5 text-xs leading-4 text-slate-500">
-                      Optional — speeds up logging future purchases.
-                    </Text>
-                  </View>
-                </View>
-
-                <Ionicons
-                  name={smartDefaultsExpanded ? "chevron-up" : "chevron-down"}
-                  size={22}
-                  color="#64748B"
-                />
-              </Pressable>
-
-              {smartDefaultsExpanded && (
-                <>
-                  <ToggleRow
-                    label="Set a default storage location"
-                    description="Prefills the location when logging a purchase of this ingredient."
-                    value={wantsDefaultLocation}
-                    onChange={setWantsDefaultLocation}
-                  />
-                  {suggestedLocation && (
-                    <Pressable
-                      className="mt-2 flex-row items-center self-start rounded-full bg-blue-50 px-3 py-1.5 active:bg-blue-100"
-                      onPress={handleAutofillLocation}
-                    >
-                      <Ionicons name="sparkles-outline" size={14} color="#2563EB" />
-                      <Text className="ml-1.5 text-xs font-semibold text-blue-600">
-                        Autofill: {suggestedLocation.name}
-                      </Text>
-                    </Pressable>
-                  )}
-                  {wantsDefaultLocation && (
-                    <View {...defaultStorageLocationSection.wrapperProps}>
-                      <FieldLabel text="Default storage location" />
-                      <SearchableObjectDropdown<SelectOption>
-                        options={storageLocations}
-                        selectedId={form.defaultStorageLocationId}
-                        selectedName={form.defaultStorageLocationName}
-                        placeholder="Search or type a location"
-                        onOpen={defaultStorageLocationSection.trigger}
-                        onTextChange={(value) => {
-                          if (value !== form.defaultStorageLocationName) {
-                            updateForm("defaultStorageLocationId", "");
-                          }
-                          setDefaultLocationDraft(value);
-                        }}
-                        onSelect={(option) => {
-                          updateForm("defaultStorageLocationId", option._id);
-                          updateForm("defaultStorageLocationName", option.name);
-                          setDefaultLocationDraft(option.name);
-                        }}
-                      />
-                    </View>
-                  )}
-
-                  <ToggleRow
-                    label="Set a default expiry duration"
-                    description="Prefills the expiry date when logging a purchase of this ingredient."
-                    value={wantsDefaultExpiry}
-                    onChange={setWantsDefaultExpiry}
-                  />
-                  {suggestedExpiryDuration && (
-                    <Pressable
-                      className="mt-2 flex-row items-center self-start rounded-full bg-blue-50 px-3 py-1.5 active:bg-blue-100"
-                      onPress={handleAutofillExpiryDuration}
-                    >
-                      <Ionicons name="sparkles-outline" size={14} color="#2563EB" />
-                      <Text className="ml-1.5 text-xs font-semibold text-blue-600">
-                        Autofill: {suggestedExpiryDuration.amount}{" "}
-                        {suggestedExpiryDuration.unit}
-                        {suggestedExpiryDuration.amount > 1 ? "s" : ""}
-                      </Text>
-                    </Pressable>
-                  )}
-                  {wantsDefaultExpiry && (
-                    <View {...defaultExpirySection.wrapperProps}>
-                      <FieldLabel text="Default expiry duration" />
-                      <DurationValueInput
-                        amount={form.defaultExpiryDurationAmount}
-                        unit={form.defaultExpiryDurationUnit}
-                        onChangeAmount={(v) => updateForm("defaultExpiryDurationAmount", v)}
-                        onChangeUnit={(v) => updateForm("defaultExpiryDurationUnit", v)}
-                        onFocus={defaultExpirySection.trigger}
-                      />
-                    </View>
-                  )}
-                </>
-              )}
-
-              <Pressable
-                className="mt-8 flex-row items-center justify-between"
-                onPress={() => setUnitConversionsExpanded((current) => !current)}
-              >
-                <View className="mr-3 flex-1 flex-row items-center">
-                  <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                    <Ionicons name="swap-horizontal-outline" size={18} color="#2563EB" />
-                  </View>
-
-                  <View className="flex-1">
-                    <Text className="text-base font-bold text-slate-950">
-                      Unit conversions
-                    </Text>
-                    <Text className="mt-0.5 text-xs leading-4 text-slate-500">
-                      Optional — e.g. 1 tbsp = 10 g, specific to this ingredient (density
-                      varies, so this doesn&apos;t apply to other ingredients).
-                    </Text>
-                  </View>
-                </View>
-
-                <Ionicons
-                  name={unitConversionsExpanded ? "chevron-up" : "chevron-down"}
-                  size={22}
-                  color="#64748B"
-                />
-              </Pressable>
-
-              {unitConversionsExpanded && (
-                <View className="mt-4">
+                <View className="mt-3">
                   <UnitConversionsEditor
                     conversions={form.unitConversions}
                     onChange={(conversions) => updateForm("unitConversions", conversions)}
@@ -1388,11 +1335,105 @@ export default function IngredientDetailScreen() {
                     disabled={saving}
                   />
                 </View>
-              )}
+              </FormCard>
+
+              <FormCard
+                icon="options-outline"
+                title="Smart defaults"
+                description="Optional — speeds up logging future purchases."
+                expanded={smartDefaultsExpanded}
+                onToggle={() => setSmartDefaultsExpanded((current) => !current)}
+                zIndex={20}
+              >
+                <ToggleRow
+                  label="Set a default storage location"
+                  description="Prefills the location when logging a purchase of this ingredient."
+                  value={wantsDefaultLocation}
+                  onChange={setWantsDefaultLocation}
+                />
+                {suggestedLocation && (
+                  <Pressable
+                    className="mt-2 flex-row items-center self-start rounded-full bg-blue-50 px-3 py-1.5 active:bg-blue-100"
+                    onPress={handleAutofillLocation}
+                  >
+                    <Ionicons name="sparkles-outline" size={14} color="#2563EB" />
+                    <Text className="ml-1.5 text-xs font-semibold text-blue-600">
+                      Autofill: {suggestedLocation.name}
+                    </Text>
+                  </Pressable>
+                )}
+                {wantsDefaultLocation && (
+                  <View {...defaultStorageLocationSection.wrapperProps}>
+                    <FieldLabel text="Default storage location" />
+                    <SearchableObjectDropdown<SelectOption>
+                      options={storageLocations}
+                      selectedId={form.defaultStorageLocationId}
+                      selectedName={form.defaultStorageLocationName}
+                      placeholder="Search or type a location"
+                      onOpen={defaultStorageLocationSection.trigger}
+                      onTextChange={(value) => {
+                        if (value !== form.defaultStorageLocationName) {
+                          updateForm("defaultStorageLocationId", "");
+                        }
+                        setDefaultLocationDraft(value);
+                      }}
+                      onSelect={(option) => {
+                        updateForm("defaultStorageLocationId", option._id);
+                        updateForm("defaultStorageLocationName", option.name);
+                        setDefaultLocationDraft(option.name);
+                      }}
+                    />
+                  </View>
+                )}
+
+                <ToggleRow
+                  label="Set a default expiry duration"
+                  description="Prefills the expiry date when logging a purchase of this ingredient."
+                  value={wantsDefaultExpiry}
+                  onChange={setWantsDefaultExpiry}
+                />
+                {suggestedExpiryDuration && (
+                  <Pressable
+                    className="mt-2 flex-row items-center self-start rounded-full bg-blue-50 px-3 py-1.5 active:bg-blue-100"
+                    onPress={handleAutofillExpiryDuration}
+                  >
+                    <Ionicons name="sparkles-outline" size={14} color="#2563EB" />
+                    <Text className="ml-1.5 text-xs font-semibold text-blue-600">
+                      Autofill: {suggestedExpiryDuration.amount}{" "}
+                      {suggestedExpiryDuration.unit}
+                      {suggestedExpiryDuration.amount > 1 ? "s" : ""}
+                    </Text>
+                  </Pressable>
+                )}
+                {wantsDefaultExpiry && (
+                  <View {...defaultExpirySection.wrapperProps}>
+                    <FieldLabel text="Default expiry duration" />
+                    <DurationValueInput
+                      amount={form.defaultExpiryDurationAmount}
+                      unit={form.defaultExpiryDurationUnit}
+                      onChangeAmount={(v) => updateForm("defaultExpiryDurationAmount", v)}
+                      onChangeUnit={(v) => updateForm("defaultExpiryDurationUnit", v)}
+                      onFocus={defaultExpirySection.trigger}
+                    />
+                  </View>
+                )}
+              </FormCard>
 
               <Pressable
                 disabled={saving}
-                className="mt-8 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
+                onPress={() => void handleSave()}
+                className={`mt-2 items-center rounded-2xl py-4 ${
+                  saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
+                }`}
+              >
+                <Text className="text-base font-semibold text-white">
+                  {saving ? "Saving..." : "Save changes"}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={saving}
+                className="mt-3 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
                 onPress={handleDeleteIngredient}
               >
                 <Text className="font-semibold text-red-600">Delete ingredient</Text>
@@ -2150,6 +2191,14 @@ export default function IngredientDetailScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <PhotoCaptureModal
+        visible={labelCameraVisible}
+        onClose={() => setLabelCameraVisible(false)}
+        onCaptured={(photoUri) => void handleLabelPhoto(photoUri)}
+        subject="nutrition label"
+        instructions="Fit the whole Nutrition Facts or Supplement Facts panel in frame, flat and in focus."
+      />
     </SafeAreaView>
   );
 }

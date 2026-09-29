@@ -220,12 +220,12 @@ export function MealCoursesEditor({
           : [];
 
         return (
-          <View key={course.id} className="mb-3 rounded-2xl border border-slate-200 bg-white p-4">
+          <View key={course.id} className="mb-3 rounded-2xl bg-slate-50 p-3">
             <View className="mb-3 flex-row items-center justify-between">
               <Text className="text-sm font-bold text-slate-700">Course {index + 1}</Text>
               <Pressable
                 onPress={() => onChange(courses.filter((c) => c.id !== course.id))}
-                className="h-8 w-8 items-center justify-center rounded-full bg-slate-100 active:bg-red-100"
+                className="h-8 w-8 items-center justify-center rounded-full bg-white active:bg-red-100"
               >
                 <Ionicons name="close" size={16} color="#64748B" />
               </Pressable>
@@ -235,7 +235,7 @@ export function MealCoursesEditor({
               {isIngredient ? "Ingredient" : "Recipe"}
             </Text>
             <Pressable
-              className="mb-3 h-11 flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-3 active:bg-slate-100"
+              className="mb-3 h-11 flex-row items-center rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-100"
               onPress={() => openPicker(course)}
             >
               <Ionicons name={isIngredient ? "nutrition-outline" : "book-outline"} size={16} color="#64748B" />
@@ -275,7 +275,7 @@ export function MealCoursesEditor({
                     keyboardType="decimal-pad"
                     placeholder="Amount"
                     placeholderTextColor="#94A3B8"
-                    className="h-11 w-28 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-950"
+                    className="h-11 w-28 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950"
                   />
                   <View className="flex-1">
                     <CreatableStringDropdown
@@ -299,7 +299,7 @@ export function MealCoursesEditor({
                   keyboardType="decimal-pad"
                   placeholder="1"
                   placeholderTextColor="#94A3B8"
-                  className="h-11 w-28 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-950"
+                  className="h-11 w-28 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950"
                 />
               </>
             )}
@@ -308,7 +308,7 @@ export function MealCoursesEditor({
       })}
 
       <Pressable
-        className="mt-1 flex-row items-center justify-center rounded-3xl border border-dashed border-blue-400 bg-blue-50 py-4 active:bg-blue-100"
+        className="flex-row items-center justify-center rounded-2xl border border-dashed border-blue-300 bg-blue-50 py-3.5 active:bg-blue-100"
         onPress={() => onChange([...courses, makeCourse()])}
       >
         <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
