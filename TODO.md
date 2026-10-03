@@ -57,6 +57,14 @@ A new home-page section ("Lists" card), with the layout and behaviour rebuilt fr
 - **Not yet built:** Remind Me (needs `expo-notifications`, a native rebuild) and Add File (needs file storage); both are shown as "Coming soon". Also not built: search, swipe actions on task rows, reordering *tasks* (lists can be dragged), and sharing / "Assigned to me" / "Flagged email" (skipped on purpose). **Grocery list:** the lists home has a "Grocery List" shortcut row (under Tasks, with a count of items still to buy) that opens the existing `/grocery-list` screen, added Sept 27. Actually merging groceries into the to-do list model/UI is still deferred at the user's request.
 - **Gotcha found while building:** NativeWind drops `Pressable`'s function-form `style={({ pressed }) => ...}` (the rows rendered stacked vertically). Use a static `style` plus `className="active:opacity-60"` for pressed feedback, as the rest of the app does.
 
+## In progress: Calendar section — modelled on Outlook for iPhone (branch `Calendar`, started Oct 3)
+
+Replaces the home page's "Scheduling — coming soon" card.
+
+- **Server:** `EventCalendar` (name, colour, visible, a built-in default "Calendar") and `CalendarEvent` in `routes/CalendarRoutes.js` at `/api/calendar`. Event times are wall-clock (`date`/`endDate` plus `startMinutes`/`endMinutes`), so repeats keep their time across daylight saving. Repeats are daily / weekdays / weekly / monthly / yearly with an optional end date. `GET /events?from&to` expands them into occurrences server-side (`occurrenceDates`, tested on its own). Deleting one occurrence adds it to `excludedDates`. Deleting a calendar deletes its events.
+- **App:** `app/calendar/index.tsx` has a week strip that pulls down into the month and swipes by week/month, plus Day / 3-Day / Month / Agenda views from the header menu. The Day / 3-Day grid (`src/components/calendar/CalendarTimeGrid.tsx`) scrolls 24 hours vertically, swipes sideways a page at a time, lays overlapping events side by side, shows a now-line, and lets you **long-press and drag on empty time to sketch an event**, which opens the new-event form with that time. The calendars drawer (top-left) shows/hides, edits, adds and deletes calendars. `app/calendar/edit.tsx` (new/edit form) and `app/calendar/event/[id].tsx` (details; deleting a repeating event asks "this event / the whole series") complete it.
+- **Not yet built:** reminder *notifications* (the reminder time is saved; delivering it needs `expo-notifications` and a native rebuild, to be done together with Lists' Remind Me), search, editing a single occurrence of a repeating series (edits apply to the whole series), dragging an existing event to move it, weather, and showing planner meals / Lists due dates in the calendar.
+
 ## Bugs caught in use (logged Sept 27, both fixed)
 
 Reported by the user while using the app.
