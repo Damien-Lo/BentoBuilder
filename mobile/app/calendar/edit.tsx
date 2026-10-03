@@ -26,7 +26,9 @@ import {
   REPEAT_OPTIONS,
   shortDateLabel,
   WEEKDAYS_FULL,
+  weeklyDays,
 } from "@/src/components/calendar/calendarUtils";
+import { loadSettings } from "@/src/services/settingsService";
 import { DatePickerModal } from "@/src/components/forms";
 import {
   createCalendarEvent,
@@ -82,6 +84,9 @@ export default function EditCalendarEventScreen() {
   const [endMinutes, setEndMinutes] = useState(Math.min(1440, initialEnd));
   const [repeatFrequency, setRepeatFrequency] = useState<RepeatFrequency | null>(null);
   const [repeatUntil, setRepeatUntil] = useState<string | null>(null);
+  // Weekly repeats: which days (0 = Sunday … 6 = Saturday).
+  const [repeatDays, setRepeatDays] = useState<number[]>([]);
+  const [weekStartDay, setWeekStartDay] = useState(1);
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [remindMinutes, setRemindMinutes] = useState<number | null>(15);
@@ -94,6 +99,7 @@ export default function EditCalendarEventScreen() {
     let cancelled = false;
     (async () => {
       try {
+        loadSettings().then((s) => !cancelled && setWeekStartDay(s.weekStartDay)).catch(() => {});
         const [loadedCalendars, event] = await Promise.all([
           getCalendars(),
           editingId ? getCalendarEvent(editingId) : Promise.resolve(null),
@@ -110,6 +116,13 @@ export default function EditCalendarEventScreen() {
           setEndMinutes(event.endMinutes);
           setRepeatFrequency(event.repeat?.frequency ?? null);
           setRepeatUntil(event.repeat?.until ?? null);
+          // The old "every weekday" option is now weekly on Mon–Fri.
+          if (event.repeat?.frequency === "weekdays") {
+            setRepeatFrequency("weekly");
+            setRepeatDays([1, 2, 3, 4, 5]);
+          } else if (event.repeat?.frequency === "weekly") {
+            setRepeatDays(weeklyDays(event.repeat, event.date));
+          }
           setLocation(event.location);
           setDescription(event.description);
           setRemindMinutes(event.remindMinutes);
@@ -141,6 +154,11 @@ export default function EditCalendarEventScreen() {
 
   function changeStartDate(next: string) {
     const span = daysBetween(date, endDate);
+    // A weekly repeat that was just "the start date's day" follows the date.
+    const oldDay = parseLocalDate(date).getDay();
+    if (repeatDays.length <= 1 && (repeatDays.length === 0 || repeatDays[0] === oldDay)) {
+      setRepeatDays([parseLocalDate(next).getDay()]);
+    }
     setDate(next);
     setEndDate(addDays(next, span));
   }
@@ -177,7 +195,14 @@ export default function EditCalendarEventScreen() {
       endDate: allDay ? (endDate < date ? date : endDate) : endDate,
       startMinutes,
       endMinutes,
-      repeat: repeatFrequency ? { frequency: repeatFrequency, interval: 1, until: repeatUntil } : null,
+      repeat: repeatFrequency
+        ? {
+            frequency: repeatFrequency,
+            interval: 1,
+            until: repeatUntil,
+            weekdays: repeatFrequency === "weekly" ? weeklyDays({ weekdays: repeatDays }, date) : [],
+          }
+        : null,
       location: location.trim(),
       description: description.trim(),
       remindMinutes,
@@ -335,6 +360,33 @@ export default function EditCalendarEventScreen() {
                 {REPEAT_OPTIONS.find((o) => o.value === repeatFrequency)?.label}
               </Text>
             </Row>
+            {repeatFrequency === "weekly" && (
+              <View className="border-t border-slate-100 px-4 py-3">
+                <Text className="mb-2 text-xs font-medium text-slate-500">Repeat on</Text>
+                <View className="flex-row justify-between">
+                  {Array.from({ length: 7 }, (_, i) => (weekStartDay + i) % 7).map((day) => {
+                    const on = weeklyDays({ weekdays: repeatDays }, date).includes(day);
+                    return (
+                      <Pressable
+                        key={day}
+                        accessibilityLabel={WEEKDAYS_FULL[day]}
+                        onPress={() => {
+                          const current = weeklyDays({ weekdays: repeatDays }, date);
+                          const next = on ? current.filter((d) => d !== day) : [...current, day];
+                          // At least one day stays selected.
+                          if (next.length) setRepeatDays(next);
+                        }}
+                        className={`h-10 w-10 items-center justify-center rounded-full ${on ? "bg-blue-600" : "bg-slate-100"}`}
+                      >
+                        <Text className={`text-sm font-semibold ${on ? "text-white" : "text-slate-600"}`}>
+                          {WEEKDAYS_FULL[day][0]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
             {repeatFrequency && (
               <Row icon="flag-outline" label="Until" onPress={() => setDateTarget("until")} border>
                 <Text className="text-base text-slate-500">{repeatUntil ? shortDateLabel(repeatUntil) : "Forever"}</Text>
@@ -432,6 +484,7 @@ export default function EditCalendarEventScreen() {
         onSelect={(value) => {
           setRepeatFrequency(value);
           if (!value) setRepeatUntil(null);
+          if (value === "weekly" && repeatDays.length === 0) setRepeatDays([parseLocalDate(date).getDay()]);
         }}
         onClose={() => setSheet(null)}
       />

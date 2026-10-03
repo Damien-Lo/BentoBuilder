@@ -15,6 +15,8 @@ export interface EventRepeat {
   frequency: RepeatFrequency;
   interval: number;
   until: string | null; // YYYY-MM-DD
+  // Weekly only: 0 = Sunday … 6 = Saturday. Empty = the start date's day.
+  weekdays?: number[];
 }
 
 // Times are wall-clock: a date plus minutes after midnight.

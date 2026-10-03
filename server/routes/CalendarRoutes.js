@@ -41,6 +41,29 @@ export function occurrenceDates(event, from, to) {
   const excluded = new Set(event.excludedDates ?? []);
   const until = repeat.until && repeat.until < to ? repeat.until : to;
   const interval = Math.max(1, repeat.interval ?? 1);
+
+  // Weekly on chosen days (and the older "every weekday", which is just
+  // weekly on Mon–Fri): walk week by week from the start date's week.
+  if (repeat.frequency === "weekly" || repeat.frequency === "weekdays") {
+    const days =
+      repeat.frequency === "weekdays"
+        ? [1, 2, 3, 4, 5]
+        : [...new Set(repeat.weekdays?.length ? repeat.weekdays : [toDate(event.date).getUTCDay()])].sort();
+    const firstWeek = addDays(event.date, -toDate(event.date).getUTCDay());
+    const unit = 7 * (repeat.frequency === "weekdays" ? 1 : interval);
+    const out = [];
+    const gap = daysBetween(firstWeek, addDays(from, -span - 6));
+    let week = gap > 0 ? addDays(firstWeek, Math.floor(gap / unit) * unit) : firstWeek;
+    for (let guard = 0; week <= until && guard < 2000; guard++) {
+      for (const d of days) {
+        const start = addDays(week, d);
+        if (start >= event.date && start <= until && !excluded.has(start) && touches(start)) out.push(start);
+      }
+      week = addDays(week, unit);
+    }
+    return out;
+  }
+
   const dayOfMonth = toDate(event.date).getUTCDate();
   const out = [];
 

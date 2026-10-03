@@ -10,6 +10,9 @@ const repeatSchema = new mongoose.Schema(
       required: true,
     },
     interval: { type: Number, min: 1, default: 1 },
+    // Weekly only: which days of the week (0 = Sunday … 6 = Saturday).
+    // Empty = the start date's own weekday.
+    weekdays: [{ type: Number, min: 0, max: 6 }],
     // Last date an occurrence can start on ("YYYY-MM-DD"), or null = forever.
     until: { type: String, match: DATE_RE, default: null },
   },

@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { runOnJS } from "react-native-reanimated";
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 
 import type { EventCalendar, EventOccurrence } from "@/src/services/calendarApi";
 import { hexToRgba, parseLocalDate } from "@/src/utils/mealPlan";
@@ -11,6 +12,8 @@ import {
   calendarColor,
   minutesLabel,
   monthGrid,
+  MONTHS_SHORT,
+  shiftMonth,
   shortDateLabel,
   weekOf,
   WEEKDAYS_SHORT,
@@ -18,103 +21,191 @@ import {
 
 // ── Week strip / pull-down month ────────────────────────────────────────────
 
-// The strip under the header: the focused week, or (pulled down) the whole
-// month. Swipe sideways for the next/previous week (or month); drag the
-// handle, or tap it, to expand/collapse.
+const STRIP_ROW_HEIGHT = 50;
+
+// The strip under the header: the focused week, sliding with your finger to
+// the next/previous week. Drag the handle down (or tap it) and it unrolls
+// into the whole month, row by row, following the finger; expanded, it
+// slides by month.
 export function WeekStrip({
   focusDate,
   today,
   weekStartDay,
-  expanded,
   eventDays,
-  onSelect,
-  onShift,
-  onSetExpanded,
+  onChangeFocus,
 }: {
   focusDate: string;
   today: string;
   weekStartDay: number;
-  expanded: boolean;
   // Dates with at least one event — they get a dot.
   eventDays: Set<string>;
-  onSelect: (date: string) => void;
-  // -1 / +1: previous / next week (month when expanded).
-  onShift: (direction: number) => void;
-  onSetExpanded: (expanded: boolean) => void;
+  onChangeFocus: (date: string) => void;
 }) {
-  const focusMonth = parseLocalDate(focusDate).getMonth();
-  const weeks = expanded ? monthGrid(focusDate, weekStartDay) : [weekOf(focusDate, weekStartDay)];
-  const headers = weekOf(focusDate, weekStartDay).map((d) => WEEKDAYS_SHORT[parseLocalDate(d).getDay()][0]);
+  const { width } = useWindowDimensions();
+  const pageWidth = width - 16;
+  const pagerRef = useRef<ScrollView>(null);
 
-  const swipe = Gesture.Pan()
-    .activeOffsetX([-20, 20])
-    .failOffsetY([-15, 15])
-    .onEnd((e) => {
-      if (Math.abs(e.translationX) > 40) runOnJS(onShift)(e.translationX < 0 ? 1 : -1);
-    });
+  const [expanded, setExpanded] = useState(false);
+  // True while the month is unrolling/rolling up — the strip then shows the
+  // month as one plain grid (no sideways paging) so it can be clipped.
+  const [animating, setAnimating] = useState(false);
+
+  const grid = useMemo(() => monthGrid(focusDate, weekStartDay), [focusDate, weekStartDay]);
+  const focusRow = Math.max(0, grid.findIndex((week) => week.includes(focusDate)));
+
+  const progress = useSharedValue(0);
+  const dragStart = useSharedValue(0);
+  const rows = useSharedValue(grid.length);
+  const row = useSharedValue(focusRow);
+  useEffect(() => {
+    rows.value = grid.length;
+    row.value = focusRow;
+  }, [grid.length, focusRow, rows, row]);
+
+  // Re-centre the pager after a swipe (or switching week <-> month).
+  useLayoutEffect(() => {
+    pagerRef.current?.scrollTo({ x: pageWidth, animated: false });
+  }, [focusDate, expanded, animating, pageWidth]);
+
+  const finish = (isExpanded: boolean) => {
+    setExpanded(isExpanded);
+    setAnimating(false);
+  };
+
+  const settle = (to: number) => {
+    "worklet";
+    progress.value = withSpring(
+      to,
+      { damping: 24, stiffness: 240, overshootClamping: true },
+      (done) => {
+        if (done) runOnJS(finish)(to === 1);
+      },
+    );
+  };
+
+  const toggle = () => {
+    setAnimating(true);
+    settle(expanded ? 0 : 1);
+  };
 
   const pull = Gesture.Pan()
-    .activeOffsetY([-10, 10])
+    .activeOffsetY([-6, 6])
+    .onStart(() => {
+      dragStart.value = progress.value;
+      runOnJS(setAnimating)(true);
+    })
+    .onUpdate((e) => {
+      const span = STRIP_ROW_HEIGHT * Math.max(1, rows.value - 1);
+      progress.value = Math.min(1, Math.max(0, dragStart.value + e.translationY / span));
+    })
     .onEnd((e) => {
-      if (e.translationY > 20) runOnJS(onSetExpanded)(true);
-      else if (e.translationY < -20) runOnJS(onSetExpanded)(false);
+      const to = e.velocityY > 400 ? 1 : e.velocityY < -400 ? 0 : progress.value > 0.5 ? 1 : 0;
+      settle(to);
     });
+
+  const clipStyle = useAnimatedStyle(() => ({
+    height: STRIP_ROW_HEIGHT * (1 + (rows.value - 1) * progress.value),
+  }));
+  // Keeps the focused week in place while the rows above it unroll.
+  const gridStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -row.value * STRIP_ROW_HEIGHT * (1 - progress.value) }],
+  }));
+
+  const select = (date: string) => {
+    onChangeFocus(date);
+    if (expanded) {
+      setAnimating(true);
+      settle(0);
+    }
+  };
+
+  const focusMonth = parseLocalDate(focusDate).getMonth();
+  const headers = weekOf(focusDate, weekStartDay).map((d) => WEEKDAYS_SHORT[parseLocalDate(d).getDay()][0]);
+
+  const renderWeek = (week: string[], month: number | null) => (
+    <View key={week[0]} className="flex-row" style={{ height: STRIP_ROW_HEIGHT }}>
+      {week.map((day) => {
+        const d = parseLocalDate(day);
+        const selected = day === focusDate;
+        const isToday = day === today;
+        const outside = month != null && d.getMonth() !== month;
+        return (
+          <Pressable key={day} onPress={() => select(day)} className="flex-1 items-center pt-1">
+            <View className={`h-9 w-9 items-center justify-center rounded-full ${selected ? "bg-blue-600" : ""}`}>
+              {d.getDate() === 1 && !selected && (
+                <Text className="-mb-0.5 text-[9px] font-semibold text-slate-400">{MONTHS_SHORT[d.getMonth()]}</Text>
+              )}
+              <Text
+                className={`text-base ${
+                  selected
+                    ? "font-bold text-white"
+                    : isToday
+                      ? "font-bold text-blue-600"
+                      : outside
+                        ? "text-slate-300"
+                        : "text-slate-800"
+                }`}
+              >
+                {d.getDate()}
+              </Text>
+            </View>
+            <View className={`mt-0.5 h-1 w-1 rounded-full ${eventDays.has(day) ? "bg-slate-400" : "bg-transparent"}`} />
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+
+  const pager = (pages: string[][][], months: (number | null)[]) => (
+    <ScrollView
+      ref={pagerRef}
+      horizontal
+      pagingEnabled
+      showsHorizontalScrollIndicator={false}
+      contentOffset={{ x: pageWidth, y: 0 }}
+      onMomentumScrollEnd={(e) => {
+        const page = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
+        if (page === 1) return;
+        const direction = page - 1;
+        onChangeFocus(expanded ? shiftMonth(focusDate, direction) : addDays(focusDate, direction * 7));
+      }}
+    >
+      {pages.map((weeks, i) => (
+        <View key={weeks[0][0]} style={{ width: pageWidth }}>
+          {weeks.map((week) => renderWeek(week, months[i]))}
+        </View>
+      ))}
+    </ScrollView>
+  );
+
+  let body;
+  if (animating) {
+    body = <Animated.View style={gridStyle}>{grid.map((week) => renderWeek(week, focusMonth))}</Animated.View>;
+  } else if (expanded) {
+    const months = [-1, 0, 1].map((m) => shiftMonth(focusDate, m));
+    body = pager(
+      months.map((m) => monthGrid(m, weekStartDay)),
+      months.map((m) => parseLocalDate(m).getMonth()),
+    );
+  } else {
+    body = pager(
+      [-7, 0, 7].map((offset) => [weekOf(addDays(focusDate, offset), weekStartDay)]),
+      [null, null, null],
+    );
+  }
 
   return (
     <View className="border-b border-slate-200 bg-white">
-      <GestureDetector gesture={swipe}>
-        <View className="px-2">
-          <View className="flex-row">
-            {headers.map((h, i) => (
-              <Text key={i} className="flex-1 py-1 text-center text-xs font-semibold text-slate-400">
-                {h}
-              </Text>
-            ))}
-          </View>
-          {weeks.map((week) => (
-            <View key={week[0]} className="flex-row">
-              {week.map((day) => {
-                const d = parseLocalDate(day);
-                const selected = day === focusDate;
-                const isToday = day === today;
-                const outside = expanded && d.getMonth() !== focusMonth;
-                return (
-                  <Pressable key={day} onPress={() => onSelect(day)} className="flex-1 items-center py-1">
-                    <View
-                      className={`h-9 w-9 items-center justify-center rounded-full ${selected ? "bg-blue-600" : ""}`}
-                    >
-                      {d.getDate() === 1 && !selected ? (
-                        <Text className="text-[9px] font-semibold text-slate-400">
-                          {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]}
-                        </Text>
-                      ) : null}
-                      <Text
-                        className={`text-base ${
-                          selected
-                            ? "font-bold text-white"
-                            : isToday
-                              ? "font-bold text-blue-600"
-                              : outside
-                                ? "text-slate-300"
-                                : "text-slate-800"
-                        }`}
-                      >
-                        {d.getDate()}
-                      </Text>
-                    </View>
-                    <View
-                      className={`mt-0.5 h-1 w-1 rounded-full ${eventDays.has(day) ? "bg-slate-400" : "bg-transparent"}`}
-                    />
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
-        </View>
-      </GestureDetector>
-
+      <View className="flex-row px-2">
+        {headers.map((h, i) => (
+          <Text key={i} className="flex-1 py-1 text-center text-xs font-semibold text-slate-400">
+            {h}
+          </Text>
+        ))}
+      </View>
+      <Animated.View style={[{ overflow: "hidden", marginHorizontal: 8 }, clipStyle]}>{body}</Animated.View>
       <GestureDetector gesture={pull}>
-        <Pressable onPress={() => onSetExpanded(!expanded)} hitSlop={6} className="items-center pb-2 pt-1">
+        <Pressable onPress={toggle} hitSlop={{ top: 4, bottom: 10, left: 40, right: 40 }} className="items-center pb-2.5 pt-1.5">
           <View className="h-1.5 w-10 rounded-full bg-slate-300" />
         </Pressable>
       </GestureDetector>

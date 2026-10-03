@@ -1,17 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, LayoutAnimation, Modal, Pressable, Text, View } from "react-native";
+import { Alert, Modal, Pressable, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CalendarTimeGrid } from "@/src/components/calendar/CalendarTimeGrid";
+import { FloatingHomeButton, HOME_BAR_HEIGHT } from "@/src/components/CustomTabBar";
 import { AgendaView, MonthView, WeekStrip } from "@/src/components/calendar/CalendarViews";
 import {
   CalendarEditSheet,
   CalendarsDrawer,
   confirmDeleteCalendar,
 } from "@/src/components/calendar/CalendarSheets";
-import { addDays, MONTHS_FULL, nowMinutes } from "@/src/components/calendar/calendarUtils";
+import { addDays, MONTHS_FULL, nowMinutes, shiftMonth } from "@/src/components/calendar/calendarUtils";
 import {
   createCalendar,
   deleteCalendar,
@@ -22,7 +23,7 @@ import {
   type EventOccurrence,
 } from "@/src/services/calendarApi";
 import { loadSettings } from "@/src/services/settingsService";
-import { parseLocalDate, todayStr, toDateStr } from "@/src/utils/mealPlan";
+import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
 type CalendarView = "agenda" | "day" | "threeDay" | "month";
 
@@ -38,12 +39,6 @@ const VIEW_OPTIONS: { value: CalendarView; label: string; icon: keyof typeof Ion
 const WINDOW_DAYS = 45;
 const AGENDA_DAYS = 30;
 
-// Same day-of-month in the month `delta` away (clamped to its length).
-function shiftMonth(date: string, delta: number): string {
-  const d = parseLocalDate(date);
-  const last = new Date(d.getFullYear(), d.getMonth() + delta + 1, 0).getDate();
-  return toDateStr(new Date(d.getFullYear(), d.getMonth() + delta, Math.min(d.getDate(), last)));
-}
 
 // The Calendar section, modelled on Outlook for iPhone: a week strip that
 // pulls down into the month, Day / 3-Day time grids (drag on empty time to
@@ -55,7 +50,6 @@ export default function CalendarScreen() {
 
   const [focusDate, setFocusDate] = useState(today);
   const [view, setView] = useState<CalendarView>("day");
-  const [stripExpanded, setStripExpanded] = useState(false);
   const [weekStartDay, setWeekStartDay] = useState(0);
   const [calendars, setCalendars] = useState<EventCalendar[]>([]);
   const [events, setEvents] = useState<EventOccurrence[]>([]);
@@ -66,6 +60,8 @@ export default function CalendarScreen() {
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   // undefined = closed, null = new calendar.
   const [editingCalendar, setEditingCalendar] = useState<EventCalendar | null | undefined>(undefined);
+  // What to open once the drawer has finished closing (same shape).
+  const afterDrawer = useRef<EventCalendar | null | undefined>(undefined);
 
   useEffect(() => {
     loadSettings().then((s) => setWeekStartDay(s.weekStartDay)).catch(() => {});
@@ -138,11 +134,6 @@ export default function CalendarScreen() {
       pathname: "/calendar/edit",
       params: { date, start: String(startMinutes), end: String(end ?? Math.min(1440, startMinutes + 60)) },
     });
-  }
-
-  function toggleStrip(expanded: boolean) {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setStripExpanded(expanded);
   }
 
   async function toggleCalendar(calendar: EventCalendar) {
@@ -223,16 +214,8 @@ export default function CalendarScreen() {
           focusDate={focusDate}
           today={today}
           weekStartDay={weekStartDay}
-          expanded={stripExpanded}
           eventDays={eventDays}
-          onSelect={(date) => {
-            setFocusDate(date);
-            if (stripExpanded) toggleStrip(false);
-          }}
-          onShift={(direction) =>
-            setFocusDate((d) => (stripExpanded ? shiftMonth(d, direction) : addDays(d, direction * 7)))
-          }
-          onSetExpanded={toggleStrip}
+          onChangeFocus={setFocusDate}
         />
       )}
 
@@ -282,7 +265,8 @@ export default function CalendarScreen() {
         accessibilityLabel="New event"
         className="absolute right-5 h-14 w-14 items-center justify-center rounded-full bg-blue-600 active:bg-blue-700"
         style={{
-          bottom: insets.bottom + 20,
+          // Level with the floating home button.
+          bottom: insets.bottom + (HOME_BAR_HEIGHT - 56) / 2,
           shadowColor: "#1E3A8A",
           shadowOpacity: 0.3,
           shadowRadius: 10,
@@ -291,6 +275,9 @@ export default function CalendarScreen() {
       >
         <Ionicons name="add" size={30} color="white" />
       </Pressable>
+
+      {/* The same centre home button as the other sections, floating */}
+      <FloatingHomeButton />
 
       {/* View menu */}
       <Modal visible={viewMenuOpen} transparent animationType="fade" onRequestClose={() => setViewMenuOpen(false)}>
@@ -325,12 +312,18 @@ export default function CalendarScreen() {
         onClose={() => setDrawerOpen(false)}
         onToggle={(c) => void toggleCalendar(c)}
         onEdit={(c) => {
+          afterDrawer.current = c;
           setDrawerOpen(false);
-          setEditingCalendar(c);
         }}
         onAdd={() => {
+          afterDrawer.current = null;
           setDrawerOpen(false);
-          setEditingCalendar(null);
+        }}
+        onClosed={() => {
+          if (afterDrawer.current !== undefined) {
+            setEditingCalendar(afterDrawer.current);
+            afterDrawer.current = undefined;
+          }
         }}
       />
 

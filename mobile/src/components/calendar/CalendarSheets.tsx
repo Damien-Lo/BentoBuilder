@@ -224,6 +224,7 @@ export function CalendarsDrawer({
   onToggle,
   onEdit,
   onAdd,
+  onClosed,
 }: {
   visible: boolean;
   calendars: EventCalendar[];
@@ -231,6 +232,10 @@ export function CalendarsDrawer({
   onToggle: (calendar: EventCalendar) => void;
   onEdit: (calendar: EventCalendar) => void;
   onAdd: () => void;
+  // Once the drawer has fully closed. iOS can't present another modal
+  // (e.g. the calendar editor) while this one is still dismissing — doing
+  // so freezes the screen — so open follow-ups from here.
+  onClosed?: () => void;
 }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -241,14 +246,17 @@ export function CalendarsDrawer({
   useEffect(() => {
     if (visible) setMounted(true);
     Animated.timing(slide, { toValue: visible ? 1 : 0, duration: 220, useNativeDriver: true }).start(() => {
-      if (!visible) setMounted(false);
+      if (!visible) {
+        setMounted(false);
+        // iOS reports the end via onDismiss below.
+        if (Platform.OS !== "ios") onClosed?.();
+      }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, slide]);
 
-  if (!mounted) return null;
-
   return (
-    <Modal visible transparent animationType="none" onRequestClose={onClose}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} onDismiss={() => onClosed?.()}>
       <Animated.View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", opacity: slide }}>
         <Pressable className="flex-1" onPress={onClose} />
       </Animated.View>

@@ -27,6 +27,13 @@ export function daysBetween(a: string, b: string): number {
   return Math.round((parseLocalDate(b).getTime() - parseLocalDate(a).getTime()) / 86400000);
 }
 
+// Same day-of-month in the month `delta` away (clamped to its length).
+export function shiftMonth(date: string, delta: number): string {
+  const d = parseLocalDate(date);
+  const last = new Date(d.getFullYear(), d.getMonth() + delta + 1, 0).getDate();
+  return toDateStr(new Date(d.getFullYear(), d.getMonth() + delta, Math.min(d.getDate(), last)));
+}
+
 // The `weekStartDay`-starting week containing `date`.
 export function weekOf(date: string, weekStartDay: number): string[] {
   const d = parseLocalDate(date);
@@ -85,7 +92,6 @@ export function nowMinutes(): number {
 export const REPEAT_OPTIONS: { value: EventRepeat["frequency"] | null; label: string }[] = [
   { value: null, label: "Never" },
   { value: "daily", label: "Every day" },
-  { value: "weekdays", label: "Every weekday" },
   { value: "weekly", label: "Every week" },
   { value: "monthly", label: "Every month" },
   { value: "yearly", label: "Every year" },
@@ -99,13 +105,28 @@ export function repeatLabel(repeat: EventRepeat | null, date: string): string | 
   const base = {
     daily: every ? `every ${repeat.interval} days` : "daily",
     weekdays: "every weekday",
-    weekly: every ? `every ${repeat.interval} weeks on ${WEEKDAYS_FULL[d.getDay()]}` : `weekly on ${WEEKDAYS_FULL[d.getDay()]}`,
+    weekly: `${every ? `every ${repeat.interval} weeks` : "weekly"} on ${weeklyDaysLabel(repeat, date)}`,
     monthly: every ? `every ${repeat.interval} months on day ${d.getDate()}` : `monthly on day ${d.getDate()}`,
     yearly: `yearly on ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`,
   }[repeat.frequency];
   if (!repeat.until) return `Repeats ${base}`;
   const u = parseLocalDate(repeat.until);
   return `Repeats ${base} until ${u.getDate()} ${MONTHS_SHORT[u.getMonth()]} ${u.getFullYear()}`;
+}
+
+// The days a weekly repeat falls on: the chosen ones, else the start date's.
+export function weeklyDays(repeat: Pick<EventRepeat, "weekdays"> | null | undefined, date: string): number[] {
+  const days = repeat?.weekdays?.length ? repeat.weekdays : [parseLocalDate(date).getDay()];
+  return [...new Set(days)].sort((a, b) => a - b);
+}
+
+// "Friday", or "Mon, Wed, Fri", or "weekdays".
+function weeklyDaysLabel(repeat: EventRepeat, date: string): string {
+  const days = weeklyDays(repeat, date);
+  if (days.length === 1) return WEEKDAYS_FULL[days[0]];
+  if (days.join() === "1,2,3,4,5") return "weekdays";
+  if (days.length === 7) return "every day";
+  return days.map((d) => WEEKDAYS_SHORT[d]).join(", ");
 }
 
 export const REMIND_OPTIONS: { value: number | null; label: string }[] = [
