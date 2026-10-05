@@ -33,6 +33,9 @@ import { DatePickerModal } from "@/src/components/forms";
 import {
   createCalendarEvent,
   deleteCalendarEvent,
+  detachCalendarEvent,
+  splitCalendarEvent,
+  type SeriesScope,
   getCalendarEvent,
   getCalendars,
   updateCalendarEvent,
@@ -64,8 +67,19 @@ type SheetTarget = "calendar" | "repeat" | "remind" | null;
 // repeating event is edited as a whole series).
 export default function EditCalendarEventScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string; date?: string; start?: string; end?: string }>();
+  const params = useLocalSearchParams<{
+    id?: string;
+    date?: string;
+    start?: string;
+    end?: string;
+    // Editing a repeating event: which occurrence was tapped, and whether
+    // the edit is for it alone, it and the following ones, or the series.
+    occurrence?: string;
+    scope?: SeriesScope;
+  }>();
   const editingId = params.id;
+  const occurrence = params.occurrence;
+  const scope: SeriesScope | null = editingId && occurrence && params.scope ? params.scope : null;
 
   const initialDate = params.date ?? todayStr();
   const initialStart = params.start != null ? Number(params.start) : 9 * 60;
@@ -110,14 +124,20 @@ export default function EditCalendarEventScreen() {
           setTitle(event.title);
           setCalendarId(event.calendar);
           setAllDay(event.allDay);
-          setDate(event.date);
-          setEndDate(event.endDate);
+          // "Only this" / "this and following" open on the tapped occurrence;
+          // the whole series opens on its start.
+          const start = scope && scope !== "all" && occurrence ? occurrence : event.date;
+          setDate(start);
+          setEndDate(addDays(start, daysBetween(event.date, event.endDate)));
           setStartMinutes(event.startMinutes);
           setEndMinutes(event.endMinutes);
-          setRepeatFrequency(event.repeat?.frequency ?? null);
-          setRepeatUntil(event.repeat?.until ?? null);
+          // "Only this event" becomes a one-off.
+          setRepeatFrequency(scope === "one" ? null : event.repeat?.frequency ?? null);
+          setRepeatUntil(scope === "one" ? null : event.repeat?.until ?? null);
           // The old "every weekday" option is now weekly on Mon–Fri.
-          if (event.repeat?.frequency === "weekdays") {
+          if (scope === "one") {
+            // no repeat
+          } else if (event.repeat?.frequency === "weekdays") {
             setRepeatFrequency("weekly");
             setRepeatDays([1, 2, 3, 4, 5]);
           } else if (event.repeat?.frequency === "weekly") {
@@ -140,6 +160,7 @@ export default function EditCalendarEventScreen() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingId, router]);
 
   const calendar = calendars.find((c) => c._id === calendarId);
@@ -209,9 +230,19 @@ export default function EditCalendarEventScreen() {
     };
     try {
       setSaving(true);
-      if (editingId) await updateCalendarEvent(editingId, input);
-      else await createCalendarEvent(input);
-      router.back();
+      if (editingId && scope === "one" && occurrence) {
+        await detachCalendarEvent(editingId, occurrence, input);
+      } else if (editingId && scope === "following" && occurrence) {
+        await splitCalendarEvent(editingId, occurrence, input);
+      } else if (editingId) {
+        await updateCalendarEvent(editingId, input);
+      } else {
+        await createCalendarEvent(input);
+      }
+      // A split-off edit makes a different event than the details page
+      // showed, so go straight back to the calendar.
+      if (scope === "one" || scope === "following") router.dismiss(2);
+      else router.back();
     } catch (error) {
       Alert.alert("Couldn't save event", error instanceof Error ? error.message : "Something went wrong.");
     } finally {
@@ -222,8 +253,14 @@ export default function EditCalendarEventScreen() {
   function handleDelete() {
     if (!editingId) return;
     Alert.alert(
-      "Delete event?",
-      repeatFrequency ? "This deletes every occurrence of this repeating event." : undefined,
+      scope === "one" ? "Delete this event?" : scope === "following" ? "Delete this and following events?" : "Delete event?",
+      scope === "one"
+        ? "The rest of the series stays."
+        : scope === "following"
+          ? "Earlier events in the series stay."
+          : repeatFrequency
+            ? "This deletes every occurrence of this repeating event."
+            : undefined,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -231,7 +268,7 @@ export default function EditCalendarEventScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await deleteCalendarEvent(editingId);
+              await deleteCalendarEvent(editingId, scope ?? "all", occurrence);
               router.dismiss(2);
             } catch (error) {
               Alert.alert("Couldn't delete", error instanceof Error ? error.message : "Something went wrong.");
@@ -263,7 +300,17 @@ export default function EditCalendarEventScreen() {
             <Ionicons name="close" size={26} color="#0F172A" />
           </Pressable>
           <Pressable onPress={() => setSheet("calendar")} className="ml-1 flex-1 active:opacity-60">
-            <Text className="text-lg font-bold text-slate-950">{editingId ? "Edit event" : "New event"}</Text>
+            <Text className="text-lg font-bold text-slate-950">
+              {!editingId
+                ? "New event"
+                : scope === "one"
+                  ? "Edit this event"
+                  : scope === "following"
+                    ? "Edit this & following"
+                    : scope === "all"
+                      ? "Edit series"
+                      : "Edit event"}
+            </Text>
             <View className="flex-row items-center">
               <View className="mr-1.5 h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
               <Text className="text-xs font-medium text-slate-500">{calendar?.name ?? "Calendar"}</Text>
@@ -285,6 +332,19 @@ export default function EditCalendarEventScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {scope && occurrence && (
+            <View className="mb-3 flex-row items-center rounded-2xl bg-blue-50 px-4 py-3">
+              <Ionicons name="repeat" size={16} color="#1D4ED8" />
+              <Text className="ml-2 flex-1 text-xs leading-4 text-blue-800">
+                {scope === "one"
+                  ? `Changes apply only to ${shortDateLabel(occurrence)}. It's split off the series as its own event.`
+                  : scope === "following"
+                    ? `Changes apply from ${shortDateLabel(occurrence)} on. Earlier events keep their current details.`
+                    : "Changes apply to every event in the series."}
+              </Text>
+            </View>
+          )}
+
           {/* Title */}
           <View className="mb-3 flex-row items-center rounded-3xl border border-slate-200 bg-white px-4">
             <View className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
@@ -355,11 +415,13 @@ export default function EditCalendarEventScreen() {
               </View>
             )}
 
+            {scope !== "one" && (
             <Row icon="repeat" label="Repeat" onPress={() => setSheet("repeat")} border>
               <Text className="text-base text-slate-500">
                 {REPEAT_OPTIONS.find((o) => o.value === repeatFrequency)?.label}
               </Text>
             </Row>
+            )}
             {repeatFrequency === "weekly" && (
               <View className="border-t border-slate-100 px-4 py-3">
                 <Text className="mb-2 text-xs font-medium text-slate-500">Repeat on</Text>

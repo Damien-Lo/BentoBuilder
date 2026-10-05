@@ -233,6 +233,72 @@ router.patch("/events/:id", async (req, res) => {
   }
 });
 
+// Fields a client may set on an event (never ids or bookkeeping).
+function eventFields(body) {
+  const { _id, createdAt, updatedAt, __v, seriesId, originalDate, excludedDates, ...fields } = body ?? {};
+  return fields;
+}
+
+// POST /events/:id/detach  { occurrence, ...event fields }
+// "Only this event": the series skips that date, and the edited occurrence
+// becomes its own one-off event (remembering which series and date).
+router.post("/events/:id/detach", async (req, res) => {
+  try {
+    const { occurrence } = req.body;
+    if (!DATE_RE.test(occurrence ?? "")) return fail(res, "occurrence must be a YYYY-MM-DD date");
+    const series = await CalendarEvent.findById(req.params.id);
+    if (!series) return fail(res, "Event not found", 404);
+    const fields = eventFields(req.body);
+    delete fields.occurrence;
+    const single = await CalendarEvent.create({
+      calendar: series.calendar,
+      ...fields,
+      endDate: fields.endDate || fields.date,
+      repeat: null,
+      seriesId: series._id,
+      originalDate: occurrence,
+    });
+    await CalendarEvent.updateOne({ _id: series._id }, { $addToSet: { excludedDates: occurrence } });
+    return res.status(201).json({ success: true, data: single });
+  } catch (error) {
+    return fail(res, error);
+  }
+});
+
+// POST /events/:id/split  { occurrence, ...event fields }
+// "This and following events": the series ends the day before `occurrence`,
+// and a new series with the edited details starts from it. Splitting at
+// the very first occurrence just edits the whole series.
+router.post("/events/:id/split", async (req, res) => {
+  try {
+    const { occurrence } = req.body;
+    if (!DATE_RE.test(occurrence ?? "")) return fail(res, "occurrence must be a YYYY-MM-DD date");
+    const series = await CalendarEvent.findById(req.params.id);
+    if (!series) return fail(res, "Event not found", 404);
+    const fields = eventFields(req.body);
+    delete fields.occurrence;
+
+    if (occurrence <= series.date) {
+      const updated = await CalendarEvent.findByIdAndUpdate(series._id, fields, { new: true, runValidators: true });
+      return res.json({ success: true, data: updated });
+    }
+
+    const following = await CalendarEvent.create({
+      calendar: series.calendar,
+      ...fields,
+      endDate: fields.endDate || fields.date,
+      // Skipped dates from here on belong to the new series.
+      excludedDates: (series.excludedDates ?? []).filter((d) => d >= occurrence),
+    });
+    series.repeat.until = addDays(occurrence, -1);
+    series.excludedDates = (series.excludedDates ?? []).filter((d) => d < occurrence);
+    await series.save();
+    return res.status(201).json({ success: true, data: following });
+  } catch (error) {
+    return fail(res, error);
+  }
+});
+
 // DELETE /events/:id — the whole event (every occurrence), or with
 // ?occurrence=YYYY-MM-DD just that one occurrence of a repeating event.
 router.delete("/events/:id", async (req, res) => {
@@ -248,8 +314,23 @@ router.delete("/events/:id", async (req, res) => {
       if (!event) return fail(res, "Event not found", 404);
       return res.json({ success: true, data: event });
     }
+    // ?from=YYYY-MM-DD: "this and following" — end the series the day
+    // before (or delete it, if that's its first occurrence).
+    const { from } = req.query;
+    if (from) {
+      if (!DATE_RE.test(from)) return fail(res, "from must be a YYYY-MM-DD date");
+      const series = await CalendarEvent.findById(req.params.id);
+      if (!series) return fail(res, "Event not found", 404);
+      if (series.repeat && from > series.date) {
+        series.repeat.until = addDays(from, -1);
+        await series.save();
+        return res.json({ success: true, data: series });
+      }
+    }
     const event = await CalendarEvent.findByIdAndDelete(req.params.id);
     if (!event) return fail(res, "Event not found", 404);
+    // Occurrences that were split off this series go with it.
+    await CalendarEvent.deleteMany({ seriesId: event._id });
     return res.json({ success: true });
   } catch (error) {
     return fail(res, error);

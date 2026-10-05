@@ -21,6 +21,7 @@ import {
   getCalendarEvent,
   getCalendars,
   type CalendarEvent,
+  type SeriesScope,
   type EventCalendar,
 } from "@/src/services/calendarApi";
 import { hexToRgba } from "@/src/utils/mealPlan";
@@ -68,9 +69,9 @@ export default function CalendarEventScreen() {
   const color = calendarColor(calendar);
   const duration = span * 1440 + event.endMinutes - event.startMinutes;
 
-  async function remove(onlyThis: boolean) {
+  async function remove(scope: SeriesScope) {
     try {
-      await deleteCalendarEvent(id, onlyThis ? occurrence : undefined);
+      await deleteCalendarEvent(id, scope, occurrence);
       router.back();
     } catch (error) {
       Alert.alert("Couldn't delete", error instanceof Error ? error.message : "Something went wrong.");
@@ -80,14 +81,30 @@ export default function CalendarEventScreen() {
   function confirmDelete() {
     if (event?.repeat) {
       showActions("Delete repeating event", [
-        { label: "Delete this event", destructive: true, onPress: () => void remove(true) },
-        { label: "Delete all events in the series", destructive: true, onPress: () => void remove(false) },
+        { label: "Delete this event", destructive: true, onPress: () => void remove("one") },
+        { label: "Delete this and following events", destructive: true, onPress: () => void remove("following") },
+        { label: "Delete all events in the series", destructive: true, onPress: () => void remove("all") },
       ]);
       return;
     }
     Alert.alert("Delete event?", undefined, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => void remove(false) },
+      { text: "Delete", style: "destructive", onPress: () => void remove("all") },
+    ]);
+  }
+
+  // A repeating event asks which occurrences the edit is for first.
+  function startEdit() {
+    const open = (scope?: SeriesScope) =>
+      router.push({ pathname: "/calendar/edit", params: { id, occurrence, ...(scope ? { scope } : {}) } });
+    if (!event?.repeat) {
+      open();
+      return;
+    }
+    showActions("Edit repeating event", [
+      { label: "Only this event", onPress: () => open("one") },
+      { label: "This and following events", onPress: () => open("following") },
+      { label: "All events in the series", onPress: () => open("all") },
     ]);
   }
 
@@ -103,7 +120,7 @@ export default function CalendarEventScreen() {
           </Text>
         </View>
         <Pressable
-          onPress={() => router.push({ pathname: "/calendar/edit", params: { id } })}
+          onPress={startEdit}
           accessibilityLabel="Edit event"
           className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
         >
@@ -129,6 +146,12 @@ export default function CalendarEventScreen() {
                 {minutesLabel(event.startMinutes)} → {minutesLabel(event.endMinutes)}
                 {span > 0 ? ` ${shortDateLabel(occurrenceEnd)}` : ""} ({durationLabel(duration)})
               </Text>
+            )}
+            {event.seriesId && !event.repeat && (
+              <View className="mt-1.5 flex-row items-center">
+                <Ionicons name="git-branch-outline" size={15} color="#64748B" />
+                <Text className="ml-1.5 flex-1 text-sm text-slate-500">Changed from its repeating series</Text>
+              </View>
             )}
             {event.repeat && (
               <View className="mt-1.5 flex-row items-center">

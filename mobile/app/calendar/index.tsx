@@ -176,12 +176,7 @@ export default function CalendarScreen() {
     <SafeAreaView className="flex-1 bg-white" edges={["top", "left", "right"]}>
       {/* Header */}
       <View className="flex-row items-center bg-white px-3 pb-2 pt-1">
-        <Pressable
-          onPress={() => router.back()}
-          className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
-        >
-          <Ionicons name="chevron-back" size={24} color="#0F172A" />
-        </Pressable>
+        {/* No back button — the floating home button covers that. */}
         <Pressable
           onPress={() => setDrawerOpen(true)}
           accessibilityLabel="Calendars"

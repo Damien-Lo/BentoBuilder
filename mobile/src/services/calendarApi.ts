@@ -34,6 +34,10 @@ export interface CalendarEvent {
   location: string;
   description: string;
   remindMinutes: number | null;
+  // Set when this was one occurrence of a repeating event, edited on its
+  // own and split off ("only this event").
+  seriesId?: string | null;
+  originalDate?: string | null;
 }
 
 // One occurrence of an event within a requested range.
@@ -72,6 +76,23 @@ export const createCalendarEvent = (input: EventInput) =>
   request<CalendarEvent>("/events", { method: "POST", body: body(input) });
 export const updateCalendarEvent = (id: string, input: Partial<EventInput>) =>
   request<CalendarEvent>(`/events/${id}`, { method: "PATCH", body: body(input) });
-// With `occurrence`, removes just that day's occurrence of a repeating event.
-export const deleteCalendarEvent = (id: string, occurrence?: string) =>
-  request<void>(`/events/${id}${occurrence ? `?occurrence=${occurrence}` : ""}`, { method: "DELETE" });
+// Which occurrences an edit or delete of a repeating event applies to.
+export type SeriesScope = "one" | "following" | "all";
+
+// Deletes the whole event, or for a repeating one just `occurrence`
+// ("one") or `occurrence` onwards ("following").
+export const deleteCalendarEvent = (id: string, scope: SeriesScope = "all", occurrence?: string) => {
+  const query =
+    occurrence && scope === "one" ? `?occurrence=${occurrence}` : occurrence && scope === "following" ? `?from=${occurrence}` : "";
+  return request<void>(`/events/${id}${query}`, { method: "DELETE" });
+};
+
+// "Only this event": the series skips `occurrence`, which becomes its own
+// event with these details.
+export const detachCalendarEvent = (id: string, occurrence: string, input: EventInput) =>
+  request<CalendarEvent>(`/events/${id}/detach`, { method: "POST", body: body({ ...input, occurrence }) });
+
+// "This and following events": the series ends before `occurrence` and a new
+// series with these details starts from it.
+export const splitCalendarEvent = (id: string, occurrence: string, input: EventInput) =>
+  request<CalendarEvent>(`/events/${id}/split`, { method: "POST", body: body({ ...input, occurrence }) });

@@ -35,8 +35,14 @@ const calendarEventSchema = new mongoose.Schema(
     startMinutes: { type: Number, min: 0, max: 1440, default: 540 },
     endMinutes: { type: Number, min: 0, max: 1440, default: 600 },
     repeat: { type: repeatSchema, default: null },
-    // Occurrences of a repeating event that were deleted on their own.
+    // Occurrences of a repeating event that were deleted on their own, or
+    // edited on their own (then saved as separate events, below).
     excludedDates: [{ type: String, match: DATE_RE }],
+    // Set on an occurrence that was edited on its own and split off its
+    // series ("only this event"): the series, and which of its dates this
+    // replaced. Deleting the series deletes these too.
+    seriesId: { type: mongoose.Schema.Types.ObjectId, ref: "CalendarEvent", default: null },
+    originalDate: { type: String, match: DATE_RE, default: null },
     location: { type: String, trim: true, default: "" },
     description: { type: String, trim: true, default: "" },
     // Minutes before the start to remind, or null for no reminder.
