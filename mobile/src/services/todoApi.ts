@@ -26,6 +26,13 @@ export interface TodoList {
   openCount?: number;
 }
 
+export interface WorkBlock {
+  _id: string;
+  date: string; // YYYY-MM-DD
+  startMinutes: number;
+  endMinutes: number;
+}
+
 export type TaskStatus = "not_started" | "in_progress" | "on_hold" | "completed";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
@@ -49,6 +56,8 @@ export interface TodoTask {
   dueDate: string | null;
   // The day you plan to work on it (the due date is when it must be done).
   doDate: string | null;
+  // Time blocked out in the calendar to work on it.
+  workBlocks: WorkBlock[];
   tags: string[];
   // "Relevant parties" — free-text names.
   parties: string[];
@@ -97,6 +106,20 @@ export interface CalendarTask {
   root: { _id: string; title: string; number: number | null };
 }
 
+// A work block scheduled for a task, as the calendar draws it.
+export interface CalendarTaskBlock extends CalendarTask {
+  blockId: string;
+  date: string;
+  startMinutes: number;
+  endMinutes: number;
+}
+
+export interface CalendarTaskFeed {
+  // Tasks switched on for the calendar, on their due date.
+  deadlines: CalendarTask[];
+  blocks: CalendarTaskBlock[];
+}
+
 export interface TodoOverview {
   groups: TodoGroup[];
   lists: TodoList[];
@@ -143,7 +166,17 @@ export const getListTasks = (listId: string) => request<TodoTask[]>(`/tasks?list
 export const getSmartTasks = (smart: SmartListId) => request<TodoTask[]>(`/tasks?smart=${smart}&today=${todayStr()}`);
 export const getTodoTask = (id: string) => request<TodoTaskDetail>(`/tasks/${id}`);
 export const getTodoDashboard = () => request<TodoDashboard>(`/dashboard?today=${todayStr()}`);
-export const getCalendarTasks = (from: string, to: string) => request<CalendarTask[]>(`/calendar?from=${from}&to=${to}`);
+export const getCalendarTasks = (from: string, to: string) => request<CalendarTaskFeed>(`/calendar?from=${from}&to=${to}`);
+// Open tasks with no time scheduled today or later.
+export const getUnscheduledTasks = () => request<CalendarTask[]>(`/unscheduled?today=${todayStr()}`);
+// "Schedule task X from A to B" — adds a work block.
+export const scheduleTodoTask = (id: string, block: Omit<WorkBlock, "_id">) =>
+  request<WorkBlock[]>(`/tasks/${id}/blocks`, { method: "POST", body: body({ ...block, today: todayStr() }) });
+// Moves one booking to another day or time.
+export const moveTodoTaskBlock = (id: string, blockId: string, block: Partial<Omit<WorkBlock, "_id">>) =>
+  request<WorkBlock[]>(`/tasks/${id}/blocks/${blockId}`, { method: "PATCH", body: body({ ...block, today: todayStr() }) });
+export const unscheduleTodoTask = (id: string, blockId: string) =>
+  request<WorkBlock[]>(`/tasks/${id}/blocks/${blockId}?today=${todayStr()}`, { method: "DELETE" });
 
 // With `parent`, creates a subtask of that task.
 export const createTodoTask = (input: {

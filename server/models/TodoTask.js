@@ -36,6 +36,19 @@ const todoTaskSchema = new mongoose.Schema(
     // "YYYY-MM-DD" — the day you plan to work on it (the due date is when
     // it has to be finished).
     doDate: { type: String, default: null },
+    // Time blocked out in the calendar to work on this. Usually one; a
+    // second is added when the first wasn't enough. The do date follows
+    // the next upcoming block.
+    workBlocks: {
+      type: [
+        {
+          date: { type: String, required: true },
+          startMinutes: { type: Number, min: 0, max: 1440, required: true },
+          endMinutes: { type: Number, min: 0, max: 1440, required: true },
+        },
+      ],
+      default: [],
+    },
     tags: { type: [String], default: [] },
     // "Relevant parties" — free-text names (there are no user accounts).
     parties: { type: [String], default: [] },

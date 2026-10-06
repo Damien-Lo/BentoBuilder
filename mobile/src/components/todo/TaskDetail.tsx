@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DatePickerModal, FormCard } from "@/src/components/forms";
-import { PriorityPill, ProgressBar, StatusPill, TaskNumber } from "@/src/components/todo/TaskBits";
+import { PriorityPill, ProgressBar, ProgressSlider, StatusPill, TaskNumber } from "@/src/components/todo/TaskBits";
 import { countDescriptions, DescriptionOutline, SubtaskTree } from "@/src/components/todo/TaskTree";
 import {
   friendlyDate,
@@ -34,12 +34,14 @@ import {
   deleteTodoTask,
   getTodoTask,
   moveTodoTask,
+  unscheduleTodoTask,
   updateTodoTask,
   type TodoSubtask,
   type TodoTask,
   type TodoTaskChanges,
   type TodoTaskDetail,
 } from "@/src/services/todoApi";
+import { minutesLabel } from "@/src/components/calendar/calendarUtils";
 import { todayStr } from "@/src/utils/mealPlan";
 
 // Subtasks nest this deep below a top-level task (matches the server).
@@ -84,6 +86,7 @@ export function TaskDetail({
   refreshKey = 0,
 }: TaskDetailProps) {
   const theme = useTodoTheme();
+  const router = useRouter();
   const sheet = mode === "sheet";
 
   const [task, setTask] = useState<TodoTaskDetail | null>(null);
@@ -95,9 +98,10 @@ export function TaskDetail({
   const [newSubtask, setNewSubtask] = useState("");
   // Which date is being picked: this task's, or one of its subtasks'.
   const [pickingDateFor, setPickingDateFor] = useState<TodoTask | null>(null);
-  const [pickingDoDate, setPickingDoDate] = useState(false);
   // The page stops scrolling while a subtask card is being dragged.
   const [treeDragging, setTreeDragging] = useState(false);
+  // The percentage under the finger while the progress slider is dragged.
+  const [progressPreview, setProgressPreview] = useState<number | null>(null);
   // The sections below the summary are folded away until tapped, like the
   // add-ingredient page's. A subtask's card opens with its details showing.
   const [detailsOpen, setDetailsOpen] = useState(mode === "sheet");
@@ -175,6 +179,18 @@ export function TaskDetail({
     save(target, { showInCalendar: !target.showInCalendar });
   }
 
+  // Opens the calendar in scheduling mode with this task selected, to drag
+  // out a block of time for it. From a subtask's card, the card closes first.
+  function openScheduler() {
+    const go = () => router.push({ pathname: "/calendar", params: { schedule: id } });
+    if (sheet && onClose) {
+      onClose();
+      setTimeout(go, 250);
+    } else {
+      go();
+    }
+  }
+
   function addSubtask() {
     const text = newSubtask.trim();
     if (!text || !task) return;
@@ -186,7 +202,14 @@ export function TaskDetail({
     if (!task) return;
     Alert.alert(
       `Delete "${task.title}"?`,
-      task.subtaskCount > 0 ? `Its ${task.subtaskCount} subtask${task.subtaskCount === 1 ? "" : "s"} will be deleted too.` : undefined,
+      // Say what goes with it — booked time is removed from the calendar,
+      // but removing booked time (the calendar, or Details) never does this.
+      [
+        "This deletes the task itself, not just its time in the calendar.",
+        task.subtaskCount > 0 ? `Its ${task.subtaskCount} subtask${task.subtaskCount === 1 ? "" : "s"} will be deleted too.` : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
       [
         { text: "Cancel", style: "cancel" },
         { text: "Delete", style: "destructive", onPress: () => deleteTodoTask(task._id).then(onExit, fail) },
@@ -211,7 +234,11 @@ export function TaskDetail({
   // What the folded Details header says, e.g. "Due Thu, 8 Oct · In calendar · 2 tags".
   const detailsSummary =
     [
-      task.doDate ? `Do ${friendlyDate(task.doDate)}` : null,
+      task.workBlocks.length
+        ? `${task.workBlocks.length} time${task.workBlocks.length === 1 ? "" : "s"} scheduled`
+        : task.doDate
+          ? `Do ${friendlyDate(task.doDate)}`
+          : null,
       task.dueDate ? `Due ${friendlyDate(task.dueDate)}${overdue ? " (overdue)" : ""}` : null,
       task.showInCalendar ? "In calendar" : null,
       task.tags.length ? `${task.tags.length} tag${task.tags.length === 1 ? "" : "s"}` : null,
@@ -345,24 +372,21 @@ export function TaskDetail({
                   Progress
                   {task.subtaskCount > 0 ? ` · ${task.subtaskCount - task.openSubtaskCount} of ${task.subtaskCount} subtasks` : ""}
                 </Text>
-                <Text className="text-sm font-bold text-slate-900">{task.progress}%</Text>
+                <Text className="text-sm font-bold text-slate-900">{progressPreview ?? task.progress}%</Text>
               </View>
-              <ProgressBar value={task.progress} color={accent} />
-              {task.subtaskCount === 0 && !task.completed && (
-                <View className="mt-2 flex-row gap-1.5">
-                  {[0, 25, 50, 75].map((value) => {
-                    const on = task.manualProgress === value;
-                    return (
-                      <Pressable
-                        key={value}
-                        onPress={() => save(task, { manualProgress: value })}
-                        className={`flex-1 items-center rounded-lg py-1.5 ${on ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"}`}
-                      >
-                        <Text className={`text-xs font-semibold ${on ? "text-white" : "text-slate-600"}`}>{value}%</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+              {task.subtaskCount === 0 && !task.completed ? (
+                <ProgressSlider
+                  value={task.progress}
+                  color={accent}
+                  onPreview={setProgressPreview}
+                  onChange={(value) => {
+                    // Show it at once; the server's figure follows.
+                    setTask((prev) => (prev ? { ...prev, progress: value } : prev));
+                    save(task, { manualProgress: value });
+                  }}
+                />
+              ) : (
+                <ProgressBar value={task.progress} color={accent} />
               )}
             </View>
 
@@ -402,16 +426,41 @@ export function TaskDetail({
                 </Pressable>
               )}
             </Row>
-            <Row icon="play-circle-outline" label="Do date" border onPress={() => setPickingDoDate(true)}>
-              <Text className={`text-base ${task.doDate ? "text-slate-900" : "text-slate-400"}`}>
-                {task.doDate ? friendlyDate(task.doDate) : "None"}
+            {/* Do date: tapping it opens the calendar to drag out a block of
+                time for this task alone. */}
+            <Row icon="play-circle-outline" label="Do date" border onPress={openScheduler}>
+              <Text className={`text-base ${task.workBlocks.length || task.doDate ? "text-slate-900" : "text-blue-600"}`}>
+                {task.workBlocks.length
+                  ? `${task.workBlocks.length} time${task.workBlocks.length === 1 ? "" : "s"} booked`
+                  : task.doDate
+                    ? friendlyDate(task.doDate)
+                    : "Schedule"}
               </Text>
-              {task.doDate && (
+              {task.doDate && task.workBlocks.length === 0 && (
                 <Pressable hitSlop={10} onPress={() => save(task, { doDate: null })} className="ml-2">
                   <Ionicons name="close-circle" size={18} color="#94A3B8" />
                 </Pressable>
               )}
+              <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 4 }} />
             </Row>
+            {/* Time blocked out in the calendar to do it. */}
+            {[...task.workBlocks]
+              .sort((a, b) => a.date.localeCompare(b.date) || a.startMinutes - b.startMinutes)
+              .map((block) => (
+                <Row key={block._id} icon="time-outline" label={friendlyDate(block.date)} border>
+                  <Text className={`text-base ${block.date < todayStr() ? "text-slate-400" : "text-slate-900"}`}>
+                    {minutesLabel(block.startMinutes)}–{minutesLabel(block.endMinutes)}
+                  </Text>
+                  <Pressable
+                    hitSlop={10}
+                    accessibilityLabel="Remove this time"
+                    onPress={() => unscheduleTodoTask(task._id, block._id).then(load, fail)}
+                    className="ml-2"
+                  >
+                    <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                  </Pressable>
+                </Row>
+              ))}
             <Row icon="calendar-number-outline" label="Show in calendar" border onPress={() => toggleCalendar(task)}>
               <Toggle value={task.showInCalendar} />
             </Row>
@@ -558,16 +607,6 @@ export function TaskDetail({
           const target = pickingDateFor;
           setPickingDateFor(null);
           if (target) save(target, { dueDate: value });
-        }}
-      />
-      <DatePickerModal
-        visible={pickingDoDate}
-        title="Do date"
-        value={task.doDate ?? todayStr()}
-        onCancel={() => setPickingDoDate(false)}
-        onConfirm={(value) => {
-          setPickingDoDate(false);
-          save(task, { doDate: value });
         }}
       />
     </SafeAreaView>

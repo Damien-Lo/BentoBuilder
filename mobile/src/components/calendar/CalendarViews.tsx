@@ -344,7 +344,7 @@ export function AgendaView({
                     className="flex-row items-center border-b border-slate-100 bg-white px-4 py-3 active:bg-slate-50"
                   >
                     <View className="w-14">
-                      {event.task ? (
+                      {event.task && event.allDay ? (
                         <Text className={`text-xs font-semibold ${event.task.overdue ? "text-red-600" : "text-slate-500"}`}>
                           {event.task.depth > 0 ? "Subtask" : "Task due"}
                         </Text>

@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -294,15 +295,20 @@ function DayColumn({
             >
               <Text
                 numberOfLines={height < 34 ? 1 : 3}
-                className={`font-semibold text-slate-900 ${height < 20 ? "text-[10px]" : "text-xs"}`}
+                className={`font-semibold ${event.task?.completed ? "text-slate-400 line-through" : "text-slate-900"} ${height < 20 ? "text-[10px]" : "text-xs"}`}
                 style={height < 20 ? { lineHeight: 11, marginTop: -2 } : undefined}
               >
+                {event.task && (
+                  <Ionicons name={event.task.depth > 0 ? "diamond-outline" : "flag"} size={height < 20 ? 8 : 10} color={color} />
+                )}
+                {event.task ? " " : ""}
                 {event.title}
               </Text>
               {height >= 40 && (
                 <Text numberOfLines={1} className="text-[10px] text-slate-600">
                   {minutesLabel(event.startMinutes)}–{minutesLabel(event.endMinutes)}
                   {event.location ? ` · ${event.location}` : ""}
+                  {event.task && event.task.depth > 0 ? ` · ${event.task.rootTitle}` : ""}
                 </Text>
               )}
             </Pressable>

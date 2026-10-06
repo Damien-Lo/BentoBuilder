@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Text, View } from "react-native";
 
 import type { EventOccurrence } from "@/src/services/calendarApi";
-import type { CalendarTask } from "@/src/services/todoApi";
+import type { CalendarTask, CalendarTaskBlock } from "@/src/services/todoApi";
 
 // How a task from Lists is drawn in the calendar. Calendars are already
 // told apart by colour, so tasks are told apart by shape instead:
@@ -40,6 +40,17 @@ export function taskToOccurrence(task: CalendarTask, calendarId: string, today: 
       rootTitle: task.root.title,
       rootNumber: task.root.number,
     },
+  };
+}
+
+// A task's work block as a timed "occurrence".
+export function taskBlockToOccurrence(block: CalendarTaskBlock, calendarId: string): EventOccurrence {
+  return {
+    ...taskToOccurrence({ ...block, dueDate: block.date }, calendarId, ""),
+    _id: `block-${block.blockId}`,
+    allDay: false,
+    startMinutes: block.startMinutes,
+    endMinutes: block.endMinutes,
   };
 }
 

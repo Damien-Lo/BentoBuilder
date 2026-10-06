@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,8 +23,19 @@ import {
   type EventOccurrence,
 } from "@/src/services/calendarApi";
 import { loadSettings } from "@/src/services/settingsService";
-import { getCalendarTasks, type CalendarTask } from "@/src/services/todoApi";
-import { taskToOccurrence } from "@/src/components/calendar/TaskChip";
+import {
+  getCalendarTasks,
+  scheduleTodoTask,
+  type CalendarTaskFeed,
+} from "@/src/services/todoApi";
+import {
+  SCHEDULE_STRIP_HEIGHT,
+  SCHEDULE_STRIP_LOCKED_HEIGHT,
+  ScheduleStrip,
+  type ScheduleTarget,
+} from "@/src/components/calendar/ScheduleStrip";
+import { TaskBlockSheet } from "@/src/components/calendar/TaskBlockSheet";
+import { taskBlockToOccurrence, taskToOccurrence } from "@/src/components/calendar/TaskChip";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
 type CalendarView = "agenda" | "day" | "threeDay" | "month";
@@ -55,7 +66,20 @@ export default function CalendarScreen() {
   const [weekStartDay, setWeekStartDay] = useState(0);
   const [calendars, setCalendars] = useState<EventCalendar[]>([]);
   const [events, setEvents] = useState<EventOccurrence[]>([]);
-  const [tasks, setTasks] = useState<CalendarTask[]>([]);
+  const [tasks, setTasks] = useState<CalendarTaskFeed>({ deadlines: [], blocks: [] });
+  // Scheduling mode: pick a task from the strip, drag on the day to block
+  // time for it. `schedule=<taskId>` in the URL opens straight into it
+  // locked to that one task (a task's Do date row).
+  const { schedule } = useLocalSearchParams<{ schedule?: string }>();
+  const [scheduling, setScheduling] = useState(!!schedule);
+  // The one task the strip is locked to: from the URL, or a booking's
+  // "Schedule another time".
+  const [lockedTask, setLockedTask] = useState(schedule);
+  // What the strip has highlighted — what a drag books time for.
+  const [selectedTask, setSelectedTask] = useState<ScheduleTarget | null>(null);
+  const [stripRefresh, setStripRefresh] = useState(0);
+  // The booked work block whose card is showing.
+  const [openBlock, setOpenBlock] = useState<EventOccurrence | null>(null);
   const windowRef = useRef<{ from: string; to: string } | null>(null);
   const [now, setNow] = useState(nowMinutes());
 
@@ -79,7 +103,7 @@ export default function CalendarScreen() {
       const [loaded, loadedTasks] = await Promise.all([
         getEventOccurrences(from, to),
         // Tasks are a bonus layer — never fail the calendar over them.
-        getCalendarTasks(from, to).catch(() => [] as CalendarTask[]),
+        getCalendarTasks(from, to).catch((): CalendarTaskFeed => ({ deadlines: [], blocks: [] })),
       ]);
       windowRef.current = { from, to };
       setEvents(loaded);
@@ -120,7 +144,12 @@ export default function CalendarScreen() {
   // built-in Tasks calendar, so they hide and show with it).
   const visibleEvents = useMemo(() => {
     const tasksCalendar = calendars.find((c) => c.isTasks);
-    const taskOccurrences = tasksCalendar ? tasks.map((t) => taskToOccurrence(t, tasksCalendar._id, today)) : [];
+    const taskOccurrences = tasksCalendar
+      ? [
+          ...tasks.deadlines.map((t) => taskToOccurrence(t, tasksCalendar._id, today)),
+          ...tasks.blocks.map((b) => taskBlockToOccurrence(b, tasksCalendar._id)),
+        ]
+      : [];
     return [...taskOccurrences, ...events].filter((e) => calendarsById.get(e.calendar)?.visible ?? true);
   }, [events, tasks, calendars, calendarsById, today]);
   const eventDays = useMemo(() => {
@@ -135,16 +164,50 @@ export default function CalendarScreen() {
   const title = `${MONTHS_FULL[focus.getMonth()]}${focus.getFullYear() !== new Date().getFullYear() ? ` ${focus.getFullYear()}` : ""}`;
   const viewOption = VIEW_OPTIONS.find((o) => o.value === view)!;
 
+  function openTask(task: NonNullable<EventOccurrence["task"]>) {
+    // A subtask opens as the sheet over its top-level task.
+    router.push({
+      pathname: "/lists/task/[id]",
+      params: task.depth > 0 ? { id: task.rootId, open: task.id } : { id: task.id },
+    });
+  }
+
   function openEvent(event: EventOccurrence) {
-    if (event.task) {
-      // A subtask opens as the sheet over its top-level task.
-      router.push({
-        pathname: "/lists/task/[id]",
-        params: event.task.depth > 0 ? { id: event.task.rootId, open: event.task.id } : { id: event.task.id },
-      });
+    const task = event.task;
+    if (task && event._id.startsWith("block-")) {
+      // Booked time gets its own card: removing it there frees the time
+      // and leaves the task alone.
+      setOpenBlock(event);
+      return;
+    }
+    if (task) {
+      openTask(task);
       return;
     }
     router.push({ pathname: "/calendar/event/[id]", params: { id: event._id, date: event.occurrenceDate } });
+  }
+
+  useEffect(() => {
+    // The time grid is where blocks are drawn.
+    if (scheduling) setView((v) => (v === "month" || v === "agenda" ? "day" : v));
+  }, [scheduling]);
+
+  // A block dragged out in scheduling mode books time for the selected task.
+  async function scheduleBlock(date: string, startMinutes: number, endMinutes: number) {
+    if (!selectedTask) {
+      Alert.alert("Pick a task first", "Choose a list and a task in the strip at the bottom, then hold and drag on the day.");
+      return;
+    }
+    try {
+      await scheduleTodoTask(selectedTask._id, { date, startMinutes, endMinutes });
+      // Make sure it shows: blocks are drawn through the Tasks calendar.
+      const tasksCalendar = calendars.find((c) => c.isTasks);
+      if (tasksCalendar && !tasksCalendar.visible) void toggleCalendar(tasksCalendar);
+      await loadEvents(focusDate);
+      setStripRefresh((k) => k + 1);
+    } catch (error) {
+      Alert.alert("Couldn't schedule", error instanceof Error ? error.message : "Something went wrong.");
+    }
   }
 
   function newEvent(date: string, start?: number, end?: number) {
@@ -215,6 +278,17 @@ export default function CalendarScreen() {
           </Pressable>
         )}
         <Pressable
+          onPress={() => {
+            setScheduling((v) => !v);
+            setLockedTask(schedule);
+            setSelectedTask(null);
+          }}
+          accessibilityLabel="Schedule tasks"
+          className={`mr-1 h-10 w-10 items-center justify-center rounded-full ${scheduling ? "bg-blue-600" : "active:bg-slate-100"}`}
+        >
+          <Ionicons name="time-outline" size={22} color={scheduling ? "#FFFFFF" : "#334155"} />
+        </Pressable>
+        <Pressable
           onPress={() => setViewMenuOpen(true)}
           accessibilityLabel="Change view"
           className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
@@ -242,7 +316,7 @@ export default function CalendarScreen() {
           events={visibleEvents}
           calendarsById={calendarsById}
           onPressEvent={openEvent}
-          onCreate={(date, start, end) => newEvent(date, start, end)}
+          onCreate={(date, start, end) => (scheduling ? void scheduleBlock(date, start, end) : newEvent(date, start, end))}
           onShiftDays={(days) => setFocusDate((d) => addDays(d, days))}
           onPressDay={(date) => {
             setFocusDate(date);
@@ -273,6 +347,29 @@ export default function CalendarScreen() {
         />
       )}
 
+      {/* Room for the strip, so the end of the day can scroll clear of it. */}
+      {scheduling && (
+        <View style={{ height: (lockedTask ? SCHEDULE_STRIP_LOCKED_HEIGHT : SCHEDULE_STRIP_HEIGHT) + insets.bottom }} />
+      )}
+
+      {scheduling ? (
+        <ScheduleStrip
+          key={lockedTask ?? "browse"}
+          lockedTaskId={lockedTask}
+          bottomInset={insets.bottom}
+          refreshKey={stripRefresh}
+          onTarget={setSelectedTask}
+          onDone={() => {
+            setScheduling(false);
+            setSelectedTask(null);
+            // Opened from a task's Do date: go back to it. (From a booking's
+            // "Schedule another time" it just returns to the calendar.)
+            if (schedule && lockedTask === schedule && router.canGoBack()) router.back();
+            setLockedTask(schedule);
+          }}
+        />
+      ) : (
+        <>
       {/* New event */}
       <Pressable
         onPress={() => newEvent(focusDate)}
@@ -292,6 +389,8 @@ export default function CalendarScreen() {
 
       {/* The same centre home button as the other sections, floating */}
       <FloatingHomeButton />
+        </>
+      )}
 
       {/* View menu */}
       <Modal visible={viewMenuOpen} transparent animationType="fade" onRequestClose={() => setViewMenuOpen(false)}>
@@ -347,6 +446,25 @@ export default function CalendarScreen() {
         onClose={() => setEditingCalendar(undefined)}
         onSave={(name, color) => void saveCalendar(name, color)}
         onDelete={removeCalendar}
+      />
+      <TaskBlockSheet
+        block={openBlock}
+        onClose={() => setOpenBlock(null)}
+        onChanged={() => {
+          setStripRefresh((k) => k + 1);
+          void loadEvents(focusDate);
+        }}
+        onRemoved={() => {
+          setOpenBlock(null);
+          setStripRefresh((k) => k + 1);
+          void loadEvents(focusDate);
+        }}
+        onOpenTask={openTask}
+        onScheduleAnother={(taskId) => {
+          setSelectedTask(null);
+          setLockedTask(taskId);
+          setScheduling(true);
+        }}
       />
     </SafeAreaView>
   );

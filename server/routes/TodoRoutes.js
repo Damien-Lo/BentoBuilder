@@ -332,48 +332,94 @@ router.get("/dashboard", async (req, res) => {
   }
 });
 
+// Each task with the top-level task it belongs to (walking up `parent`).
+async function withRoots(tasks) {
+  const byId = new Map(tasks.map((t) => [String(t._id), t]));
+  let missing = tasks.map((t) => t.parent).filter((p) => p && !byId.has(String(p)));
+  for (let i = 0; i < MAX_TASK_DEPTH && missing.length; i++) {
+    const parents = await TodoTask.find({ _id: { $in: missing } }).lean();
+    for (const p of parents) byId.set(String(p._id), p);
+    missing = parents.map((p) => p.parent).filter((p) => p && !byId.has(String(p)));
+  }
+  return tasks.map((task) => {
+    let root = task;
+    while (root.parent && byId.get(String(root.parent))) root = byId.get(String(root.parent));
+    return { task, root };
+  });
+}
+
+// What the calendar needs to draw a task.
+function calendarItem(task, root) {
+  return {
+    _id: task._id,
+    title: task.title,
+    dueDate: task.dueDate,
+    depth: task.depth ?? 0,
+    completed: !!task.completed,
+    status: task.status,
+    priority: task.priority,
+    number: task.number,
+    root: { _id: root._id, title: root.title, number: root.number },
+  };
+}
+
 /**
  * GET /api/todo/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD
- * Tasks and subtasks switched on for the calendar, due in the range — each
- * with its top-level task (`root`) so the calendar can label and group them.
+ * What the calendar's Tasks calendar shows in the range:
+ *   deadlines — tasks/subtasks switched on for the calendar, on their due date;
+ *   blocks    — every work block scheduled for a task.
  */
 router.get("/calendar", async (req, res) => {
   try {
     const { from, to } = req.query;
     if (!DATE_RE.test(from ?? "") || !DATE_RE.test(to ?? "")) throw new Error("from and to must be YYYY-MM-DD dates");
-    const tasks = await TodoTask.find({ showInCalendar: true, dueDate: { $gte: from, $lte: to } })
-      .sort({ dueDate: 1, depth: 1 })
-      .lean();
-    // Walk each subtask up to its top-level task.
-    const byId = new Map(tasks.map((t) => [String(t._id), t]));
-    let missing = tasks.map((t) => t.parent).filter((p) => p && !byId.has(String(p)));
-    for (let i = 0; i < MAX_TASK_DEPTH && missing.length; i++) {
-      const parents = await TodoTask.find({ _id: { $in: missing } }).lean();
-      for (const p of parents) byId.set(String(p._id), p);
-      missing = parents.map((p) => p.parent).filter((p) => p && !byId.has(String(p)));
-    }
-    const rootOf = (task) => {
-      let current = task;
-      while (current.parent && byId.get(String(current.parent))) current = byId.get(String(current.parent));
-      return current;
-    };
+    const [due, scheduled] = await Promise.all([
+      TodoTask.find({ showInCalendar: true, dueDate: { $gte: from, $lte: to } }).sort({ dueDate: 1, depth: 1 }).lean(),
+      TodoTask.find({ workBlocks: { $elemMatch: { date: { $gte: from, $lte: to } } } }).lean(),
+    ]);
+    const rooted = await withRoots([...due, ...scheduled]);
+    const rootOf = new Map(rooted.map(({ task, root }) => [String(task._id), root]));
     return res.json({
       success: true,
-      data: tasks.map((t) => {
-        const root = rootOf(t);
-        return {
-          _id: t._id,
-          title: t.title,
-          dueDate: t.dueDate,
-          depth: t.depth ?? 0,
-          completed: !!t.completed,
-          status: t.status,
-          priority: t.priority,
-          number: t.number,
-          root: { _id: root._id, title: root.title, number: root.number },
-        };
-      }),
+      data: {
+        deadlines: due.map((t) => calendarItem(t, rootOf.get(String(t._id)))),
+        blocks: scheduled.flatMap((t) =>
+          t.workBlocks
+            .filter((b) => b.date >= from && b.date <= to)
+            .map((b) => ({
+              ...calendarItem(t, rootOf.get(String(t._id))),
+              blockId: b._id,
+              date: b.date,
+              startMinutes: b.startMinutes,
+              endMinutes: b.endMinutes,
+            })),
+        ),
+      },
     });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+/**
+ * GET /api/todo/unscheduled?today=YYYY-MM-DD
+ * Open tasks and subtasks (tasks lists only) with no work block today or
+ * later — what the calendar's scheduling strip offers. Soonest due first.
+ */
+router.get("/unscheduled", async (req, res) => {
+  try {
+    const today = todayFrom(req);
+    const tasks = await TodoTask.find({
+      completed: false,
+      list: { $in: await taskListIds() },
+      workBlocks: { $not: { $elemMatch: { date: { $gte: today } } } },
+    })
+      .limit(200)
+      .lean();
+    const rooted = await withRoots(tasks);
+    const items = rooted.map(({ task, root }) => calendarItem(task, root));
+    items.sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") || (a.number ?? 0) - (b.number ?? 0));
+    return res.json({ success: true, data: items });
   } catch (error) {
     return sendError(res, error);
   }
@@ -541,6 +587,76 @@ router.post("/tasks/:id/move", async (req, res) => {
       siblings.map((s, order) => ({ updateOne: { filter: { _id: s._id }, update: { $set: { order } } } })),
     );
     return res.json({ success: true });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+// The do date follows the schedule: the next block from today, else the
+// most recent one.
+function syncDoDate(task, today) {
+  const dates = task.workBlocks.map((b) => b.date).sort();
+  if (dates.length === 0) return;
+  task.doDate = dates.find((d) => d >= today) ?? dates[dates.length - 1];
+}
+
+/**
+ * POST /api/todo/tasks/:id/blocks  { date, startMinutes, endMinutes, today? }
+ * Schedules time to work on a task: adds a work block. This is the one
+ * "schedule task X from A to B" action every client uses.
+ */
+router.post("/tasks/:id/blocks", async (req, res) => {
+  try {
+    const task = await TodoTask.findById(req.params.id);
+    if (!task) return sendError(res, new Error("Task not found"), 404);
+    const { date } = req.body;
+    const startMinutes = Number(req.body.startMinutes);
+    const endMinutes = Number(req.body.endMinutes);
+    if (!DATE_RE.test(date ?? "")) throw new Error("date must be YYYY-MM-DD");
+    if (!(startMinutes >= 0 && endMinutes <= 1440 && endMinutes > startMinutes)) {
+      throw new Error("The block needs a start and a later end, within one day.");
+    }
+    task.workBlocks.push({ date, startMinutes, endMinutes });
+    syncDoDate(task, todayFrom(req));
+    await task.save();
+    return res.status(201).json({ success: true, data: task.workBlocks });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+// Moves one booking: PATCH { date?, startMinutes?, endMinutes?, today? }.
+router.patch("/tasks/:id/blocks/:blockId", async (req, res) => {
+  try {
+    const task = await TodoTask.findById(req.params.id);
+    if (!task) return sendError(res, new Error("Task not found"), 404);
+    const block = task.workBlocks.id(req.params.blockId);
+    if (!block) return sendError(res, new Error("That time is no longer booked"), 404);
+    const date = req.body.date ?? block.date;
+    const startMinutes = Number(req.body.startMinutes ?? block.startMinutes);
+    const endMinutes = Number(req.body.endMinutes ?? block.endMinutes);
+    if (!DATE_RE.test(date)) throw new Error("date must be YYYY-MM-DD");
+    if (!(startMinutes >= 0 && endMinutes <= 1440 && endMinutes > startMinutes)) {
+      throw new Error("The block needs a start and a later end, within one day.");
+    }
+    Object.assign(block, { date, startMinutes, endMinutes });
+    syncDoDate(task, todayFrom(req));
+    await task.save();
+    return res.json({ success: true, data: task.workBlocks });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.delete("/tasks/:id/blocks/:blockId", async (req, res) => {
+  try {
+    const task = await TodoTask.findById(req.params.id);
+    if (!task) return sendError(res, new Error("Task not found"), 404);
+    task.workBlocks.pull(req.params.blockId);
+    if (task.workBlocks.length === 0) task.doDate = null;
+    else syncDoDate(task, todayFrom(req));
+    await task.save();
+    return res.json({ success: true, data: task.workBlocks });
   } catch (error) {
     return sendError(res, error);
   }
