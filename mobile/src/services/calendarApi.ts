@@ -7,6 +7,8 @@ export interface EventCalendar {
   visible: boolean;
   order: number;
   isDefault: boolean;
+  // The built-in Tasks calendar (filled from Lists, not from events).
+  isTasks?: boolean;
 }
 
 export type RepeatFrequency = "daily" | "weekdays" | "weekly" | "monthly" | "yearly";
@@ -44,6 +46,19 @@ export interface CalendarEvent {
 export interface EventOccurrence extends CalendarEvent {
   occurrenceDate: string;
   occurrenceEndDate: string;
+  // Set when this isn't an event but a task's due date from Lists, shown
+  // through the Tasks calendar.
+  task?: {
+    id: string;
+    rootId: string;
+    // 0 = the task itself, 1–2 = a subtask of `rootTitle`.
+    depth: number;
+    completed: boolean;
+    overdue: boolean;
+    number: number | null;
+    rootTitle: string;
+    rootNumber: number | null;
+  };
 }
 
 export type EventInput = Omit<CalendarEvent, "_id" | "excludedDates">;

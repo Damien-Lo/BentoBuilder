@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -8,24 +8,27 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AddTaskBar, type NewTaskInput } from "@/src/components/todo/AddTaskBar";
 import { openListOptions } from "@/src/components/todo/listActions";
+import { PriorityPill, ProgressBar, StatusPill, TaskNumber } from "@/src/components/todo/TaskBits";
 import { TextPromptModal } from "@/src/components/todo/TextPromptModal";
 import {
   friendlyDate,
   isOverdue,
   listAccent,
   longToday,
+  showActions,
   SMART_LISTS,
   useTodoTheme,
   type TodoTheme,
 } from "@/src/components/todo/theme";
 import {
   createTodoTask,
+  deleteTodoTask,
   getListTasks,
   getSmartTasks,
   getTodoOverview,
@@ -51,13 +54,13 @@ export default function TodoListScreen() {
   const [groups, setGroups] = useState<TodoGroup[]>([]);
   const [tasks, setTasks] = useState<TodoTask[]>([]);
   const [showCompleted, setShowCompleted] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState("");
   const [renaming, setRenaming] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+  const [renamingItem, setRenamingItem] = useState<TodoTask | null>(null);
 
   const accent = listAccent(smart?.color ?? list?.color, theme);
   const title = smart?.name ?? list?.name ?? "";
+  const isChecklist = list?.type === "checklist";
+  const noun = isChecklist ? "item" : "task";
 
   const refresh = useCallback(() => {
     const load = smart ? getSmartTasks(smart.id as SmartListId) : getListTasks(id);
@@ -79,18 +82,50 @@ export default function TodoListScreen() {
     setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, ...changes } : t)));
   }
 
-  function toggleComplete(task: TodoTask) {
-    patchLocal(task._id, { completed: !task.completed });
-    updateTodoTask(task._id, { completed: !task.completed })
-      .then(({ next }) => {
-        // A repeating task spawned its next occurrence — reload so it shows
-        // wherever it belongs.
-        if (next) refresh();
-      })
+  function setCompleted(task: TodoTask, completed: boolean, completeSubtasks = false) {
+    patchLocal(task._id, { completed });
+    updateTodoTask(task._id, { completed, completeSubtasks })
+      .then((updated) => patchLocal(task._id, updated))
       .catch((error) => {
         patchLocal(task._id, { completed: task.completed });
         fail(error);
       });
+  }
+
+  // Ticking off a task that still has open subtasks warns first; going
+  // ahead completes them too.
+  function toggleComplete(task: TodoTask) {
+    if (!task.completed && task.openSubtaskCount > 0) {
+      const n = task.openSubtaskCount;
+      Alert.alert(
+        "Complete with open subtasks?",
+        `"${task.title}" still has ${n} open subtask${n === 1 ? "" : "s"}. Completing it will complete ${n === 1 ? "it" : "them"} too.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Complete all", onPress: () => setCompleted(task, true, true) },
+        ],
+      );
+      return;
+    }
+    setCompleted(task, !task.completed);
+  }
+
+  // Checklist items: tap to rename, with delete in the same menu.
+  function openChecklistItem(task: TodoTask) {
+    showActions(task.title, [
+      { label: "Rename", onPress: () => setRenamingItem(task) },
+      {
+        label: "Delete",
+        destructive: true,
+        onPress: () => {
+          setTasks((prev) => prev.filter((t) => t._id !== task._id));
+          deleteTodoTask(task._id).catch((error) => {
+            fail(error);
+            refresh();
+          });
+        },
+      },
+    ]);
   }
 
   function toggleImportant(task: TodoTask) {
@@ -105,17 +140,21 @@ export default function TodoListScreen() {
       });
   }
 
-  async function addTask() {
-    const text = draft.trim();
-    if (!text) return;
-    setDraft("");
+  function openTask(task: TodoTask) {
+    if (isChecklist) openChecklistItem(task);
+    else router.push({ pathname: "/lists/task/[id]", params: { id: task._id } });
+  }
+
+  async function addTask(input: NewTaskInput) {
     try {
       const created = await createTodoTask({
-        title: text,
+        title: input.title,
         list: smart ? undefined : id,
-        myDayDate: smart?.id === "myday" ? todayStr() : null,
+        myDayDate: input.myDay ? todayStr() : null,
         important: smart?.id === "important",
-        dueDate: smart?.id === "planned" ? todayStr() : null,
+        dueDate: input.dueDate,
+        doDate: input.doDate,
+        description: input.description,
       });
       setTasks((prev) => [...prev, created]);
     } catch (error) {
@@ -125,7 +164,7 @@ export default function TodoListScreen() {
 
   const sortForView = (list: TodoTask[]) =>
     smart?.id === "planned"
-      ? [...list].sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""))
+      ? [...list].sort((a, b) => (a.doDate ?? a.dueDate ?? "").localeCompare(b.doDate ?? b.dueDate ?? ""))
       : list;
   const open = sortForView(tasks.filter((t) => !t.completed));
   const done = tasks
@@ -162,7 +201,7 @@ export default function TodoListScreen() {
             <Text style={{ marginTop: 2, fontSize: 14, color: theme.textMuted }} numberOfLines={1}>
               {smart?.id === "myday"
                 ? longToday()
-                : `${open.length} task${open.length === 1 ? "" : "s"}${done.length ? ` · ${done.length} completed` : ""}`}
+                : `${isChecklist ? "Checklist · " : ""}${open.length} ${noun}${open.length === 1 ? "" : "s"}${done.length ? ` · ${done.length} ${isChecklist ? "ticked" : "completed"}` : ""}`}
             </Text>
           </View>
           {list && (
@@ -175,6 +214,8 @@ export default function TodoListScreen() {
                   onRename: () => setRenaming(true),
                   onChanged: refresh,
                   onDeleted: () => router.back(),
+                  // It now belongs on a different tab — go back to the tabs.
+                  onMoved: () => router.back(),
                 })
               }
               className="active:bg-slate-100"
@@ -185,11 +226,18 @@ export default function TodoListScreen() {
           )}
         </View>
 
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16 }}>
+        <AddTaskBar
+          accent={accent}
+          checklist={isChecklist}
+          defaults={{ myDay: smart?.id === "myday", dueDate: smart?.id === "planned" ? todayStr() : null }}
+          onAdd={(input) => void addTask(input)}
+        />
+
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40 }}>
 
           {open.length === 0 && done.length === 0 && (
             <Text style={{ color: theme.textFaint, fontSize: 16, textAlign: "center", marginTop: 48 }}>
-              {smart?.id === "myday" ? "Nothing planned for today yet." : "No tasks yet."}
+              {smart?.id === "myday" ? "Nothing planned for today yet." : `No ${noun}s yet.`}
             </Text>
           )}
 
@@ -203,7 +251,8 @@ export default function TodoListScreen() {
               inMyDayView={smart?.id === "myday"}
               onToggle={() => toggleComplete(task)}
               onStar={() => toggleImportant(task)}
-              onOpen={() => router.push({ pathname: "/lists/task/[id]", params: { id: task._id } })}
+              checklist={isChecklist}
+              onOpen={() => openTask(task)}
             />
           ))}
 
@@ -224,7 +273,9 @@ export default function TodoListScreen() {
                 }}
               >
                 <Ionicons name={showCompleted ? "chevron-down" : "chevron-forward"} size={16} color={theme.icon} />
-                <Text style={{ marginLeft: 6, color: theme.icon, fontSize: 14, fontWeight: "600" }}>Completed</Text>
+                <Text style={{ marginLeft: 6, color: theme.icon, fontSize: 14, fontWeight: "600" }}>
+                  {isChecklist ? "Ticked" : "Completed"}
+                </Text>
                 <Text style={{ marginLeft: 6, color: theme.textFaint, fontSize: 14 }}>{done.length}</Text>
               </Pressable>
               {showCompleted &&
@@ -238,62 +289,31 @@ export default function TodoListScreen() {
                     inMyDayView={smart?.id === "myday"}
                     onToggle={() => toggleComplete(task)}
                     onStar={() => toggleImportant(task)}
-                    onOpen={() => router.push({ pathname: "/lists/task/[id]", params: { id: task._id } })}
+                    checklist={isChecklist}
+                    onOpen={() => openTask(task)}
                   />
                 ))}
             </>
           )}
         </ScrollView>
 
-        {/* Add a Task */}
-        <View
-          style={{
-            paddingHorizontal: 16,
-            paddingTop: 10,
-            paddingBottom: adding ? 10 : 28,
-            backgroundColor: theme.headerBg,
-            borderTopWidth: 1,
-            borderTopColor: theme.cardBorder,
-          }}
-        >
-          <Pressable
-            onPress={() => {
-              setAdding(true);
-              setTimeout(() => inputRef.current?.focus(), 0);
-            }}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              minHeight: 52,
-              borderRadius: 16,
-              paddingHorizontal: 16,
-              backgroundColor: theme.bg,
-              borderWidth: 1,
-              borderColor: theme.cardBorder,
-            }}
-          >
-            <Ionicons name={adding ? "ellipse-outline" : "add"} size={adding ? 24 : 26} color={adding ? theme.circle : accent} />
-            {adding ? (
-              <TextInput
-                ref={inputRef}
-                value={draft}
-                onChangeText={setDraft}
-                placeholder="Add a Task"
-                placeholderTextColor={theme.textFaint}
-                returnKeyType="done"
-                blurOnSubmit={false}
-                onSubmitEditing={() => void addTask()}
-                onBlur={() => {
-                  if (!draft.trim()) setAdding(false);
-                }}
-                style={{ flex: 1, marginLeft: 12, fontSize: 16, color: theme.text, paddingVertical: 12 }}
-              />
-            ) : (
-              <Text style={{ marginLeft: 12, fontSize: 16, fontWeight: "600", color: accent }}>Add a Task</Text>
-            )}
-          </Pressable>
-        </View>
       </KeyboardAvoidingView>
+
+      <TextPromptModal
+        visible={renamingItem !== null}
+        title="Rename item"
+        placeholder="Item"
+        initialValue={renamingItem?.title ?? ""}
+        confirmLabel="Save"
+        onCancel={() => setRenamingItem(null)}
+        onSubmit={(value) => {
+          const item = renamingItem;
+          setRenamingItem(null);
+          if (!item) return;
+          patchLocal(item._id, { title: value });
+          updateTodoTask(item._id, { title: value }).catch(fail);
+        }}
+      />
 
       {list && (
         <TextPromptModal
@@ -319,6 +339,7 @@ function TaskCard({
   accent,
   showListName,
   inMyDayView,
+  checklist,
   onToggle,
   onStar,
   onOpen,
@@ -328,21 +349,29 @@ function TaskCard({
   accent: string;
   showListName: boolean;
   inMyDayView: boolean;
+  // A checklist item: just the tick and the text.
+  checklist: boolean;
   onToggle: () => void;
   onStar: () => void;
   onOpen: () => void;
 }) {
-  const doneSteps = task.steps.filter((s) => s.completed).length;
   const meta: { text: string; icon?: keyof typeof Ionicons.glyphMap; color?: string }[] = [];
-  if (showListName) meta.push({ text: task.list.name });
-  if (!inMyDayView && task.myDayDate === todayStr()) meta.push({ text: "My Day", icon: "sunny-outline" });
-  if (task.steps.length > 0) meta.push({ text: `${doneSteps} of ${task.steps.length}` });
-  if (task.dueDate) {
-    const overdue = !task.completed && isOverdue(task.dueDate);
-    meta.push({ text: friendlyDate(task.dueDate), icon: "calendar-outline", color: overdue ? theme.danger : undefined });
+  if (!checklist) {
+    if (showListName) meta.push({ text: task.list.name });
+    if (!inMyDayView && task.myDayDate === todayStr()) meta.push({ text: "My Day", icon: "sunny-outline" });
+    if (task.subtaskCount > 0) {
+      meta.push({ text: `${task.subtaskCount - task.openSubtaskCount}/${task.subtaskCount}`, icon: "git-merge-outline" });
+    }
+    if (task.doDate) meta.push({ text: `Do ${friendlyDate(task.doDate)}`, icon: "play-circle-outline" });
+    if (task.dueDate) {
+      const overdue = !task.completed && isOverdue(task.dueDate);
+      meta.push({ text: friendlyDate(task.dueDate), icon: "calendar-outline", color: overdue ? theme.danger : undefined });
+    }
+    if (task.showInCalendar) meta.push({ text: "", icon: "calendar-number-outline" });
+    if (task.note.trim()) meta.push({ text: "", icon: "document-text-outline" });
   }
-  if (task.repeat) meta.push({ text: "", icon: "repeat" });
-  if (task.note.trim()) meta.push({ text: "", icon: "document-text-outline" });
+  const showPills = !checklist && !task.completed;
+  const showProgress = showPills && (task.subtaskCount > 0 || task.progress > 0);
 
   return (
     <Pressable
@@ -351,13 +380,13 @@ function TaskCard({
       style={{
         flexDirection: "row",
         alignItems: "center",
-        minHeight: 56,
+        minHeight: checklist ? 48 : 56,
         marginBottom: 8,
         borderRadius: 16,
         borderWidth: 1,
         borderColor: theme.cardBorder,
         paddingLeft: 16,
-        paddingRight: 6,
+        paddingRight: checklist ? 16 : 6,
         paddingVertical: 10,
         backgroundColor: theme.card,
       }}
@@ -368,14 +397,32 @@ function TaskCard({
         hitSlop={10}
       >
         {task.completed ? (
-          <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: accent, alignItems: "center", justifyContent: "center" }}>
+          <View
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: checklist ? 7 : 12,
+              backgroundColor: accent,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
             <Ionicons name="checkmark" size={16} color="#FFFFFF" />
           </View>
         ) : (
-          <View style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: theme.circle }} />
+          <View
+            style={{ width: 24, height: 24, borderRadius: checklist ? 7 : 12, borderWidth: 2, borderColor: theme.circle }}
+          />
         )}
       </Pressable>
       <View style={{ flex: 1, marginLeft: 14, marginRight: 8 }}>
+        {showPills && (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 4 }}>
+            <TaskNumber number={task.number} />
+            <StatusPill status={task.status} />
+            <PriorityPill priority={task.priority} />
+          </View>
+        )}
         <Text
           style={{
             fontSize: 16,
@@ -397,14 +444,21 @@ function TaskCard({
             ))}
           </View>
         )}
+        {showProgress && (
+          <View style={{ marginTop: 6 }}>
+            <ProgressBar value={task.progress} color={accent} />
+          </View>
+        )}
       </View>
-      <Pressable
-        onPress={onStar}
-        accessibilityLabel={task.important ? "Remove importance" : "Mark as important"}
-        style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
-      >
-        <Ionicons name={task.important ? "star" : "star-outline"} size={22} color={task.important ? accent : theme.circle} />
-      </Pressable>
+      {!checklist && (
+        <Pressable
+          onPress={onStar}
+          accessibilityLabel={task.important ? "Remove importance" : "Mark as important"}
+          style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+        >
+          <Ionicons name={task.important ? "star" : "star-outline"} size={22} color={task.important ? accent : theme.circle} />
+        </Pressable>
+      )}
     </Pressable>
   );
 }

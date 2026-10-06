@@ -114,6 +114,9 @@ function fail(res, error, status = 400) {
 router.get("/calendars", async (req, res) => {
   try {
     await getDefaultCalendar();
+    if (!(await EventCalendar.exists({ isTasks: true }))) {
+      await EventCalendar.create({ name: "Tasks", color: "indigo", isTasks: true, order: 1000 });
+    }
     const calendars = await EventCalendar.find().sort({ order: 1, createdAt: 1 });
     return res.json({ success: true, data: calendars });
   } catch (error) {
@@ -155,6 +158,7 @@ router.delete("/calendars/:id", async (req, res) => {
     const calendar = await EventCalendar.findById(req.params.id);
     if (!calendar) return fail(res, "Calendar not found", 404);
     if (calendar.isDefault) return fail(res, "The default calendar can't be deleted");
+    if (calendar.isTasks) return fail(res, "The Tasks calendar can't be deleted — hide it instead");
     await CalendarEvent.deleteMany({ calendar: calendar._id });
     await calendar.deleteOne();
     return res.json({ success: true });

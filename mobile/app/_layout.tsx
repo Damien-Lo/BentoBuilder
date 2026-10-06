@@ -139,8 +139,8 @@ export default function RootLayout() {
           }}
         />
 
-        {/* Lists — to-do lists (modelled on Microsoft To Do), from the home page */}
-        <Stack.Screen name="lists/index" options={{ headerShown: false }} />
+        {/* Lists — tabs (Overview / Tasks / Checklists / Shopping), from the home page */}
+        <Stack.Screen name="lists/(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="lists/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="lists/task/[id]" options={{ headerShown: false }} />
         {/* Calendar — modelled on Outlook for iPhone, from the home page */}

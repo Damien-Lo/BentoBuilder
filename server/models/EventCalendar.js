@@ -12,6 +12,10 @@ const eventCalendarSchema = new mongoose.Schema(
     order: { type: Number, default: 0 },
     // The built-in "Calendar": created on first use, can't be deleted.
     isDefault: { type: Boolean, default: false },
+    // The built-in "Tasks" calendar: holds no events of its own — the app
+    // fills it with the tasks and subtasks switched on for the calendar.
+    // Created on first use, can't be deleted.
+    isTasks: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

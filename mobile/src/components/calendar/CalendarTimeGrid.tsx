@@ -6,6 +6,7 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-nativ
 import type { EventCalendar, EventOccurrence } from "@/src/services/calendarApi";
 import { hexToRgba, parseLocalDate } from "@/src/utils/mealPlan";
 
+import { TaskChip } from "./TaskChip";
 import {
   addDays,
   calendarColor,
@@ -113,6 +114,13 @@ export function CalendarTimeGrid({
               <View style={{ minHeight: hasAllDay ? 24 : 8 }} className="mt-1 gap-1">
                 {allDayByDay[i].map((event) => {
                   const color = calendarColor(calendarsById.get(event.calendar));
+                  if (event.task) {
+                    return (
+                      <Pressable key={event._id} onPress={() => onPressEvent(event)}>
+                        <TaskChip event={event} color={color} />
+                      </Pressable>
+                    );
+                  }
                   return (
                     <Pressable
                       key={`${event._id}-${event.occurrenceDate}`}

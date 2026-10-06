@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { ActionSheetIOS, Alert, Platform } from "react-native";
 
-import type { SmartListId } from "@/src/services/todoApi";
+import type { SmartListId, TaskPriority, TaskStatus } from "@/src/services/todoApi";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
 // The Lists section's colours — the same Tailwind slate/blue palette the
@@ -120,13 +120,26 @@ export function shortDateFromIso(iso: string): string {
   return `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
-export const REPEAT_LABELS: Record<string, string> = {
-  daily: "Daily",
-  weekdays: "Weekdays",
-  weekly: "Weekly",
-  monthly: "Monthly",
-  yearly: "Yearly",
+// --- Task status and priority ---
+
+export const TASK_STATUS_META: Record<
+  TaskStatus,
+  { label: string; icon: keyof typeof Ionicons.glyphMap; fg: string; bg: string }
+> = {
+  not_started: { label: "Not started", icon: "ellipse-outline", fg: "#475569", bg: "#F1F5F9" },
+  in_progress: { label: "In progress", icon: "time-outline", fg: "#1D4ED8", bg: "#DBEAFE" },
+  on_hold: { label: "On hold", icon: "pause-outline", fg: "#B45309", bg: "#FEF3C7" },
+  completed: { label: "Completed", icon: "checkmark-circle-outline", fg: "#047857", bg: "#D1FAE5" },
 };
+export const TASK_STATUSES = Object.keys(TASK_STATUS_META) as TaskStatus[];
+
+export const TASK_PRIORITY_META: Record<TaskPriority, { label: string; fg: string; bg: string }> = {
+  low: { label: "Low", fg: "#475569", bg: "#F1F5F9" },
+  medium: { label: "Medium", fg: "#1D4ED8", bg: "#DBEAFE" },
+  high: { label: "High", fg: "#C2410C", bg: "#FFEDD5" },
+  urgent: { label: "Urgent", fg: "#B91C1C", bg: "#FEE2E2" },
+};
+export const TASK_PRIORITIES = Object.keys(TASK_PRIORITY_META) as TaskPriority[];
 
 // --- A native action menu (iOS action sheet; a plain alert elsewhere) ---
 

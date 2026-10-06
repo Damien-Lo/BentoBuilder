@@ -533,7 +533,7 @@ export default function EditCalendarEventScreen() {
       <OptionSheet
         visible={sheet === "calendar"}
         title="Calendar"
-        options={calendars.map((c) => ({ value: c._id, label: c.name, color: calendarColor(c) }))}
+        options={calendars.filter((c) => !c.isTasks).map((c) => ({ value: c._id, label: c.name, color: calendarColor(c) }))}
         value={calendarId}
         onSelect={setCalendarId}
         onClose={() => setSheet(null)}

@@ -7,6 +7,7 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 
 import type { EventCalendar, EventOccurrence } from "@/src/services/calendarApi";
 import { hexToRgba, parseLocalDate } from "@/src/utils/mealPlan";
 
+import { TaskChip } from "./TaskChip";
 import {
   addDays,
   calendarColor,
@@ -275,6 +276,7 @@ export function MonthView({
                   </View>
                   {dayEvents.slice(0, 3).map((event) => {
                     const color = calendarColor(calendarsById.get(event.calendar));
+                    if (event.task) return <TaskChip key={event._id} event={event} color={color} size="small" />;
                     return (
                       <View
                         key={`${event._id}-${event.occurrenceDate}`}
@@ -342,7 +344,11 @@ export function AgendaView({
                     className="flex-row items-center border-b border-slate-100 bg-white px-4 py-3 active:bg-slate-50"
                   >
                     <View className="w-14">
-                      {event.allDay ? (
+                      {event.task ? (
+                        <Text className={`text-xs font-semibold ${event.task.overdue ? "text-red-600" : "text-slate-500"}`}>
+                          {event.task.depth > 0 ? "Subtask" : "Task due"}
+                        </Text>
+                      ) : event.allDay ? (
                         <Text className="text-xs font-semibold text-slate-500">All day</Text>
                       ) : (
                         <>
@@ -353,9 +359,21 @@ export function AgendaView({
                     </View>
                     <View className="mr-3 w-1 self-stretch rounded-full" style={{ backgroundColor: color }} />
                     <View className="flex-1">
-                      <Text className="text-[15px] font-semibold text-slate-900" numberOfLines={1}>
+                      <Text
+                        className={`text-[15px] font-semibold ${event.task?.completed ? "text-slate-400 line-through" : "text-slate-900"}`}
+                        numberOfLines={1}
+                      >
                         {event.title}
                       </Text>
+                      {event.task && (
+                        <View className="mt-0.5 flex-row items-center">
+                          <Ionicons name={event.task.depth > 0 ? "diamond-outline" : "flag"} size={11} color="#94A3B8" />
+                          <Text className="ml-1 text-xs text-slate-500" numberOfLines={1}>
+                            {event.task.rootNumber != null ? `#${event.task.rootNumber} ` : ""}
+                            {event.task.depth > 0 ? event.task.rootTitle : "Task"}
+                          </Text>
+                        </View>
+                      )}
                       {!!event.location && (
                         <View className="mt-0.5 flex-row items-center">
                           <Ionicons name="location-outline" size={12} color="#94A3B8" />

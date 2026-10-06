@@ -36,7 +36,7 @@ const SECTIONS: Section[] = [
   {
     id: "lists",
     name: "Lists",
-    description: "To-dos, reminders & everyday lists",
+    description: "Tasks, checklists & shopping",
     icon: "checkbox-outline",
     iconColor: "#4B55C9",
     iconBg: "#EEF0FB",

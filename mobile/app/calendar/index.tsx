@@ -23,6 +23,8 @@ import {
   type EventOccurrence,
 } from "@/src/services/calendarApi";
 import { loadSettings } from "@/src/services/settingsService";
+import { getCalendarTasks, type CalendarTask } from "@/src/services/todoApi";
+import { taskToOccurrence } from "@/src/components/calendar/TaskChip";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
 type CalendarView = "agenda" | "day" | "threeDay" | "month";
@@ -53,6 +55,7 @@ export default function CalendarScreen() {
   const [weekStartDay, setWeekStartDay] = useState(0);
   const [calendars, setCalendars] = useState<EventCalendar[]>([]);
   const [events, setEvents] = useState<EventOccurrence[]>([]);
+  const [tasks, setTasks] = useState<CalendarTask[]>([]);
   const windowRef = useRef<{ from: string; to: string } | null>(null);
   const [now, setNow] = useState(nowMinutes());
 
@@ -73,9 +76,14 @@ export default function CalendarScreen() {
     const from = addDays(center, -WINDOW_DAYS);
     const to = addDays(center, WINDOW_DAYS);
     try {
-      const loaded = await getEventOccurrences(from, to);
+      const [loaded, loadedTasks] = await Promise.all([
+        getEventOccurrences(from, to),
+        // Tasks are a bonus layer — never fail the calendar over them.
+        getCalendarTasks(from, to).catch(() => [] as CalendarTask[]),
+      ]);
       windowRef.current = { from, to };
       setEvents(loaded);
+      setTasks(loadedTasks);
     } catch {
       // Keep whatever was showing; the next focus/refresh retries.
     }
@@ -108,10 +116,13 @@ export default function CalendarScreen() {
   }, [focusDate, loadEvents]);
 
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c._id, c])), [calendars]);
-  const visibleEvents = useMemo(
-    () => events.filter((e) => calendarsById.get(e.calendar)?.visible ?? true),
-    [events, calendarsById],
-  );
+  // Events, plus the tasks switched on for the calendar (through the
+  // built-in Tasks calendar, so they hide and show with it).
+  const visibleEvents = useMemo(() => {
+    const tasksCalendar = calendars.find((c) => c.isTasks);
+    const taskOccurrences = tasksCalendar ? tasks.map((t) => taskToOccurrence(t, tasksCalendar._id, today)) : [];
+    return [...taskOccurrences, ...events].filter((e) => calendarsById.get(e.calendar)?.visible ?? true);
+  }, [events, tasks, calendars, calendarsById, today]);
   const eventDays = useMemo(() => {
     const days = new Set<string>();
     for (const e of visibleEvents) {
@@ -125,6 +136,14 @@ export default function CalendarScreen() {
   const viewOption = VIEW_OPTIONS.find((o) => o.value === view)!;
 
   function openEvent(event: EventOccurrence) {
+    if (event.task) {
+      // A subtask opens as the sheet over its top-level task.
+      router.push({
+        pathname: "/lists/task/[id]",
+        params: event.task.depth > 0 ? { id: event.task.rootId, open: event.task.id } : { id: event.task.id },
+      });
+      return;
+    }
     router.push({ pathname: "/calendar/event/[id]", params: { id: event._id, date: event.occurrenceDate } });
   }
 
