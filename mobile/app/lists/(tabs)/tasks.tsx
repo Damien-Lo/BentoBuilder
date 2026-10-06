@@ -9,7 +9,6 @@ import { openListOptions } from "@/src/components/todo/listActions";
 import { applyDrop, computeDrop, rowKey, type DragRow, type DropTarget, type RowLayout } from "@/src/components/todo/listDrag";
 import { TextPromptModal } from "@/src/components/todo/TextPromptModal";
 import { listAccent, showActions, SMART_LISTS, useTodoTheme } from "@/src/components/todo/theme";
-import { getGroceryItems } from "@/src/services/groceryListApi";
 import { loadSettings } from "@/src/services/settingsService";
 import {
   createTodoGroup,
@@ -21,11 +20,12 @@ import {
   updateTodoList,
   type TodoGroup,
   type TodoList,
+  type TodoListType,
   type TodoOverview,
 } from "@/src/services/todoApi";
 
 type Prompt =
-  | { kind: "newList"; group: string | null }
+  | { kind: "newList"; group: string | null; type: TodoListType }
   | { kind: "newGroup" }
   | { kind: "renameList"; list: TodoList }
   | { kind: "renameGroup"; group: TodoGroup };
@@ -36,15 +36,14 @@ function initials(name: string): string {
   return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
-// The Lists home — smart lists, then your own lists and groups, with
+// The Tasks tab — smart lists, then your own task lists and groups, with
 // "New List" / new group at the bottom (modelled on Microsoft To Do).
-export default function ListsHomeScreen() {
+export default function TasksTabScreen() {
   const router = useRouter();
   const theme = useTodoTheme();
   const accent = listAccent("blue", theme);
   const [overview, setOverview] = useState<TodoOverview | null>(null);
   const [displayName, setDisplayName] = useState("");
-  const [groceryToBuy, setGroceryToBuy] = useState(0);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
 
   const refresh = useCallback(() => {
@@ -57,14 +56,16 @@ export default function ListsHomeScreen() {
     useCallback(() => {
       refresh();
       loadSettings().then((s) => setDisplayName(s.displayName)).catch(() => {});
-      getGroceryItems()
-        .then((items) => setGroceryToBuy(items.filter((item) => item.status === "toBuy").length))
-        .catch(() => {});
     }, [refresh]),
   );
 
   const fail = (error: unknown) =>
     Alert.alert("Something went wrong", error instanceof Error ? error.message : "Please try again.");
+
+  // Lists made here are task lists; checklists are made on their own tabs.
+  function startNewList(group: string | null) {
+    setPrompt({ kind: "newList", group, type: "tasks" });
+  }
 
   async function handlePromptSubmit(value: string) {
     const current = prompt;
@@ -72,7 +73,7 @@ export default function ListsHomeScreen() {
     if (!current) return;
     try {
       if (current.kind === "newList") {
-        const list = await createTodoList(value, "blue", current.group);
+        const list = await createTodoList(value, current.type === "checklist" ? "green" : "blue", current.group, current.type);
         router.push({ pathname: "/lists/[id]", params: { id: list._id } });
       } else if (current.kind === "newGroup") {
         await createTodoGroup(value);
@@ -96,7 +97,8 @@ export default function ListsHomeScreen() {
     overflow: "hidden" as const,
   };
 
-  const lists = overview?.lists ?? [];
+  // Checklists have their own tabs.
+  const lists = (overview?.lists ?? []).filter((l) => l.type !== "checklist");
   const groups = overview?.groups ?? [];
   const defaultList = lists.find((l) => l.isDefault);
   const byOrder = (a: TodoList, b: TodoList) => a.order - b.order;
@@ -180,7 +182,7 @@ export default function ListsHomeScreen() {
 
   function groupOptions(group: TodoGroup) {
     showActions(group.name, [
-      { label: "New list in this group", onPress: () => setPrompt({ kind: "newList", group: group._id }) },
+      { label: "New list in this group", onPress: () => startNewList(group._id) },
       { label: "Rename group", onPress: () => setPrompt({ kind: "renameGroup", group }) },
       {
         label: "Delete group",
@@ -211,7 +213,7 @@ export default function ListsHomeScreen() {
         className="active:bg-slate-50"
         style={{ flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: theme.rowDivider }}
       >
-        <Ionicons name={list.isDefault ? "home-outline" : "list"} size={20} color={listAccent(list.color, theme)} />
+        <Ionicons name={list.isDefault ? "home-outline" : list.type === "checklist" ? "checkbox-outline" : "list"} size={20} color={listAccent(list.color, theme)} />
         <Text numberOfLines={1} style={{ flex: 1, marginLeft: 14, fontSize: 16, color: theme.text }}>
           {list.name}
         </Text>
@@ -227,21 +229,13 @@ export default function ListsHomeScreen() {
         style={{
           flexDirection: "row",
           alignItems: "center",
-          paddingHorizontal: 12,
+          paddingHorizontal: 20,
           paddingVertical: 12,
           backgroundColor: theme.headerBg,
           borderBottomWidth: 1,
           borderBottomColor: theme.cardBorder,
         }}
       >
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityLabel="Back to home"
-          className="active:bg-slate-100"
-          style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", marginRight: 4 }}
-        >
-          <Ionicons name="chevron-back" size={26} color={theme.text} />
-        </Pressable>
         {initials(displayName) ? (
           <View
             style={{
@@ -261,9 +255,9 @@ export default function ListsHomeScreen() {
         ) : null}
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 24, fontWeight: "700", color: theme.title }} numberOfLines={1}>
-            {displayName.trim() || "Lists"}
+            Tasks
           </Text>
-          {!!displayName.trim() && <Text style={{ marginTop: 2, fontSize: 14, color: theme.textMuted }}>Lists</Text>}
+          <Text style={{ marginTop: 2, fontSize: 14, color: theme.textMuted }}>Your task lists</Text>
         </View>
       </View>
 
@@ -293,17 +287,6 @@ export default function ListsHomeScreen() {
             );
           })}
           {defaultList && listRow(defaultList)}
-          {/* A shortcut to the Kitchen's grocery list — not a to-do list
-              itself, just a way in from here. */}
-          <Pressable
-            onPress={() => router.push("/grocery-list")}
-            className="active:bg-slate-50"
-            style={{ flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: theme.rowDivider }}
-          >
-            <Ionicons name="cart-outline" size={20} color={listAccent("green", theme)} />
-            <Text style={{ flex: 1, marginLeft: 14, fontSize: 16, color: theme.text }}>Grocery List</Text>
-            {groceryToBuy > 0 && <Text style={{ fontSize: 15, color: theme.textFaint }}>{groceryToBuy}</Text>}
-          </Pressable>
         </View>
 
         <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">My lists</Text>
@@ -402,7 +385,7 @@ export default function ListsHomeScreen() {
         }}
       >
         <Pressable
-          onPress={() => setPrompt({ kind: "newList", group: null })}
+          onPress={() => startNewList(null)}
           className="active:opacity-60"
           style={{ flex: 1, flexDirection: "row", alignItems: "center", minHeight: 48, paddingHorizontal: 8 }}
         >

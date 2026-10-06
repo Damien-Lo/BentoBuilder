@@ -111,7 +111,7 @@ export function DraggableListRow({
           animatedStyle,
         ]}
       >
-        <Ionicons name="list" size={20} color={listAccent(list.color, theme)} />
+        <Ionicons name={list.type === "checklist" ? "checkbox-outline" : "list"} size={20} color={listAccent(list.color, theme)} />
         <Text numberOfLines={1} style={{ flex: 1, marginLeft: 14, fontSize: 16, color: theme.text }}>
           {list.name}
         </Text>

@@ -10,6 +10,8 @@ export interface TodoGroup {
   order: number;
 }
 
+export type TodoListType = "tasks" | "checklist";
+
 export interface TodoList {
   _id: string;
   name: string;
@@ -17,35 +19,105 @@ export interface TodoList {
   group: string | null;
   order: number;
   isDefault: boolean;
+  // "checklist" = plain tickable lines; "tasks" = full tasks.
+  type: TodoListType;
+  // A checklist that's a shopping list (Shopping tab, not Checklists).
+  shopping?: boolean;
   openCount?: number;
 }
 
-export interface TodoStep {
-  _id?: string;
-  title: string;
-  completed: boolean;
+export interface WorkBlock {
+  _id: string;
+  date: string; // YYYY-MM-DD
+  startMinutes: number;
+  endMinutes: number;
 }
 
-export type TodoRepeatFrequency = "daily" | "weekdays" | "weekly" | "monthly" | "yearly";
+export type TaskStatus = "not_started" | "in_progress" | "on_hold" | "completed";
+export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
-export interface TodoRepeat {
-  frequency: TodoRepeatFrequency;
-  interval: number;
-}
-
+// An item in a list. In a checklist only the title and tick matter; in a
+// tasks list it's a full task, and subtasks are tasks with a `parent`.
 export interface TodoTask {
   _id: string;
-  list: Pick<TodoList, "_id" | "name" | "color" | "isDefault">;
+  list: Pick<TodoList, "_id" | "name" | "color" | "isDefault" | "type">;
+  parent: string | null;
+  depth: number;
+  // Short reference number ("#12"); older tasks may have none.
+  number: number | null;
   title: string;
+  description: string;
+  status: TaskStatus;
   completed: boolean;
   completedAt: string | null;
+  priority: TaskPriority;
   important: boolean;
   myDayDate: string | null;
   dueDate: string | null;
-  repeat: TodoRepeat | null;
-  steps: TodoStep[];
+  // The day you plan to work on it (the due date is when it must be done).
+  doDate: string | null;
+  // Time blocked out in the calendar to work on it.
+  workBlocks: WorkBlock[];
+  tags: string[];
+  // "Relevant parties" — free-text names.
+  parties: string[];
   note: string;
+  // Hand-set 0–100, used only while there are no subtasks.
+  manualProgress: number;
+  showInCalendar: boolean;
   createdAt: string;
+  // Worked out by the server: 0–100, and counts over every level below.
+  progress: number;
+  subtaskCount: number;
+  openSubtaskCount: number;
+}
+
+export interface TodoSubtask extends TodoTask {
+  subtasks: TodoSubtask[];
+}
+
+// One task opened on its own: with its subtask tree and the tasks above it.
+export interface TodoTaskDetail extends TodoTask {
+  subtasks: TodoSubtask[];
+  ancestors: { _id: string; title: string; number: number | null }[];
+}
+
+export interface TodoDashboard {
+  total: number;
+  inProgress: number;
+  completed: number;
+  overdue: number;
+  // Average progress across top-level tasks, 0–100.
+  completion: number;
+  recent: TodoTask[];
+  overdueTasks: TodoTask[];
+}
+
+// A task or subtask switched on for the calendar.
+export interface CalendarTask {
+  _id: string;
+  title: string;
+  dueDate: string;
+  depth: number;
+  completed: boolean;
+  status: TaskStatus;
+  priority: TaskPriority;
+  number: number | null;
+  root: { _id: string; title: string; number: number | null };
+}
+
+// A work block scheduled for a task, as the calendar draws it.
+export interface CalendarTaskBlock extends CalendarTask {
+  blockId: string;
+  date: string;
+  startMinutes: number;
+  endMinutes: number;
+}
+
+export interface CalendarTaskFeed {
+  // Tasks switched on for the calendar, on their due date.
+  deadlines: CalendarTask[];
+  blocks: CalendarTaskBlock[];
 }
 
 export interface TodoOverview {
@@ -76,9 +148,14 @@ export const updateTodoGroup = (id: string, changes: Partial<Pick<TodoGroup, "na
   request<TodoGroup>(`/groups/${id}`, { method: "PATCH", body: body(changes) });
 export const deleteTodoGroup = (id: string) => request<void>(`/groups/${id}`, { method: "DELETE" });
 
-export const createTodoList = (name: string, color: string, group: string | null = null) =>
-  request<TodoList>("/lists", { method: "POST", body: body({ name, color, group }) });
-export const updateTodoList = (id: string, changes: Partial<Pick<TodoList, "name" | "color" | "group">>) =>
+export const createTodoList = (
+  name: string,
+  color: string,
+  group: string | null = null,
+  type: TodoListType = "tasks",
+  shopping = false,
+) => request<TodoList>("/lists", { method: "POST", body: body({ name, color, group, type, shopping }) });
+export const updateTodoList = (id: string, changes: Partial<Pick<TodoList, "name" | "color" | "group" | "type" | "shopping">>) =>
   request<TodoList>(`/lists/${id}`, { method: "PATCH", body: body(changes) });
 export const deleteTodoList = (id: string) => request<void>(`/lists/${id}`, { method: "DELETE" });
 // After a drag on the Lists home: each moved list's new group and position.
@@ -87,35 +164,61 @@ export const reorderTodoLists = (items: { id: string; group: string | null; orde
 
 export const getListTasks = (listId: string) => request<TodoTask[]>(`/tasks?list=${listId}`);
 export const getSmartTasks = (smart: SmartListId) => request<TodoTask[]>(`/tasks?smart=${smart}&today=${todayStr()}`);
-export const getTodoTask = (id: string) => request<TodoTask>(`/tasks/${id}`);
+export const getTodoTask = (id: string) => request<TodoTaskDetail>(`/tasks/${id}`);
+export const getTodoDashboard = () => request<TodoDashboard>(`/dashboard?today=${todayStr()}`);
+export const getCalendarTasks = (from: string, to: string) => request<CalendarTaskFeed>(`/calendar?from=${from}&to=${to}`);
+// Open tasks with no time scheduled today or later.
+export const getUnscheduledTasks = () => request<CalendarTask[]>(`/unscheduled?today=${todayStr()}`);
+// "Schedule task X from A to B" — adds a work block.
+export const scheduleTodoTask = (id: string, block: Omit<WorkBlock, "_id">) =>
+  request<WorkBlock[]>(`/tasks/${id}/blocks`, { method: "POST", body: body({ ...block, today: todayStr() }) });
+// Moves one booking to another day or time.
+export const moveTodoTaskBlock = (id: string, blockId: string, block: Partial<Omit<WorkBlock, "_id">>) =>
+  request<WorkBlock[]>(`/tasks/${id}/blocks/${blockId}`, { method: "PATCH", body: body({ ...block, today: todayStr() }) });
+export const unscheduleTodoTask = (id: string, blockId: string) =>
+  request<WorkBlock[]>(`/tasks/${id}/blocks/${blockId}?today=${todayStr()}`, { method: "DELETE" });
 
+// With `parent`, creates a subtask of that task.
 export const createTodoTask = (input: {
   list?: string;
+  parent?: string;
   title: string;
   important?: boolean;
   myDayDate?: string | null;
   dueDate?: string | null;
+  doDate?: string | null;
+  description?: string;
 }) => request<TodoTask>("/tasks", { method: "POST", body: body(input) });
 
-export type TodoTaskChanges = Partial<
-  Pick<TodoTask, "title" | "completed" | "important" | "myDayDate" | "dueDate" | "repeat" | "steps" | "note">
->;
+// Drag-and-drop: put a subtask (and everything under it) under `parent`,
+// right after its sibling `after` — or first, when `after` is null.
+export const moveTodoTask = (id: string, parent: string, after: string | null) =>
+  request<void>(`/tasks/${id}/move`, { method: "POST", body: body({ parent, after }) });
 
-// Completing a repeating task also returns the next occurrence the server
-// created.
-export async function updateTodoTask(id: string, changes: TodoTaskChanges): Promise<{ task: TodoTask; next: TodoTask | null }> {
-  const response = await fetch(`${API_BASE_URL}/api/todo/tasks/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: body({ ...changes, today: todayStr() }),
-  });
-  const json = (await response.json().catch(() => null)) as
-    | { success?: boolean; data?: TodoTask; next?: TodoTask | null; message?: string }
-    | null;
-  if (!response.ok || !json?.success || !json.data) {
-    throw new Error(json?.message ?? `Request failed: ${response.status}`);
-  }
-  return { task: json.data, next: json.next ?? null };
-}
+export type TodoTaskChanges = Partial<
+  Pick<
+    TodoTask,
+    | "title"
+    | "description"
+    | "status"
+    | "completed"
+    | "priority"
+    | "important"
+    | "myDayDate"
+    | "dueDate"
+    | "doDate"
+    | "tags"
+    | "parties"
+    | "note"
+    | "manualProgress"
+    | "showInCalendar"
+  >
+> & {
+  // When completing: also complete every open subtask under it.
+  completeSubtasks?: boolean;
+};
+
+export const updateTodoTask = (id: string, changes: TodoTaskChanges) =>
+  request<TodoTask>(`/tasks/${id}`, { method: "PATCH", body: body(changes) });
 
 export const deleteTodoTask = (id: string) => request<void>(`/tasks/${id}`, { method: "DELETE" });

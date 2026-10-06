@@ -1,7 +1,7 @@
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   Animated,
   Modal,
@@ -15,6 +15,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const TAB_H    = 56;   // tab row height
+// The bar's height above the safe-area inset — for floating buttons that
+// sit above it.
+export const HOME_BAR_HEIGHT = TAB_H;
 const FAB_D    = 48;   // FAB diameter
 const SUB_D    = 40;   // sub-option button diameter
 const RADIUS   = 92;   // arc radius from FAB centre
@@ -55,6 +58,72 @@ export function CustomTabBar({
   navigation,
   subOptions = DEFAULT_SUB_OPTIONS,
 }: CustomTabBarProps) {
+  const visible     = state.routes;
+  const leftRoutes  = visible.slice(0, 2);
+  const rightRoutes = visible.slice(2);
+
+  return (
+    <TabBarFrame
+      subOptions={subOptions}
+      renderTabs={(closeMenuIfOpen) => {
+        function renderTab(route: (typeof state.routes)[0]) {
+          const focused = state.index === state.routes.indexOf(route);
+          const desc    = descriptors[route.key];
+          const color   = focused ? TINT : INACTIVE;
+
+          return (
+            <Pressable
+              key={route.key}
+              onPress={() => {
+                closeMenuIfOpen();
+                const evt = navigation.emit({
+                  type: "tabPress",
+                  target: route.key,
+                  canPreventDefault: true,
+                });
+                if (!focused && !evt.defaultPrevented) navigation.navigate(route.name);
+              }}
+              style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 6 }}
+            >
+              {desc.options.tabBarIcon?.({ focused, color, size: 24 })}
+              <Text
+                style={{
+                  fontSize: 10,
+                  color,
+                  marginTop: 3,
+                  fontWeight: focused ? "600" : "400",
+                }}
+              >
+                {desc.options.title ?? route.name}
+              </Text>
+            </Pressable>
+          );
+        }
+        return { left: leftRoutes.map(renderTab), right: rightRoutes.map(renderTab) };
+      }}
+    />
+  );
+}
+
+// Just the centre home button (and its menu), floating over the screen in
+// the same spot as on the tabbed sections — for a section without tabs,
+// e.g. the Calendar.
+export function FloatingHomeButton({ subOptions = DEFAULT_SUB_OPTIONS }: { subOptions?: SubOption[] }) {
+  return <TabBarFrame floating subOptions={subOptions} renderTabs={() => ({ left: null, right: null })} />;
+}
+
+// The bar itself: white strip, tabs either side of the centre button, and
+// the button's radial quick-action menu.
+function TabBarFrame({
+  subOptions,
+  renderTabs,
+  floating = false,
+}: {
+  subOptions: SubOption[];
+  // No white bar: just the button, over whatever's underneath.
+  floating?: boolean;
+  renderTabs: (closeMenuIfOpen: () => void) => { left: ReactNode; right: ReactNode };
+}) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width: sw, height: sh } = useWindowDimensions();
@@ -101,45 +170,9 @@ export function CustomTabBar({
     );
   }
 
-  // ── Tab helpers ──────────────────────────────────────────────────────────
-
-  const visible     = state.routes;
-  const leftRoutes  = visible.slice(0, 2);
-  const rightRoutes = visible.slice(2);
-
-  function renderTab(route: (typeof state.routes)[0]) {
-    const focused = state.index === state.routes.indexOf(route);
-    const desc    = descriptors[route.key];
-    const color   = focused ? TINT : INACTIVE;
-
-    return (
-      <Pressable
-        key={route.key}
-        onPress={() => {
-          if (isOpen) closeMenu();
-          const evt = navigation.emit({
-            type: "tabPress",
-            target: route.key,
-            canPreventDefault: true,
-          });
-          if (!focused && !evt.defaultPrevented) navigation.navigate(route.name);
-        }}
-        style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 6 }}
-      >
-        {desc.options.tabBarIcon?.({ focused, color, size: 24 })}
-        <Text
-          style={{
-            fontSize: 10,
-            color,
-            marginTop: 3,
-            fontWeight: focused ? "600" : "400",
-          }}
-        >
-          {desc.options.title ?? route.name}
-        </Text>
-      </Pressable>
-    );
-  }
+  const tabs = renderTabs(() => {
+    if (isOpen) closeMenu();
+  });
 
   const fabIcon = isOpen ? "home-outline" : "grid-outline";
 
@@ -267,24 +300,29 @@ export function CustomTabBar({
 
       {/* ── Tab bar ──────────────────────────────────────────────────────── */}
       <View
-        style={{
-          backgroundColor: "#fff",
-          borderTopWidth: 1,
-          borderTopColor: "#F1F5F9",
-          paddingBottom: insets.bottom,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.06,
-          shadowRadius: 6,
-          elevation: 8,
-        }}
+        pointerEvents="box-none"
+        style={
+          floating
+            ? { position: "absolute", left: 0, right: 0, bottom: 0, paddingBottom: insets.bottom }
+            : {
+                backgroundColor: "#fff",
+                borderTopWidth: 1,
+                borderTopColor: "#F1F5F9",
+                paddingBottom: insets.bottom,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: -2 },
+                shadowOpacity: 0.06,
+                shadowRadius: 6,
+                elevation: 8,
+              }
+        }
       >
         {/* Tab row */}
-        <View style={{ flexDirection: "row", height: TAB_H }}>
-          {leftRoutes.map(renderTab)}
+        <View pointerEvents="box-none" style={{ flexDirection: "row", height: TAB_H }}>
+          <View style={{ flex: 2, flexDirection: "row" }}>{tabs.left}</View>
           {/* Gap for FAB */}
           <View style={{ width: FAB_D + 20 }} />
-          {rightRoutes.map(renderTab)}
+          <View style={{ flex: 2, flexDirection: "row" }}>{tabs.right}</View>
         </View>
 
         {/* Real FAB — vertically centred in tab row */}
