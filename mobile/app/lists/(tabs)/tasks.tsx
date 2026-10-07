@@ -14,6 +14,7 @@ import {
   createTodoGroup,
   createTodoList,
   deleteTodoGroup,
+  getDeletedTasks,
   getTodoOverview,
   reorderTodoLists,
   updateTodoGroup,
@@ -45,11 +46,13 @@ export default function TasksTabScreen() {
   const [overview, setOverview] = useState<TodoOverview | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [prompt, setPrompt] = useState<Prompt | null>(null);
+  const [deletedCount, setDeletedCount] = useState(0);
 
   const refresh = useCallback(() => {
     getTodoOverview()
       .then(setOverview)
       .catch((error) => Alert.alert("Couldn't load lists", error instanceof Error ? error.message : "Something went wrong."));
+    getDeletedTasks().then((deleted) => setDeletedCount(deleted.length)).catch(() => {});
   }, []);
 
   useFocusEffect(
@@ -369,6 +372,18 @@ export default function TasksTabScreen() {
             />
           )}
         </View>
+
+        {/* Deleted tasks wait here for 30 days. */}
+        <Pressable
+          onPress={() => router.push("/lists/deleted")}
+          className="active:bg-slate-50"
+          style={[cardStyle, { marginTop: 24, flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 16 }]}
+        >
+          <Ionicons name="trash-outline" size={20} color={theme.textMuted} />
+          <Text style={{ flex: 1, marginLeft: 14, fontSize: 16, color: theme.text }}>Recently deleted</Text>
+          {deletedCount > 0 && <Text style={{ fontSize: 15, color: theme.textFaint }}>{deletedCount}</Text>}
+          <Ionicons name="chevron-forward" size={16} color={theme.textFaint} style={{ marginLeft: 6 }} />
+        </Pressable>
       </ScrollView>
 
       {/* New list / new group */}

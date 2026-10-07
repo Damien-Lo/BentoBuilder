@@ -77,6 +77,11 @@ Replaces the home page's "Scheduling — coming soon" card.
 - **Repeating events (Oct 3):** a series is one record plus its rule; occurrences are computed per date range, never stored. Weekly repeats pick their days (`repeat.weekdays`). Editing or deleting an occurrence first asks **only this event / this and following / all events**. "Only this" adds the date to the series' `excludedDates` and saves the edit as a one-off event with `seriesId` + `originalDate` (`POST /events/:id/detach`). "This and following" ends the series the day before and starts a new series from there (`POST /events/:id/split`, or `DELETE ?from=` to delete). Deleting a series also deletes its split-off one-offs. The form opens on the tapped occurrence.
 - **Not yet built:** reminder *notifications* (the reminder time is saved; delivering it needs `expo-notifications` and a native rebuild, to be done together with Lists' Remind Me), search, dragging an existing event to move it, weather, and showing planner meals / Lists due dates in the calendar.
 
+## Recently deleted tasks + home card order (branch `TaskBinHomeOrder`, Oct 6)
+
+- **Recently deleted.** Deleting a task no longer removes it: `DELETE /api/todo/tasks/:id` stamps `deletedAt` / `deletedRoot` on the task and its subtasks, and a query hook on the `TodoTask` model hides deleted tasks from every ordinary read (pass the `withDeleted` option to see them). `GET /api/todo/deleted`, `POST /tasks/:id/restore`, `DELETE /deleted/:id` and `DELETE /deleted` back `app/lists/deleted.tsx`, reached from a row at the bottom of the Tasks tab. Kept 30 days, purged lazily when the bin is read or something is deleted. A subtask can't be restored while the task it was inside is still deleted. Deleting a whole *list* is still permanent, including anything of its in the bin. Checklists items go through the same route, so they land in the bin too.
+- **Home card order.** A Reorder button beside "Sections" puts the cards in a mode with earlier / later arrows; the order is saved on the device (`home.sectionOrder` in AsyncStorage), with Reset to go back to the default.
+
 ## Bugs caught in use (logged Sept 27, both fixed)
 
 Reported by the user while using the app.

@@ -51,6 +51,8 @@ const VIEW_OPTIONS: { value: CalendarView; label: string; icon: keyof typeof Ion
 // once the focus wanders near its edge.
 const WINDOW_DAYS = 45;
 const AGENDA_DAYS = 30;
+const LOAD_RETRIES = 3;
+const LOAD_RETRY_MS = 2500;
 
 
 // The Calendar section, modelled on Outlook for iPhone: a week strip that
@@ -96,7 +98,9 @@ export default function CalendarScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  const loadEvents = useCallback(async (center: string) => {
+  // A failed load tries again a few times by itself (the server can be slow
+  // to answer when it has been idle) before giving up until the next visit.
+  const loadEvents = useCallback(async (center: string, attempt = 0) => {
     const from = addDays(center, -WINDOW_DAYS);
     const to = addDays(center, WINDOW_DAYS);
     try {
@@ -109,15 +113,17 @@ export default function CalendarScreen() {
       setEvents(loaded);
       setTasks(loadedTasks);
     } catch {
-      // Keep whatever was showing; the next focus/refresh retries.
+      // Keep whatever was showing.
+      if (attempt < LOAD_RETRIES) setTimeout(() => void loadEvents(center, attempt + 1), LOAD_RETRY_MS);
     }
   }, []);
 
-  const loadCalendars = useCallback(async () => {
+  const loadCalendars = useCallback(async (attempt = 0) => {
     try {
       setCalendars(await getCalendars());
     } catch {
-      Alert.alert("Couldn't load calendars", "Check your connection and try again.");
+      if (attempt < LOAD_RETRIES) setTimeout(() => void loadCalendars(attempt + 1), LOAD_RETRY_MS);
+      else Alert.alert("Couldn't load calendars", "Check your connection and try again.");
     }
   }, []);
 

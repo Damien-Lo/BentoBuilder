@@ -207,6 +207,7 @@ export function TaskDetail({
       [
         "This deletes the task itself, not just its time in the calendar.",
         task.subtaskCount > 0 ? `Its ${task.subtaskCount} subtask${task.subtaskCount === 1 ? "" : "s"} will be deleted too.` : "",
+        "You can restore it from Recently deleted for 30 days.",
       ]
         .filter(Boolean)
         .join(" "),

@@ -11,6 +11,7 @@ import "react-native-reanimated";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { ServerGate } from "@/src/components/ServerGate";
 
 export const unstable_settings = {
   initialRouteName: "index",
@@ -24,6 +25,7 @@ export default function RootLayout() {
     <ThemeProvider
       value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
     >
+      <ServerGate>
       <Stack>
         <Stack.Screen
           name="index"
@@ -143,6 +145,7 @@ export default function RootLayout() {
         <Stack.Screen name="lists/(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="lists/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="lists/task/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="lists/deleted" options={{ headerShown: false }} />
         {/* Calendar — modelled on Outlook for iPhone, from the home page */}
         <Stack.Screen name="calendar/index" options={{ headerShown: false }} />
         <Stack.Screen name="calendar/event/[id]" options={{ headerShown: false }} />
@@ -230,6 +233,7 @@ export default function RootLayout() {
           }}
         />
       </Stack>
+      </ServerGate>
 
       <StatusBar style="auto" />
     </ThemeProvider>

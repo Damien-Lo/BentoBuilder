@@ -257,7 +257,11 @@ async function taskListIds() {
 }
 
 async function nextNumber() {
-  const last = await TodoTask.findOne({ number: { $ne: null } }).sort({ number: -1 }).select("number");
+  // Deleted tasks keep their numbers, so one that's restored never clashes.
+  const last = await TodoTask.findOne({ number: { $ne: null } })
+    .setOptions({ withDeleted: true })
+    .sort({ number: -1 })
+    .select("number");
   return (last?.number ?? 0) + 1;
 }
 
@@ -662,13 +666,108 @@ router.delete("/tasks/:id/blocks/:blockId", async (req, res) => {
   }
 });
 
-// Deleting a task deletes its subtasks too.
+// Deleted tasks wait this long in "Recently deleted" before they're gone.
+const DELETED_KEEP_DAYS = 30;
+
+async function purgeOldDeleted() {
+  const cutoff = new Date(Date.now() - DELETED_KEEP_DAYS * 86_400_000);
+  await TodoTask.deleteMany({ deletedAt: { $ne: null, $lt: cutoff } });
+}
+
+/**
+ * GET /api/todo/deleted
+ * What's in "Recently deleted": each task that was deleted (not the
+ * subtasks that went with it — those are counted), newest first.
+ */
+router.get("/deleted", async (req, res) => {
+  try {
+    await purgeOldDeleted();
+    const all = await TodoTask.find({ deletedAt: { $ne: null } })
+      .setOptions({ withDeleted: true })
+      .populate("list", LIST_FIELDS)
+      .sort({ deletedAt: -1 })
+      .lean();
+    const titles = new Map(all.map((t) => [String(t._id), t.title]));
+    const roots = all.filter((t) => String(t.deletedRoot ?? t._id) === String(t._id));
+    const parents = await TodoTask.find({ _id: { $in: roots.map((r) => r.parent).filter(Boolean) } })
+      .setOptions({ withDeleted: true })
+      .select("title")
+      .lean();
+    for (const p of parents) titles.set(String(p._id), p.title);
+    const data = roots.map((root) => ({
+      _id: root._id,
+      title: root.title,
+      number: root.number,
+      depth: root.depth,
+      list: root.list,
+      parentTitle: root.parent ? titles.get(String(root.parent)) ?? null : null,
+      completed: root.completed,
+      deletedAt: root.deletedAt,
+      subtaskCount: all.filter((t) => String(t.deletedRoot) === String(root._id)).length - 1,
+      daysLeft: Math.max(0, DELETED_KEEP_DAYS - Math.floor((Date.now() - new Date(root.deletedAt).getTime()) / 86_400_000)),
+    }));
+    return res.json({ success: true, data });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+// Puts a deleted task (and the subtasks deleted with it) back.
+router.post("/tasks/:id/restore", async (req, res) => {
+  try {
+    const task = await TodoTask.findOne({ _id: req.params.id, deletedAt: { $ne: null } }).setOptions({ withDeleted: true });
+    if (!task) return sendError(res, new Error("That task is no longer in Recently deleted"), 404);
+    if (task.parent) {
+      const parent = await TodoTask.findById(task.parent)
+        .setOptions({ withDeleted: true })
+        .select("title deletedAt deletedRoot")
+        .populate({ path: "deletedRoot", select: "title", options: { withDeleted: true } });
+      if (!parent) throw new Error("The task this belonged to is gone for good, so it can't be put back.");
+      if (parent.deletedAt) {
+        throw new Error(`Restore "${parent.deletedRoot?.title ?? parent.title}" first — this was inside it.`);
+      }
+    }
+    await TodoTask.updateMany(
+      { deletedRoot: task._id, deletedAt: { $ne: null } },
+      { $set: { deletedAt: null, deletedRoot: null } },
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+// Removes a deleted task for good, before its 30 days are up.
+router.delete("/deleted/:id", async (req, res) => {
+  try {
+    await TodoTask.deleteMany({ deletedRoot: req.params.id, deletedAt: { $ne: null } });
+    return res.json({ success: true });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.delete("/deleted", async (req, res) => {
+  try {
+    await TodoTask.deleteMany({ deletedAt: { $ne: null } });
+    return res.json({ success: true });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+// Deleting a task moves it, and its subtasks, to "Recently deleted" for
+// 30 days. Nothing is removed here.
 router.delete("/tasks/:id", async (req, res) => {
   try {
-    const task = await TodoTask.findByIdAndDelete(req.params.id);
+    const task = await TodoTask.findById(req.params.id);
     if (!task) return sendError(res, new Error("Task not found"), 404);
     const subs = await descendantsOf([task._id]);
-    await TodoTask.deleteMany({ _id: { $in: subs.map((s) => s._id) } });
+    await TodoTask.updateMany(
+      { _id: { $in: [task._id, ...subs.map((s) => s._id)] } },
+      { $set: { deletedAt: new Date(), deletedRoot: task._id } },
+    );
+    void purgeOldDeleted().catch(() => {});
     return res.json({ success: true });
   } catch (error) {
     return sendError(res, error);
