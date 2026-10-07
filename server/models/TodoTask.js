@@ -59,12 +59,27 @@ const todoTaskSchema = new mongoose.Schema(
     // Show this task's due date in the calendar's built-in Tasks calendar.
     showInCalendar: { type: Boolean, default: false },
     order: { type: Number, default: 0 },
+    // Set while the task sits in "Recently deleted". A task deleted with its
+    // subtasks shares one `deletedRoot` (the task that was deleted), so they
+    // come back together.
+    deletedAt: { type: Date, default: null },
+    deletedRoot: { type: mongoose.Schema.Types.ObjectId, ref: "TodoTask", default: null },
   },
   { timestamps: true },
 );
 
+// Deleted tasks are invisible to every ordinary read, so no query has to
+// remember to leave them out. Pass the `withDeleted` option to see them.
+function hideDeleted() {
+  if (this.getOptions().withDeleted) return;
+  this.where({ deletedAt: null });
+}
+todoTaskSchema.pre(/^find/, hideDeleted);
+todoTaskSchema.pre("countDocuments", hideDeleted);
+
 todoTaskSchema.index({ list: 1, completed: 1 });
 todoTaskSchema.index({ parent: 1 });
+todoTaskSchema.index({ deletedAt: 1 });
 
 const TodoTask = mongoose.model("TodoTask", todoTaskSchema);
 export default TodoTask;

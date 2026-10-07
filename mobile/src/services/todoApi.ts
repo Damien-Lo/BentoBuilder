@@ -221,4 +221,27 @@ export type TodoTaskChanges = Partial<
 export const updateTodoTask = (id: string, changes: TodoTaskChanges) =>
   request<TodoTask>(`/tasks/${id}`, { method: "PATCH", body: body(changes) });
 
+// Moves the task and its subtasks to "Recently deleted" (kept 30 days).
 export const deleteTodoTask = (id: string) => request<void>(`/tasks/${id}`, { method: "DELETE" });
+
+// One entry in "Recently deleted": a task as it was deleted, with the
+// number of subtasks that went with it.
+export interface DeletedTask {
+  _id: string;
+  title: string;
+  number: number | null;
+  depth: number;
+  list: Pick<TodoList, "_id" | "name" | "color"> | null;
+  // Set when what was deleted was a subtask.
+  parentTitle: string | null;
+  completed: boolean;
+  deletedAt: string;
+  subtaskCount: number;
+  daysLeft: number;
+}
+
+export const getDeletedTasks = () => request<DeletedTask[]>("/deleted");
+export const restoreTodoTask = (id: string) => request<void>(`/tasks/${id}/restore`, { method: "POST" });
+// Gone for good — one entry, or the whole bin.
+export const purgeDeletedTask = (id: string) => request<void>(`/deleted/${id}`, { method: "DELETE" });
+export const emptyDeletedTasks = () => request<void>("/deleted", { method: "DELETE" });
