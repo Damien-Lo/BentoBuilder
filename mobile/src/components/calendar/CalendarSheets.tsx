@@ -14,11 +14,15 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { EventCalendar } from "@/src/services/calendarApi";
 
 import { CALENDAR_COLORS, calendarColor } from "./calendarUtils";
+
+const CALENDAR_ROW_HEIGHT = 52;
 
 // ── Bottom sheet with a list of choices ─────────────────────────────────────
 
@@ -202,7 +206,7 @@ export function CalendarEditSheet({
               <Text className="text-sm font-semibold text-white">{calendar ? "Save" : "Create"}</Text>
             </Pressable>
           </View>
-          {calendar && !calendar.isDefault && !calendar.isTasks && (
+          {calendar && !calendar.isDefault && !calendar.isTasks && !calendar.isMeals && (
             <Pressable onPress={() => onDelete(calendar)} className="mt-3 items-center py-2 active:opacity-60">
               <Text className="text-sm font-semibold text-red-600">Delete calendar</Text>
             </Pressable>
@@ -217,12 +221,16 @@ export function CalendarEditSheet({
 
 // Slides in from the left (Outlook's top-left button): every calendar with
 // a coloured check to show/hide it, a gear to edit it, and "New calendar".
+// Hold a row and drag to reorder; calendars that are switched off sit in a
+// collapsed "Hidden calendars" section.
 export function CalendarsDrawer({
   visible,
   calendars,
   onClose,
   onToggle,
   onEdit,
+  onMealTimes,
+  onReorder,
   onAdd,
   onClosed,
 }: {
@@ -231,6 +239,10 @@ export function CalendarsDrawer({
   onClose: () => void;
   onToggle: (calendar: EventCalendar) => void;
   onEdit: (calendar: EventCalendar) => void;
+  // The Meals calendar's own settings: when each meal usually is.
+  onMealTimes: () => void;
+  // Every calendar's id in its new order, after one was dragged.
+  onReorder: (ids: string[]) => void;
   onAdd: () => void;
   // Once the drawer has fully closed. iOS can't present another modal
   // (e.g. the calendar editor) while this one is still dismissing — doing
@@ -242,6 +254,11 @@ export function CalendarsDrawer({
   const drawerWidth = Math.min(340, width * 0.85);
   const slide = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
+  const [showHidden, setShowHidden] = useState(false);
+  // A row is being dragged: the list mustn't scroll under it.
+  const [dragging, setDragging] = useState(false);
+  const shown = calendars.filter((c) => c.visible);
+  const hidden = calendars.filter((c) => !c.visible);
 
   useEffect(() => {
     if (visible) setMounted(true);
@@ -279,43 +296,46 @@ export function CalendarsDrawer({
           </View>
           <View className="ml-3 flex-1">
             <Text className="text-lg font-bold text-slate-950">Calendars</Text>
-            <Text className="text-xs text-slate-500">Tap to show or hide</Text>
+            <Text className="text-xs text-slate-500">Tap to show or hide · hold and drag to reorder</Text>
           </View>
         </View>
 
-        <ScrollView className="flex-1 border-t border-slate-100">
-          {calendars.map((calendar) => {
-            const color = calendarColor(calendar);
-            return (
-              <View key={calendar._id} className="flex-row items-center border-b border-slate-100 pl-5 pr-3">
-                <Pressable onPress={() => onToggle(calendar)} className="flex-1 flex-row items-center py-3.5 active:opacity-60">
-                  <View
-                    className="h-6 w-6 items-center justify-center rounded-full"
-                    style={
-                      calendar.visible
-                        ? { backgroundColor: color }
-                        : { borderWidth: 2, borderColor: color, backgroundColor: "white" }
-                    }
-                  >
-                    {calendar.visible && <Ionicons name="checkmark" size={15} color="white" />}
-                  </View>
-                  <Text
-                    numberOfLines={1}
-                    className={`ml-3 flex-1 text-base ${calendar.visible ? "text-slate-900" : "text-slate-400"}`}
-                  >
-                    {calendar.name}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  hitSlop={8}
-                  onPress={() => onEdit(calendar)}
-                  className="h-9 w-9 items-center justify-center rounded-full active:bg-slate-100"
-                >
-                  <Ionicons name="settings-outline" size={19} color="#64748B" />
-                </Pressable>
-              </View>
-            );
-          })}
+        <ScrollView className="flex-1 border-t border-slate-100" scrollEnabled={!dragging}>
+          <CalendarRows
+            calendars={shown}
+            onToggle={onToggle}
+            onEdit={onEdit}
+            onMealTimes={onMealTimes}
+            onDragChange={setDragging}
+            onReorder={(ids) => onReorder([...ids, ...hidden.map((c) => c._id)])}
+          />
+
+          {/* Calendars that are switched off, tucked away. */}
+          {hidden.length > 0 && (
+            <>
+              <Pressable
+                onPress={() => setShowHidden((v) => !v)}
+                className="flex-row items-center border-b border-slate-100 bg-slate-50 px-5 active:bg-slate-100"
+                style={{ height: 46 }}
+              >
+                <Ionicons name="eye-off-outline" size={18} color="#64748B" />
+                <Text className="ml-3 flex-1 text-sm font-semibold text-slate-600">
+                  Hidden calendars ({hidden.length})
+                </Text>
+                <Ionicons name={showHidden ? "chevron-up" : "chevron-down"} size={18} color="#64748B" />
+              </Pressable>
+              {showHidden && (
+                <CalendarRows
+                  calendars={hidden}
+                  onToggle={onToggle}
+                  onEdit={onEdit}
+                  onMealTimes={onMealTimes}
+                  onDragChange={setDragging}
+                  onReorder={(ids) => onReorder([...shown.map((c) => c._id), ...ids])}
+                />
+              )}
+            </>
+          )}
           <Pressable onPress={onAdd} className="flex-row items-center px-5 py-4 active:bg-slate-50">
             <Ionicons name="add-circle-outline" size={22} color="#2563EB" />
             <Text className="ml-3 text-base font-semibold text-blue-600">New calendar</Text>
@@ -323,6 +343,164 @@ export function CalendarsDrawer({
         </ScrollView>
       </Animated.View>
     </Modal>
+  );
+}
+
+// One section of the drawer's list. Rows are a fixed height, so a drag is
+// just "how many rows has it moved": hold a row, drag it, and a line shows
+// where it will land.
+function CalendarRows({
+  calendars,
+  onToggle,
+  onEdit,
+  onMealTimes,
+  onDragChange,
+  onReorder,
+}: {
+  calendars: EventCalendar[];
+  onToggle: (calendar: EventCalendar) => void;
+  onEdit: (calendar: EventCalendar) => void;
+  onMealTimes: () => void;
+  onDragChange: (dragging: boolean) => void;
+  onReorder: (ids: string[]) => void;
+}) {
+  // While dragging: which row, and the slot it's over.
+  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
+  const slotFor = (from: number, translationY: number) =>
+    Math.max(0, Math.min(calendars.length - 1, from + Math.round(translationY / CALENDAR_ROW_HEIGHT)));
+
+  function drop(from: number, to: number) {
+    setDrag(null);
+    onDragChange(false);
+    if (from === to) return;
+    const ids = calendars.map((c) => c._id);
+    ids.splice(to, 0, ...ids.splice(from, 1));
+    onReorder(ids);
+  }
+
+  // The line sits above the row at `to` when moving up, below it when down.
+  const lineAt = drag && drag.to !== drag.from ? (drag.to > drag.from ? drag.to + 1 : drag.to) : null;
+
+  return (
+    <View>
+      {calendars.map((calendar, index) => (
+        <CalendarRow
+          key={calendar._id}
+          calendar={calendar}
+          onToggle={() => onToggle(calendar)}
+          onEdit={() => onEdit(calendar)}
+          onMealTimes={onMealTimes}
+          onDragStart={() => {
+            setDrag({ from: index, to: index });
+            onDragChange(true);
+          }}
+          onDragMove={(y) => setDrag({ from: index, to: slotFor(index, y) })}
+          onDragEnd={(y) => drop(index, slotFor(index, y))}
+          onDragCancel={() => {
+            setDrag(null);
+            onDragChange(false);
+          }}
+        />
+      ))}
+      {lineAt != null && (
+        <View
+          pointerEvents="none"
+          className="absolute left-3 right-3 rounded-full bg-blue-600"
+          style={{ top: lineAt * CALENDAR_ROW_HEIGHT - 2, height: 3 }}
+        />
+      )}
+    </View>
+  );
+}
+
+function CalendarRow({
+  calendar,
+  onToggle,
+  onEdit,
+  onMealTimes,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onDragCancel,
+}: {
+  calendar: EventCalendar;
+  onToggle: () => void;
+  onEdit: () => void;
+  onMealTimes: () => void;
+  onDragStart: () => void;
+  onDragMove: (translationY: number) => void;
+  onDragEnd: (translationY: number) => void;
+  onDragCancel: () => void;
+}) {
+  const color = calendarColor(calendar);
+  const translateY = useSharedValue(0);
+  const lifted = useSharedValue(0);
+
+  const hold = Gesture.Pan()
+    .runOnJS(true)
+    .activateAfterLongPress(280)
+    .onStart(() => {
+      lifted.value = withTiming(1, { duration: 120 });
+      onDragStart();
+    })
+    .onUpdate((e) => {
+      translateY.value = e.translationY;
+      onDragMove(e.translationY);
+    })
+    .onEnd((e) => onDragEnd(e.translationY))
+    .onFinalize((_e, success) => {
+      translateY.value = 0;
+      lifted.value = withTiming(0, { duration: 120 });
+      if (!success) onDragCancel();
+    });
+
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }, { scale: 1 + lifted.value * 0.02 }],
+    zIndex: lifted.value > 0 ? 10 : 0,
+    shadowOpacity: lifted.value * 0.2,
+  }));
+
+  return (
+    <GestureDetector gesture={hold}>
+      <Reanimated.View
+        className="flex-row items-center border-b border-slate-100 bg-white pl-5 pr-3"
+        style={[
+          { height: CALENDAR_ROW_HEIGHT, shadowColor: "#000", shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+          rowStyle,
+        ]}
+      >
+        <Pressable onPress={onToggle} className="flex-1 flex-row items-center self-stretch active:opacity-60">
+          <View
+            className="h-6 w-6 items-center justify-center rounded-full"
+            style={calendar.visible ? { backgroundColor: color } : { borderWidth: 2, borderColor: color, backgroundColor: "white" }}
+          >
+            {calendar.visible && <Ionicons name="checkmark" size={15} color="white" />}
+          </View>
+          <Text numberOfLines={1} className={`ml-3 flex-1 text-base ${calendar.visible ? "text-slate-900" : "text-slate-400"}`}>
+            {calendar.name}
+          </Text>
+        </Pressable>
+        {calendar.isMeals && (
+          <Pressable
+            hitSlop={8}
+            onPress={onMealTimes}
+            accessibilityLabel="Meal times"
+            className="mr-1 h-9 flex-row items-center rounded-full bg-blue-50 px-3 active:bg-blue-100"
+          >
+            <Ionicons name="time-outline" size={16} color="#1D4ED8" />
+            <Text className="ml-1 text-xs font-semibold text-blue-700">Times</Text>
+          </Pressable>
+        )}
+        <Pressable
+          hitSlop={8}
+          onPress={onEdit}
+          accessibilityLabel={`Edit ${calendar.name}`}
+          className="h-9 w-9 items-center justify-center rounded-full active:bg-slate-100"
+        >
+          <Ionicons name="settings-outline" size={19} color="#64748B" />
+        </Pressable>
+      </Reanimated.View>
+    </GestureDetector>
   );
 }
 

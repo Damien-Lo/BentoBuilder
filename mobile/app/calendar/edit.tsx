@@ -41,6 +41,8 @@ import {
   updateCalendarEvent,
   type EventCalendar,
   type EventInput,
+  MEAL_TYPES,
+  type MealType,
   type RepeatFrequency,
 } from "@/src/services/calendarApi";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
@@ -104,6 +106,8 @@ export default function EditCalendarEventScreen() {
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [remindMinutes, setRemindMinutes] = useState<number | null>(15);
+  // Events in the Meals calendar: which meal this is (required there).
+  const [mealSlot, setMealSlot] = useState<MealType | null>(null);
 
   const [dateTarget, setDateTarget] = useState<DateTarget>(null);
   const [timeTarget, setTimeTarget] = useState<TimeTarget>(null);
@@ -146,6 +150,7 @@ export default function EditCalendarEventScreen() {
           setLocation(event.location);
           setDescription(event.description);
           setRemindMinutes(event.remindMinutes);
+          setMealSlot(event.mealSlot ?? null);
         } else {
           setCalendarId((loadedCalendars.find((c) => c.isDefault) ?? loadedCalendars[0])?._id ?? "");
         }
@@ -165,6 +170,14 @@ export default function EditCalendarEventScreen() {
 
   const calendar = calendars.find((c) => c._id === calendarId);
   const color = calendarColor(calendar);
+  const isMeal = !!calendar?.isMeals;
+
+  function pickMeal(slot: MealType) {
+    // An untouched or default title follows the meal.
+    const labels = MEAL_TYPES.map((m) => m.label);
+    if (!title.trim() || labels.includes(title.trim())) setTitle(MEAL_TYPES.find((m) => m.value === slot)!.label);
+    setMealSlot(slot);
+  }
 
   // A timed event ending at or before its start runs into the next day.
   const overnight = !allDay && endDate > date;
@@ -204,6 +217,14 @@ export default function EditCalendarEventScreen() {
       Alert.alert("Add a title", "Give your event a title.");
       return;
     }
+    if (isMeal && !mealSlot) {
+      Alert.alert("Which meal is this?", "Pick breakfast, lunch, dinner or snack, so it can show that meal from your planner.");
+      return;
+    }
+    if (isMeal && (allDay || endDate > date)) {
+      Alert.alert("Check the time", "A meal needs a start and an end on the same day.");
+      return;
+    }
     if (repeatFrequency && repeatUntil && repeatUntil < date) {
       Alert.alert("Check the repeat", "The repeat's end date is before the event starts.");
       return;
@@ -227,6 +248,7 @@ export default function EditCalendarEventScreen() {
       location: location.trim(),
       description: description.trim(),
       remindMinutes,
+      mealSlot: isMeal ? mealSlot : null,
     };
     try {
       setSaving(true);
@@ -359,9 +381,38 @@ export default function EditCalendarEventScreen() {
             />
           </View>
 
+          {/* Which meal — only in the Meals calendar */}
+          {isMeal && (
+            <View className="mb-3 rounded-3xl border border-slate-200 bg-white p-4">
+              <Text className="text-sm font-semibold text-slate-900">Meal</Text>
+              <Text className="mt-0.5 text-xs text-slate-500">Shows this meal from your planner on the day.</Text>
+              <View className="mt-3 flex-row gap-2">
+                {MEAL_TYPES.map((meal) => {
+                  const on = mealSlot === meal.value;
+                  return (
+                    <Pressable
+                      key={meal.value}
+                      onPress={() => pickMeal(meal.value)}
+                      className={`flex-1 items-center rounded-xl py-2.5 ${on ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"}`}
+                    >
+                      <Text className={`text-[13px] font-semibold ${on ? "text-white" : "text-slate-700"}`}>{meal.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
           {/* When */}
           <Card>
-            <Row icon="time-outline" label="All day" onPress={() => setAllDay((v) => !v)} hideChevron>
+            <Row
+              icon="time-outline"
+              label="All day"
+              onPress={() =>
+                isMeal ? Alert.alert("Meals have a time", "A meal needs a start and an end time.") : setAllDay((v) => !v)
+              }
+              hideChevron
+            >
               {/* Same toggle as the app's ToggleRow. */}
               <View className={`h-7 w-12 justify-center rounded-full px-1 ${allDay ? "bg-blue-600" : "bg-slate-200"}`}>
                 <View
@@ -535,7 +586,12 @@ export default function EditCalendarEventScreen() {
         title="Calendar"
         options={calendars.filter((c) => !c.isTasks).map((c) => ({ value: c._id, label: c.name, color: calendarColor(c) }))}
         value={calendarId}
-        onSelect={setCalendarId}
+        onSelect={(next) => {
+          setCalendarId(next);
+          // Meals are timed; other calendars have no meal type.
+          if (calendars.find((c) => c._id === next)?.isMeals) setAllDay(false);
+          else setMealSlot(null);
+        }}
         onClose={() => setSheet(null)}
       />
       <OptionSheet

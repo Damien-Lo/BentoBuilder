@@ -106,6 +106,27 @@ router.get("/", async (req, res) => {
 });
 
 /**
+ * GET /api/meal-plan/range?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * Every non-archived entry in the range, populated like a single day's —
+ * what the calendar shows on its meal events.
+ */
+router.get("/range", async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) {
+      return res.status(400).json({ success: false, message: "from and to query params are required" });
+    }
+    const entries = await populateEntry(
+      MealPlanEntry.find({ date: { $gte: from, $lte: to }, isArchived: false }).sort({ date: 1, createdAt: 1 }),
+    );
+    return res.status(200).json({ success: true, count: entries.length, data: entries });
+  } catch (error) {
+    console.error("Get meal plan range error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load meal plan" });
+  }
+});
+
+/**
  * GET /api/meal-plan/by-restaurant/:restaurantMealId
  * Every non-archived visit to this restaurant, most recent first — powers
  * the restaurant detail page's "Past visits" section. Registered before

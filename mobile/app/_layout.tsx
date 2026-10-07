@@ -149,6 +149,7 @@ export default function RootLayout() {
         {/* Calendar — modelled on Outlook for iPhone, from the home page */}
         <Stack.Screen name="calendar/index" options={{ headerShown: false }} />
         <Stack.Screen name="calendar/event/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="calendar/meal-times" options={{ headerShown: false }} />
         <Stack.Screen name="calendar/edit" options={{ headerShown: false, presentation: "modal" }} />
 
         {/* Grocery list — reached from the Pantry/Kitchen tabs, not its own tab */}

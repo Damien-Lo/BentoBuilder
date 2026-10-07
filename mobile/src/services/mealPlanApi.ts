@@ -113,6 +113,13 @@ async function parseResponse<T>(res: Response): Promise<T> {
   return json as T;
 }
 
+// Every entry from `from` to `to` (inclusive), for the calendar's meal events.
+export async function getMealPlanRange(from: string, to: string): Promise<MealPlanEntry[]> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/range?from=${from}&to=${to}`);
+  const result = await parseResponse<{ success: boolean; data: MealPlanEntry[] }>(res);
+  return Array.isArray(result.data) ? result.data : [];
+}
+
 export async function getMealPlanForDate(date: string): Promise<MealPlanEntry[]> {
   const res = await fetch(`${API_BASE_URL}/api/meal-plan?date=${encodeURIComponent(date)}`);
   const result = await parseResponse<{ success: boolean; data: MealPlanEntry[] }>(res);

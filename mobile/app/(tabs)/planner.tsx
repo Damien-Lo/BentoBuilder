@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import { getMeals, type Meal } from "@/src/services/mealApi";
@@ -137,6 +137,11 @@ export default function HomeScreen() {
   const today = todayStr();
 
   const [selectedDate, setSelectedDate] = useState(today);
+  // Opened on a particular day (from a meal in the calendar).
+  const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
+  useEffect(() => {
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) setSelectedDate(dateParam);
+  }, [dateParam]);
   const [entries, setEntries] = useState<MealPlanEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [allMeals, setAllMeals] = useState<Meal[]>([]);

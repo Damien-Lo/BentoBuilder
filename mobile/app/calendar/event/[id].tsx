@@ -15,6 +15,7 @@ import {
   repeatLabel,
   shortDateLabel,
 } from "@/src/components/calendar/calendarUtils";
+import { buildMealFood, mealKey, type MealFood } from "@/src/components/calendar/mealFood";
 import { showActions } from "@/src/components/todo/theme";
 import {
   deleteCalendarEvent,
@@ -24,6 +25,8 @@ import {
   type SeriesScope,
   type EventCalendar,
 } from "@/src/services/calendarApi";
+import { getMealPlanForDate } from "@/src/services/mealPlanApi";
+import { loadSettings } from "@/src/services/settingsService";
 import { hexToRgba } from "@/src/utils/mealPlan";
 
 // One event, as Outlook's event page shows it: the summary card (title,
@@ -35,6 +38,9 @@ export default function CalendarEventScreen() {
   const [event, setEvent] = useState<CalendarEvent | null>(null);
   const [calendar, setCalendar] = useState<EventCalendar | null>(null);
   const [loading, setLoading] = useState(true);
+  // A meal event: that day's food for its meal from the planner
+  // (undefined while loading, null when nothing's planned).
+  const [food, setFood] = useState<MealFood | null | undefined>(undefined);
 
   useFocusEffect(
     useCallback(() => {
@@ -44,6 +50,15 @@ export default function CalendarEventScreen() {
           if (cancelled) return;
           setEvent(loaded);
           setCalendar(calendars.find((c) => c._id === loaded.calendar) ?? null);
+          const slot = loaded.mealSlot;
+          if (slot) {
+            const day = date ?? loaded.date;
+            Promise.all([getMealPlanForDate(day), loadSettings()])
+              .then(([entries, settings]) => {
+                if (!cancelled) setFood(buildMealFood(entries, settings.unitConversions).get(mealKey(day, slot)) ?? null);
+              })
+              .catch(() => !cancelled && setFood(null));
+          }
         })
         .catch(() => {
           if (!cancelled) Alert.alert("Couldn't load event", undefined, [{ text: "OK", onPress: () => router.back() }]);
@@ -52,7 +67,7 @@ export default function CalendarEventScreen() {
       return () => {
         cancelled = true;
       };
-    }, [id, router]),
+    }, [id, date, router]),
   );
 
   if (loading || !event) {
@@ -78,7 +93,18 @@ export default function CalendarEventScreen() {
     }
   }
 
+  // A regular meal (from the Meals calendar's times) can only be changed a
+  // day at a time here; the series is changed in the meal times.
+  const regularMeal = !!event.mealAuto && !!event.repeat;
+
   function confirmDelete() {
+    if (regularMeal) {
+      Alert.alert("Skip this meal?", "Only this day's block is removed. To stop it every week, change your meal times.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Skip this day", style: "destructive", onPress: () => void remove("one") },
+      ]);
+      return;
+    }
     if (event?.repeat) {
       showActions("Delete repeating event", [
         { label: "Delete this event", destructive: true, onPress: () => void remove("one") },
@@ -99,6 +125,10 @@ export default function CalendarEventScreen() {
       router.push({ pathname: "/calendar/edit", params: { id, occurrence, ...(scope ? { scope } : {}) } });
     if (!event?.repeat) {
       open();
+      return;
+    }
+    if (regularMeal) {
+      open("one");
       return;
     }
     showActions("Edit repeating event", [
@@ -185,11 +215,70 @@ export default function CalendarEventScreen() {
           </Detail>
         </View>
 
+        {/* Food from the planner */}
+        {event.mealSlot && (
+          <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+            <View className="flex-row items-center px-4 pb-1 pt-3.5">
+              <Ionicons name="restaurant-outline" size={18} color="#64748B" />
+              <Text className="ml-2 flex-1 text-base font-semibold text-slate-900">Food</Text>
+              {!!food && (
+                <Text className="text-sm font-semibold text-slate-700">{Math.round(food.nutrition.calories ?? 0)} kcal</Text>
+              )}
+            </View>
+            {food === undefined ? (
+              <ActivityIndicator className="my-4" color="#2563EB" />
+            ) : !food ? (
+              <Text className="px-4 pb-3 pt-1 text-sm text-slate-500">Nothing planned for this meal yet.</Text>
+            ) : (
+              <>
+                {food.items.map((item) => (
+                  <View key={item.id} className="flex-row items-center border-t border-slate-100 px-4 py-3">
+                    <Ionicons
+                      name={item.eaten ? "checkmark-circle" : "ellipse-outline"}
+                      size={18}
+                      color={item.eaten ? "#16A34A" : "#CBD5E1"}
+                    />
+                    <Text className="ml-2.5 flex-1 text-base text-slate-900" numberOfLines={2}>
+                      {item.name}
+                    </Text>
+                    <Text className="text-sm text-slate-500">{item.kcal} kcal</Text>
+                  </View>
+                ))}
+                <View className="flex-row border-t border-slate-100 px-4 py-3">
+                  <Macro label="Protein" value={food.nutrition.protein} />
+                  <Macro label="Carbs" value={food.nutrition.carbs} />
+                  <Macro label="Fat" value={food.nutrition.fats} />
+                </View>
+              </>
+            )}
+            <Pressable
+              onPress={() => router.navigate({ pathname: "/planner", params: { date: occurrence } })}
+              className="flex-row items-center justify-center border-t border-slate-100 py-3.5 active:bg-slate-50"
+            >
+              <Text className="font-semibold text-blue-700">{food ? "Open in planner" : "Plan this meal"}</Text>
+              <Ionicons name="chevron-forward" size={16} color="#1D4ED8" style={{ marginLeft: 4 }} />
+            </Pressable>
+          </View>
+        )}
+
+        {regularMeal && (
+          <Pressable
+            onPress={() => router.push("/calendar/meal-times")}
+            className="mb-3 flex-row items-center rounded-2xl bg-blue-50 px-4 py-3 active:bg-blue-100"
+          >
+            <Ionicons name="time-outline" size={18} color="#1D4ED8" />
+            <Text className="ml-2 flex-1 text-sm text-blue-900">
+              This is one of your regular meal times. Editing here changes this day only.
+            </Text>
+            <Text className="text-sm font-semibold text-blue-700">Change times</Text>
+          </Pressable>
+        )}
+
         <Pressable
           onPress={confirmDelete}
           className="items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
         >
-          <Text className="font-semibold text-red-600">Delete event</Text>
+          <Text className="font-semibold text-red-600">{regularMeal ? "Skip this day" : "Delete event"}</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -201,6 +290,15 @@ function Detail({ icon, children, last = false }: { icon: keyof typeof Ionicons.
     <View className={`flex-row items-start px-4 py-3.5 ${last ? "" : "border-b border-slate-100"}`}>
       <Ionicons name={icon} size={20} color="#64748B" style={{ marginTop: 1 }} />
       <View className="ml-3 flex-1">{children}</View>
+    </View>
+  );
+}
+
+function Macro({ label, value }: { label: string; value: number | null | undefined }) {
+  return (
+    <View className="flex-1 items-center">
+      <Text className="text-sm font-semibold text-slate-900">{Math.round(value ?? 0)} g</Text>
+      <Text className="text-xs text-slate-500">{label}</Text>
     </View>
   );
 }

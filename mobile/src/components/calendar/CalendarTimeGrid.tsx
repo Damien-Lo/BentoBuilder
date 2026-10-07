@@ -15,6 +15,7 @@ import {
   minutesLabel,
   WEEKDAYS_SHORT,
 } from "./calendarUtils";
+import { mealLine } from "./mealFood";
 
 export const HOUR_HEIGHT = 56;
 const LABEL_WIDTH = 48;
@@ -304,7 +305,15 @@ function DayColumn({
                 {event.task ? " " : ""}
                 {event.title}
               </Text>
-              {height >= 40 && (
+              {/* A meal's food from the planner. */}
+              {event.meal && height >= 30 && (
+                <Text numberOfLines={height >= 56 ? 2 : 1} className={`text-[10px] ${event.meal.food ? "text-slate-700" : "text-slate-400"}`}>
+                  {event.meal.food?.eaten && <Ionicons name="checkmark-circle" size={10} color="#16A34A" />}
+                  {event.meal.food?.eaten ? " " : ""}
+                  {mealLine(event)}
+                </Text>
+              )}
+              {height >= (event.meal ? 58 : 40) && (
                 <Text numberOfLines={1} className="text-[10px] text-slate-600">
                   {minutesLabel(event.startMinutes)}–{minutesLabel(event.endMinutes)}
                   {event.location ? ` · ${event.location}` : ""}

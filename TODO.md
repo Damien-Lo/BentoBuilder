@@ -82,6 +82,17 @@ Replaces the home page's "Scheduling — coming soon" card.
 - **Recently deleted.** Deleting a task no longer removes it: `DELETE /api/todo/tasks/:id` stamps `deletedAt` / `deletedRoot` on the task and its subtasks, and a query hook on the `TodoTask` model hides deleted tasks from every ordinary read (pass the `withDeleted` option to see them). `GET /api/todo/deleted`, `POST /tasks/:id/restore`, `DELETE /deleted/:id` and `DELETE /deleted` back `app/lists/deleted.tsx`, reached from a row at the bottom of the Tasks tab. Kept 30 days, purged lazily when the bin is read or something is deleted. A subtask can't be restored while the task it was inside is still deleted. Deleting a whole *list* is still permanent, including anything of its in the bin. Checklists items go through the same route, so they land in the bin too.
 - **Home card order.** A Reorder button beside "Sections" puts the cards in a mode with earlier / later arrows; the order is saved on the device (`home.sectionOrder` in AsyncStorage), with Reset to go back to the default.
 
+## In progress: meals in the calendar (branch `MealsInCalendar`, started Oct 6)
+
+Step 1 of connecting the Kitchen to the Calendar. The planner stays the only place food is stored; the calendar reads from it.
+
+- **Meals calendar** (`EventCalendar.isMeals`): built in like Tasks, can be hidden / recoloured / renamed but not deleted. Every event in it needs a **meal type** (`CalendarEvent.mealSlot`: breakfast / lunch / dinner / snack); the event form only shows the picker for this calendar, and the server clears the type on any other.
+- **Regular meal times** (`EventCalendar.mealTimes`, screen `app/calendar/meal-times.tsx`, reached from the "Times" button on the Meals row in the calendars drawer): per meal, per day of the week, a start/end or none. `PUT /api/calendar/meal-times` regenerates weekly series (`mealAuto: true`), one per distinct time: a series that still matches is left alone, one that doesn't ends the day before `today` and a new one starts, carrying over days that were skipped or edited on their own.
+- **Regular series are changed only through the meal times.** On the server, PATCH / split / whole-series delete of a `mealAuto` series is refused; a single day can still be edited (detach, keeps its meal type) or skipped.
+- **Food on the events:** `GET /api/meal-plan/range` + `src/components/calendar/mealFood.ts` (reuses the planner's `computeDayNutrition`). Every event of a type shows that day's planner slot of the same type: a line on the block in Day / 3-Day and Agenda ("Nothing planned" when empty, a green tick when everything in the slot is confirmed), and a Food section on the event page with per-item calories, macros and "Open in planner" (`/planner?date=`).
+- **Calendars drawer (same branch):** hold a row and drag to reorder (`PATCH /api/calendar/calendars/reorder`, within the shown or the hidden section, not between them); switched-off calendars sit in a collapsed "Hidden calendars" section; calendars have 24 colours (`CALENDAR_COLORS` in `calendarUtils.ts` — lists keep the original 12).
+- **Not built yet:** adding or confirming food from the event page (read-only for now); food on the Month view's tiny chips; an automatic block for food planned in a slot with no event that day; meal times shown in the planner. Next after this: meal-prep sessions and shopping trips as their own event types.
+
 ## Bugs caught in use (logged Sept 27, both fixed)
 
 Reported by the user while using the app.
