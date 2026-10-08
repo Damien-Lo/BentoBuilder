@@ -16,6 +16,7 @@ import {
   shortDateLabel,
 } from "@/src/components/calendar/calendarUtils";
 import { buildMealFood, mealKey, type MealFood } from "@/src/components/calendar/mealFood";
+import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { showActions } from "@/src/components/todo/theme";
 import {
   deleteCalendarEvent,
@@ -24,9 +25,19 @@ import {
   type CalendarEvent,
   type SeriesScope,
   type EventCalendar,
+  type MealType,
 } from "@/src/services/calendarApi";
-import { getMealPlanForDate } from "@/src/services/mealPlanApi";
-import { loadSettings } from "@/src/services/settingsService";
+import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import {
+  deleteMealPlanEntry,
+  getMealPlanForDate,
+  unconfirmMealPlanEntry,
+  type MealPlanEntry,
+} from "@/src/services/mealPlanApi";
+import { getPantryItems } from "@/src/services/pantryApi";
+import { getRecipes, type Recipe } from "@/src/services/recipeApi";
+import { loadSettings, type AppSettings } from "@/src/services/settingsService";
+import type { PantryItem } from "@/src/types/pantry";
 import { hexToRgba } from "@/src/utils/mealPlan";
 
 // One event, as Outlook's event page shows it: the summary card (title,
@@ -41,6 +52,50 @@ export default function CalendarEventScreen() {
   // A meal event: that day's food for its meal from the planner
   // (undefined while loading, null when nothing's planned).
   const [food, setFood] = useState<MealFood | null | undefined>(undefined);
+  // The planner entries behind `food`, and what marking one as eaten works
+  // from (what's in the pantry, and the recipes and ingredients it uses).
+  const [slotEntries, setSlotEntries] = useState<MealPlanEntry[]>([]);
+  const [kitchen, setKitchen] = useState<{
+    recipes: Recipe[];
+    ingredients: Ingredient[];
+    pantry: PantryItem[];
+    settings: AppSettings;
+  } | null>(null);
+
+  // That day's food for the meal, from the planner.
+  async function loadFood(day: string, slot: MealType, cancelled: () => boolean = () => false) {
+    try {
+      const [entries, settings] = await Promise.all([getMealPlanForDate(day), loadSettings()]);
+      if (cancelled()) return;
+      setSlotEntries(entries.filter((e) => e.slot === slot));
+      setFood(buildMealFood(entries, settings.unitConversions).get(mealKey(day, slot)) ?? null);
+    } catch {
+      if (!cancelled()) setFood(null);
+    }
+  }
+
+  // Marking food as eaten runs the planner's own confirm, here on this page:
+  // the pantry deduction, the choose-a-source step and the rating prompt.
+  const confirmEntry = useEntryConfirm({
+    allRecipes: kitchen?.recipes ?? [],
+    allIngredients: kitchen?.ingredients ?? [],
+    pantryItems: kitchen?.pantry ?? [],
+    settings: kitchen?.settings ?? null,
+    ready: !!kitchen,
+    onConfirmed: (updated) => {
+      if (event?.mealSlot) void loadFood(updated.date, event.mealSlot);
+      // What it used has left the pantry.
+      getPantryItems()
+        .then((pantry) => setKitchen((prev) => prev && { ...prev, pantry }))
+        .catch(() => {});
+    },
+  });
+
+  function markEaten(entryId: string) {
+    const entry = slotEntries.find((e) => e._id === entryId);
+    // (If the pantry is still loading, the confirm waits for it.)
+    if (entry) confirmEntry.confirm(entry, true);
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -50,14 +105,14 @@ export default function CalendarEventScreen() {
           if (cancelled) return;
           setEvent(loaded);
           setCalendar(calendars.find((c) => c._id === loaded.calendar) ?? null);
-          const slot = loaded.mealSlot;
-          if (slot) {
-            const day = date ?? loaded.date;
-            Promise.all([getMealPlanForDate(day), loadSettings()])
-              .then(([entries, settings]) => {
-                if (!cancelled) setFood(buildMealFood(entries, settings.unitConversions).get(mealKey(day, slot)) ?? null);
+          if (loaded.mealSlot) {
+            void loadFood(date ?? loaded.date, loaded.mealSlot, () => cancelled);
+            // Fresh each visit: the pantry may have changed since.
+            Promise.all([getRecipes(), getIngredients(), getPantryItems(), loadSettings()])
+              .then(([recipes, ingredients, pantry, settings]) => {
+                if (!cancelled) setKitchen({ recipes, ingredients, pantry, settings });
               })
-              .catch(() => !cancelled && setFood(null));
+              .catch(() => {});
           }
         })
         .catch(() => {
@@ -91,6 +146,37 @@ export default function CalendarEventScreen() {
     } catch (error) {
       Alert.alert("Couldn't delete", error instanceof Error ? error.message : "Something went wrong.");
     }
+  }
+
+  // Adding food hands over to the planner's add sheet for this day and
+  // meal; coming back here reloads the food.
+  function openPlanner(action?: { add?: MealType }) {
+    router.navigate({
+      pathname: "/planner",
+      params: { date: occurrence, from: "calendar", t: String(Date.now()), ...action },
+    });
+  }
+
+  function foodActions(item: MealFood["items"][number]) {
+    const slot = event?.mealSlot;
+    if (!slot) return;
+    const reload = () => loadFood(occurrence, slot);
+    const fail = (error: unknown) =>
+      Alert.alert("Couldn't update", error instanceof Error ? error.message : "Something went wrong.");
+    showActions(item.name, [
+      item.eaten
+        ? {
+            label: "Mark as not eaten",
+            // Puts back what it took from the pantry.
+            onPress: () => void unconfirmMealPlanEntry(item.id).then(reload, fail),
+          }
+        : { label: "Mark as eaten", onPress: () => markEaten(item.id) },
+      {
+        label: "Remove from this meal",
+        destructive: true,
+        onPress: () => void deleteMealPlanEntry(item.id).then(reload, fail),
+      },
+    ]);
   }
 
   // A regular meal (from the Meals calendar's times) can only be changed a
@@ -232,16 +318,34 @@ export default function CalendarEventScreen() {
             ) : (
               <>
                 {food.items.map((item) => (
-                  <View key={item.id} className="flex-row items-center border-t border-slate-100 px-4 py-3">
-                    <Ionicons
-                      name={item.eaten ? "checkmark-circle" : "ellipse-outline"}
-                      size={18}
-                      color={item.eaten ? "#16A34A" : "#CBD5E1"}
-                    />
-                    <Text className="ml-2.5 flex-1 text-base text-slate-900" numberOfLines={2}>
-                      {item.name}
-                    </Text>
-                    <Text className="text-sm text-slate-500">{item.kcal} kcal</Text>
+                  <View key={item.id} className="flex-row items-center border-t border-slate-100 pl-2 pr-4">
+                    {/* The circle marks it eaten (or not); the row has the rest. */}
+                    <Pressable
+                      hitSlop={6}
+                      onPress={() =>
+                        item.eaten
+                          ? void unconfirmMealPlanEntry(item.id).then(
+                              () => event.mealSlot && loadFood(occurrence, event.mealSlot),
+                              () => Alert.alert("Couldn't update", "Something went wrong."),
+                            )
+                          : markEaten(item.id)
+                      }
+                      accessibilityLabel={item.eaten ? `Mark ${item.name} as not eaten` : `Mark ${item.name} as eaten`}
+                      className="h-11 w-10 items-center justify-center active:opacity-60"
+                    >
+                      <Ionicons
+                        name={item.eaten ? "checkmark-circle" : "ellipse-outline"}
+                        size={22}
+                        color={item.eaten ? "#16A34A" : "#94A3B8"}
+                      />
+                    </Pressable>
+                    <Pressable onPress={() => foodActions(item)} className="flex-1 flex-row items-center py-3 active:opacity-60">
+                      <Text className="ml-1 flex-1 text-base text-slate-900" numberOfLines={2}>
+                        {item.name}
+                      </Text>
+                      <Text className="text-sm text-slate-500">{item.kcal} kcal</Text>
+                      <Ionicons name="ellipsis-horizontal" size={16} color="#CBD5E1" style={{ marginLeft: 8 }} />
+                    </Pressable>
                   </View>
                 ))}
                 <View className="flex-row border-t border-slate-100 px-4 py-3">
@@ -251,13 +355,22 @@ export default function CalendarEventScreen() {
                 </View>
               </>
             )}
-            <Pressable
-              onPress={() => router.navigate({ pathname: "/planner", params: { date: occurrence } })}
-              className="flex-row items-center justify-center border-t border-slate-100 py-3.5 active:bg-slate-50"
-            >
-              <Text className="font-semibold text-blue-700">{food ? "Open in planner" : "Plan this meal"}</Text>
-              <Ionicons name="chevron-forward" size={16} color="#1D4ED8" style={{ marginLeft: 4 }} />
-            </Pressable>
+            <View className="flex-row border-t border-slate-100">
+              <Pressable
+                onPress={() => event.mealSlot && openPlanner({ add: event.mealSlot })}
+                className="flex-1 flex-row items-center justify-center py-3.5 active:bg-slate-50"
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#1D4ED8" />
+                <Text className="ml-1.5 font-semibold text-blue-700">Add food</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => openPlanner()}
+                className="flex-1 flex-row items-center justify-center border-l border-slate-100 py-3.5 active:bg-slate-50"
+              >
+                <Text className="font-semibold text-slate-700">Open planner</Text>
+                <Ionicons name="chevron-forward" size={16} color="#475569" style={{ marginLeft: 4 }} />
+              </Pressable>
+            </View>
           </View>
         )}
 
@@ -281,6 +394,8 @@ export default function CalendarEventScreen() {
           <Text className="font-semibold text-red-600">{regularMeal ? "Skip this day" : "Delete event"}</Text>
         </Pressable>
       </ScrollView>
+
+      {confirmEntry.modals}
     </SafeAreaView>
   );
 }
