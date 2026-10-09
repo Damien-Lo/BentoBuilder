@@ -3,7 +3,23 @@ import type { EventCalendar, EventOccurrence, EventRepeat } from "@/src/services
 import { parseLocalDate, toDateStr } from "@/src/utils/mealPlan";
 
 // Calendar colours reuse the to-do list palette (Tailwind 600 shades).
-export const CALENDAR_COLORS = TODO_LIST_COLORS;
+// Calendars get a wider palette than lists: there are usually more of them
+// on screen at once, and each needs to be told apart.
+export const CALENDAR_COLORS: Record<string, { name: string; value: string }> = {
+  ...TODO_LIST_COLORS,
+  rose:     { name: "Rose",     value: "#E11D48" },
+  coral:    { name: "Coral",    value: "#F4664A" },
+  brown:    { name: "Brown",    value: "#92400E" },
+  gold:     { name: "Gold",     value: "#B8860B" },
+  lime:     { name: "Lime",     value: "#65A30D" },
+  emerald:  { name: "Emerald",  value: "#047857" },
+  cyan:     { name: "Cyan",     value: "#0891B2" },
+  navy:     { name: "Navy",     value: "#1E3A8A" },
+  violet:   { name: "Violet",   value: "#8B5CF6" },
+  fuchsia:  { name: "Fuchsia",  value: "#C026D3" },
+  maroon:   { name: "Maroon",   value: "#881337" },
+  charcoal: { name: "Charcoal", value: "#1F2937" },
+};
 
 export function calendarColor(calendar: Pick<EventCalendar, "color"> | null | undefined): string {
   return (CALENDAR_COLORS[calendar?.color ?? "blue"] ?? CALENDAR_COLORS.blue).value;

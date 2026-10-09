@@ -16,6 +16,15 @@ const eventCalendarSchema = new mongoose.Schema(
     // fills it with the tasks and subtasks switched on for the calendar.
     // Created on first use, can't be deleted.
     isTasks: { type: Boolean, default: false },
+    // The built-in "Meals" calendar: every event in it has a meal type and
+    // shows that day's food from the Kitchen planner. Created on first use,
+    // can't be deleted.
+    isMeals: { type: Boolean, default: false },
+    // Meals calendar only — the regular time of each meal on each day of the
+    // week: { breakfast: [Sunday … Saturday], lunch: […], … }, each day
+    // either { start, end } (minutes after midnight) or null for none. The
+    // repeating meal events are generated from this.
+    mealTimes: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true },
 );

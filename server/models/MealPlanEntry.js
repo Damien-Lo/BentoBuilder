@@ -96,6 +96,10 @@ const mealPlanEntrySchema = new mongoose.Schema(
     // entry confirmed before this field existed.
     confirmedNutrition: { type: confirmedNutritionSchema, default: null },
 
+    // Set when a usual meal filled this in (see models/UsualMeal.js).
+    // Removing such an entry skips that usual on this day.
+    usual: { type: mongoose.Schema.Types.ObjectId, ref: "UsualMeal", default: null },
+
     notes:      { type: String, trim: true, default: "" },
     isArchived: { type: Boolean, default: false },
   },
@@ -110,6 +114,11 @@ mealPlanEntrySchema.pre("validate", function () {
 });
 
 mealPlanEntrySchema.index({ date: 1 });
+// One entry per usual per day, so filling in can't double up.
+mealPlanEntrySchema.index(
+  { usual: 1, date: 1 },
+  { unique: true, partialFilterExpression: { usual: { $type: "objectId" } } },
+);
 
 const MealPlanEntry = mongoose.model("MealPlanEntry", mealPlanEntrySchema);
 export default MealPlanEntry;

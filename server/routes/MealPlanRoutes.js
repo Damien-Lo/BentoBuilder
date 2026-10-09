@@ -1,6 +1,8 @@
 import express from "express";
 import MealPlanEntry from "../models/MealPlanEntry.js";
 import PantryItem from "../models/PantryItem.js";
+import UsualMeal from "../models/UsualMeal.js";
+import { syncUsualMeals, todayFrom } from "../services/usualMeals.js";
 import { removeMealPlanEntryContributions } from "../services/groceryContributions.js";
 import {
   CORE_NUTRITION_FIELD_NAMES,
@@ -95,12 +97,36 @@ router.get("/", async (req, res) => {
     if (!date) {
       return res.status(400).json({ success: false, message: "date query param is required" });
     }
+    // Usual meals fill themselves in as the planner is read.
+    await syncUsualMeals(todayFrom(req.query.today)).catch((error) => console.error("Usual meals sync error:", error));
     const entries = await populateEntry(
       MealPlanEntry.find({ date, isArchived: false }).sort({ createdAt: 1 }),
     );
     return res.status(200).json({ success: true, count: entries.length, data: entries });
   } catch (error) {
     console.error("Get meal plan error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load meal plan" });
+  }
+});
+
+/**
+ * GET /api/meal-plan/range?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * Every non-archived entry in the range, populated like a single day's —
+ * what the calendar shows on its meal events.
+ */
+router.get("/range", async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) {
+      return res.status(400).json({ success: false, message: "from and to query params are required" });
+    }
+    await syncUsualMeals(todayFrom(req.query.today)).catch((error) => console.error("Usual meals sync error:", error));
+    const entries = await populateEntry(
+      MealPlanEntry.find({ date: { $gte: from, $lte: to }, isArchived: false }).sort({ date: 1, createdAt: 1 }),
+    );
+    return res.status(200).json({ success: true, count: entries.length, data: entries });
+  } catch (error) {
+    console.error("Get meal plan range error:", error);
     return res.status(500).json({ success: false, message: "Failed to load meal plan" });
   }
 });
@@ -367,6 +393,10 @@ router.delete("/:id", async (req, res) => {
     }
     existing.isArchived = true;
     await existing.save();
+    // Removing what a usual meal filled in skips it for that day only.
+    if (existing.usual) {
+      await UsualMeal.updateOne({ _id: existing.usual }, { $addToSet: { skippedDates: existing.date } });
+    }
 
     // Best-effort — the entry is already archived either way. Strips this
     // entry's contribution from any still-unpurchased (toBuy) grocery item;

@@ -19,6 +19,7 @@ import {
   weekOf,
   WEEKDAYS_SHORT,
 } from "./calendarUtils";
+import { mealLine } from "./mealFood";
 
 // ── Week strip / pull-down month ────────────────────────────────────────────
 
@@ -371,6 +372,18 @@ export function AgendaView({
                           <Text className="ml-1 text-xs text-slate-500" numberOfLines={1}>
                             {event.task.rootNumber != null ? `#${event.task.rootNumber} ` : ""}
                             {event.task.depth > 0 ? event.task.rootTitle : "Task"}
+                          </Text>
+                        </View>
+                      )}
+                      {event.meal && (
+                        <View className="mt-0.5 flex-row items-center">
+                          <Ionicons
+                            name={event.meal.food?.eaten ? "checkmark-circle" : "restaurant-outline"}
+                            size={12}
+                            color={event.meal.food?.eaten ? "#16A34A" : "#94A3B8"}
+                          />
+                          <Text className={`ml-1 flex-1 text-xs ${event.meal.food ? "text-slate-600" : "text-slate-400"}`} numberOfLines={1}>
+                            {mealLine(event)}
                           </Text>
                         </View>
                       )}

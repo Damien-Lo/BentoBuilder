@@ -18,10 +18,14 @@ import {
   deleteCalendar,
   getCalendars,
   getEventOccurrences,
+  reorderCalendars,
   updateCalendar,
   type EventCalendar,
   type EventOccurrence,
 } from "@/src/services/calendarApi";
+import { buildMealFood, mealKey, type MealFood } from "@/src/components/calendar/mealFood";
+import { getMealPlanRange } from "@/src/services/mealPlanApi";
+import { getUsualMeals, usualAppliesOn, usualName, type UsualMeal } from "@/src/services/usualMealApi";
 import { loadSettings } from "@/src/services/settingsService";
 import {
   getCalendarTasks,
@@ -51,6 +55,9 @@ const VIEW_OPTIONS: { value: CalendarView; label: string; icon: keyof typeof Ion
 // once the focus wanders near its edge.
 const WINDOW_DAYS = 45;
 const AGENDA_DAYS = 30;
+// The planner's food is fetched for a narrower span: it's heavier, and only
+// drawn on the days in view.
+const MEAL_WINDOW_DAYS = 35;
 const LOAD_RETRIES = 3;
 const LOAD_RETRY_MS = 2500;
 
@@ -69,6 +76,9 @@ export default function CalendarScreen() {
   const [calendars, setCalendars] = useState<EventCalendar[]>([]);
   const [events, setEvents] = useState<EventOccurrence[]>([]);
   const [tasks, setTasks] = useState<CalendarTaskFeed>({ deadlines: [], blocks: [] });
+  // The planner's food by day and meal, shown on the Meals calendar's events.
+  const [mealFood, setMealFood] = useState<Map<string, MealFood>>(new Map());
+  const [usualMeals, setUsualMeals] = useState<UsualMeal[]>([]);
   // Scheduling mode: pick a task from the strip, drag on the day to block
   // time for it. `schedule=<taskId>` in the URL opens straight into it
   // locked to that one task (a task's Do date row).
@@ -112,6 +122,14 @@ export default function CalendarScreen() {
       windowRef.current = { from, to };
       setEvents(loaded);
       setTasks(loadedTasks);
+      // A bonus layer too: meal events still show without their food.
+      Promise.all([
+        getMealPlanRange(addDays(center, -MEAL_WINDOW_DAYS), addDays(center, MEAL_WINDOW_DAYS)),
+        loadSettings(),
+      ])
+        .then(([entries, settings]) => setMealFood(buildMealFood(entries, settings.unitConversions)))
+        .catch(() => {});
+      getUsualMeals().then(setUsualMeals).catch(() => {});
     } catch {
       // Keep whatever was showing.
       if (attempt < LOAD_RETRIES) setTimeout(() => void loadEvents(center, attempt + 1), LOAD_RETRY_MS);
@@ -156,8 +174,22 @@ export default function CalendarScreen() {
           ...tasks.blocks.map((b) => taskBlockToOccurrence(b, tasksCalendar._id)),
         ]
       : [];
-    return [...taskOccurrences, ...events].filter((e) => calendarsById.get(e.calendar)?.visible ?? true);
-  }, [events, tasks, calendars, calendarsById, today]);
+    const withFood = events.map((e) => {
+      if (!e.mealSlot) return e;
+      const food = mealFood.get(mealKey(e.occurrenceDate, e.mealSlot)) ?? null;
+      // Usual meals are only filled in a couple of weeks ahead; beyond
+      // that, name what's due instead of "Nothing planned".
+      const usually =
+        !food && e.occurrenceDate > today
+          ? usualMeals
+              .filter((u) => u.slot === e.mealSlot && usualAppliesOn(u, e.occurrenceDate))
+              .map(usualName)
+              .join(", ")
+          : "";
+      return { ...e, meal: { food, usually: usually || undefined } };
+    });
+    return [...taskOccurrences, ...withFood].filter((e) => calendarsById.get(e.calendar)?.visible ?? true);
+  }, [events, tasks, mealFood, usualMeals, calendars, calendarsById, today]);
   const eventDays = useMemo(() => {
     const days = new Set<string>();
     for (const e of visibleEvents) {
@@ -433,6 +465,15 @@ export default function CalendarScreen() {
         onEdit={(c) => {
           afterDrawer.current = c;
           setDrawerOpen(false);
+        }}
+        onMealTimes={() => {
+          setDrawerOpen(false);
+          router.push("/calendar/meal-times");
+        }}
+        onReorder={(ids) => {
+          // Show it at once; the saved order follows.
+          setCalendars((prev) => [...prev].sort((a, b) => ids.indexOf(a._id) - ids.indexOf(b._id)));
+          reorderCalendars(ids).then(setCalendars).catch(() => void loadCalendars());
         }}
         onAdd={() => {
           afterDrawer.current = null;

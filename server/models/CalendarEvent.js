@@ -47,6 +47,11 @@ const calendarEventSchema = new mongoose.Schema(
     description: { type: String, trim: true, default: "" },
     // Minutes before the start to remind, or null for no reminder.
     remindMinutes: { type: Number, min: 0, default: 15 },
+    // Events in the Meals calendar: which planner slot's food this shows.
+    mealSlot: { type: String, enum: ["breakfast", "lunch", "dinner", "snack", null], default: null },
+    // A repeating meal generated from the Meals calendar's regular times
+    // (changed there, not by editing the series).
+    mealAuto: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

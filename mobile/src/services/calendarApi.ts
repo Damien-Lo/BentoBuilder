@@ -9,7 +9,25 @@ export interface EventCalendar {
   isDefault: boolean;
   // The built-in Tasks calendar (filled from Lists, not from events).
   isTasks?: boolean;
+  // The built-in Meals calendar: its events each have a meal type and show
+  // that day's food from the planner.
+  isMeals?: boolean;
 }
+
+export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+export const MEAL_TYPES: { value: MealType; label: string }[] = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+  { value: "snack", label: "Snack" },
+];
+// The regular time of one meal on one day (minutes after midnight).
+export interface MealTime {
+  start: number;
+  end: number;
+}
+// Each meal's time on each day of the week (index 0 = Sunday), null = none.
+export type MealTimes = Record<MealType, (MealTime | null)[]>;
 
 export type RepeatFrequency = "daily" | "weekdays" | "weekly" | "monthly" | "yearly";
 
@@ -36,6 +54,11 @@ export interface CalendarEvent {
   location: string;
   description: string;
   remindMinutes: number | null;
+  // Meals calendar only: which planner slot's food this event shows.
+  mealSlot?: MealType | null;
+  // A regular meal generated from the Meals calendar's times: only single
+  // days of it can be edited or deleted here.
+  mealAuto?: boolean;
   // Set when this was one occurrence of a repeating event, edited on its
   // own and split off ("only this event").
   seriesId?: string | null;
@@ -59,6 +82,10 @@ export interface EventOccurrence extends CalendarEvent {
     rootTitle: string;
     rootNumber: number | null;
   };
+  // Set by the calendar screen on a Meals event: that day's food for its
+  // meal type from the planner (`food` is null when nothing's planned).
+  // `usually`: with no food yet, the usual meals due that day.
+  meal?: { food: import("@/src/components/calendar/mealFood").MealFood | null; usually?: string };
 }
 
 export type EventInput = Omit<CalendarEvent, "_id" | "excludedDates">;
@@ -82,7 +109,16 @@ export const createCalendar = (name: string, color: string) =>
   request<EventCalendar>("/calendars", { method: "POST", body: body({ name, color }) });
 export const updateCalendar = (id: string, changes: Partial<Pick<EventCalendar, "name" | "color" | "visible">>) =>
   request<EventCalendar>(`/calendars/${id}`, { method: "PATCH", body: body(changes) });
+// Saves the order the calendars are listed in.
+export const reorderCalendars = (ids: string[]) =>
+  request<EventCalendar[]>("/calendars/reorder", { method: "PATCH", body: body({ ids }) });
 export const deleteCalendar = (id: string) => request<void>(`/calendars/${id}`, { method: "DELETE" });
+
+export const getMealTimes = () => request<MealTimes>("/meal-times");
+// Saves the regular meal times; the repeating meal events follow from
+// `today` on (earlier days keep the times they had).
+export const saveMealTimes = (mealTimes: MealTimes, today: string) =>
+  request<MealTimes>("/meal-times", { method: "PUT", body: body({ mealTimes, today }) });
 
 export const getEventOccurrences = (from: string, to: string) =>
   request<EventOccurrence[]>(`/events?from=${from}&to=${to}`);
