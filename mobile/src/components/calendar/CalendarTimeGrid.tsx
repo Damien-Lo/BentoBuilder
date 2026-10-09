@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { usePaneDimensions } from "@/src/utils/pane";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 
@@ -53,7 +54,7 @@ export function CalendarTimeGrid({
   onShiftDays,
   onPressDay,
 }: Props) {
-  const { width } = useWindowDimensions();
+  const { width } = usePaneDimensions();
   const pageWidth = width - LABEL_WIDTH;
   const columnWidth = pageWidth / dayCount;
   const verticalRef = useRef<ScrollView>(null);

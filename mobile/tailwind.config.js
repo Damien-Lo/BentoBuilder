@@ -5,6 +5,8 @@ module.exports = {
     "./components/**/*.{js,jsx,ts,tsx}",
     "./src/**/*.{js,jsx,ts,tsx}",
   ],
+  // In a browser NativeWind otherwise throws when the colour scheme is set.
+  darkMode: "class",
   presets: [require("nativewind/preset")],
   theme: {
     extend: {},

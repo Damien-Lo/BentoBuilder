@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePaneDimensions } from "@/src/utils/pane";
 import {
   ActivityIndicator,
   Alert,
@@ -10,7 +11,6 @@ import {
   ScrollView,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -161,7 +161,7 @@ function getMealCalories(meal: Meal): number | null {
 
 export default function RecipesMainPage() {
   const router = useRouter();
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth } = usePaneDimensions();
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);

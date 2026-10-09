@@ -107,6 +107,16 @@ A food you usually have for a meal on certain weekdays (e.g. the same breakfast 
 - **Adding from the calendar returns there** — at once for a planned add, after the confirm steps for an eaten one — and the meal page then asks whether the new food is just for that day, every that-weekday, or chosen days. The question was felt to be clunky; proposed replacement is a "Repeat weekly" button on the just-added row with no pop-up (not done).
 - **Not built:** making a usual straight from the planner's add sheet or from a planner row (it's only offered on the calendar's meal page); changing a usual's food or amount in place (stop it and make a new one); a usual in a slot with no meal event that day shows in the planner but has no calendar block.
 
+## In progress: web app (branch `WebApp`, started Oct 9)
+
+The same codebase running in a browser, with a desktop layout for wide windows. Meant mainly for weekly planning (Calendar, Lists); new sections are still built once and show on both.
+
+- **Running it:** `npx expo start --web --port 8082` in `mobile/` (the phone's dev server on 8081 serves the dev-client manifest at `/`, not a web page). `app.config.js` web is now `bundler: "metro"`, `output: "single"` (it had been falling back to Webpack, which can't resolve the router root). In dev the browser finds the API on the page's own host (`src/config/api.ts`).
+- **Shell** (`src/components/web/WebShell.tsx`, wrapped round the root `Stack`): at 900px and wider (`useWideWeb`) a sidebar lists every section and page — Home; Kitchen (Planner, Recipes & meals, Pantry, Grocery list, Nutrition); Lists (Overview, Tasks, Checklists, Shopping); Calendar (Calendar, Meal times); Coming soon (Gym, Food recommender, Home planning, Documents, greyed out); App (Settings, Developer) — highlighting the one you're in. Narrower than that, and on phones, nothing changes.
+- **Content pane:** the existing phone screens, held to 860px. `CustomTabBar` and `FloatingHomeButton` render nothing in the wide layout. Screens that size by width (calendar grid and week strip, planner cards, pantry and recipes pagers, receipt review) now use `usePaneDimensions()` (`src/utils/pane.tsx`) instead of the window's width.
+- **Checked:** every sidebar destination loads in headless Chrome with no exceptions, against real data. Clicking a sidebar item navigates and moves the highlight; a 600px window gets the phone layout with no sidebar. **Not checked:** anything interactive — clicking through forms, the modals and bottom sheets (they still cover the whole window, not the pane), date/time pickers, and gestures (long-press drag to draw a calendar block, drag to reorder, swipe rows) which have no mouse equivalents yet. Camera scanning has no web stand-in.
+- **Next:** wide layouts for Calendar (a 7-column week) and Lists (list beside the open task); mouse equivalents for the gestures; sign-in before it is ever served anywhere but this machine.
+
 ## Bugs caught in use (logged Sept 27, both fixed)
 
 Reported by the user while using the app.

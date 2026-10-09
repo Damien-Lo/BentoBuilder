@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ServerGate } from "@/src/components/ServerGate";
+import { WebShell } from "@/src/components/web/WebShell";
 
 export const unstable_settings = {
   initialRouteName: "index",
@@ -26,6 +27,7 @@ export default function RootLayout() {
       value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
     >
       <ServerGate>
+      <WebShell>
       <Stack>
         <Stack.Screen
           name="index"
@@ -234,6 +236,7 @@ export default function RootLayout() {
           }}
         />
       </Stack>
+      </WebShell>
       </ServerGate>
 
       <StatusBar style="auto" />

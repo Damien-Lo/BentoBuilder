@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { usePaneDimensions } from "@/src/utils/pane";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
@@ -10,7 +11,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -161,7 +161,7 @@ export default function HomeScreen() {
   // Daily / weekly nutrition card paging
   const [nutritionView, setNutritionView] = useState<0 | 1 | 2>(0);
   const [weekEntries, setWeekEntries] = useState<MealPlanEntry[][]>([]);
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = usePaneDimensions();
 
   // Add-to-plan overlay (plain local state — no navigation involved)
   const [showAdd, setShowAdd] = useState(false);

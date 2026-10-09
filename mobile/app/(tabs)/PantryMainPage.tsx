@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import { usePaneDimensions } from "@/src/utils/pane";
 import {
   BarcodeScannerModal,
   type ScannedProduct,
@@ -18,7 +19,6 @@ import {
   ScrollView,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -182,7 +182,7 @@ function buildIngredientTree(items: Ingredient[]): IngredientTreeNode[] {
 
 export default function PantryMainPage() {
   const router = useRouter();
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth } = usePaneDimensions();
 
   const [addMenuVisible, setAddMenuVisible] = useState(false);
   const [pantryAddMenuVisible, setPantryAddMenuVisible] = useState(false);

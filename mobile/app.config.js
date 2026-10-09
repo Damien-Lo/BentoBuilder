@@ -38,7 +38,9 @@ module.exports = {
       predictiveBackGestureEnabled: false,
     },
     web: {
-      output: "static",
+      // Metro, like the phone builds; one page app (no server rendering).
+      bundler: "metro",
+      output: "single",
       favicon: "./assets/images/favicon.png",
     },
     plugins: [

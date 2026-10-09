@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { usePaneDimensions } from "@/src/utils/pane";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -12,7 +13,6 @@ import {
   ScrollView,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -1259,7 +1259,7 @@ function ReceiptRowSummary({
 
 export default function ReceiptReviewPage() {
   const router = useRouter();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = usePaneDimensions();
   const pagerRef = useRef<FlatList<ReviewRow>>(null);
 
   // The item-list panel's draggable height (see the gesture + JSX further

@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -58,9 +59,12 @@ export function CustomTabBar({
   navigation,
   subOptions = DEFAULT_SUB_OPTIONS,
 }: CustomTabBarProps) {
+  // The desktop layout's sidebar does this job.
+  const wideWeb = useWideWeb();
   const visible     = state.routes;
   const leftRoutes  = visible.slice(0, 2);
   const rightRoutes = visible.slice(2);
+  if (wideWeb) return null;
 
   return (
     <TabBarFrame
@@ -109,6 +113,8 @@ export function CustomTabBar({
 // the same spot as on the tabbed sections — for a section without tabs,
 // e.g. the Calendar.
 export function FloatingHomeButton({ subOptions = DEFAULT_SUB_OPTIONS }: { subOptions?: SubOption[] }) {
+  const wideWeb = useWideWeb();
+  if (wideWeb) return null;
   return <TabBarFrame floating subOptions={subOptions} renderTabs={() => ({ left: null, right: null })} />;
 }
 

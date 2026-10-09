@@ -15,6 +15,11 @@ const devServerHost = Constants.expoConfig?.hostUri?.split(":")[0];
 // iteration without a Render round-trip. Any other build (release/
 // standalone, or the dev client launched with no Metro attached) talks to
 // the deployed server, which is reachable from anywhere.
+//
+// In a browser the page's own host is the dev machine (there is no Metro
+// host to read), so the local server is found there.
+const webHost = typeof window !== "undefined" ? window.location?.hostname : undefined;
+
 export const API_BASE_URL = __DEV__
-  ? `http://${devServerHost || LOCAL_FALLBACK_HOST}:${SERVER_PORT}`
+  ? `http://${devServerHost || webHost || LOCAL_FALLBACK_HOST}:${SERVER_PORT}`
   : DEPLOYED_API_URL;
