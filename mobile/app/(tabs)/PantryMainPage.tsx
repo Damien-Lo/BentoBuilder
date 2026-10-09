@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import { WebPantryScreen } from "@/src/components/pantry/web/WebPantryScreen";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { usePaneDimensions } from "@/src/utils/pane";
 import {
   BarcodeScannerModal,
@@ -181,6 +183,12 @@ function buildIngredientTree(items: Ingredient[]): IngredientTreeNode[] {
 }
 
 export default function PantryMainPage() {
+  // A desktop browser gets the pantry as a table; the phone's is below.
+  const wide = useWideWeb();
+  return wide ? <WebPantryScreen /> : <PhonePantryMainPage />;
+}
+
+function PhonePantryMainPage() {
   const router = useRouter();
   const { width: screenWidth } = usePaneDimensions();
 

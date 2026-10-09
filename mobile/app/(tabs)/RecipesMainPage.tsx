@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { WebRecipesScreen } from "@/src/components/recipes/web/WebRecipesScreen";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { usePaneDimensions } from "@/src/utils/pane";
 import {
   ActivityIndicator,
@@ -160,6 +162,12 @@ function getMealCalories(meal: Meal): number | null {
 }
 
 export default function RecipesMainPage() {
+  // A desktop browser gets a wall of cards; the phone's lists are below.
+  const wide = useWideWeb();
+  return wide ? <WebRecipesScreen /> : <PhoneRecipesMainPage />;
+}
+
+function PhoneRecipesMainPage() {
   const router = useRouter();
   const { width: screenWidth } = usePaneDimensions();
 

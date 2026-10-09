@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { WebHomeScreen } from "@/src/components/web/WebHomeScreen";
+import { useWideWeb } from "@/src/utils/useWideWeb";
+
 const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -105,6 +108,12 @@ function arrange(order: string[]): Section[] {
 }
 
 export default function HomeScreen() {
+  // A desktop browser gets a dashboard; the phone's home is below.
+  const wide = useWideWeb();
+  return wide ? <WebHomeScreen /> : <PhoneHomeScreen />;
+}
+
+function PhoneHomeScreen() {
   const router = useRouter();
   const [sections, setSections] = useState(SECTIONS);
   // Reorder mode: the cards show arrows instead of opening.

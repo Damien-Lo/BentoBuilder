@@ -57,6 +57,8 @@ import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { DishQuantityStepper } from "@/src/components/planner/DishQuantityStepper";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
+import { WebWeekPlanScreen } from "@/src/components/planner/web/WebWeekPlanScreen";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { NutritionSummaryCard, type NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
 import { NutritionDetailOverlay, type NutritionDetailPage } from "@/src/components/planner/NutritionDetailOverlay";
 import {
@@ -114,12 +116,24 @@ function buildDates(): string[] {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function HomeScreen() {
+export default function PlannerScreen() {
+  // A desktop browser gets the week laid out; adding food there still opens
+  // this screen's own add sheet (`add`), so that case stays on the phone
+  // planner below.
+  const wide = useWideWeb();
+  const { add } = useLocalSearchParams<{ add?: string }>();
+  return wide && !add ? <WebWeekPlanScreen /> : <PhonePlannerScreen />;
+}
+
+function PhonePlannerScreen() {
   const router = useRouter();
   const dates = useMemo(buildDates, []);
   const today = todayStr();
 
   const [selectedDate, setSelectedDate] = useState(today);
+  // (For callbacks that fire later than the render they were made in.)
+  const selectedDateRef = useRef(selectedDate);
+  selectedDateRef.current = selectedDate;
   // Opened from a meal in the calendar: on that day, and optionally straight
   // into adding food to a slot (`add`). `t` just makes a repeat request
   // count as new.
@@ -133,6 +147,15 @@ export default function HomeScreen() {
   // The add sheet now showing was opened by the calendar's "Add food":
   // cancelling it goes back there, not to the planner underneath.
   const addForCalendar = useRef(false);
+  // Where an add that was started from elsewhere ends up. The calendar is a
+  // page back. The desktop week plan is this same route without `add`, and
+  // going "back" from a tab would leave the Kitchen altogether, so it is
+  // re-opened on the week that was being planned.
+  const leaveAddFlow = () => {
+    if (fromParam === "web") router.replace({ pathname: "/planner", params: { date: selectedDateRef.current } });
+    else router.back();
+  };
+
   // An entry the calendar's "Add food" added as already eaten: go back to
   // the calendar once its confirm (pantry, rating) has finished.
   const returnAfterConfirm = useRef<string | null>(null);
@@ -273,7 +296,7 @@ export default function HomeScreen() {
       setEntries(prev => prev.map(e => (e._id === updated._id ? updated : e)));
       if (returnAfterConfirm.current === updated._id) {
         returnAfterConfirm.current = null;
-        router.back();
+        leaveAddFlow();
       }
     },
   });
@@ -594,7 +617,7 @@ export default function HomeScreen() {
     if (addForCalendar.current) {
       addForCalendar.current = false;
       if (wantsConfirmed) returnAfterConfirm.current = entry._id;
-      else setTimeout(() => router.back(), 0);
+      else setTimeout(() => leaveAddFlow(), 0);
     }
     // rateFirst: true — adding something already-confirmed is exactly the
     // moment a rating is easiest to forget (there's no separate swipe
@@ -1991,7 +2014,7 @@ export default function HomeScreen() {
                 setShowAdd(false);
                 if (addForCalendar.current) {
                   addForCalendar.current = false;
-                  router.back();
+                  leaveAddFlow();
                 }
               }}
               hitSlop={10}

@@ -14,6 +14,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
+import { WebNutritionScreen } from "@/src/components/health/web/WebNutritionScreen";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { SettingsNumericInput, SettingsRow, SettingsSectionHeader } from "@/src/components/forms";
 import { getMealPlanForDate, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
@@ -37,6 +39,12 @@ const MORE_ROWS: MoreRow[] = [
 ];
 
 export default function NutritionScreen() {
+  // A desktop browser gets the review page; the phone's tab is below.
+  const wide = useWideWeb();
+  return wide ? <WebNutritionScreen /> : <PhoneNutritionScreen />;
+}
+
+function PhoneNutritionScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);

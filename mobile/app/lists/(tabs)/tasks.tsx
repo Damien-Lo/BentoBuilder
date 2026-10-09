@@ -5,6 +5,8 @@ import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DraggableListRow } from "@/src/components/todo/DraggableListRow";
+import { WebTasksScreen } from "@/src/components/todo/web/WebTasksScreen";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { openListOptions } from "@/src/components/todo/listActions";
 import { applyDrop, computeDrop, rowKey, type DragRow, type DropTarget, type RowLayout } from "@/src/components/todo/listDrag";
 import { TextPromptModal } from "@/src/components/todo/TextPromptModal";
@@ -40,6 +42,12 @@ function initials(name: string): string {
 // The Tasks tab — smart lists, then your own task lists and groups, with
 // "New List" / new group at the bottom (modelled on Microsoft To Do).
 export default function TasksTabScreen() {
+  // A desktop browser gets its own layout; the phone screen is below.
+  const wide = useWideWeb();
+  return wide ? <WebTasksScreen /> : <PhoneTasksTabScreen />;
+}
+
+function PhoneTasksTabScreen() {
   const router = useRouter();
   const theme = useTodoTheme();
   const accent = listAccent("blue", theme);

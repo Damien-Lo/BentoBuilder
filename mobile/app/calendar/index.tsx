@@ -5,6 +5,8 @@ import { Alert, Modal, Pressable, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CalendarTimeGrid } from "@/src/components/calendar/CalendarTimeGrid";
+import { WebCalendarScreen } from "@/src/components/calendar/web/WebCalendarScreen";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { FloatingHomeButton, HOME_BAR_HEIGHT } from "@/src/components/CustomTabBar";
 import { AgendaView, MonthView, WeekStrip } from "@/src/components/calendar/CalendarViews";
 import {
@@ -66,6 +68,12 @@ const LOAD_RETRY_MS = 2500;
 // pulls down into the month, Day / 3-Day time grids (drag on empty time to
 // create an event), Month and Agenda views, and a drawer of calendars.
 export default function CalendarScreen() {
+  // A desktop browser gets its own layout; the phone screen is below.
+  const wide = useWideWeb();
+  return wide ? <WebCalendarScreen /> : <PhoneCalendarScreen />;
+}
+
+function PhoneCalendarScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const today = todayStr();

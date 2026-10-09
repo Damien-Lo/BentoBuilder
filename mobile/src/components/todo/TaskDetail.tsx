@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -70,6 +70,9 @@ export interface TaskDetailProps {
   canGoBack?: boolean;
   // Bump to reload (the page does when the overlay closes).
   refreshKey?: number;
+  // Something about the task (or its subtasks) was saved — for a list
+  // shown beside it, as on the desktop layout, to refresh.
+  onChanged?: () => void;
 }
 
 // One task (or subtask) in full: status, priority, progress, due date,
@@ -84,6 +87,7 @@ export function TaskDetail({
   onClose,
   canGoBack = false,
   refreshKey = 0,
+  onChanged,
 }: TaskDetailProps) {
   const theme = useTodoTheme();
   const router = useRouter();
@@ -111,9 +115,16 @@ export function TaskDetail({
   const fail = (error: unknown) =>
     Alert.alert("Something went wrong", error instanceof Error ? error.message : "Please try again.");
 
+  const loadedOnce = useRef(false);
   const load = useCallback(() => {
     getTodoTask(id)
-      .then(setTask)
+      .then((loaded) => {
+        setTask(loaded);
+        // Every save ends in a reload, so a reload after the first means
+        // something changed.
+        if (loadedOnce.current) onChanged?.();
+        loadedOnce.current = true;
+      })
       .catch((error) =>
         Alert.alert("Couldn't load task", error instanceof Error ? error.message : "Something went wrong.", [
           { text: "OK", onPress: onExit },

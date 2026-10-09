@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ServerGate } from "@/src/components/ServerGate";
+import { WebAlertHost } from "@/src/components/web/WebAlert";
 import { WebShell } from "@/src/components/web/WebShell";
 
 export const unstable_settings = {
@@ -163,6 +164,8 @@ export default function RootLayout() {
         />
 
         {/* Review a scanned receipt before its items are added to the pantry */}
+        {/* Desktop only: where scanned receipts will be reviewed (planned) */}
+        <Stack.Screen name="receipts/index" options={{ headerShown: false }} />
         <Stack.Screen
           name="receipts/review"
           options={{
@@ -239,6 +242,7 @@ export default function RootLayout() {
       </WebShell>
       </ServerGate>
 
+      <WebAlertHost />
       <StatusBar style="auto" />
     </ThemeProvider>
     </GestureHandlerRootView>
