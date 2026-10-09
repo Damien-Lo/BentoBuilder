@@ -10,7 +10,8 @@ import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 // shows the same food.
 export interface MealFood {
   // Each thing in the slot, in the order it was added.
-  items: { id: string; name: string; eaten: boolean; kcal: number }[];
+  // `usual`: the usual meal that filled it in, if one did.
+  items: { id: string; name: string; eaten: boolean; kcal: number; usual: string | null }[];
   // "Chicken rice, Side salad"
   summary: string;
   nutrition: NutritionTotals;
@@ -39,6 +40,7 @@ export function buildMealFood(entries: MealPlanEntry[], conversions: CustomUnitC
       name: entryName(entry),
       eaten: entry.status === "confirmed",
       kcal: Math.round(computeDayNutrition([entry], conversions).calories ?? 0),
+      usual: entry.usual ?? null,
     }));
     out.set(key, {
       items,
@@ -53,7 +55,8 @@ export function buildMealFood(entries: MealPlanEntry[], conversions: CustomUnitC
 // The line under a meal event's title: "Chicken rice, Side salad · 650 kcal".
 export function mealLine(event: Pick<EventOccurrence, "meal">): string {
   const food = event.meal?.food;
-  if (!food) return "Nothing planned";
+  // Further ahead than usual meals are filled in, say what's coming.
+  if (!food) return event.meal?.usually ? `Usually: ${event.meal.usually}` : "Nothing planned";
   const kcal = Math.round(food.nutrition.calories ?? 0);
   return kcal > 0 ? `${food.summary} · ${kcal} kcal` : food.summary;
 }

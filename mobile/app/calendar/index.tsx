@@ -25,6 +25,7 @@ import {
 } from "@/src/services/calendarApi";
 import { buildMealFood, mealKey, type MealFood } from "@/src/components/calendar/mealFood";
 import { getMealPlanRange } from "@/src/services/mealPlanApi";
+import { getUsualMeals, usualAppliesOn, usualName, type UsualMeal } from "@/src/services/usualMealApi";
 import { loadSettings } from "@/src/services/settingsService";
 import {
   getCalendarTasks,
@@ -77,6 +78,7 @@ export default function CalendarScreen() {
   const [tasks, setTasks] = useState<CalendarTaskFeed>({ deadlines: [], blocks: [] });
   // The planner's food by day and meal, shown on the Meals calendar's events.
   const [mealFood, setMealFood] = useState<Map<string, MealFood>>(new Map());
+  const [usualMeals, setUsualMeals] = useState<UsualMeal[]>([]);
   // Scheduling mode: pick a task from the strip, drag on the day to block
   // time for it. `schedule=<taskId>` in the URL opens straight into it
   // locked to that one task (a task's Do date row).
@@ -127,6 +129,7 @@ export default function CalendarScreen() {
       ])
         .then(([entries, settings]) => setMealFood(buildMealFood(entries, settings.unitConversions)))
         .catch(() => {});
+      getUsualMeals().then(setUsualMeals).catch(() => {});
     } catch {
       // Keep whatever was showing.
       if (attempt < LOAD_RETRIES) setTimeout(() => void loadEvents(center, attempt + 1), LOAD_RETRY_MS);
@@ -171,11 +174,22 @@ export default function CalendarScreen() {
           ...tasks.blocks.map((b) => taskBlockToOccurrence(b, tasksCalendar._id)),
         ]
       : [];
-    const withFood = events.map((e) =>
-      e.mealSlot ? { ...e, meal: { food: mealFood.get(mealKey(e.occurrenceDate, e.mealSlot)) ?? null } } : e,
-    );
+    const withFood = events.map((e) => {
+      if (!e.mealSlot) return e;
+      const food = mealFood.get(mealKey(e.occurrenceDate, e.mealSlot)) ?? null;
+      // Usual meals are only filled in a couple of weeks ahead; beyond
+      // that, name what's due instead of "Nothing planned".
+      const usually =
+        !food && e.occurrenceDate > today
+          ? usualMeals
+              .filter((u) => u.slot === e.mealSlot && usualAppliesOn(u, e.occurrenceDate))
+              .map(usualName)
+              .join(", ")
+          : "";
+      return { ...e, meal: { food, usually: usually || undefined } };
+    });
     return [...taskOccurrences, ...withFood].filter((e) => calendarsById.get(e.calendar)?.visible ?? true);
-  }, [events, tasks, mealFood, calendars, calendarsById, today]);
+  }, [events, tasks, mealFood, usualMeals, calendars, calendarsById, today]);
   const eventDays = useMemo(() => {
     const days = new Set<string>();
     for (const e of visibleEvents) {

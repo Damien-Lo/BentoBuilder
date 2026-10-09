@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -16,6 +17,7 @@ import {
   shortDateLabel,
 } from "@/src/components/calendar/calendarUtils";
 import { buildMealFood, mealKey, type MealFood } from "@/src/components/calendar/mealFood";
+import { RepeatDaysSheet } from "@/src/components/calendar/RepeatDaysSheet";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { showActions } from "@/src/components/todo/theme";
 import {
@@ -37,8 +39,9 @@ import {
 import { getPantryItems } from "@/src/services/pantryApi";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
+import { makeUsualFromEntry, stopUsualMeal } from "@/src/services/usualMealApi";
 import type { PantryItem } from "@/src/types/pantry";
-import { hexToRgba } from "@/src/utils/mealPlan";
+import { hexToRgba, parseLocalDate } from "@/src/utils/mealPlan";
 
 // One event, as Outlook's event page shows it: the summary card (title,
 // date, time, repeat), then location / notes / reminder, then delete. `date`
@@ -55,6 +58,11 @@ export default function CalendarEventScreen() {
   // The planner entries behind `food`, and what marking one as eaten works
   // from (what's in the pantry, and the recipes and ingredients it uses).
   const [slotEntries, setSlotEntries] = useState<MealPlanEntry[]>([]);
+  // The food being made a usual: picking which days of the week.
+  const [repeating, setRepeating] = useState<MealFood["items"][number] | null>(null);
+  // Set on the way out to "Add food": what the meal held before, so that
+  // on coming back the new food can be offered as a usual.
+  const beforeAdd = useRef<Set<string> | null>(null);
   const [kitchen, setKitchen] = useState<{
     recipes: Recipe[];
     ingredients: Ingredient[];
@@ -68,10 +76,34 @@ export default function CalendarEventScreen() {
       const [entries, settings] = await Promise.all([getMealPlanForDate(day), loadSettings()]);
       if (cancelled()) return;
       setSlotEntries(entries.filter((e) => e.slot === slot));
-      setFood(buildMealFood(entries, settings.unitConversions).get(mealKey(day, slot)) ?? null);
+      const loaded = buildMealFood(entries, settings.unitConversions).get(mealKey(day, slot)) ?? null;
+      setFood(loaded);
+      // Just back from adding something: this day only, or every week?
+      const before = beforeAdd.current;
+      beforeAdd.current = null;
+      const added = before && loaded?.items.find((item) => !before.has(item.id) && !item.usual);
+      if (added) askHowOften(added, day, slot);
     } catch {
       if (!cancelled()) setFood(null);
     }
+  }
+
+  function askHowOften(item: MealFood["items"][number], day: string, slot: MealType) {
+    const weekday = parseLocalDate(day).getDay();
+    const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][weekday];
+    Alert.alert(`${item.name} added`, "Have it just this day, or make it one of your usual meals?", [
+      { text: "Just this day", style: "cancel" },
+      {
+        text: `Every ${dayName}`,
+        onPress: () =>
+          void makeUsualFromEntry(item.id, [weekday]).then(
+            () => loadFood(day, slot),
+            (error) => Alert.alert("Couldn't save", error instanceof Error ? error.message : "Something went wrong."),
+          ),
+      },
+      // (After the alert has gone: iOS can't present over it.)
+      { text: "Choose days…", onPress: () => setTimeout(() => setRepeating(item), 350) },
+    ]);
   }
 
   // Marking food as eaten runs the planner's own confirm, here on this page:
@@ -122,6 +154,8 @@ export default function CalendarEventScreen() {
       return () => {
         cancelled = true;
       };
+      // (loadFood only uses what it's passed, refs and setters.)
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id, date, router]),
   );
 
@@ -151,10 +185,46 @@ export default function CalendarEventScreen() {
   // Adding food hands over to the planner's add sheet for this day and
   // meal; coming back here reloads the food.
   function openPlanner(action?: { add?: MealType }) {
+    if (action?.add) beforeAdd.current = new Set(slotEntries.map((e) => e._id));
     router.navigate({
       pathname: "/planner",
       params: { date: occurrence, from: "calendar", t: String(Date.now()), ...action },
     });
+  }
+
+  function markNotEaten(entryId: string) {
+    const slot = event?.mealSlot;
+    // Puts back what it took from the pantry.
+    unconfirmMealPlanEntry(entryId).then(
+      () => slot && loadFood(occurrence, slot),
+      (error) => Alert.alert("Couldn't update", error instanceof Error ? error.message : "Something went wrong."),
+    );
+  }
+
+  // The swipe-to-delete button. A usual meal asks how much to remove.
+  function confirmRemove(item: MealFood["items"][number]) {
+    const slot = event?.mealSlot;
+    if (!slot) return;
+    const reload = () => loadFood(occurrence, slot);
+    const fail = (error: unknown) =>
+      Alert.alert("Couldn't remove", error instanceof Error ? error.message : "Something went wrong.");
+    if (item.usual) {
+      const usualId = item.usual;
+      Alert.alert(`Remove ${item.name}?`, "This is one of your usual meals.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Just this day", onPress: () => void deleteMealPlanEntry(item.id).then(reload, fail) },
+        {
+          text: "This day and every one after",
+          style: "destructive",
+          onPress: () => void stopUsualMeal(usualId, occurrence).then(reload, fail),
+        },
+      ]);
+      return;
+    }
+    Alert.alert("Remove item", "Remove this item from the plan?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: () => void deleteMealPlanEntry(item.id).then(reload, fail) },
+    ]);
   }
 
   function foodActions(item: MealFood["items"][number]) {
@@ -167,15 +237,32 @@ export default function CalendarEventScreen() {
       item.eaten
         ? {
             label: "Mark as not eaten",
-            // Puts back what it took from the pantry.
-            onPress: () => void unconfirmMealPlanEntry(item.id).then(reload, fail),
+            onPress: () => markNotEaten(item.id),
           }
         : { label: "Mark as eaten", onPress: () => markEaten(item.id) },
-      {
-        label: "Remove from this meal",
-        destructive: true,
-        onPress: () => void deleteMealPlanEntry(item.id).then(reload, fail),
-      },
+      ...(item.usual
+        ? [
+            {
+              // The usual carries on; this day is skipped.
+              label: "Remove just this day",
+              destructive: true,
+              onPress: () => void deleteMealPlanEntry(item.id).then(reload, fail),
+            },
+            {
+              label: "Stop having this from this day on",
+              destructive: true,
+              onPress: () => void stopUsualMeal(item.usual!, occurrence).then(reload, fail),
+            },
+          ]
+        : [
+            // (After the menu has gone: iOS can't present over it.)
+            { label: "Have this every week…", onPress: () => setTimeout(() => setRepeating(item), 350) },
+            {
+              label: "Remove from this meal",
+              destructive: true,
+              onPress: () => void deleteMealPlanEntry(item.id).then(reload, fail),
+            },
+          ]),
     ]);
   }
 
@@ -317,37 +404,21 @@ export default function CalendarEventScreen() {
               <Text className="px-4 pb-3 pt-1 text-sm text-slate-500">Nothing planned for this meal yet.</Text>
             ) : (
               <>
-                {food.items.map((item) => (
-                  <View key={item.id} className="flex-row items-center border-t border-slate-100 pl-2 pr-4">
-                    {/* The circle marks it eaten (or not); the row has the rest. */}
-                    <Pressable
-                      hitSlop={6}
-                      onPress={() =>
-                        item.eaten
-                          ? void unconfirmMealPlanEntry(item.id).then(
-                              () => event.mealSlot && loadFood(occurrence, event.mealSlot),
-                              () => Alert.alert("Couldn't update", "Something went wrong."),
-                            )
-                          : markEaten(item.id)
-                      }
-                      accessibilityLabel={item.eaten ? `Mark ${item.name} as not eaten` : `Mark ${item.name} as eaten`}
-                      className="h-11 w-10 items-center justify-center active:opacity-60"
-                    >
-                      <Ionicons
-                        name={item.eaten ? "checkmark-circle" : "ellipse-outline"}
-                        size={22}
-                        color={item.eaten ? "#16A34A" : "#94A3B8"}
-                      />
-                    </Pressable>
-                    <Pressable onPress={() => foodActions(item)} className="flex-1 flex-row items-center py-3 active:opacity-60">
-                      <Text className="ml-1 flex-1 text-base text-slate-900" numberOfLines={2}>
-                        {item.name}
-                      </Text>
-                      <Text className="text-sm text-slate-500">{item.kcal} kcal</Text>
-                      <Ionicons name="ellipsis-horizontal" size={16} color="#CBD5E1" style={{ marginLeft: 8 }} />
-                    </Pressable>
-                  </View>
-                ))}
+                {food.items.map((item) => {
+                  const entry = slotEntries.find((e) => e._id === item.id);
+                  return (
+                    <FoodRow
+                      key={item.id}
+                      item={item}
+                      // A planned recipe or ingredient can be rated as it's confirmed.
+                      canRate={!item.eaten && !!entry && !!(entry.recipe || entry.ingredient)}
+                      onToggleEaten={() => (item.eaten ? markNotEaten(item.id) : markEaten(item.id))}
+                      onRate={() => entry && confirmEntry.openRateAndConfirm(entry)}
+                      onDelete={() => confirmRemove(item)}
+                      onMenu={() => foodActions(item)}
+                    />
+                  );
+                })}
                 <View className="flex-row border-t border-slate-100 px-4 py-3">
                   <Macro label="Protein" value={food.nutrition.protein} />
                   <Macro label="Carbs" value={food.nutrition.carbs} />
@@ -396,6 +467,26 @@ export default function CalendarEventScreen() {
       </ScrollView>
 
       {confirmEntry.modals}
+
+      <RepeatDaysSheet
+        visible={!!repeating}
+        title={`Have ${repeating?.name ?? "this"} every week`}
+        subtitle={`It will be added to your planner as planned ${event.mealSlot ?? "meal"} on these days, two weeks ahead.`}
+        initialDays={[parseLocalDate(occurrence).getDay()]}
+        weekStartDay={kitchen?.settings.weekStartDay ?? 1}
+        confirmLabel="Add as usual"
+        onCancel={() => setRepeating(null)}
+        onConfirm={(days) => {
+          const item = repeating;
+          setRepeating(null);
+          if (!item || !event.mealSlot) return;
+          const slot = event.mealSlot;
+          makeUsualFromEntry(item.id, days).then(
+            () => loadFood(occurrence, slot),
+            (error) => Alert.alert("Couldn't save", error instanceof Error ? error.message : "Something went wrong."),
+          );
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -414,6 +505,95 @@ function Macro({ label, value }: { label: string; value: number | null | undefin
     <View className="flex-1 items-center">
       <Text className="text-sm font-semibold text-slate-900">{Math.round(value ?? 0)} g</Text>
       <Text className="text-xs text-slate-500">{label}</Text>
+    </View>
+  );
+}
+
+// One food in a meal, swiped like a row in the planner: right to reveal
+// delete, left to reveal confirm (with "Rate" for a planned recipe or
+// ingredient) or unconfirm. The circle and the row's menu do the same jobs
+// by tap.
+function FoodRow({
+  item,
+  canRate,
+  onToggleEaten,
+  onRate,
+  onDelete,
+  onMenu,
+}: {
+  item: MealFood["items"][number];
+  canRate: boolean;
+  onToggleEaten: () => void;
+  onRate: () => void;
+  onDelete: () => void;
+  onMenu: () => void;
+}) {
+  const swipe = useRef<SwipeableMethods | null>(null);
+  const then = (action: () => void) => () => {
+    swipe.current?.close();
+    action();
+  };
+
+  return (
+    <View className="border-t border-slate-100">
+      <ReanimatedSwipeable
+        ref={swipe}
+        friction={2}
+        leftThreshold={40}
+        rightThreshold={40}
+        renderLeftActions={() => (
+          <Pressable
+            className="w-20 items-center justify-center bg-red-500 active:bg-red-600"
+            onPress={then(onDelete)}
+            accessibilityLabel={`Remove ${item.name}`}
+          >
+            <Ionicons name="trash-outline" size={20} color="white" />
+          </Pressable>
+        )}
+        renderRightActions={() => (
+          <View className="flex-row">
+            {canRate && (
+              <Pressable className="w-20 items-center justify-center bg-blue-600 active:opacity-80" onPress={then(onRate)}>
+                <Ionicons name="star-outline" size={20} color="white" />
+                <Text className="mt-1 text-[10px] font-semibold text-white">Rate</Text>
+              </Pressable>
+            )}
+            <Pressable
+              className="w-20 items-center justify-center active:opacity-80"
+              style={{ backgroundColor: item.eaten ? "#94A3B8" : "#10B981" }}
+              onPress={then(onToggleEaten)}
+            >
+              <Ionicons name={item.eaten ? "time-outline" : "checkmark-circle-outline"} size={20} color="white" />
+              <Text className="mt-1 text-[10px] font-semibold text-white">{item.eaten ? "Unconfirm" : "Confirm"}</Text>
+            </Pressable>
+          </View>
+        )}
+      >
+        <View className="flex-row items-center bg-white pl-2 pr-4">
+          <Pressable
+            hitSlop={6}
+            onPress={onToggleEaten}
+            accessibilityLabel={item.eaten ? `Mark ${item.name} as not eaten` : `Mark ${item.name} as eaten`}
+            className="h-11 w-10 items-center justify-center active:opacity-60"
+          >
+            <Ionicons
+              name={item.eaten ? "checkmark-circle" : "ellipse-outline"}
+              size={22}
+              color={item.eaten ? "#16A34A" : "#94A3B8"}
+            />
+          </Pressable>
+          <Pressable onPress={onMenu} className="flex-1 flex-row items-center py-3 active:opacity-60">
+            <Text className="ml-1 flex-1 text-base text-slate-900" numberOfLines={2}>
+              {item.name}
+              {/* One of your usual meals. */}
+              {item.usual ? "  " : ""}
+              {item.usual && <Ionicons name="repeat" size={14} color="#2563EB" />}
+            </Text>
+            <Text className="text-sm text-slate-500">{item.kcal} kcal</Text>
+            <Ionicons name="ellipsis-horizontal" size={16} color="#CBD5E1" style={{ marginLeft: 8 }} />
+          </Pressable>
+        </View>
+      </ReanimatedSwipeable>
     </View>
   );
 }

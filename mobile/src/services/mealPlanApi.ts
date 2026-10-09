@@ -52,6 +52,9 @@ export interface RestaurantDishSelection {
 
 export interface MealPlanEntry {
   _id: string;
+  // The usual meal that filled this in, if one did (see usualMealApi).
+  // Removing such an entry skips that usual for the day.
+  usual?: string | null;
   date: string; // "YYYY-MM-DD"
   slot: MealSlot;
   status: MealPlanEntryStatus;
@@ -113,15 +116,22 @@ async function parseResponse<T>(res: Response): Promise<T> {
   return json as T;
 }
 
+// The phone's own date, so the server fills usual meals in from the right
+// "today" whatever timezone it runs in.
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 // Every entry from `from` to `to` (inclusive), for the calendar's meal events.
 export async function getMealPlanRange(from: string, to: string): Promise<MealPlanEntry[]> {
-  const res = await fetch(`${API_BASE_URL}/api/meal-plan/range?from=${from}&to=${to}`);
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/range?from=${from}&to=${to}&today=${localToday()}`);
   const result = await parseResponse<{ success: boolean; data: MealPlanEntry[] }>(res);
   return Array.isArray(result.data) ? result.data : [];
 }
 
 export async function getMealPlanForDate(date: string): Promise<MealPlanEntry[]> {
-  const res = await fetch(`${API_BASE_URL}/api/meal-plan?date=${encodeURIComponent(date)}`);
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan?date=${encodeURIComponent(date)}&today=${localToday()}`);
   const result = await parseResponse<{ success: boolean; data: MealPlanEntry[] }>(res);
   return Array.isArray(result.data) ? result.data : [];
 }

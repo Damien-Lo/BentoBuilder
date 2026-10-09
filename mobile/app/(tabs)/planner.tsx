@@ -133,6 +133,9 @@ export default function HomeScreen() {
   // The add sheet now showing was opened by the calendar's "Add food":
   // cancelling it goes back there, not to the planner underneath.
   const addForCalendar = useRef(false);
+  // An entry the calendar's "Add food" added as already eaten: go back to
+  // the calendar once its confirm (pantry, rating) has finished.
+  const returnAfterConfirm = useRef<string | null>(null);
   useEffect(() => {
     if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return;
     setSelectedDate(dateParam);
@@ -266,7 +269,13 @@ export default function HomeScreen() {
     settings: appSettings,
     ready: kitchenReady && !!appSettings,
     onStart: entry => swipeableRefs.get(entry._id)?.current?.close(),
-    onConfirmed: updated => setEntries(prev => prev.map(e => (e._id === updated._id ? updated : e))),
+    onConfirmed: updated => {
+      setEntries(prev => prev.map(e => (e._id === updated._id ? updated : e)));
+      if (returnAfterConfirm.current === updated._id) {
+        returnAfterConfirm.current = null;
+        router.back();
+      }
+    },
   });
 
   // Load available meals/recipes/ingredients for the add overlay — on every
@@ -580,6 +589,13 @@ export default function HomeScreen() {
     const wantsConfirmed = input.status === "confirmed";
     const entry = await createMealPlanEntry({ ...input, status: "planned" });
     setEntries(prev => [...prev, entry]);
+    // Added from the calendar's "Add food": that's where to end up — at
+    // once for a plan, or after the confirm steps for something eaten.
+    if (addForCalendar.current) {
+      addForCalendar.current = false;
+      if (wantsConfirmed) returnAfterConfirm.current = entry._id;
+      else setTimeout(() => router.back(), 0);
+    }
     // rateFirst: true — adding something already-confirmed is exactly the
     // moment a rating is easiest to forget (there's no separate swipe
     // gesture prompting for it), so ask here, after any piece-size
@@ -1194,7 +1210,12 @@ export default function HomeScreen() {
             />
           )}
           <View className="flex-1">
-            <Text className="font-semibold text-slate-900" numberOfLines={1}>{title}</Text>
+            <Text className="font-semibold text-slate-900" numberOfLines={1}>
+              {title}
+              {/* Filled in by one of your usual meals. */}
+              {entry.usual ? "  " : ""}
+              {entry.usual && <Ionicons name="repeat" size={13} color="#2563EB" />}
+            </Text>
             <Text className="mt-0.5 text-xs text-slate-400">
               {subtitle}{entry.status === "planned" ? " · Planned" : ""}
             </Text>

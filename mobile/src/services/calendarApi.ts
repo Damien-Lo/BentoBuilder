@@ -84,7 +84,8 @@ export interface EventOccurrence extends CalendarEvent {
   };
   // Set by the calendar screen on a Meals event: that day's food for its
   // meal type from the planner (`food` is null when nothing's planned).
-  meal?: { food: import("@/src/components/calendar/mealFood").MealFood | null };
+  // `usually`: with no food yet, the usual meals due that day.
+  meal?: { food: import("@/src/components/calendar/mealFood").MealFood | null; usually?: string };
 }
 
 export type EventInput = Omit<CalendarEvent, "_id" | "excludedDates">;
