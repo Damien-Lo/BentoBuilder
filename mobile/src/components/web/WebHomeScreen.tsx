@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
-import { addDays, calendarColor, minutesLabel, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
+import { addDays, calendarColor, minutesLabel, nowMinutes as currentMinutes, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
 import { entryName, mealLine } from "@/src/components/calendar/mealFood";
 import { useCalendarData } from "@/src/components/calendar/useCalendarData";
 import { friendlyDate, longToday } from "@/src/components/todo/theme";
@@ -15,6 +15,7 @@ import type { PantryItem } from "@/src/types/pantry";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
 
 import { WEB_COMING_SOON } from "./nav";
+import { themeColor } from "./theme";
 import { BarChart, Button, Card, CardLink, Empty, GoalBar, Planned, Row, WEB, WebPage } from "./ui";
 
 // Home in a desktop browser: everything about today and this week on one
@@ -62,6 +63,20 @@ export function WebHomeScreen() {
   const todayEvents = calendar.visibleEvents
     .filter((e) => today >= e.occurrenceDate && today <= e.occurrenceEndDate)
     .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.startMinutes - b.startMinutes);
+  // The time, kept current, for the line on today's schedule.
+  const [nowMinutes, setNowMinutes] = useState(currentMinutes);
+  useEffect(() => {
+    const timer = setInterval(() => setNowMinutes(currentMinutes()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  // The timed event on now (the first, if they overlap), or else the one
+  // the line sits just above — the next to start, or the end of the list.
+  const nowAt = (() => {
+    const during = todayEvents.findIndex((e) => !e.allDay && e.startMinutes <= nowMinutes && nowMinutes < e.endMinutes);
+    if (during >= 0) return { during, before: -1 };
+    const next = todayEvents.findIndex((e) => !e.allDay && e.startMinutes > nowMinutes);
+    return { during: -1, before: next >= 0 ? next : todayEvents.length };
+  })();
 
   const weekBars = week.map((day) => {
     const dayEntries = entries.filter((e) => e.date === day);
@@ -113,11 +128,17 @@ export function WebHomeScreen() {
             <Empty icon="calendar-clear-outline" text="Nothing scheduled today" />
           ) : (
             <View style={{ paddingBottom: 8 }}>
-              {todayEvents.map((event) => {
+              {todayEvents.map((event, index) => {
                 const color = calendarColor(calendar.calendarsById.get(event.calendar));
+                // Where the day has got to: a line across the event that's
+                // on now (as far down it as the event is through), or in
+                // the gap before the next one.
+                const during = index === nowAt.during;
+                const through = during ? (nowMinutes - event.startMinutes) / Math.max(1, event.endMinutes - event.startMinutes) : 0;
                 return (
+                  <View key={`${event._id}-${event.occurrenceDate}`}>
+                  {index === nowAt.before && <NowLine />}
                   <Pressable
-                    key={`${event._id}-${event.occurrenceDate}`}
                     onPress={() =>
                       event.task
                         ? router.push({ pathname: "/lists/task/[id]", params: { id: event.task.depth > 0 ? event.task.rootId : event.task.id } })
@@ -141,9 +162,16 @@ export function WebHomeScreen() {
                         </Text>
                       )}
                     </View>
+                    {during && (
+                      <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: `${Math.round(through * 100)}%` }}>
+                        <NowLine />
+                      </View>
+                    )}
                   </Pressable>
+                  </View>
                 );
               })}
+              {nowAt.before === todayEvents.length && <NowLine />}
             </View>
           )}
         </Card>
@@ -260,6 +288,18 @@ function Mini({ label, value, tone }: { label: string; value: number; tone?: str
     <View>
       <Text style={{ fontSize: 22, fontWeight: "700", color: tone ?? WEB.text }}>{value}</Text>
       <Text style={{ fontSize: 11, color: WEB.muted }}>{label}</Text>
+    </View>
+  );
+}
+
+// "Now" on today's schedule: a light red line that takes up no room.
+const NOW_RED = themeColor("248,113,113", "248,113,113", 0.75);
+
+function NowLine() {
+  return (
+    <View pointerEvents="none" style={{ height: 0, zIndex: 2 }}>
+      <View style={{ position: "absolute", left: 12, right: 14, top: -1, height: 2, borderRadius: 1, backgroundColor: NOW_RED }} />
+      <View style={{ position: "absolute", left: 9, top: -4, width: 8, height: 8, borderRadius: 4, backgroundColor: NOW_RED }} />
     </View>
   );
 }

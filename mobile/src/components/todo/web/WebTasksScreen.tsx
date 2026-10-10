@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
@@ -267,6 +267,17 @@ export function WebTasksScreen() {
     setSelected(id);
     setDetail([]);
   }
+
+  // `list=<id>` (and `task=<id>`) in the address open straight to that list
+  // with that task's panel showing — where the Overview's links lead.
+  const { list: listParam, task: taskParam } = useLocalSearchParams<{ list?: string; task?: string }>();
+  useEffect(() => {
+    if (!listParam) return;
+    setSelected(listParam);
+    setDetail(taskParam ? [taskParam] : []);
+    router.setParams({ list: undefined, task: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listParam, taskParam]);
 
   function patchLocal(taskId: string, changes: Partial<TodoTask>) {
     setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, ...changes } : t)));

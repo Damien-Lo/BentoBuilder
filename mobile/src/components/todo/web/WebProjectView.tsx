@@ -39,7 +39,7 @@ const BOOKED = themeColor("15,23,42", "226,232,240");
 type Hover = { hovered?: boolean };
 type Tab = "overview" | "plan" | "timeline";
 
-const PROJECT_STATUS_META: Record<ProjectStatus, { label: string; fg: string; bg: string }> = {
+export const PROJECT_STATUS_META: Record<ProjectStatus, { label: string; fg: string; bg: string }> = {
   planning: { label: "Planning", fg: "#475569", bg: "#F1F5F9" },
   active: { label: "Active", fg: "#1D4ED8", bg: "#DBEAFE" },
   on_hold: { label: "On hold", fg: "#B45309", bg: "#FEF3C7" },

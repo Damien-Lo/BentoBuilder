@@ -4,14 +4,22 @@ import { useCallback, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { WebTasksOverviewScreen } from "@/src/components/todo/web/WebTasksOverviewScreen";
 import { TaskDashboard } from "@/src/components/todo/TaskDashboard";
 import { longToday } from "@/src/components/todo/theme";
 import { getTodoDashboard, type TodoDashboard } from "@/src/services/todoApi";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // The Lists section's first tab: where your tasks stand — counts, overall
 // completion, and what's overdue or recently touched. Checklists and
 // shopping lists aren't counted.
+// In a wide browser window the overview is a page laid out for the desktop.
 export default function ListsOverviewScreen() {
+  const wide = useWideWeb();
+  return wide ? <WebTasksOverviewScreen /> : <PhoneListsOverviewScreen />;
+}
+
+function PhoneListsOverviewScreen() {
   const router = useRouter();
   const [dashboard, setDashboard] = useState<TodoDashboard | null>(null);
 
