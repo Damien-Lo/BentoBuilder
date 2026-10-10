@@ -8,6 +8,7 @@ import { useWideWeb } from "@/src/utils/useWideWeb";
 
 import { isDesktopPage, resolveWebRoute, WEB_SECTIONS, type WebSection } from "./nav";
 import { setWebScaleChoice, useWebScale, WEB_SCALE_STEPS } from "./scale";
+import { setWebThemeChoice, themeColor, useWebTheme, type WebThemeChoice } from "./theme";
 
 // The desktop frame for the browser. On a phone, or a narrow window, it
 // adds nothing and the app is laid out as usual.
@@ -26,6 +27,10 @@ const HEADER_HEIGHT = 54;
 // How wide a phone-shaped page is allowed to grow.
 const COLUMN_MAX_WIDTH = 760;
 
+// Beside a phone-shaped page: a shade darker than the page in either theme
+// (left to the translation it would come out lighter in the dark).
+const GUTTER = themeColor("241,245,249", "7,11,22");
+
 type Hover = { hovered?: boolean };
 
 export function WebShell({ children }: { children: ReactNode }) {
@@ -38,6 +43,9 @@ export function WebShell({ children }: { children: ReactNode }) {
   // The whole layout is scaled to suit the window (see scale.ts).
   const { scale, choice } = useWebScale(wide);
   const [sizing, setSizing] = useState(false);
+  // Light or dark (see theme/engine.ts).
+  const theme = useWebTheme();
+  const [theming, setTheming] = useState(false);
   if (!wide) return <>{children}</>;
 
   const { section, tab } = resolveWebRoute(pathname);
@@ -47,9 +55,9 @@ export function WebShell({ children }: { children: ReactNode }) {
   const go = (path: string) => router.navigate(path as Parameters<typeof router.navigate>[0]);
 
   return (
-    <View style={{ flex: 1, flexDirection: "row", backgroundColor: "#F1F5F9" }}>
+    <View style={{ flex: 1, flexDirection: "row", backgroundColor: GUTTER }}>
       {/* Rail */}
-      <View style={{ width: WEB_RAIL_WIDTH, alignItems: "center", backgroundColor: "#FFFFFF", borderRightWidth: 1, borderRightColor: "#E2E8F0", paddingVertical: 12, zIndex: sizing ? 40 : 1 }}>
+      <View style={{ width: WEB_RAIL_WIDTH, alignItems: "center", backgroundColor: "#FFFFFF", borderRightWidth: 1, borderRightColor: "#E2E8F0", paddingVertical: 12, zIndex: sizing || theming ? 40 : 1 }}>
         <Pressable
           onPress={() => go("/")}
           accessibilityLabel="BentoBuilder home"
@@ -62,10 +70,78 @@ export function WebShell({ children }: { children: ReactNode }) {
         ))}
         <View style={{ flex: 1 }} />
 
+        {/* Light or dark */}
+        <View style={{ zIndex: 41 }}>
+          <Pressable
+            onPress={() => {
+              setSizing(false);
+              setTheming((v) => !v);
+            }}
+            accessibilityLabel="Appearance"
+            style={({ hovered }: Hover) => ({
+              width: 64,
+              paddingVertical: 8,
+              marginBottom: 4,
+              alignItems: "center",
+              borderRadius: 12,
+              backgroundColor: theming ? "#EFF6FF" : hovered ? "#F1F5F9" : "transparent",
+            })}
+          >
+            <Ionicons name={theme.dark ? "moon-outline" : "sunny-outline"} size={20} color="#64748B" />
+            <Text style={{ marginTop: 3, fontSize: 11, fontWeight: "500", color: "#64748B" }}>{theme.choice === "system" ? "Auto" : theme.dark ? "Dark" : "Light"}</Text>
+          </Pressable>
+          {theming && (
+            <View
+              style={{
+                position: "absolute",
+                left: 70,
+                bottom: 0,
+                width: 210,
+                padding: 12,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: "#E2E8F0",
+                backgroundColor: "#FFFFFF",
+                boxShadow: "0 12px 28px rgba(15,23,42,0.18)",
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#0F172A" }}>Appearance</Text>
+              <Text style={{ marginTop: 2, marginBottom: 8, fontSize: 12, lineHeight: 16, color: "#64748B" }}>Remembered in this browser.</Text>
+              {THEME_CHOICES.map((option) => {
+                const on = theme.choice === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => {
+                      setWebThemeChoice(option.value);
+                      setTheming(false);
+                    }}
+                    style={({ hovered }: Hover) => ({
+                      flexDirection: "row",
+                      alignItems: "center",
+                      height: 34,
+                      paddingHorizontal: 8,
+                      borderRadius: 9,
+                      backgroundColor: on ? "#EFF6FF" : hovered ? "#F1F5F9" : "transparent",
+                    })}
+                  >
+                    <Ionicons name={option.icon} size={16} color={on ? "#1D4ED8" : "#64748B"} />
+                    <Text style={{ flex: 1, marginLeft: 8, fontSize: 13, fontWeight: on ? "700" : "500", color: on ? "#1D4ED8" : "#334155" }}>{option.label}</Text>
+                    {on && <Ionicons name="checkmark" size={16} color="#1D4ED8" />}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
         {/* How big everything is drawn */}
         <View style={{ zIndex: 40 }}>
           <Pressable
-            onPress={() => setSizing((v) => !v)}
+            onPress={() => {
+              setTheming(false);
+              setSizing((v) => !v);
+            }}
             accessibilityLabel="Display size"
             style={({ hovered }: Hover) => ({
               width: 64,
@@ -204,6 +280,12 @@ export function WebShell({ children }: { children: ReactNode }) {
     </View>
   );
 }
+
+const THEME_CHOICES: { value: WebThemeChoice; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { value: "light", label: "Light", icon: "sunny-outline" },
+  { value: "dark", label: "Dark", icon: "moon-outline" },
+  { value: "system", label: "Match the system", icon: "contrast-outline" },
+];
 
 function SizeButton({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
   return (

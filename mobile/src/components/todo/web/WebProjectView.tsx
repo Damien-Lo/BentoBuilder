@@ -5,6 +5,7 @@ import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-nativ
 import { addDays, daysBetween, MONTHS_SHORT, WEEKDAYS_SHORT } from "@/src/components/calendar/calendarUtils";
 import { Choice, compactDate, DateField } from "@/src/components/web/fields";
 import { Card, Empty, Segmented, WEB } from "@/src/components/web/ui";
+import { themeColor } from "@/src/components/web/theme";
 import {
   addProjectPhase,
   createTodoTask,
@@ -25,6 +26,9 @@ import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 import { StatusPill, TaskNumber } from "../TaskBits";
 import { TextPromptModal } from "../TextPromptModal";
 import { showActions, TASK_STATUS_META, TASK_STATUSES } from "../theme";
+
+// A dot for booked time: dark on the light theme, light on the dark one.
+const BOOKED = themeColor("15,23,42", "226,232,240");
 
 // A project on the desktop: a list planned as a whole. Three ways to look
 // at it — Overview (the goal, where it stands, what's coming), Plan (its
@@ -844,7 +848,7 @@ function TimelineTab({
                               {/* Days with time booked for it */}
                               {task.workBlocks.map((block) =>
                                 block.date >= first && block.date <= last ? (
-                                  <View key={block._id} pointerEvents="none" style={{ position: "absolute", left: x(block.date) + dayWidth / 2 - 2.5, top: ROW - 7, width: 5, height: 5, borderRadius: 3, backgroundColor: "#0F172A" }} />
+                                  <View key={block._id} pointerEvents="none" style={{ position: "absolute", left: x(block.date) + dayWidth / 2 - 2.5, top: ROW - 7, width: 5, height: 5, borderRadius: 3, backgroundColor: BOOKED }} />
                                 ) : null,
                               )}
                             </View>
@@ -885,7 +889,7 @@ function TimelineTab({
             <Key color="#D97706" label="On hold" />
             <Key color="#10B981" label="Completed" />
             <Key diamond color={accent} label="Milestone" />
-            <Key dot color="#0F172A" label="Time booked" />
+            <Key dot color={BOOKED} label="Time booked" />
             <Key line color="#EF4444" label="Today" />
             <Key line dashed color="#94A3B8" label="Target" />
           </View>

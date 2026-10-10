@@ -2,11 +2,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, Text, View, type DimensionValue, type StyleProp, type ViewStyle } from "react-native";
 
+import { themeColor } from "./theme";
+
 // Building blocks for the desktop pages, in the app's own look: white cards
 // with a slate border on a slate-50 page, blue-600 for actions.
 
 type IconName = keyof typeof Ionicons.glyphMap;
 type Hover = { hovered?: boolean };
+
+// The chosen segment of a Segmented control: raised off its track in
+// either theme (white on grey, or a lighter slate on the dark).
+const SEGMENT_ON = themeColor("255,255,255", "55,70,96");
 
 export const WEB = {
   page: "#F8FAFC",
@@ -214,7 +220,7 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
               paddingHorizontal: 12,
               justifyContent: "center",
               borderRadius: 8,
-              backgroundColor: on ? "#FFFFFF" : hovered ? "#E2E8F0" : "transparent",
+              backgroundColor: on ? SEGMENT_ON : hovered ? "#E2E8F0" : "transparent",
               boxShadow: on ? "0 1px 2px rgba(15,23,42,0.12)" : undefined,
             })}
           >
