@@ -102,7 +102,7 @@ export function WebHomeScreen() {
         </View>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <Button label="Plan the week" icon="restaurant-outline" onPress={() => router.navigate("/planner")} />
-          <Button label="New event" icon="add" kind="primary" onPress={() => router.push({ pathname: "/calendar/edit", params: { date: today } })} />
+          <Button label="New event" icon="add" kind="primary" onPress={() => router.navigate({ pathname: "/calendar", params: { new: today } })} />
         </View>
       </View>
 

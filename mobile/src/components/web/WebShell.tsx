@@ -7,6 +7,7 @@ import { PaneContext } from "@/src/utils/pane";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 
 import { isDesktopPage, resolveWebRoute, WEB_SECTIONS, type WebSection } from "./nav";
+import { setWebScaleChoice, useWebScale, WEB_SCALE_STEPS } from "./scale";
 
 // The desktop frame for the browser. On a phone, or a narrow window, it
 // adds nothing and the app is laid out as usual.
@@ -34,6 +35,9 @@ export function WebShell({ children }: { children: ReactNode }) {
   const params = useGlobalSearchParams();
   // The content pane's own size, for screens that lay out by width.
   const [pane, setPane] = useState<{ width: number; height: number } | null>(null);
+  // The whole layout is scaled to suit the window (see scale.ts).
+  const { scale, choice } = useWebScale(wide);
+  const [sizing, setSizing] = useState(false);
   if (!wide) return <>{children}</>;
 
   const { section, tab } = resolveWebRoute(pathname);
@@ -45,7 +49,7 @@ export function WebShell({ children }: { children: ReactNode }) {
   return (
     <View style={{ flex: 1, flexDirection: "row", backgroundColor: "#F1F5F9" }}>
       {/* Rail */}
-      <View style={{ width: WEB_RAIL_WIDTH, alignItems: "center", backgroundColor: "#FFFFFF", borderRightWidth: 1, borderRightColor: "#E2E8F0", paddingVertical: 12 }}>
+      <View style={{ width: WEB_RAIL_WIDTH, alignItems: "center", backgroundColor: "#FFFFFF", borderRightWidth: 1, borderRightColor: "#E2E8F0", paddingVertical: 12, zIndex: sizing ? 40 : 1 }}>
         <Pressable
           onPress={() => go("/")}
           accessibilityLabel="BentoBuilder home"
@@ -57,6 +61,72 @@ export function WebShell({ children }: { children: ReactNode }) {
           <RailButton key={s.id} section={s} on={section?.id === s.id} onPress={() => go(s.path)} />
         ))}
         <View style={{ flex: 1 }} />
+
+        {/* How big everything is drawn */}
+        <View style={{ zIndex: 40 }}>
+          <Pressable
+            onPress={() => setSizing((v) => !v)}
+            accessibilityLabel="Display size"
+            style={({ hovered }: Hover) => ({
+              width: 64,
+              paddingVertical: 8,
+              marginBottom: 4,
+              alignItems: "center",
+              borderRadius: 12,
+              backgroundColor: sizing ? "#EFF6FF" : hovered ? "#F1F5F9" : "transparent",
+            })}
+          >
+            <Ionicons name="scan-outline" size={20} color="#64748B" />
+            <Text style={{ marginTop: 3, fontSize: 11, fontWeight: "500", color: "#64748B" }}>{Math.round(scale * 100)}%</Text>
+          </Pressable>
+          {sizing && (
+            <View
+              style={{
+                position: "absolute",
+                left: 70,
+                bottom: 0,
+                width: 210,
+                padding: 12,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: "#E2E8F0",
+                backgroundColor: "#FFFFFF",
+                boxShadow: "0 12px 28px rgba(15,23,42,0.18)",
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#0F172A" }}>Display size</Text>
+              <Text style={{ marginTop: 2, fontSize: 12, lineHeight: 16, color: "#64748B" }}>Auto fits the layout to this window.</Text>
+              <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <SizeButton
+                  icon="remove"
+                  label="Smaller"
+                  onPress={() => setWebScaleChoice([...WEB_SCALE_STEPS].reverse().find((step) => step < scale - 0.001) ?? WEB_SCALE_STEPS[0])}
+                />
+                <Text style={{ flex: 1, textAlign: "center", fontSize: 15, fontWeight: "700", color: "#0F172A" }}>{Math.round(scale * 100)}%</Text>
+                <SizeButton
+                  icon="add"
+                  label="Bigger"
+                  onPress={() => setWebScaleChoice(WEB_SCALE_STEPS.find((step) => step > scale + 0.001) ?? WEB_SCALE_STEPS[WEB_SCALE_STEPS.length - 1])}
+                />
+              </View>
+              <Pressable
+                onPress={() => setWebScaleChoice("auto")}
+                style={({ hovered }: Hover) => ({
+                  marginTop: 8,
+                  height: 32,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 9,
+                  backgroundColor: choice === "auto" ? "#EFF6FF" : hovered ? "#E2E8F0" : "#F1F5F9",
+                })}
+              >
+                <Text style={{ fontSize: 13, fontWeight: "600", color: choice === "auto" ? "#1D4ED8" : "#334155" }}>
+                  {choice === "auto" ? "Auto (on)" : "Back to auto"}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
         {WEB_SECTIONS.filter((s) => s.footer).map((s) => (
           <RailButton key={s.id} section={s} on={section?.id === s.id} onPress={() => go(s.path)} />
         ))}
@@ -135,6 +205,25 @@ export function WebShell({ children }: { children: ReactNode }) {
   );
 }
 
+function SizeButton({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityLabel={label}
+      style={({ hovered }: Hover) => ({
+        width: 36,
+        height: 32,
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 9,
+        backgroundColor: hovered ? "#E2E8F0" : "#F1F5F9",
+      })}
+    >
+      <Ionicons name={icon} size={17} color="#334155" />
+    </Pressable>
+  );
+}
+
 function RailButton({ section, on, onPress }: { section: WebSection; on: boolean; onPress: () => void }) {
   return (
     <Pressable
@@ -150,7 +239,7 @@ function RailButton({ section, on, onPress }: { section: WebSection; on: boolean
       })}
     >
       <Ionicons name={on ? (section.icon.replace("-outline", "") as typeof section.icon) : section.icon} size={22} color={on ? "#1D4ED8" : "#64748B"} />
-      <Text numberOfLines={1} style={{ marginTop: 3, fontSize: 10.5, fontWeight: on ? "700" : "500", color: on ? "#1D4ED8" : "#64748B" }}>
+      <Text numberOfLines={1} style={{ marginTop: 3, fontSize: 11, fontWeight: on ? "700" : "500", color: on ? "#1D4ED8" : "#64748B" }}>
         {section.label}
       </Text>
     </Pressable>

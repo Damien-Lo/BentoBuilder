@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 
-import type { EventCalendar, EventOccurrence } from "@/src/services/calendarApi";
+import { showActions } from "@/src/components/todo/theme";
+import { deleteCalendarEvent, type EventCalendar, type EventOccurrence, type SeriesScope } from "@/src/services/calendarApi";
 import { parseLocalDate } from "@/src/utils/mealPlan";
 
 import { CalendarEditSheet, confirmDeleteCalendar } from "../CalendarSheets";
@@ -22,7 +23,9 @@ import {
 import { mealLine } from "../mealFood";
 import { TaskBlockSheet } from "../TaskBlockSheet";
 import { useCalendarData } from "../useCalendarData";
+import type { EventDraft } from "../useEventForm";
 import { WebMiniMonth, WebMonthGrid, WebTimeGrid } from "./WebCalendarGrids";
+import { WebEventEditor } from "./WebEventEditor";
 
 // The Calendar in a desktop browser, laid out like Outlook on the web: a
 // left panel (new event, a mini month to jump around, the calendars to
@@ -53,6 +56,24 @@ export function WebCalendarScreen() {
   const [openBlock, setOpenBlock] = useState<EventOccurrence | null>(null);
   // undefined = closed, null = a new calendar.
   const [editingCalendar, setEditingCalendar] = useState<EventCalendar | null | undefined>(undefined);
+  // Calendars that are switched off sit in a collapsed section.
+  const [showHidden, setShowHidden] = useState(false);
+  const shownCalendars = calendars.filter((c) => c.visible);
+  const hiddenCalendars = calendars.filter((c) => !c.visible);
+  // The event card: a new event's starting point, or the event being edited.
+  const [editor, setEditor] = useState<EventDraft | null>(null);
+
+  // `new=<date>` in the address opens straight into a new event (Home's
+  // "New event" button).
+  const { new: newParam } = useLocalSearchParams<{ new?: string }>();
+  useEffect(() => {
+    if (!newParam || !/^\d{4}-\d{2}-\d{2}$/.test(newParam)) return;
+    setFocusDate(newParam);
+    const start = Math.min(23 * 60, (Math.floor(currentMinutes() / 60) + 1) * 60);
+    setEditor({ mode: "new", date: newParam, startMinutes: start, endMinutes: Math.min(1440, start + 60) });
+    router.setParams({ new: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newParam]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(currentMinutes()), 60_000);
@@ -86,10 +107,50 @@ export function WebCalendarScreen() {
 
   function newEvent(date: string, start?: number, end?: number) {
     const startMinutes = start ?? Math.min(23 * 60, (Math.floor(now / 60) + 1) * 60);
-    router.push({
-      pathname: "/calendar/edit",
-      params: { date, start: String(startMinutes), end: String(end ?? Math.min(1440, startMinutes + 60)) },
-    });
+    setEditor({ mode: "new", date, startMinutes, endMinutes: end ?? Math.min(1440, startMinutes + 60) });
+  }
+
+  // A repeating event asks which occurrences the edit is for first. A
+  // regular meal time can only be changed a day at a time here.
+  function editEvent(event: EventOccurrence) {
+    const open = (scope: SeriesScope | null) => {
+      setPeek(null);
+      setEditor({ mode: "edit", id: event._id, occurrence: event.occurrenceDate, scope });
+    };
+    if (!event.repeat) open(null);
+    else if (event.mealAuto) open("one");
+    else
+      showActions("Edit repeating event", [
+        { label: "Only this event", onPress: () => open("one") },
+        { label: "This and following events", onPress: () => open("following") },
+        { label: "All events in the series", onPress: () => open("all") },
+      ]);
+  }
+
+  function deleteEvent(event: EventOccurrence) {
+    const remove = (scope: SeriesScope) => {
+      setPeek(null);
+      deleteCalendarEvent(event._id, scope, event.occurrenceDate).then(reload, (error) =>
+        Alert.alert("Couldn't delete", error instanceof Error ? error.message : "Something went wrong."),
+      );
+    };
+    if (event.repeat && event.mealAuto) {
+      Alert.alert("Skip this meal?", "Only this day's block is removed. To stop it every week, change your meal times.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Skip this day", style: "destructive", onPress: () => remove("one") },
+      ]);
+    } else if (event.repeat) {
+      showActions("Delete repeating event", [
+        { label: "Delete this event", destructive: true, onPress: () => remove("one") },
+        { label: "Delete this and following events", destructive: true, onPress: () => remove("following") },
+        { label: "Delete all events in the series", destructive: true, onPress: () => remove("all") },
+      ]);
+    } else {
+      Alert.alert(`Delete "${event.title}"?`, undefined, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => remove("all") },
+      ]);
+    }
   }
 
   function openTask(task: NonNullable<EventOccurrence["task"]>) {
@@ -107,6 +168,51 @@ export function WebCalendarScreen() {
 
   const openEvent = (event: EventOccurrence) =>
     router.push({ pathname: "/calendar/event/[id]", params: { id: event._id, date: event.occurrenceDate } });
+
+  const calendarRow = (calendar: EventCalendar) => {
+        const color = calendarColor(calendar);
+        return (
+          <Pressable
+            key={calendar._id}
+            onPress={() => void data.toggleCalendar(calendar)}
+            style={({ hovered }: { hovered?: boolean }) => ({
+              flexDirection: "row",
+              alignItems: "center",
+              height: 32,
+              paddingHorizontal: 6,
+              marginHorizontal: -6,
+              borderRadius: 8,
+              backgroundColor: hovered ? "#EEF2F7" : "transparent",
+            })}
+          >
+            <View
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: 4,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: calendar.visible ? color : "#FFFFFF",
+                borderWidth: 2,
+                borderColor: color,
+              }}
+            >
+              {calendar.visible && <Ionicons name="checkmark" size={11} color="#FFFFFF" />}
+            </View>
+            <Text numberOfLines={1} style={{ flex: 1, marginLeft: 10, fontSize: 13, color: calendar.visible ? "#0F172A" : "#94A3B8" }}>
+              {calendar.name}
+            </Text>
+            {calendar.isMeals && (
+              <Pressable onPress={() => router.push("/calendar/meal-times")} accessibilityLabel="Meal times" hitSlop={4}>
+                <Ionicons name="time-outline" size={15} color="#2563EB" style={{ marginRight: 8 }} />
+              </Pressable>
+            )}
+            <Pressable onPress={() => setEditingCalendar(calendar)} accessibilityLabel={`Edit ${calendar.name}`} hitSlop={4}>
+              <Ionicons name="ellipsis-horizontal" size={15} color="#94A3B8" />
+            </Pressable>
+          </Pressable>
+        );
+  };
 
   return (
     <View style={{ flex: 1, flexDirection: "row", backgroundColor: "#FFFFFF" }}>
@@ -150,50 +256,32 @@ export function WebCalendarScreen() {
             </Pressable>
           </View>
 
-          {calendars.map((calendar) => {
-            const color = calendarColor(calendar);
-            return (
+          {shownCalendars.map(calendarRow)}
+
+          {/* Calendars that are switched off, tucked away until wanted. */}
+          {hiddenCalendars.length > 0 && (
+            <>
               <Pressable
-                key={calendar._id}
-                onPress={() => void data.toggleCalendar(calendar)}
+                onPress={() => setShowHidden((v) => !v)}
                 style={({ hovered }: { hovered?: boolean }) => ({
                   flexDirection: "row",
                   alignItems: "center",
                   height: 32,
+                  marginTop: 6,
                   paddingHorizontal: 6,
                   marginHorizontal: -6,
                   borderRadius: 8,
                   backgroundColor: hovered ? "#EEF2F7" : "transparent",
                 })}
               >
-                <View
-                  style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: 4,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: calendar.visible ? color : "#FFFFFF",
-                    borderWidth: 2,
-                    borderColor: color,
-                  }}
-                >
-                  {calendar.visible && <Ionicons name="checkmark" size={11} color="#FFFFFF" />}
-                </View>
-                <Text numberOfLines={1} style={{ flex: 1, marginLeft: 10, fontSize: 13, color: calendar.visible ? "#0F172A" : "#94A3B8" }}>
-                  {calendar.name}
+                <Ionicons name={showHidden ? "chevron-down" : "chevron-forward"} size={14} color="#64748B" />
+                <Text style={{ flex: 1, marginLeft: 8, fontSize: 12, fontWeight: "600", color: "#64748B" }}>
+                  Hidden calendars ({hiddenCalendars.length})
                 </Text>
-                {calendar.isMeals && (
-                  <Pressable onPress={() => router.push("/calendar/meal-times")} accessibilityLabel="Meal times" hitSlop={4}>
-                    <Ionicons name="time-outline" size={15} color="#2563EB" style={{ marginRight: 8 }} />
-                  </Pressable>
-                )}
-                <Pressable onPress={() => setEditingCalendar(calendar)} accessibilityLabel={`Edit ${calendar.name}`} hitSlop={4}>
-                  <Ionicons name="ellipsis-horizontal" size={15} color="#94A3B8" />
-                </Pressable>
               </Pressable>
-            );
-          })}
+              {showHidden && hiddenCalendars.map(calendarRow)}
+            </>
+          )}
         </ScrollView>
       </View>
 
@@ -279,6 +367,22 @@ export function WebCalendarScreen() {
           setPeek(null);
           openEvent(event);
         }}
+        onEdit={editEvent}
+        onDelete={deleteEvent}
+      />
+
+      <WebEventEditor
+        draft={editor}
+        calendars={calendars}
+        calendarsById={calendarsById}
+        events={visibleEvents}
+        weekStartDay={weekStartDay}
+        today={today}
+        onClose={() => setEditor(null)}
+        onSaved={() => {
+          setEditor(null);
+          reload();
+        }}
       />
 
       <TaskBlockSheet
@@ -358,11 +462,15 @@ function EventPeek({
   calendar,
   onClose,
   onOpen,
+  onEdit,
+  onDelete,
 }: {
   event: EventOccurrence | null;
   calendar: EventCalendar | undefined;
   onClose: () => void;
   onOpen: (event: EventOccurrence) => void;
+  onEdit: (event: EventOccurrence) => void;
+  onDelete: (event: EventOccurrence) => void;
 }) {
   if (!event) return null;
   const color = calendarColor(calendar);
@@ -401,26 +509,51 @@ function EventPeek({
             {!!event.description && <PeekRow icon="reorder-three-outline">{event.description}</PeekRow>}
             <PeekRow icon="calendar-outline">{calendar?.name ?? "Calendar"}</PeekRow>
 
-            <View style={{ marginTop: 18, flexDirection: "row", justifyContent: "flex-end" }}>
-              <Pressable
-                onPress={() => onOpen(event)}
-                style={({ hovered }: { hovered?: boolean }) => ({
-                  flexDirection: "row",
-                  alignItems: "center",
-                  height: 38,
-                  paddingHorizontal: 16,
-                  borderRadius: 12,
-                  backgroundColor: hovered ? "#1D4ED8" : "#2563EB",
-                })}
-              >
-                <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFFFFF" }}>{event.meal ? "Open meal" : "Open event"}</Text>
-                <Ionicons name="chevron-forward" size={15} color="#FFFFFF" style={{ marginLeft: 4 }} />
-              </Pressable>
+            <View style={{ marginTop: 18, flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <PeekButton label="Edit" icon="create-outline" primary onPress={() => onEdit(event)} />
+              <PeekButton label={event.repeat && event.mealAuto ? "Skip this day" : "Delete"} icon="trash-outline" danger onPress={() => onDelete(event)} />
+              <View style={{ flex: 1 }} />
+              {/* A meal's page has its food: what's planned, ticking it off, adding more. */}
+              {event.meal && <PeekButton label="Open meal" icon="restaurant-outline" onPress={() => onOpen(event)} />}
             </View>
           </View>
         </View>
       </View>
     </Modal>
+  );
+}
+
+function PeekButton({
+  label,
+  icon,
+  primary,
+  danger,
+  onPress,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  primary?: boolean;
+  danger?: boolean;
+  onPress: () => void;
+}) {
+  const text = primary ? "#FFFFFF" : danger ? "#DC2626" : "#334155";
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ hovered }: { hovered?: boolean }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        height: 36,
+        paddingHorizontal: 14,
+        borderRadius: 10,
+        borderWidth: primary ? 0 : 1,
+        borderColor: danger ? "#FECACA" : "#CBD5E1",
+        backgroundColor: primary ? (hovered ? "#1D4ED8" : "#2563EB") : hovered ? (danger ? "#FEF2F2" : "#F1F5F9") : "#FFFFFF",
+      })}
+    >
+      <Ionicons name={icon} size={15} color={text} style={{ marginRight: 6 }} />
+      <Text style={{ fontSize: 13, fontWeight: "700", color: text }}>{label}</Text>
+    </Pressable>
   );
 }
 

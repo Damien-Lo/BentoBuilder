@@ -7,6 +7,7 @@ import { hexToRgba, parseLocalDate } from "@/src/utils/mealPlan";
 
 import { calendarColor, layoutDay, minutesLabel, monthGrid, MONTHS_SHORT, WEEKDAYS_SHORT } from "../calendarUtils";
 import { mealLine } from "../mealFood";
+import { getWebScale } from "@/src/components/web/scale";
 import { TaskChip } from "../TaskChip";
 
 // The desktop calendar's two grids, laid out like Outlook on the web: a
@@ -174,7 +175,9 @@ function DayColumn({
   const top = useRef(0);
 
   const minutesAt = (pageY: number) => {
-    const raw = ((pageY - top.current) / HOUR_HEIGHT) * 60;
+    // (The mouse is measured on screen; the grid is laid out before the
+    // page's scale is applied.)
+    const raw = ((pageY - top.current) / getWebScale() / HOUR_HEIGHT) * 60;
     return Math.max(0, Math.min(1440, Math.round(raw / SNAP) * SNAP));
   };
 
