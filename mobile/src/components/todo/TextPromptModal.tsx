@@ -38,7 +38,7 @@ export function TextPromptModal({
         style={{ flex: 1, justifyContent: "center", paddingHorizontal: 32, backgroundColor: "rgba(0,0,0,0.45)" }}
       >
         <Pressable style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} onPress={onCancel} />
-        <View style={{ backgroundColor: theme.card, borderRadius: 24, padding: 20 }}>
+        <View style={{ width: "100%", maxWidth: 460, alignSelf: "center", backgroundColor: theme.card, borderRadius: 24, padding: 20 }}>
           <Text style={{ color: theme.title, fontSize: 18, fontWeight: "700" }}>{title}</Text>
           <TextInput
             value={value}

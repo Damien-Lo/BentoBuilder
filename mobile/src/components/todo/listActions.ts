@@ -20,6 +20,8 @@ export function openListOptions({
   onChanged,
   onDeleted,
   onMoved,
+  allowProject,
+  onNewGroup,
 }: {
   list: TodoList;
   groups: TodoGroup[];
@@ -28,7 +30,14 @@ export function openListOptions({
   onDeleted: () => void;
   // After the list moved to a different tab (defaults to onChanged).
   onMoved?: () => void;
+  // Offer turning a plain list into a project — where projects have views
+  // of their own (the desktop).
+  allowProject?: boolean;
+  // Offer "New group…" among the groups to move to: asks for its name.
+  onNewGroup?: () => void;
 }) {
+  const isProject = list.type === "project";
+  const noun = list.type === "checklist" ? "checklist" : isProject ? "project" : "list";
   const fail = (error: unknown) =>
     Alert.alert("Couldn't update the list", error instanceof Error ? error.message : "Something went wrong.");
 
@@ -50,16 +59,17 @@ export function openListOptions({
       ...(list.group
         ? [{ label: "Remove from group", onPress: () => updateTodoList(list._id, { group: null }).then(onChanged, fail) }]
         : []),
+      ...(onNewGroup ? [{ label: "New group…", onPress: onNewGroup }] : []),
     ]);
 
   const confirmDelete = () =>
-    Alert.alert(`Delete "${list.name}"?`, `This deletes the ${list.type === "checklist" ? "checklist and all of its items" : "list and all of its tasks"}.`, [
+    Alert.alert(`Delete "${list.name}"?`, `This deletes the ${list.type === "checklist" ? "checklist and all of its items" : `${noun} and all of its tasks`}.`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: () => deleteTodoList(list._id).then(onDeleted, fail) },
     ]);
 
   showActions(list.name, [
-    { label: list.type === "checklist" ? "Rename checklist" : "Rename list", onPress: onRename },
+    { label: `Rename ${noun}`, onPress: onRename },
     { label: "Change colour", onPress: pickColor },
     ...(list.type === "checklist"
       ? [
@@ -72,8 +82,24 @@ export function openListOptions({
             onPress: () => updateTodoList(list._id, { type: "tasks" }).then(onMoved ?? onChanged, fail),
           },
         ]
-      : !list.isDefault
+      : isProject
         ? [
+            {
+              // (Its phases are kept, should it become a project again.)
+              label: "Turn into a plain list",
+              onPress: () => updateTodoList(list._id, { type: "tasks" }).then(onMoved ?? onChanged, fail),
+            },
+          ]
+        : !list.isDefault
+        ? [
+            ...(allowProject
+              ? [
+                  {
+                    label: "Turn into a project",
+                    onPress: () => updateTodoList(list._id, { type: "project" }).then(onMoved ?? onChanged, fail),
+                  },
+                ]
+              : []),
             {
               label: "Turn into a checklist",
               onPress: () =>
@@ -92,7 +118,7 @@ export function openListOptions({
             },
           ]
         : []),
-    ...(!list.isDefault && list.type !== "checklist" && groups.length > 0 ? [{ label: "Move to group", onPress: moveToGroup }] : []),
-    ...(!list.isDefault ? [{ label: list.type === "checklist" ? "Delete checklist" : "Delete list", onPress: confirmDelete, destructive: true }] : []),
+    ...(!list.isDefault && list.type !== "checklist" && (groups.length > 0 || onNewGroup) ? [{ label: "Move to group", onPress: moveToGroup }] : []),
+    ...(!list.isDefault ? [{ label: `Delete ${noun}`, onPress: confirmDelete, destructive: true }] : []),
   ]);
 }

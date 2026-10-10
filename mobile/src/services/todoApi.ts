@@ -10,7 +10,17 @@ export interface TodoGroup {
   order: number;
 }
 
-export type TodoListType = "tasks" | "checklist";
+// "project": a tasks list planned as a whole (see TodoList's project fields).
+export type TodoListType = "tasks" | "checklist" | "project";
+
+export type ProjectStatus = "planning" | "active" | "on_hold" | "done";
+
+// A named, ordered section of a project that its tasks are grouped into.
+export interface ProjectPhase {
+  _id: string;
+  name: string;
+  order: number;
+}
 
 export interface TodoList {
   _id: string;
@@ -24,6 +34,13 @@ export interface TodoList {
   // A checklist that's a shopping list (Shopping tab, not Checklists).
   shopping?: boolean;
   openCount?: number;
+  // Projects only: the goal, the dates it runs between, where it stands,
+  // and its phases.
+  description?: string;
+  startDate?: string | null;
+  targetDate?: string | null;
+  projectStatus?: ProjectStatus;
+  phases?: ProjectPhase[];
 }
 
 export interface WorkBlock {
@@ -64,6 +81,14 @@ export interface TodoTask {
   note: string;
   // Hand-set 0–100, used only while there are no subtasks.
   manualProgress: number;
+  // Its place among its siblings (top-level tasks of a list, or subtasks).
+  order: number;
+  // In a project: the phase it's in, when work on it starts (with the due
+  // date, its span on the timeline), and whether it's a milestone — a
+  // deliverable or checkpoint, a dated point rather than a stretch of work.
+  phase?: string | null;
+  startDate?: string | null;
+  milestone?: boolean;
   showInCalendar: boolean;
   createdAt: string;
   // Worked out by the server: 0–100, and counts over every level below.
@@ -158,6 +183,30 @@ export const createTodoList = (
 export const updateTodoList = (id: string, changes: Partial<Pick<TodoList, "name" | "color" | "group" | "type" | "shopping">>) =>
   request<TodoList>(`/lists/${id}`, { method: "PATCH", body: body(changes) });
 export const deleteTodoList = (id: string) => request<void>(`/lists/${id}`, { method: "DELETE" });
+
+// --- Projects ---
+
+export const createTodoProject = (name: string, color: string, group: string | null = null) =>
+  request<TodoList>("/lists", { method: "POST", body: body({ name, color, group, type: "project" }) });
+export const updateTodoProject = (
+  id: string,
+  changes: Partial<Pick<TodoList, "description" | "startDate" | "targetDate" | "projectStatus">>,
+) => request<TodoList>(`/lists/${id}`, { method: "PATCH", body: body(changes) });
+export const addProjectPhase = (listId: string, name: string) =>
+  request<TodoList>(`/lists/${listId}/phases`, { method: "POST", body: body({ name }) });
+export const renameProjectPhase = (listId: string, phaseId: string, name: string) =>
+  request<TodoList>(`/lists/${listId}/phases/${phaseId}`, { method: "PATCH", body: body({ name }) });
+// Its tasks stay, in no phase.
+export const deleteProjectPhase = (listId: string, phaseId: string) =>
+  request<TodoList>(`/lists/${listId}/phases/${phaseId}`, { method: "DELETE" });
+// The plan as it stands after something moved: the phases in order, and/or
+// each phase's top-level tasks in order (`phase: null` = in no phase).
+export const saveProjectPlan = (listId: string, plan: { phases?: string[]; tasks?: { phase: string | null; ids: string[] }[] }) =>
+  request<TodoList>(`/lists/${listId}/plan`, { method: "PATCH", body: body(plan) });
+// A task that has outgrown being one becomes a project; its subtasks become
+// the project's tasks.
+export const turnTaskIntoProject = (taskId: string, group?: string | null) =>
+  request<TodoList>(`/tasks/${taskId}/to-project`, { method: "POST", body: body(group === undefined ? {} : { group }) });
 // After a drag on the Lists home: each moved list's new group and position.
 export const reorderTodoLists = (items: { id: string; group: string | null; order: number }[]) =>
   request<void>("/lists/reorder", { method: "PATCH", body: body({ items }) });
@@ -188,6 +237,9 @@ export const createTodoTask = (input: {
   dueDate?: string | null;
   doDate?: string | null;
   description?: string;
+  phase?: string | null;
+  startDate?: string | null;
+  milestone?: boolean;
 }) => request<TodoTask>("/tasks", { method: "POST", body: body(input) });
 
 // Drag-and-drop: put a subtask (and everything under it) under `parent`,
@@ -207,6 +259,9 @@ export type TodoTaskChanges = Partial<
     | "myDayDate"
     | "dueDate"
     | "doDate"
+    | "startDate"
+    | "milestone"
+    | "phase"
     | "tags"
     | "parties"
     | "note"

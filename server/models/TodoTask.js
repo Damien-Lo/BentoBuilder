@@ -56,6 +56,15 @@ const todoTaskSchema = new mongoose.Schema(
     // 0–100, set by hand; only used while the task has no subtasks (with
     // subtasks, progress is the share of them completed).
     manualProgress: { type: Number, min: 0, max: 100, default: 0 },
+    // --- In a project ---
+    // The phase of its list (TodoList.phases) this task sits in, if any.
+    phase: { type: mongoose.Schema.Types.ObjectId, default: null },
+    // "YYYY-MM-DD" — when work on it starts; with the due date, its span on
+    // the project's timeline.
+    startDate: { type: String, default: null },
+    // A deliverable or checkpoint: a dated point rather than a stretch of
+    // work, drawn as a diamond on the timeline.
+    milestone: { type: Boolean, default: false },
     // Show this task's due date in the calendar's built-in Tasks calendar.
     showInCalendar: { type: Boolean, default: false },
     order: { type: Number, default: 0 },

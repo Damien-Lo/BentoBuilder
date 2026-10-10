@@ -106,7 +106,6 @@ export const WEB_SECTIONS: WebSection[] = [
 export const WEB_COMING_SOON: { label: string; icon: IconName; text: string }[] = [
   { label: "Gym", icon: "barbell-outline", text: "Workout plans, logged sessions and progress over time." },
   { label: "Food recommender", icon: "sparkles-outline", text: "What to eat next, from your ratings, goals and what's in the pantry." },
-  { label: "Projects", icon: "git-network-outline", text: "Whole project timelines: phases, milestones and the time booked against them." },
   { label: "Documents", icon: "document-text-outline", text: "Store and organise your files." },
 ];
 

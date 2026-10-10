@@ -3,13 +3,17 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
+import { loadSettings } from "@/src/services/settingsService";
 import {
+  createTodoGroup,
   createTodoList,
+  createTodoProject,
   createTodoTask,
   getDeletedTasks,
   getListTasks,
   getSmartTasks,
   getTodoOverview,
+  turnTaskIntoProject,
   updateTodoList,
   updateTodoTask,
   type SmartListId,
@@ -24,7 +28,8 @@ import { openListOptions } from "../listActions";
 import { PriorityPill, StatusPill, TaskNumber } from "../TaskBits";
 import { TaskDetail } from "../TaskDetail";
 import { TextPromptModal } from "../TextPromptModal";
-import { friendlyDate, isOverdue, listAccent, longToday, SMART_LISTS, useTodoTheme } from "../theme";
+import { friendlyDate, isOverdue, listAccent, longToday, showActions, SMART_LISTS, useTodoTheme } from "../theme";
+import { WebProjectView } from "./WebProjectView";
 
 // Tasks in a desktop browser, laid out like Microsoft To Do on the web:
 // the lists down the left, the chosen list's tasks in the middle with the
@@ -48,13 +53,71 @@ export function WebTasksScreen() {
   const [showCompleted, setShowCompleted] = useState(false);
   // The task open on the right, then any subtasks drilled into from it.
   const [detail, setDetail] = useState<string[]>([]);
-  const [prompt, setPrompt] = useState<"newList" | "rename" | null>(null);
+  const [prompt, setPrompt] = useState<"newList" | "newProject" | "newGroup" | "rename" | null>(null);
+  const [weekStartDay, setWeekStartDay] = useState(1);
+  useEffect(() => {
+    loadSettings().then((s) => setWeekStartDay(s.weekStartDay)).catch(() => {});
+  }, []);
 
   const smart = SMART_LISTS.find((s) => s.id === selected);
   const lists = (overview?.lists ?? [])
     .filter((l) => l.type !== "checklist")
     .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.order - b.order);
   const list = smart ? null : lists.find((l) => l._id === selected) ?? null;
+  // Projects are lists planned as a whole; they get their own heading and,
+  // when opened, their own views.
+  const projects = lists.filter((l) => l.type === "project");
+  const plainLists = lists.filter((l) => l.type !== "project");
+  const groupName = (id: string | null | undefined) => overview?.groups.find((g) => g._id === id)?.name;
+  // Projects under the group they're in, ungrouped ones first.
+  const projectGroups = [...new Set(projects.map((p) => p.group ?? null))].sort((a, b) => (a === null ? -1 : b === null ? 1 : (groupName(a) ?? "").localeCompare(groupName(b) ?? "")));
+  const isProject = list?.type === "project";
+
+  function listOptions(target: TodoList) {
+    openListOptions({
+      list: target,
+      groups: overview?.groups ?? [],
+      onRename: () => setPrompt("rename"),
+      onNewGroup: () => setPrompt("newGroup"),
+      onChanged: refresh,
+      allowProject: true,
+      onDeleted: () => {
+        pick("myday");
+        loadOverview();
+      },
+    });
+  }
+
+  // A task that has outgrown being one: it becomes a project, its subtasks
+  // the project's tasks.
+  function taskMenu(task: TodoTask) {
+    showActions(task.title, [
+      { label: "Open", onPress: () => setDetail([task._id]) },
+      {
+        label: "Turn into a project",
+        onPress: () =>
+          Alert.alert(
+            `Turn "${task.title}" into a project?`,
+            (task.subtaskCount > 0
+              ? "The task becomes the project, and its subtasks become the project's tasks."
+              : "It becomes an empty project you can add tasks and phases to.") +
+              // (Time is booked against tasks, and this one stops being one.)
+              (task.workBlocks.length > 0 ? ` The time booked on it (${task.workBlocks.length} block${task.workBlocks.length === 1 ? "" : "s"}) comes off the calendar.` : ""),
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Make it a project",
+                onPress: () =>
+                  void turnTaskIntoProject(task._id).then((project) => {
+                    loadOverview();
+                    pick(project._id);
+                  }, fail),
+              },
+            ],
+          ),
+      },
+    ]);
+  }
   const accent = listAccent(smart?.color ?? list?.color, theme);
   const title = smart?.name ?? list?.name ?? "";
 
@@ -175,7 +238,38 @@ export function WebTasksScreen() {
 
           <View style={{ height: 1, backgroundColor: "#E2E8F0", marginVertical: 10, marginHorizontal: 8 }} />
 
-          {lists.map((l) => (
+          {projects.length > 0 && (
+            <>
+              <Heading label="Projects" />
+              {projectGroups.map((group) => (
+                <View key={group ?? "none"}>
+                  {group !== null && (
+                    <Text numberOfLines={1} style={{ marginTop: 4, marginBottom: 2, paddingHorizontal: 10, fontSize: 12, fontWeight: "600", color: "#64748B" }}>
+                      {groupName(group) ?? "Group"}
+                    </Text>
+                  )}
+                  {projects
+                    .filter((p) => (p.group ?? null) === group)
+                    .map((p) => (
+                      <ListRow
+                        key={p._id}
+                        icon="git-network-outline"
+                        color={listAccent(p.color, theme)}
+                        label={p.name}
+                        count={p.openCount ?? 0}
+                        on={selected === p._id}
+                        indent={group !== null}
+                        onPress={() => pick(p._id)}
+                      />
+                    ))}
+                </View>
+              ))}
+              <View style={{ height: 1, backgroundColor: "#E2E8F0", marginVertical: 10, marginHorizontal: 8 }} />
+              <Heading label="Lists" />
+            </>
+          )}
+
+          {plainLists.map((l) => (
             <ListRow
               key={l._id}
               icon={l.isDefault ? "home-outline" : "list-outline"}
@@ -199,25 +293,53 @@ export function WebTasksScreen() {
           />
         </ScrollView>
 
-        <Pressable
-          onPress={() => setPrompt("newList")}
-          style={({ hovered }: Row) => ({
-            flexDirection: "row",
-            alignItems: "center",
-            height: 48,
-            paddingHorizontal: 20,
-            borderTopWidth: 1,
-            borderTopColor: "#E2E8F0",
-            backgroundColor: hovered ? "#EEF2F7" : "transparent",
-          })}
-        >
-          <Ionicons name="add" size={20} color="#2563EB" />
-          <Text style={{ marginLeft: 10, fontSize: 14, fontWeight: "600", color: "#2563EB" }}>New list</Text>
-        </Pressable>
+        <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: "#E2E8F0" }}>
+          {(
+            [
+              ["newList", "New list", "add"],
+              ["newProject", "New project", "git-network-outline"],
+            ] as const
+          ).map(([kind, label, icon], index) => (
+            <Pressable
+              key={kind}
+              onPress={() => setPrompt(kind)}
+              style={({ hovered }: Row) => ({
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                height: 48,
+                borderLeftWidth: index ? 1 : 0,
+                borderLeftColor: "#E2E8F0",
+                backgroundColor: hovered ? "#EEF2F7" : "transparent",
+              })}
+            >
+              <Ionicons name={icon} size={index ? 15 : 18} color="#2563EB" />
+              <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: "600", color: "#2563EB" }}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
+      {/* A project has views of its own. */}
+      {isProject && list && (
+        <View style={{ flex: 1 }}>
+          <WebProjectView
+            project={list}
+            tasks={ready ? tasks : []}
+            groupName={groupName(list.group)}
+            accent={accent}
+            selectedTaskId={detail[0]}
+            weekStartDay={weekStartDay}
+            onOpenTask={(id) => setDetail([id])}
+            onChanged={refresh}
+            onOptions={() => listOptions(list)}
+          />
+        </View>
+      )}
+
       {/* The chosen list's tasks */}
-      <View style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
+      <View style={{ flex: 1, backgroundColor: "#F8FAFC", display: isProject ? "none" : "flex" }}>
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 28, paddingTop: 24, paddingBottom: 12 }}>
           <View style={{ flex: 1 }}>
             <Text numberOfLines={1} style={{ fontSize: 26, fontWeight: "700", color: accent }}>
@@ -227,18 +349,7 @@ export function WebTasksScreen() {
           </View>
           {list && (
             <Pressable
-              onPress={() =>
-                openListOptions({
-                  list,
-                  groups: overview?.groups ?? [],
-                  onRename: () => setPrompt("rename"),
-                  onChanged: refresh,
-                  onDeleted: () => {
-                    pick("myday");
-                    loadOverview();
-                  },
-                })
-              }
+              onPress={() => listOptions(list)}
               accessibilityLabel="List options"
               style={({ hovered }: Row) => ({
                 width: 36,
@@ -277,6 +388,7 @@ export function WebTasksScreen() {
               onOpen={() => setDetail([task._id])}
               onToggle={() => toggleComplete(task)}
               onStar={() => toggleImportant(task)}
+              onMenu={() => taskMenu(task)}
             />
           ))}
 
@@ -310,6 +422,7 @@ export function WebTasksScreen() {
                     onOpen={() => setDetail([task._id])}
                     onToggle={() => toggleComplete(task)}
                     onStar={() => toggleImportant(task)}
+                    onMenu={() => taskMenu(task)}
                   />
                 ))}
             </>
@@ -339,8 +452,10 @@ export function WebTasksScreen() {
 
       <TextPromptModal
         visible={prompt != null}
-        title={prompt === "rename" ? "Rename list" : "New list"}
-        placeholder="List name"
+        title={
+          prompt === "rename" ? (isProject ? "Rename project" : "Rename list") : prompt === "newProject" ? "New project" : prompt === "newGroup" ? "New group" : "New list"
+        }
+        placeholder={prompt === "newProject" ? "Project name" : prompt === "newGroup" ? "e.g. Work, Home, a client" : "List name"}
         initialValue={prompt === "rename" ? list?.name ?? "" : ""}
         confirmLabel={prompt === "rename" ? "Save" : "Create"}
         onCancel={() => setPrompt(null)}
@@ -349,6 +464,16 @@ export function WebTasksScreen() {
           setPrompt(null);
           if (mode === "rename" && list) {
             updateTodoList(list._id, { name }).then(refresh, fail);
+          } else if (mode === "newGroup" && list) {
+            // A new group, with the open list or project as its first member.
+            createTodoGroup(name)
+              .then((group) => updateTodoList(list._id, { group: group._id }))
+              .then(refresh, fail);
+          } else if (mode === "newProject") {
+            createTodoProject(name, "blue").then((created: TodoList) => {
+              loadOverview();
+              pick(created._id);
+            }, fail);
           } else {
             createTodoList(name, "blue").then((created: TodoList) => {
               loadOverview();
@@ -361,12 +486,17 @@ export function WebTasksScreen() {
   );
 }
 
+function Heading({ label }: { label: string }) {
+  return <Text style={{ marginBottom: 4, paddingHorizontal: 10, fontSize: 11, fontWeight: "700", letterSpacing: 1, color: "#94A3B8" }}>{label.toUpperCase()}</Text>;
+}
+
 function ListRow({
   icon,
   color,
   label,
   count,
   on,
+  indent,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
@@ -374,6 +504,8 @@ function ListRow({
   label: string;
   count: number;
   on: boolean;
+  // Sits under a group's name.
+  indent?: boolean;
   onPress: () => void;
 }) {
   return (
@@ -384,6 +516,7 @@ function ListRow({
         alignItems: "center",
         height: 38,
         paddingHorizontal: 10,
+        marginLeft: indent ? 10 : 0,
         borderRadius: 10,
         backgroundColor: on ? "#E0EAFF" : hovered ? "#EEF2F7" : "transparent",
       })}
@@ -405,6 +538,7 @@ function TaskRow({
   onOpen,
   onToggle,
   onStar,
+  onMenu,
 }: {
   task: TodoTask;
   accent: string;
@@ -414,6 +548,7 @@ function TaskRow({
   onOpen: () => void;
   onToggle: () => void;
   onStar: () => void;
+  onMenu: () => void;
 }) {
   const overdue = !task.completed && !!task.dueDate && isOverdue(task.dueDate);
   const meta = [
@@ -480,6 +615,9 @@ function TaskRow({
         </View>
       </View>
 
+      <Pressable onPress={onMenu} accessibilityLabel="More" style={{ width: 30, height: 44, alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name="ellipsis-horizontal" size={16} color="#94A3B8" />
+      </Pressable>
       <Pressable
         onPress={onStar}
         accessibilityLabel={task.important ? "Remove importance" : "Mark as important"}

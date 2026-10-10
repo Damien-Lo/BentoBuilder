@@ -117,6 +117,23 @@ router.delete("/groups/:id", async (req, res) => {
 
 // --- Lists ---
 
+const LIST_TYPES = ["tasks", "checklist", "project"];
+const PROJECT_STATUSES = ["planning", "active", "on_hold", "done"];
+
+// The project fields present in a request body, checked.
+function projectFields(body) {
+  const out = {};
+  const dateOrNull = (value) => (typeof value === "string" && DATE_RE.test(value) ? value : null);
+  if (body.description !== undefined) out.description = String(body.description ?? "");
+  if (body.startDate !== undefined) out.startDate = dateOrNull(body.startDate);
+  if (body.targetDate !== undefined) out.targetDate = dateOrNull(body.targetDate);
+  if (body.projectStatus !== undefined) {
+    if (!PROJECT_STATUSES.includes(body.projectStatus)) throw new Error("Unknown project status");
+    out.projectStatus = body.projectStatus;
+  }
+  return out;
+}
+
 router.post("/lists", async (req, res) => {
   try {
     const { name, color, group, type, shopping } = req.body;
@@ -126,8 +143,9 @@ router.post("/lists", async (req, res) => {
       color,
       group: group || null,
       order: count,
-      type: type === "checklist" ? "checklist" : "tasks",
+      type: LIST_TYPES.includes(type) ? type : "tasks",
       shopping: type === "checklist" && !!shopping,
+      ...(type === "project" ? projectFields(req.body) : {}),
     });
     return res.status(201).json({ success: true, data: list });
   } catch (error) {
@@ -168,10 +186,12 @@ router.patch("/lists/:id", async (req, res) => {
     const { name, color, group, type, shopping } = req.body;
     if (shopping !== undefined) list.shopping = !!shopping;
     if (type !== undefined) {
-      if (list.isDefault && type !== "tasks") throw new Error("The Tasks list can't be a checklist.");
-      list.type = type === "checklist" ? "checklist" : "tasks";
-      if (list.type === "tasks") list.shopping = false;
+      if (list.isDefault && type !== "tasks") throw new Error("The Tasks list can't be a checklist or a project.");
+      list.type = LIST_TYPES.includes(type) ? type : "tasks";
+      if (list.type !== "checklist") list.shopping = false;
     }
+    // A project's own goal, dates and status.
+    Object.assign(list, projectFields(req.body));
     if (name !== undefined) list.name = name;
     if (color !== undefined) list.color = color;
     if (group !== undefined) {
@@ -179,6 +199,99 @@ router.patch("/lists/:id", async (req, res) => {
       list.group = group || null;
     }
     await list.save();
+    return res.json({ success: true, data: list });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+// --- A project's phases ---
+
+router.post("/lists/:id/phases", async (req, res) => {
+  try {
+    const list = await TodoList.findById(req.params.id);
+    if (!list) return sendError(res, new Error("List not found"), 404);
+    list.phases.push({ name: req.body.name, order: list.phases.length });
+    await list.save();
+    return res.status(201).json({ success: true, data: list });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+router.patch("/lists/:id/phases/:phaseId", async (req, res) => {
+  try {
+    const list = await TodoList.findById(req.params.id);
+    const phase = list?.phases.id(req.params.phaseId);
+    if (!phase) return sendError(res, new Error("Phase not found"), 404);
+    if (req.body.name !== undefined) phase.name = req.body.name;
+    await list.save();
+    return res.json({ success: true, data: list });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+// Deleting a phase keeps its tasks — they just aren't in a phase any more.
+router.delete("/lists/:id/phases/:phaseId", async (req, res) => {
+  try {
+    const list = await TodoList.findById(req.params.id);
+    if (!list?.phases.id(req.params.phaseId)) return sendError(res, new Error("Phase not found"), 404);
+    list.phases.pull(req.params.phaseId);
+    list.phases.forEach((phase, index) => {
+      phase.order = index;
+    });
+    await list.save();
+    await TodoTask.updateMany({ list: list._id, phase: req.params.phaseId }, { $set: { phase: null } });
+    return res.json({ success: true, data: list });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+/**
+ * PATCH /api/todo/lists/:id/plan
+ * Body: { phases: [phaseId, …], tasks: [{ phase: phaseId | null, ids: [taskId, …] }] }
+ * The project's plan as it now stands after something was moved: the
+ * phases in order, and each phase's top-level tasks in order (`phase: null`
+ * = the tasks in no phase). Either part may be left out.
+ */
+router.patch("/lists/:id/plan", async (req, res) => {
+  try {
+    const list = await TodoList.findById(req.params.id);
+    if (!list) return sendError(res, new Error("List not found"), 404);
+    if (Array.isArray(req.body.phases)) {
+      const order = req.body.phases.map(String);
+      list.phases.forEach((phase) => {
+        const index = order.indexOf(String(phase._id));
+        phase.order = index < 0 ? order.length : index;
+      });
+      list.phases.sort((a, b) => a.order - b.order);
+      await list.save();
+    }
+    if (Array.isArray(req.body.tasks)) {
+      const valid = new Set(list.phases.map((phase) => String(phase._id)));
+      const writes = [];
+      for (const group of req.body.tasks) {
+        const phase = group.phase && valid.has(String(group.phase)) ? group.phase : null;
+        (group.ids ?? []).forEach((id, order) => {
+          writes.push({ updateOne: { filter: { _id: id, list: list._id, parent: null }, update: { $set: { phase, order } } } });
+        });
+      }
+      if (writes.length) await TodoTask.bulkWrite(writes);
+    }
+    // Number the tasks straight through — the phases in order, each one's
+    // tasks in order — so the project reads in plan order as a plain list
+    // too (which is how the phone shows it).
+    const phaseIndex = new Map(list.phases.map((phase, index) => [String(phase._id), index]));
+    const tasks = await TodoTask.find({ list: list._id, parent: null }).select("phase order").lean();
+    const place = (task) => phaseIndex.get(String(task.phase)) ?? -1;
+    tasks.sort((a, b) => place(a) - place(b) || a.order - b.order);
+    const renumber = tasks
+      .map((task, order) => ({ task, order }))
+      .filter(({ task, order }) => task.order !== order)
+      .map(({ task, order }) => ({ updateOne: { filter: { _id: task._id }, update: { $set: { order } } } }));
+    if (renumber.length) await TodoTask.bulkWrite(renumber);
     return res.json({ success: true, data: list });
   } catch (error) {
     return sendError(res, error);
@@ -466,7 +579,7 @@ router.get("/tasks/:id", async (req, res) => {
 // list. With `parent`, it's a subtask: same list, one level deeper.
 router.post("/tasks", async (req, res) => {
   try {
-    const { list, parent, title, important, myDayDate, dueDate, doDate, description } = req.body;
+    const { list, parent, title, important, myDayDate, dueDate, doDate, description, phase, startDate, milestone } = req.body;
     const dateOrNull = (value) => (typeof value === "string" && DATE_RE.test(value) ? value : null);
     let listId = list;
     let depth = 0;
@@ -489,6 +602,10 @@ router.post("/tasks", async (req, res) => {
       dueDate: dateOrNull(dueDate),
       doDate: dateOrNull(doDate),
       description: typeof description === "string" ? description : "",
+      // A project's top-level tasks only.
+      phase: !parent && phase ? phase : null,
+      startDate: dateOrNull(startDate),
+      milestone: !!milestone,
       order: await TodoTask.countDocuments({ list: listId, parent: parent || null }),
     });
     await task.populate("list", LIST_FIELDS);
@@ -515,6 +632,9 @@ router.patch("/tasks/:id", async (req, res) => {
     }
     if (b.dueDate !== undefined) task.dueDate = typeof b.dueDate === "string" && DATE_RE.test(b.dueDate) ? b.dueDate : null;
     if (b.doDate !== undefined) task.doDate = typeof b.doDate === "string" && DATE_RE.test(b.doDate) ? b.doDate : null;
+    if (b.startDate !== undefined) task.startDate = typeof b.startDate === "string" && DATE_RE.test(b.startDate) ? b.startDate : null;
+    if (b.milestone !== undefined) task.milestone = !!b.milestone;
+    if (b.phase !== undefined) task.phase = b.phase || null;
     if (b.priority !== undefined) {
       if (!TASK_PRIORITIES.includes(b.priority)) throw new Error("Unknown priority");
       task.priority = b.priority;
@@ -661,6 +781,52 @@ router.delete("/tasks/:id/blocks/:blockId", async (req, res) => {
     else syncDoDate(task, todayFrom(req));
     await task.save();
     return res.json({ success: true, data: task.workBlocks });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+/**
+ * POST /api/todo/tasks/:id/to-project  { group? }
+ * A task that has outgrown being a task becomes a project: a project list
+ * named after it (its description and due date carried over), with its
+ * subtasks as the project's tasks, each a level higher than before. `group`
+ * puts the project in a group; left out, it stays in its old list's group.
+ */
+router.post("/tasks/:id/to-project", async (req, res) => {
+  try {
+    const task = await TodoTask.findById(req.params.id);
+    if (!task) return sendError(res, new Error("Task not found"), 404);
+    if (task.parent) throw new Error("Only a top-level task can become a project.");
+    const source = await TodoList.findById(task.list);
+    if (source?.type === "checklist") throw new Error("A checklist item can't become a project.");
+
+    const project = await TodoList.create({
+      name: task.title,
+      color: source?.color ?? "blue",
+      type: "project",
+      group: req.body.group !== undefined ? req.body.group || null : source?.group ?? null,
+      order: await TodoList.countDocuments(),
+      description: [task.description, task.note].filter(Boolean).join("\n\n"),
+      startDate: task.startDate ?? null,
+      targetDate: task.dueDate ?? null,
+      projectStatus: { completed: "done", in_progress: "active", on_hold: "on_hold" }[task.status] ?? "planning",
+    });
+
+    // Everything under it moves into the project, a level up — including
+    // anything of its in "Recently deleted", so a restore still lands right.
+    let level = [task._id];
+    for (let depth = 0; depth < MAX_TASK_DEPTH && level.length; depth++) {
+      const children = await TodoTask.find({ parent: { $in: level } }).setOptions({ withDeleted: true }).select("_id");
+      const ids = children.map((c) => c._id);
+      await TodoTask.updateMany(
+        { _id: { $in: ids } },
+        { $set: { list: project._id, depth, ...(depth === 0 ? { parent: null } : {}) } },
+      );
+      level = ids;
+    }
+    await TodoTask.deleteOne({ _id: task._id });
+    return res.status(201).json({ success: true, data: project });
   } catch (error) {
     return sendError(res, error);
   }
