@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { addDays, daysBetween, MONTHS_SHORT, WEEKDAYS_SHORT } from "@/src/components/calendar/calendarUtils";
@@ -23,7 +23,7 @@ import {
 } from "@/src/services/todoApi";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
-import { StatusPill, TaskNumber } from "../TaskBits";
+import { StatusPill } from "../TaskBits";
 import { TextPromptModal } from "../TextPromptModal";
 import { showActions, TASK_STATUS_META, TASK_STATUSES } from "../theme";
 
@@ -79,11 +79,26 @@ export function WebProjectView({
   const [tasks, setTasks] = useState(loadedTasks);
   useEffect(() => setTasks(loadedTasks), [loadedTasks]);
   const [prompt, setPrompt] = useState<{ kind: "newPhase" } | { kind: "renamePhase"; phase: ProjectPhase } | null>(null);
+  // A row being dragged by its handle, and where it would land.
+  const [drag, setDrag] = useState<{ id: string; over: Drop | null } | null>(null);
+  const dragId = useRef<string | null>(null);
+  const pointerY = useRef(0);
+  const edgeScroll = useRef<ReturnType<typeof setInterval> | null>(null);
+  const planScroll = useRef<ScrollView>(null);
+  // The plan's rows and phase cards as drawn, to find what's under the pointer.
+  const rowViews = useRef(new Map<string, View | null>());
+  const cardViews = useRef(new Map<string, View | null>());
 
   const phases = useMemo(() => [...(project.phases ?? [])].sort((a, b) => a.order - b.order), [project.phases]);
   const phaseIds = new Set(phases.map((p) => p._id));
   const phaseOf = (task: TodoTask) => (task.phase && phaseIds.has(task.phase) ? task.phase : NONE);
   const inPhase = (id: string) => tasks.filter((t) => phaseOf(t) === id).sort((a, b) => a.order - b.order);
+  // The cards on the Plan tab, top to bottom ("no phase" only when it has
+  // something in it, or there are no phases at all).
+  const groups = [...(inPhase(NONE).length || phases.length === 0 ? [NONE] : []), ...phases.map((p) => p._id)];
+  // A task's number is its place in the plan, counted straight through.
+  const placeOf = new Map<string, number>();
+  for (const id of [NONE, ...phases.map((p) => p._id)]) for (const task of inPhase(id)) placeOf.set(task._id, placeOf.size + 1);
 
   const fail = (error: unknown) => {
     Alert.alert("Couldn't save", error instanceof Error ? error.message : "Something went wrong.");
@@ -122,15 +137,87 @@ export function WebProjectView({
   }
   const currentPlan = () => new Map<string, TodoTask[]>([NONE, ...phases.map((p) => p._id)].map((id) => [id, inPhase(id)]));
 
-  function moveWithin(task: TodoTask, by: -1 | 1) {
+  // Where a row dropped at `y` (a position in the window) would go: the
+  // card under the pointer, or the nearest one, and the slot among that
+  // card's other rows.
+  function dropAt(y: number): Drop | null {
+    const id = dragId.current;
+    if (!id) return null;
+    let phase: string | null = null;
+    let nearest = Infinity;
+    for (const group of groups) {
+      const rect = rectOf(cardViews.current.get(group));
+      if (!rect) continue;
+      const away = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0;
+      if (away < nearest) {
+        nearest = away;
+        phase = group;
+      }
+    }
+    if (phase === null) return null;
+    let index = 0;
+    for (const task of inPhase(phase)) {
+      if (task._id === id) continue;
+      const rect = rectOf(rowViews.current.get(task._id));
+      if (rect && y > rect.top + rect.height / 2) index++;
+    }
+    return { phase, index };
+  }
+
+  function moveDrag(y: number) {
+    pointerY.current = y;
+    const over = dropAt(y);
+    setDrag((prev) => (prev && (prev.over?.phase !== over?.phase || prev.over?.index !== over?.index) ? { ...prev, over } : prev));
+  }
+
+  function stopDragging() {
+    dragId.current = null;
+    if (edgeScroll.current) clearInterval(edgeScroll.current);
+    edgeScroll.current = null;
+    if (typeof document !== "undefined") {
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    }
+  }
+
+  function startDrag(task: TodoTask, y: number) {
+    dragId.current = task._id;
+    pointerY.current = y;
+    setDrag({ id: task._id, over: dropAt(y) });
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "grabbing";
+    // Held near the top or bottom of the plan, it scrolls.
+    edgeScroll.current = setInterval(() => {
+      const node = (planScroll.current as unknown as { getScrollableNode?: () => HTMLElement } | null)?.getScrollableNode?.();
+      if (!node) return;
+      const rect = node.getBoundingClientRect();
+      const step = pointerY.current < rect.top + 56 ? -16 : pointerY.current > rect.bottom - 56 ? 16 : 0;
+      const before = node.scrollTop;
+      if (step) node.scrollTop = before + step;
+      if (node.scrollTop !== before) moveDrag(pointerY.current);
+    }, 30);
+  }
+
+  function endDrag(commit: boolean) {
+    const id = dragId.current;
+    const over = commit ? dropAt(pointerY.current) : null;
+    stopDragging();
+    setDrag(null);
+    const task = tasks.find((t) => t._id === id);
+    if (!task || !over) return;
     const plan = currentPlan();
-    const list = plan.get(phaseOf(task))!;
-    const index = list.findIndex((t) => t._id === task._id);
-    const target = index + by;
-    if (target < 0 || target >= list.length) return;
-    [list[index], list[target]] = [list[target], list[index]];
+    const from = phaseOf(task);
+    // (The slot is counted without the dragged row, so its own is a no-op.)
+    if (from === over.phase && plan.get(from)!.findIndex((t) => t._id === task._id) === over.index) return;
+    plan.set(
+      from,
+      plan.get(from)!.filter((t) => t._id !== task._id),
+    );
+    plan.get(over.phase)?.splice(over.index, 0, task);
     savePlan(plan);
   }
+  // (A drag cut short by leaving the page.)
+  useEffect(() => stopDragging, []);
 
   function moveToPhase(task: TodoTask, phase: string) {
     const plan = currentPlan();
@@ -255,13 +342,22 @@ export function WebProjectView({
       )}
 
       {tab === "plan" && (
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 28, paddingBottom: 48 }}>
-          {[...(inPhase(NONE).length || phases.length === 0 ? [null] : []), ...phases].map((phase) => {
-            const id = phase?._id ?? NONE;
+        <ScrollView ref={planScroll} contentContainerStyle={{ paddingHorizontal: 28, paddingBottom: 48 }}>
+          {groups.map((id) => {
+            const phase = phases.find((p) => p._id === id) ?? null;
             const rows = inPhase(id);
             const finished = rows.filter((t) => t.completed).length;
+            // Where the dragged row would land in this card, if it's this one.
+            const others = rows.filter((t) => t._id !== drag?.id);
+            const dropIndex = drag?.over?.phase === id ? drag.over.index : -1;
             return (
-              <View key={id} style={{ marginBottom: 18, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, borderRadius: 14, overflow: "hidden" }}>
+              <View
+                key={id}
+                ref={(view) => {
+                  cardViews.current.set(id, view);
+                }}
+                style={{ marginBottom: 18, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, borderRadius: 14, overflow: "hidden" }}
+              >
                 <View style={{ flexDirection: "row", alignItems: "center", height: 42, paddingLeft: 14, paddingRight: 6, backgroundColor: "#F8FAFC", borderBottomWidth: 1, borderBottomColor: WEB.border }}>
                   <Text style={{ fontSize: 14, fontWeight: "700", color: phase ? WEB.text : WEB.muted }}>{phase?.name ?? (phases.length ? "Not in a phase yet" : "Tasks")}</Text>
                   <Text style={{ flex: 1, marginLeft: 10, fontSize: 12, color: WEB.muted }}>
@@ -283,23 +379,33 @@ export function WebProjectView({
                   </View>
                 </View>
 
-                {rows.map((task, index) => (
-                  <PlanRow
+                {rows.map((task) => (
+                  <View
                     key={task._id}
-                    task={task}
-                    accent={accent}
-                    today={today}
-                    weekStartDay={weekStartDay}
-                    selected={selectedTaskId === task._id}
-                    first={index === 0}
-                    last={index === rows.length - 1}
-                    onOpen={() => onOpenTask(task._id)}
-                    onToggle={() => toggleDone(task)}
-                    onPatch={(changes) => patchTask(task, changes)}
-                    onMove={(by) => moveWithin(task, by)}
-                    onMenu={() => taskMenu(task)}
-                  />
+                    ref={(view) => {
+                      rowViews.current.set(task._id, view);
+                    }}
+                    style={{ opacity: drag?.id === task._id ? 0.35 : 1 }}
+                  >
+                    {dropIndex >= 0 && others.indexOf(task) === dropIndex && <DropLine color={accent} />}
+                    <PlanRow
+                      task={task}
+                      place={placeOf.get(task._id) ?? 0}
+                      accent={accent}
+                      today={today}
+                      weekStartDay={weekStartDay}
+                      selected={selectedTaskId === task._id}
+                      onOpen={() => onOpenTask(task._id)}
+                      onToggle={() => toggleDone(task)}
+                      onPatch={(changes) => patchTask(task, changes)}
+                      onMenu={() => taskMenu(task)}
+                      onDragStart={(y) => startDrag(task, y)}
+                      onDragMove={moveDrag}
+                      onDragEnd={endDrag}
+                    />
+                  </View>
                 ))}
+                {dropIndex >= 0 && dropIndex === others.length && <DropLine color={accent} />}
 
                 <AddRow
                   placeholder={phase ? `Add a task to ${phase.name}` : "Add a task"}
@@ -356,34 +462,54 @@ export function WebProjectView({
 
 // ── Plan ─────────────────────────────────────────────────────────────────────
 
-const COL = { status: 124, date: 108, actions: 96 };
+const COL = { status: 124, date: 108, actions: 40 };
+
+// A slot among a phase's rows: where a dragged row would land.
+type Drop = { phase: string; index: number };
+
+const rectOf = (view: View | null | undefined) => (view as unknown as { getBoundingClientRect?: () => DOMRect } | null)?.getBoundingClientRect?.() ?? null;
+
+// The line showing where a dragged row will land. It takes up no room, so
+// nothing shifts as it moves.
+function DropLine({ color }: { color: string }) {
+  return (
+    <View pointerEvents="none" style={{ height: 0, zIndex: 2 }}>
+      <View style={{ position: "absolute", left: 10, right: 10, top: -2, height: 3, borderRadius: 2, backgroundColor: color }} />
+    </View>
+  );
+}
 
 function PlanRow({
   task,
+  place,
   accent,
   today,
   weekStartDay,
   selected,
-  first,
-  last,
   onOpen,
   onToggle,
   onPatch,
-  onMove,
   onMenu,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
 }: {
   task: TodoTask;
+  // Its number: where it comes in the plan.
+  place: number;
   accent: string;
   today: string;
   weekStartDay: number;
   selected: boolean;
-  first: boolean;
-  last: boolean;
   onOpen: () => void;
   onToggle: () => void;
   onPatch: (changes: TodoTaskChanges) => void;
-  onMove: (by: -1 | 1) => void;
   onMenu: () => void;
+  // Dragging by the handle, with the pointer's height in the window.
+  onDragStart: (y: number) => void;
+  onDragMove: (y: number) => void;
+  // Let go (true), or the drag was taken away (false).
+  onDragEnd: (commit: boolean) => void;
 }) {
   const overdue = !task.completed && !!task.dueDate && task.dueDate < today;
   return (
@@ -393,14 +519,30 @@ function PlanRow({
         flexDirection: "row",
         alignItems: "center",
         minHeight: 44,
-        paddingLeft: 4,
         paddingRight: 6,
         borderBottomWidth: 1,
         borderBottomColor: WEB.line,
         backgroundColor: selected ? "#EFF6FF" : hovered ? "#F8FAFC" : "#FFFFFF",
       })}
     >
-      <Pressable onPress={onToggle} accessibilityLabel={task.completed ? "Mark as not done" : "Mark as done"} style={{ width: 38, height: 40, alignItems: "center", justifyContent: "center" }}>
+      {/* The handle: drag it to move the task, within its phase or to another. */}
+      <View
+        accessibilityLabel="Drag to reorder"
+        style={{ width: 46, height: 44, flexDirection: "row", alignItems: "center", paddingLeft: 8, cursor: "grab", userSelect: "none" } as object}
+        onStartShouldSetResponder={() => true}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={(e) => onDragStart(e.nativeEvent.pageY)}
+        onResponderMove={(e) => onDragMove(e.nativeEvent.pageY)}
+        onResponderRelease={() => onDragEnd(true)}
+        onResponderTerminate={() => onDragEnd(false)}
+        // (A click on the handle isn't a click on the row.)
+        {...({ onClick: (e: { stopPropagation: () => void }) => e.stopPropagation() } as object)}
+      >
+        <Ionicons name="reorder-two-outline" size={16} color="#94A3B8" />
+        <Text style={{ flex: 1, textAlign: "right", fontSize: 12, fontWeight: "700", color: WEB.muted }}>{place}</Text>
+      </View>
+
+      <Pressable onPress={onToggle} accessibilityLabel={task.completed ? "Mark as not done" : "Mark as done"} style={{ width: 36, height: 40, alignItems: "center", justifyContent: "center" }}>
         {({ hovered }: Hover) => (
           <Ionicons name={task.completed ? "checkmark-circle" : hovered ? "checkmark-circle-outline" : "ellipse-outline"} size={20} color={task.completed || hovered ? accent : "#94A3B8"} />
         )}
@@ -414,9 +556,6 @@ function PlanRow({
         >
           {task.title}
         </Text>
-        <View style={{ marginLeft: 7 }}>
-          <TaskNumber number={task.number} />
-        </View>
         {task.subtaskCount > 0 && (
           <Text style={{ marginLeft: 8, fontSize: 12, color: WEB.muted }}>
             {task.subtaskCount - task.openSubtaskCount}/{task.subtaskCount}
@@ -451,8 +590,6 @@ function PlanRow({
       </View>
 
       <View style={{ width: COL.actions, flexDirection: "row", justifyContent: "flex-end" }}>
-        <RowIcon icon="arrow-up" label="Move up" disabled={first} onPress={() => onMove(-1)} />
-        <RowIcon icon="arrow-down" label="Move down" disabled={last} onPress={() => onMove(1)} />
         <RowIcon icon="ellipsis-horizontal" label="More" onPress={onMenu} />
       </View>
     </Pressable>
@@ -653,6 +790,20 @@ function TaskLines({ tasks, today, accent, onOpenTask }: { tasks: TodoTask[]; to
 // ── Timeline ─────────────────────────────────────────────────────────────────
 
 const LABELS = 260;
+type Zoom = "project" | "weeks";
+const ZOOM_KEY = "web.timelineZoom";
+const savedZoom = (): Zoom => {
+  try {
+    return globalThis.localStorage?.getItem(ZOOM_KEY) === "weeks" ? "weeks" : "project";
+  } catch {
+    return "project";
+  }
+};
+// Two-week view: weeks to scroll into beyond the project to begin with, how
+// many more each time an end is reached, and where that stops.
+const EDGE_WEEKS = 8;
+const MORE_WEEKS = 12;
+const MAX_EXTRA_WEEKS = 156;
 const ROW = 34;
 
 function TimelineTab({
@@ -676,6 +827,23 @@ function TimelineTab({
 }) {
   const [width, setWidth] = useState(0);
   const scroller = useRef<ScrollView>(null);
+  // Two ways to look at it: the whole project squeezed into the width, or
+  // two weeks at a time, scrolling on as far as you like either way.
+  const [zoom, setZoomState] = useState<Zoom>(savedZoom);
+  const setZoom = (next: Zoom) => {
+    setZoomState(next);
+    try {
+      globalThis.localStorage?.setItem(ZOOM_KEY, next);
+    } catch {
+      // Not remembered, but still applied.
+    }
+  };
+  // In the two-week view: how many weeks have been added before and after
+  // the project by scrolling up to an end.
+  const [extra, setExtra] = useState({ before: 0, after: 0 });
+  const offset = useRef(0);
+  // Days just added on the left, for the scroll position to be moved along by.
+  const shiftBy = useRef(0);
 
   // A task's place on the calendar: a milestone is its one date; otherwise
   // start to due, or a single day when only one of them is set.
@@ -692,22 +860,48 @@ function TimelineTab({
   const dated = tasks.filter((t) => spanOf(t));
   const undated = tasks.filter((t) => !spanOf(t));
   const points = [today, project.startDate, project.targetDate, ...dated.flatMap((t) => [spanOf(t)!.from, spanOf(t)!.to])].filter((d): d is string => !!d).sort();
-  // A few days of margin, and at least five weeks so it never looks cramped.
-  const first = addDays(points[0], -3);
-  const last = (() => {
-    const end = addDays(points[points.length - 1], 4);
-    return daysBetween(first, end) < 35 ? addDays(first, 35) : end;
-  })();
+  const room = Math.max(0, width - LABELS);
+  const fit = zoom === "project";
+  // Whole project: a day of margin each side, and every day the same share
+  // of the width. Two weeks: fourteen days across, with a couple of months
+  // to scroll into beyond each end of the project (and more on reaching one).
+  const first = fit ? addDays(points[0], -1) : addDays(points[0], -(EDGE_WEEKS + extra.before) * 7);
+  const last = fit ? addDays(points[points.length - 1], 1) : addDays(points[points.length - 1], (EDGE_WEEKS + extra.after) * 7);
   const days = daysBetween(first, last) + 1;
-  const dayWidth = Math.max(16, Math.min(46, width > LABELS ? (width - LABELS) / days : 24));
+  const dayWidth = room > 0 ? (fit ? room / days : room / 14) : 24;
   const x = (date: string) => daysBetween(first, date) * dayWidth;
   const allDays = Array.from({ length: days }, (_, i) => addDays(first, i));
+  // Which days are named along the top: all of them while there's room,
+  // then only Mondays, then every second or fourth Monday.
+  const mondayEvery = dayWidth * 7 >= 26 ? 1 : dayWidth * 14 >= 26 ? 2 : 4;
+  const named = (day: string, weekday: number) => dayWidth >= 15 || day === today || (weekday === 1 && Math.floor(daysBetween("2024-01-01", day) / 7) % mondayEvery === 0);
 
+  const goTo = (date: string, animated = false) => scroller.current?.scrollTo({ x: Math.max(0, x(date) - 2 * dayWidth), animated });
   useEffect(() => {
     // Open with today a little in from the left.
-    if (width > 0) scroller.current?.scrollTo({ x: Math.max(0, x(today) - 120), animated: false });
+    if (width <= 0) return;
+    if (fit) scroller.current?.scrollTo({ x: 0, animated: false });
+    else goTo(today);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width > 0, project._id]);
+  }, [width > 0, project._id, fit]);
+  // Weeks added on the left push everything along; the view stays where it was.
+  useLayoutEffect(() => {
+    if (!shiftBy.current) return;
+    scroller.current?.scrollTo({ x: offset.current + shiftBy.current * dayWidth, animated: false });
+    shiftBy.current = 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extra.before]);
+
+  function onScroll(at: number, shown: number, total: number) {
+    offset.current = at;
+    if (fit || shiftBy.current) return;
+    if (at < 3 * dayWidth && extra.before < MAX_EXTRA_WEEKS) {
+      shiftBy.current = MORE_WEEKS * 7;
+      setExtra((prev) => ({ ...prev, before: prev.before + MORE_WEEKS }));
+    } else if (at + shown > total - 3 * dayWidth && extra.after < MAX_EXTRA_WEEKS) {
+      setExtra((prev) => ({ ...prev, after: prev.after + MORE_WEEKS }));
+    }
+  }
 
   const sections = [...(inPhase(NONE).some((t) => spanOf(t)) || phases.length === 0 ? [null] : []), ...phases];
   const months: { key: string; label: string; left: number; width: number }[] = [];
@@ -731,7 +925,18 @@ function TimelineTab({
             <View style={{ flexDirection: "row" }}>
               {/* Names, down the left */}
               <View style={{ width: LABELS, borderRightWidth: 1, borderRightColor: WEB.border }}>
-                <View style={{ height: 52, borderBottomWidth: 1, borderBottomColor: WEB.border, backgroundColor: "#F8FAFC" }} />
+                <View style={{ height: 52, justifyContent: "center", paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: WEB.border, backgroundColor: "#F8FAFC" }}>
+                  <View style={{ alignSelf: "flex-start" }}>
+                    <Segmented
+                      options={[
+                        { value: "project", label: "Whole project" },
+                        { value: "weeks", label: "2 weeks" },
+                      ]}
+                      value={zoom}
+                      onChange={setZoom}
+                    />
+                  </View>
+                </View>
                 {sections.map((phase) => {
                   const rows = inPhase(phase?._id ?? NONE).filter((t) => spanOf(t));
                   return (
@@ -759,14 +964,23 @@ function TimelineTab({
               </View>
 
               {/* The calendar, scrolling sideways */}
-              <ScrollView ref={scroller} horizontal style={{ flex: 1 }} showsHorizontalScrollIndicator>
+              <ScrollView
+                ref={scroller}
+                horizontal
+                style={{ flex: 1 }}
+                scrollEnabled={!fit}
+                showsHorizontalScrollIndicator={!fit}
+                scrollEventThrottle={16}
+                onScroll={(e) => onScroll(e.nativeEvent.contentOffset.x, e.nativeEvent.layoutMeasurement.width, e.nativeEvent.contentSize.width)}
+              >
                 <View style={{ width: days * dayWidth }}>
                   {/* Months, then days */}
                   <View style={{ height: 52, borderBottomWidth: 1, borderBottomColor: WEB.border, backgroundColor: "#F8FAFC" }}>
                     <View style={{ height: 24 }}>
                       {months.map((m) => (
                         <View key={m.key} style={{ position: "absolute", left: m.left, width: m.width, height: 24, justifyContent: "center", paddingLeft: 6, borderLeftWidth: 1, borderLeftColor: WEB.border }}>
-                          <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "700", color: WEB.body }}>
+                          {/* (Stays in view while any of its month is.) */}
+                          <Text numberOfLines={1} style={{ position: "sticky", left: 6, alignSelf: "flex-start", fontSize: 12, fontWeight: "700", color: WEB.body } as object}>
                             {m.label}
                           </Text>
                         </View>
@@ -777,13 +991,12 @@ function TimelineTab({
                         const d = parseLocalDate(day);
                         const weekend = d.getDay() === 0 || d.getDay() === 6;
                         const isToday = day === today;
-                        // Narrow days only name the Mondays.
-                        const show = dayWidth >= 26 || d.getDay() === 1 || isToday;
                         return (
                           <View key={day} style={{ width: dayWidth, alignItems: "center", justifyContent: "center", backgroundColor: isToday ? "#DBEAFE" : weekend ? "#F1F5F9" : "transparent" }}>
-                            {show && (
-                              <Text numberOfLines={1} style={{ fontSize: 10, fontWeight: isToday ? "700" : "500", color: isToday ? WEB.blueDark : WEB.muted }}>
-                                {dayWidth >= 26 ? `${WEEKDAYS_SHORT[d.getDay()][0]} ${d.getDate()}` : d.getDate()}
+                            {named(day, d.getDay()) && (
+                              // (Wider than a narrow day, so the number isn't cut off.)
+                              <Text numberOfLines={1} style={{ minWidth: 22, textAlign: "center", fontSize: dayWidth >= 60 ? 11 : 10, fontWeight: isToday ? "700" : "500", color: isToday ? WEB.blueDark : WEB.muted }}>
+                                {dayWidth >= 60 ? `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()}` : dayWidth >= 26 ? `${WEEKDAYS_SHORT[d.getDay()][0]} ${d.getDate()}` : d.getDate()}
                               </Text>
                             )}
                           </View>
@@ -830,7 +1043,7 @@ function TimelineTab({
                                   style={({ hovered }: Hover) => ({
                                     position: "absolute",
                                     left: x(span.from) + 2,
-                                    width: Math.max(dayWidth - 4, (daysBetween(span.from, span.to) + 1) * dayWidth - 4),
+                                    width: Math.max(6, (daysBetween(span.from, span.to) + 1) * dayWidth - 4),
                                     top: 7,
                                     height: ROW - 15,
                                     borderRadius: 6,
@@ -892,6 +1105,14 @@ function TimelineTab({
             <Key dot color={BOOKED} label="Time booked" />
             <Key line color="#EF4444" label="Today" />
             <Key line dashed color="#94A3B8" label="Target" />
+            {!fit && (
+              <Pressable
+                onPress={() => goTo(today, true)}
+                style={({ hovered }: Hover) => ({ marginLeft: "auto", height: 24, paddingHorizontal: 10, justifyContent: "center", borderRadius: 7, backgroundColor: hovered ? "#DBEAFE" : "#EFF6FF" })}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#1D4ED8" }}>Today</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       )}

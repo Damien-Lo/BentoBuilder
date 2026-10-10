@@ -184,6 +184,7 @@ router.patch("/lists/:id", async (req, res) => {
     const list = await TodoList.findById(req.params.id);
     if (!list) return sendError(res, new Error("List not found"), 404);
     const { name, color, group, type, shopping } = req.body;
+    const previousType = list.type;
     if (shopping !== undefined) list.shopping = !!shopping;
     if (type !== undefined) {
       if (list.isDefault && type !== "tasks") throw new Error("The Tasks list can't be a checklist or a project.");
@@ -199,6 +200,7 @@ router.patch("/lists/:id", async (req, res) => {
       list.group = group || null;
     }
     await list.save();
+    await renumberForType(list, previousType);
     return res.json({ success: true, data: list });
   } catch (error) {
     return sendError(res, error);
@@ -243,6 +245,7 @@ router.delete("/lists/:id/phases/:phaseId", async (req, res) => {
     });
     await list.save();
     await TodoTask.updateMany({ list: list._id, phase: req.params.phaseId }, { $set: { phase: null } });
+    await renumberProject(list._id);
     return res.json({ success: true, data: list });
   } catch (error) {
     return sendError(res, error);
@@ -280,18 +283,9 @@ router.patch("/lists/:id/plan", async (req, res) => {
       }
       if (writes.length) await TodoTask.bulkWrite(writes);
     }
-    // Number the tasks straight through — the phases in order, each one's
-    // tasks in order — so the project reads in plan order as a plain list
-    // too (which is how the phone shows it).
-    const phaseIndex = new Map(list.phases.map((phase, index) => [String(phase._id), index]));
-    const tasks = await TodoTask.find({ list: list._id, parent: null }).select("phase order").lean();
-    const place = (task) => phaseIndex.get(String(task.phase)) ?? -1;
-    tasks.sort((a, b) => place(a) - place(b) || a.order - b.order);
-    const renumber = tasks
-      .map((task, order) => ({ task, order }))
-      .filter(({ task, order }) => task.order !== order)
-      .map(({ task, order }) => ({ updateOne: { filter: { _id: task._id }, update: { $set: { order } } } }));
-    if (renumber.length) await TodoTask.bulkWrite(renumber);
+    // The plan is numbered straight through, so the project reads in plan
+    // order as a plain list too (which is how the phone shows it).
+    await renumberProject(list._id);
     return res.json({ success: true, data: list });
   } catch (error) {
     return sendError(res, error);
@@ -376,6 +370,43 @@ async function nextNumber() {
     .sort({ number: -1 })
     .select("number");
   return (last?.number ?? 0) + 1;
+}
+
+// In a project a task's number is its place in the plan — 1, 2, 3… through
+// the phases in order — not a reference number: move a task and the numbers
+// follow. Run after anything that changes which tasks a project has or
+// where they sit. (Tasks in "Recently deleted" are left out, and keep the
+// number they had.) Subtasks in a project carry no number.
+async function renumberProject(listId) {
+  const list = await TodoList.findById(listId).select("type phases");
+  if (!list || list.type !== "project") return;
+  const phaseIndex = new Map(list.phases.map((phase, index) => [String(phase._id), index]));
+  const tasks = await TodoTask.find({ list: list._id, parent: null }).select("phase order number createdAt").lean();
+  const place = (task) => phaseIndex.get(String(task.phase)) ?? -1;
+  tasks.sort((a, b) => place(a) - place(b) || a.order - b.order || a.createdAt - b.createdAt);
+  const writes = tasks
+    .map((task, order) => ({ task, order }))
+    .filter(({ task, order }) => task.order !== order || task.number !== order + 1)
+    .map(({ task, order }) => ({ updateOne: { filter: { _id: task._id }, update: { $set: { order, number: order + 1 } } } }));
+  if (writes.length) await TodoTask.bulkWrite(writes);
+}
+
+// A list has just become a project, or stopped being one: its tasks go
+// over to the other way of numbering.
+async function renumberForType(list, previousType) {
+  if (list.type === previousType) return;
+  if (list.type === "project") {
+    await TodoTask.updateMany({ list: list._id, parent: { $ne: null } }, { $set: { number: null } });
+    await renumberProject(list._id);
+  } else if (previousType === "project") {
+    // (Cleared first, so the plan's 1, 2, 3 aren't taken for the last number used.)
+    await TodoTask.updateMany({ list: list._id }, { $set: { number: null } });
+    const tasks = await TodoTask.find({ list: list._id }).setOptions({ withDeleted: true }).sort({ depth: 1, order: 1, createdAt: 1 }).select("_id");
+    let number = await nextNumber();
+    if (tasks.length) {
+      await TodoTask.bulkWrite(tasks.map((task) => ({ updateOne: { filter: { _id: task._id }, update: { $set: { number: number++ } } } })));
+    }
+  }
 }
 
 function setCompleted(task, completed) {
@@ -591,11 +622,13 @@ router.post("/tasks", async (req, res) => {
       depth = (parentTask.depth ?? 0) + 1;
     }
     if (!listId) listId = (await getDefaultList())._id;
+    // In a project the number is the task's place in the plan (set below).
+    const inProject = (await TodoList.findById(listId).select("type"))?.type === "project";
     const task = await TodoTask.create({
       list: listId,
       parent: parent || null,
       depth,
-      number: await nextNumber(),
+      number: inProject ? null : await nextNumber(),
       title,
       important: !!important,
       myDayDate: typeof myDayDate === "string" && DATE_RE.test(myDayDate) ? myDayDate : null,
@@ -608,6 +641,12 @@ router.post("/tasks", async (req, res) => {
       milestone: !!milestone,
       order: await TodoTask.countDocuments({ list: listId, parent: parent || null }),
     });
+    if (inProject && !parent) {
+      await renumberProject(listId);
+      const placed = await TodoTask.findById(task._id).select("order number");
+      task.order = placed.order;
+      task.number = placed.number;
+    }
     await task.populate("list", LIST_FIELDS);
     return res.status(201).json({ success: true, data: present(task) });
   } catch (error) {
@@ -826,6 +865,7 @@ router.post("/tasks/:id/to-project", async (req, res) => {
       level = ids;
     }
     await TodoTask.deleteOne({ _id: task._id });
+    await renumberForType(project, "tasks");
     return res.status(201).json({ success: true, data: project });
   } catch (error) {
     return sendError(res, error);
@@ -897,6 +937,7 @@ router.post("/tasks/:id/restore", async (req, res) => {
       { deletedRoot: task._id, deletedAt: { $ne: null } },
       { $set: { deletedAt: null, deletedRoot: null } },
     );
+    if (!task.parent) await renumberProject(task.list);
     return res.json({ success: true });
   } catch (error) {
     return sendError(res, error);
@@ -933,6 +974,7 @@ router.delete("/tasks/:id", async (req, res) => {
       { _id: { $in: [task._id, ...subs.map((s) => s._id)] } },
       { $set: { deletedAt: new Date(), deletedRoot: task._id } },
     );
+    if (!task.parent) await renumberProject(task.list);
     void purgeOldDeleted().catch(() => {});
     return res.json({ success: true });
   } catch (error) {

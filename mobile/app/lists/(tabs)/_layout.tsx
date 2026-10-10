@@ -18,7 +18,7 @@ export default function ListsSectionLayout() {
       <Tabs.Screen
         name="tasks"
         options={{
-          title: "Tasks",
+          title: "Lists",
           tabBarIcon: ({ color }) => <Ionicons size={24} name="list-outline" color={color} />,
         }}
       />

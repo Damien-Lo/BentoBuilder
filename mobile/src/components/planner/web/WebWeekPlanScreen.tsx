@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 import { addDays, MONTHS_FULL, MONTHS_SHORT, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
 import { entryName } from "@/src/components/calendar/mealFood";
@@ -33,6 +33,8 @@ type Hover = { hovered?: boolean };
 
 const LABEL_WIDTH = 104;
 const SUMMARY_WIDTH = 300;
+// One page of the numbers card (the card, less its border).
+const PAGE_WIDTH = SUMMARY_WIDTH - 2;
 
 export function WebWeekPlanScreen() {
   const router = useRouter();
@@ -150,7 +152,25 @@ export function WebWeekPlanScreen() {
   const eaten = computeDayNutrition(weekEntries.filter((e) => e.status === "confirmed"), conversions);
   const planned = computeDayNutrition(weekEntries.filter((e) => e.status === "planned"), conversions);
   const loggedDays = week.filter((d) => weekEntries.some((e) => e.date === d && e.status === "confirmed")).length;
-  const x7 = (n: number | null) => (n != null ? n * 7 : null);
+
+  // The numbers card has two pages, swiped between: the week, and one day.
+  // Clicking a day at the top of the grid picks it and turns to its page.
+  const [page, setPage] = useState<0 | 1>(0);
+  const [pickedDay, setPickedDay] = useState(today);
+  const pickedDayShown = week.includes(pickedDay) ? pickedDay : week.includes(today) ? today : week[0];
+  const pager = useRef<ScrollView>(null);
+  const turnTo = (next: 0 | 1) => {
+    setPage(next);
+    pager.current?.scrollTo({ x: next * PAGE_WIDTH, animated: true });
+  };
+  const pickedEntries = weekEntries.filter((e) => e.date === pickedDayShown);
+  const dayEaten = computeDayNutrition(pickedEntries.filter((e) => e.status === "confirmed"), conversions);
+  const dayPlanned = computeDayNutrition(pickedEntries.filter((e) => e.status === "planned"), conversions);
+  const dayCount = pickedEntries.filter((e) => e.status === "confirmed").length;
+  const longDay = (date: string) => {
+    const d = parseLocalDate(date);
+    return `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+  };
 
   return (
     <WebPage maxWidth={1760}>
@@ -178,18 +198,24 @@ export function WebWeekPlanScreen() {
               const goal = settings.dailyCalorieLimit;
               const pct = (n: number) => `${Math.max(0, Math.min(100, goal ? (n / goal) * 100 : 0))}%` as const;
               const over = !!goal && done > goal * 1.05;
+              const chosen = page === 1 && day === pickedDayShown;
               return (
-                <View
+                <Pressable
                   key={day}
-                  style={{
+                  onPress={() => {
+                    setPickedDay(day);
+                    turnTo(1);
+                  }}
+                  accessibilityLabel={`Show ${longDay(day)}`}
+                  style={({ hovered }: { hovered?: boolean }) => ({
                     flex: 1,
                     padding: 10,
                     borderLeftWidth: 1,
                     borderLeftColor: WEB.border,
                     borderTopWidth: 3,
-                    borderTopColor: isToday ? WEB.blue : "transparent",
-                    backgroundColor: isToday ? "#F8FBFF" : WEB.card,
-                  }}
+                    borderTopColor: isToday || chosen ? WEB.blue : "transparent",
+                    backgroundColor: chosen ? "#DBEAFE" : hovered ? "#EEF2F7" : isToday ? "#F8FBFF" : WEB.card,
+                  })}
                 >
                   <View style={{ flexDirection: "row", alignItems: "baseline" }}>
                     <Text style={{ fontSize: 20, fontWeight: isToday ? "700" : "500", color: isToday ? WEB.blue : WEB.text }}>{d.getDate()}</Text>
@@ -203,7 +229,7 @@ export function WebWeekPlanScreen() {
                     <View style={{ width: pct(done), backgroundColor: over ? WEB.red : WEB.blue }} />
                     <View style={{ width: pct(Math.min(ahead, Math.max(0, (goal ?? 0) - done))), backgroundColor: WEB.blue, opacity: 0.3 }} />
                   </View>
-                </View>
+                </Pressable>
               );
             })}
           </View>
@@ -284,23 +310,48 @@ export function WebWeekPlanScreen() {
 
         {/* The week in numbers */}
         <View style={{ width: SUMMARY_WIDTH, gap: 16 }}>
-          <Card title="This week" subtitle={`${loggedDays} of 7 days logged`}>
-            <View style={{ flexDirection: "row", alignItems: "baseline" }}>
-              <Text style={{ fontSize: 28, fontWeight: "700", color: WEB.text }}>{Math.round(eaten.calories ?? 0)}</Text>
-              {(planned.calories ?? 0) > 0 && <Text style={{ marginLeft: 6, fontSize: 15, fontWeight: "600", color: WEB.faint }}>+{Math.round(planned.calories ?? 0)}</Text>}
-              <Text style={{ marginLeft: 6, fontSize: 13, color: WEB.muted }}>kcal</Text>
-            </View>
-            <Text style={{ marginTop: 2, fontSize: 12, color: WEB.muted }}>
-              {loggedDays > 0 ? `${Math.round((eaten.calories ?? 0) / loggedDays)} kcal a day on logged days` : "Nothing logged yet"}
-              {settings.dailyCalorieLimit ? ` · goal ${settings.dailyCalorieLimit}` : ""}
-            </Text>
-            <GoalBar label="Calories" value={eaten.calories ?? 0} planned={planned.calories ?? 0} goal={x7(settings.dailyCalorieLimit)} unit="kcal" />
-            <GoalBar label="Protein" value={eaten.protein ?? 0} planned={planned.protein ?? 0} goal={x7(settings.dailyProteinLimit)} unit="g" />
-            <GoalBar label="Carbs" value={eaten.carbs ?? 0} planned={planned.carbs ?? 0} goal={x7(settings.dailyCarbsLimit)} unit="g" color="#D97706" />
-            <GoalBar label="Fats" value={eaten.fats ?? 0} planned={planned.fats ?? 0} goal={x7(settings.dailyFatsLimit)} unit="g" color="#DB2777" />
-            <View style={{ marginTop: 14, flexDirection: "row", alignItems: "center", gap: 14 }}>
-              <Legend color="#F0FDF4" border="#BBF7D0" label="Eaten" />
-              <Legend color="#FFFFFF" border="#CBD5E1" dashed label="Planned" />
+          <Card padded={false}>
+            <ScrollView
+              ref={pager}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              scrollEventThrottle={32}
+              onScroll={(e) => {
+                const next = e.nativeEvent.contentOffset.x > PAGE_WIDTH / 2 ? 1 : 0;
+                if (next !== page) setPage(next);
+              }}
+            >
+              <Numbers
+                title="This week"
+                subtitle={`${loggedDays} of 7 days logged`}
+                eaten={eaten}
+                planned={planned}
+                days={7}
+                settings={settings}
+                line={loggedDays > 0 ? `${Math.round((eaten.calories ?? 0) / loggedDays)} kcal a day on logged days` : "Nothing logged yet"}
+              />
+              <Numbers
+                title={longDay(pickedDayShown)}
+                subtitle={`${pickedDayShown === today ? "Today · " : ""}${dayCount} eaten${pickedEntries.length > dayCount ? `, ${pickedEntries.length - dayCount} planned` : ""}`}
+                eaten={dayEaten}
+                planned={dayPlanned}
+                days={1}
+                settings={settings}
+                line={pickedEntries.length ? "" : "Nothing planned or eaten"}
+              />
+            </ScrollView>
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingBottom: 14 }}>
+              <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 14 }}>
+                <Legend color="#F0FDF4" border="#BBF7D0" label="Eaten" />
+                <Legend color="#FFFFFF" border="#CBD5E1" dashed label="Planned" />
+              </View>
+              {/* Which page is showing; click to turn. */}
+              {([0, 1] as const).map((n) => (
+                <Pressable key={n} onPress={() => turnTo(n)} accessibilityLabel={n ? "The day" : "The week"} style={{ padding: 4 }}>
+                  <View style={{ width: page === n ? 16 : 7, height: 7, borderRadius: 4, backgroundColor: page === n ? WEB.blue : "#CBD5E1" }} />
+                </Pressable>
+              ))}
             </View>
           </Card>
           <Planned
@@ -314,6 +365,46 @@ export function WebWeekPlanScreen() {
 
       {confirm.modals}
     </WebPage>
+  );
+}
+
+// One page of the numbers card: what was eaten (and what's still planned)
+// against the goals for that many days.
+function Numbers({
+  title,
+  subtitle,
+  eaten,
+  planned,
+  days,
+  settings,
+  line,
+}: {
+  title: string;
+  subtitle: string;
+  eaten: ReturnType<typeof computeDayNutrition>;
+  planned: ReturnType<typeof computeDayNutrition>;
+  days: number;
+  settings: AppSettings;
+  line: string;
+}) {
+  const goal = (n: number | null) => (n != null ? n * days : null);
+  return (
+    <View style={{ width: PAGE_WIDTH, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14 }}>
+      <Text style={{ fontSize: 15, fontWeight: "700", color: WEB.text }}>{title}</Text>
+      <Text style={{ marginTop: 1, marginBottom: 10, fontSize: 12, color: WEB.muted }}>{subtitle}</Text>
+      <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+        <Text style={{ fontSize: 28, fontWeight: "700", color: WEB.text }}>{Math.round(eaten.calories ?? 0)}</Text>
+        {(planned.calories ?? 0) > 0 && <Text style={{ marginLeft: 6, fontSize: 15, fontWeight: "600", color: WEB.faint }}>+{Math.round(planned.calories ?? 0)}</Text>}
+        <Text style={{ marginLeft: 6, fontSize: 13, color: WEB.muted }}>kcal</Text>
+      </View>
+      <Text style={{ marginTop: 2, fontSize: 12, color: WEB.muted }}>
+        {[line, settings.dailyCalorieLimit ? `goal ${settings.dailyCalorieLimit}${days === 1 ? " kcal" : ""}` : ""].filter(Boolean).join(" · ")}
+      </Text>
+      <GoalBar label="Calories" value={eaten.calories ?? 0} planned={planned.calories ?? 0} goal={goal(settings.dailyCalorieLimit)} unit="kcal" />
+      <GoalBar label="Protein" value={eaten.protein ?? 0} planned={planned.protein ?? 0} goal={goal(settings.dailyProteinLimit)} unit="g" />
+      <GoalBar label="Carbs" value={eaten.carbs ?? 0} planned={planned.carbs ?? 0} goal={goal(settings.dailyCarbsLimit)} unit="g" color="#D97706" />
+      <GoalBar label="Fats" value={eaten.fats ?? 0} planned={planned.fats ?? 0} goal={goal(settings.dailyFatsLimit)} unit="g" color="#DB2777" />
+    </View>
   );
 }
 

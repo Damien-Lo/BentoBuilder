@@ -1,22 +1,26 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
+import { getWebScale } from "@/src/components/web/scale";
 import { loadSettings } from "@/src/services/settingsService";
 import {
   createTodoGroup,
   createTodoList,
   createTodoProject,
   createTodoTask,
+  deleteTodoGroup,
   getDeletedTasks,
   getListTasks,
   getSmartTasks,
   getTodoOverview,
   turnTaskIntoProject,
+  updateTodoGroup,
   updateTodoList,
   updateTodoTask,
   type SmartListId,
+  type TodoGroup,
   type TodoList,
   type TodoOverview,
   type TodoTask,
@@ -53,7 +57,18 @@ export function WebTasksScreen() {
   const [showCompleted, setShowCompleted] = useState(false);
   // The task open on the right, then any subtasks drilled into from it.
   const [detail, setDetail] = useState<string[]>([]);
-  const [prompt, setPrompt] = useState<"newList" | "newProject" | "newGroup" | "rename" | null>(null);
+  const [prompt, setPrompt] = useState<"newList" | "newProject" | "newGroup" | "createGroup" | "renameGroup" | "rename" | null>(null);
+  // The group being renamed.
+  const [groupTarget, setGroupTarget] = useState<TodoGroup | null>(null);
+  // A list or project being dragged to a group: where the pointer is, and
+  // the group under it ("" = out of any group, null = nowhere to drop).
+  const [drag, setDrag] = useState<{ list: TodoList; x: number; y: number; over: string | null } | null>(null);
+  const zones = useRef(new Map<string, View | null>());
+  // (A drag ends with a click on whatever is under the pointer; that one is ignored.)
+  const justDragged = useRef(false);
+  // Bumped when the project beside the open task changes (a reorder
+  // renumbers it), so the panel reloads.
+  const [panelReload, setPanelReload] = useState(0);
   const [weekStartDay, setWeekStartDay] = useState(1);
   useEffect(() => {
     loadSettings().then((s) => setWeekStartDay(s.weekStartDay)).catch(() => {});
@@ -64,13 +79,110 @@ export function WebTasksScreen() {
     .filter((l) => l.type !== "checklist")
     .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.order - b.order);
   const list = smart ? null : lists.find((l) => l._id === selected) ?? null;
-  // Projects are lists planned as a whole; they get their own heading and,
-  // when opened, their own views.
-  const projects = lists.filter((l) => l.type === "project");
-  const plainLists = lists.filter((l) => l.type !== "project");
-  const groupName = (id: string | null | undefined) => overview?.groups.find((g) => g._id === id)?.name;
-  // Projects under the group they're in, ungrouped ones first.
-  const projectGroups = [...new Set(projects.map((p) => p.group ?? null))].sort((a, b) => (a === null ? -1 : b === null ? 1 : (groupName(a) ?? "").localeCompare(groupName(b) ?? "")));
+  const groups = [...(overview?.groups ?? [])].sort((a, b) => a.order - b.order);
+  const groupName = (id: string | null | undefined) => groups.find((g) => g._id === id)?.name;
+  // What sits in a group ("" = in none): its lists, then its projects.
+  const inGroup = (id: string) =>
+    lists
+      .filter((l) => (l.group && groupName(l.group) !== undefined ? l.group : "") === id)
+      .sort((a, b) => Number(a.type === "project") - Number(b.type === "project"));
+
+  // Dragging a list or project by its row. It starts once the pointer has
+  // moved a little, so a plain click still opens the row.
+  function watchDrag(target: TodoList, down: { clientX: number; clientY: number; button?: number }) {
+    if (target.isDefault || down.button) return;
+    const scale = getWebScale();
+    let started = false;
+    const zoneAt = (y: number, x: number): string | null => {
+      for (const [id, view] of zones.current) {
+        const rect = (view as unknown as { getBoundingClientRect?: () => DOMRect } | null)?.getBoundingClientRect?.();
+        if (rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return id;
+      }
+      return null;
+    };
+    const move = (e: MouseEvent) => {
+      if (!started && Math.abs(e.clientX - down.clientX) + Math.abs(e.clientY - down.clientY) < 6) return;
+      started = true;
+      document.body.style.userSelect = "none";
+      setDrag({ list: target, x: e.clientX / scale, y: e.clientY / scale, over: zoneAt(e.clientY, e.clientX) });
+    };
+    const up = (e: MouseEvent) => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      if (!started) return;
+      document.body.style.userSelect = "";
+      justDragged.current = true;
+      setTimeout(() => (justDragged.current = false), 0);
+      setDrag(null);
+      const over = zoneAt(e.clientY, e.clientX);
+      if (over === null || over === (target.group ?? "")) return;
+      updateTodoList(target._id, { group: over || null }).then(loadOverview, fail);
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  }
+
+  function groupMenu(group: TodoGroup) {
+    const count = inGroup(group._id).length;
+    showActions(group.name, [
+      {
+        label: "Rename group",
+        onPress: () => {
+          setGroupTarget(group);
+          setPrompt("renameGroup");
+        },
+      },
+      {
+        label: "Delete group",
+        destructive: true,
+        onPress: () =>
+          Alert.alert(`Delete "${group.name}"?`, count ? "What's in it is kept, and goes back to being in no group." : undefined, [
+            { text: "Cancel", style: "cancel" },
+            { text: "Delete", style: "destructive", onPress: () => void deleteTodoGroup(group._id).then(loadOverview, fail) },
+          ]),
+      },
+    ]);
+  }
+
+  const rowFor = (l: TodoList, indent: boolean) => (
+    <ListRow
+      key={l._id}
+      icon={l.isDefault ? "home-outline" : l.type === "project" ? "git-network-outline" : "list-outline"}
+      color={listAccent(l.color, theme)}
+      label={l.name}
+      count={l.openCount ?? 0}
+      on={selected === l._id}
+      indent={indent}
+      faded={drag?.list._id === l._id}
+      onPress={() => {
+        if (!justDragged.current) pick(l._id);
+      }}
+      onMouseDown={(e) => watchDrag(l, e)}
+    />
+  );
+  // A zone's rows under "Lists" and "Projects", so the two kinds stay apart.
+  const kinds = (members: TodoList[], indent: boolean) =>
+    (
+      [
+        ["Lists", members.filter((l) => l.type !== "project")],
+        ["Projects", members.filter((l) => l.type === "project")],
+      ] as const
+    ).map(([label, rows]) =>
+      rows.length ? (
+        <View key={label}>
+          <Text style={{ marginTop: 6, marginBottom: 2, paddingLeft: indent ? 20 : 10, fontSize: 10, fontWeight: "700", letterSpacing: 0.8, color: "#94A3B8" }}>{label.toUpperCase()}</Text>
+          {rows.map((l) => rowFor(l, indent))}
+        </View>
+      ) : null,
+    );
+  const zoneStyle = (id: string) => ({
+    borderRadius: 12,
+    marginHorizontal: -4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    backgroundColor: drag && drag.over === id && id !== (drag.list.group ?? "") ? "#DBEAFE" : "transparent",
+  });
+
   const isProject = list?.type === "project";
 
   function listOptions(target: TodoList) {
@@ -238,48 +350,62 @@ export function WebTasksScreen() {
 
           <View style={{ height: 1, backgroundColor: "#E2E8F0", marginVertical: 10, marginHorizontal: 8 }} />
 
-          {projects.length > 0 && (
-            <>
-              <Heading label="Projects" />
-              {projectGroups.map((group) => (
-                <View key={group ?? "none"}>
-                  {group !== null && (
-                    <Text numberOfLines={1} style={{ marginTop: 4, marginBottom: 2, paddingHorizontal: 10, fontSize: 12, fontWeight: "600", color: "#64748B" }}>
-                      {groupName(group) ?? "Group"}
-                    </Text>
-                  )}
-                  {projects
-                    .filter((p) => (p.group ?? null) === group)
-                    .map((p) => (
-                      <ListRow
-                        key={p._id}
-                        icon="git-network-outline"
-                        color={listAccent(p.color, theme)}
-                        label={p.name}
-                        count={p.openCount ?? 0}
-                        on={selected === p._id}
-                        indent={group !== null}
-                        onPress={() => pick(p._id)}
-                      />
-                    ))}
-                </View>
-              ))}
-              <View style={{ height: 1, backgroundColor: "#E2E8F0", marginVertical: 10, marginHorizontal: 8 }} />
-              <Heading label="Lists" />
-            </>
-          )}
+          {/* In no group */}
+          <View
+            ref={(view) => {
+              zones.current.set("", view);
+            }}
+            style={zoneStyle("")}
+          >
+            {kinds(inGroup(""), false)}
+          </View>
 
-          {plainLists.map((l) => (
-            <ListRow
-              key={l._id}
-              icon={l.isDefault ? "home-outline" : "list-outline"}
-              color={listAccent(l.color, theme)}
-              label={l.name}
-              count={l.openCount ?? 0}
-              on={selected === l._id}
-              onPress={() => pick(l._id)}
-            />
-          ))}
+          {/* Groups, each with its lists and projects. Drag a row onto one. */}
+          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, marginBottom: 2 }}>
+            <View style={{ flex: 1 }}>
+              <Heading label="Groups" />
+            </View>
+            <Pressable
+              onPress={() => setPrompt("createGroup")}
+              accessibilityLabel="New group"
+              style={({ hovered }: Row) => ({ width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? "#E2E8F0" : "transparent" })}
+            >
+              <Ionicons name="add" size={17} color="#64748B" />
+            </Pressable>
+          </View>
+          {groups.length === 0 && (
+            <Text style={{ paddingHorizontal: 10, paddingVertical: 4, fontSize: 12, lineHeight: 17, color: "#94A3B8" }}>
+              A group holds related lists and projects. Make one with +, then drag things into it.
+            </Text>
+          )}
+          {groups.map((group) => {
+            const members = inGroup(group._id);
+            return (
+              <View
+                key={group._id}
+                ref={(view) => {
+                  zones.current.set(group._id, view);
+                }}
+                style={[zoneStyle(group._id), { marginBottom: 4 }]}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", height: 30, paddingLeft: 10 }}>
+                  <Ionicons name="folder-outline" size={14} color="#64748B" />
+                  <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontSize: 13, fontWeight: "700", color: "#475569" }}>
+                    {group.name}
+                  </Text>
+                  <Pressable
+                    onPress={() => groupMenu(group)}
+                    accessibilityLabel={`${group.name} options`}
+                    style={({ hovered }: Row) => ({ width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? "#E2E8F0" : "transparent" })}
+                  >
+                    <Ionicons name="ellipsis-horizontal" size={14} color="#94A3B8" />
+                  </Pressable>
+                </View>
+                {kinds(members, true)}
+                {members.length === 0 && <Text style={{ paddingLeft: 32, paddingBottom: 6, fontSize: 12, color: "#94A3B8" }}>Drag a list or project here</Text>}
+              </View>
+            );
+          })}
 
           <View style={{ height: 1, backgroundColor: "#E2E8F0", marginVertical: 10, marginHorizontal: 8 }} />
 
@@ -332,7 +458,10 @@ export function WebTasksScreen() {
             selectedTaskId={detail[0]}
             weekStartDay={weekStartDay}
             onOpenTask={(id) => setDetail([id])}
-            onChanged={refresh}
+            onChanged={() => {
+              refresh();
+              setPanelReload((n) => n + 1);
+            }}
             onOptions={() => listOptions(list)}
           />
         </View>
@@ -446,24 +575,40 @@ export function WebTasksScreen() {
             }}
             onClose={() => setDetail([])}
             onChanged={refresh}
+            refreshKey={panelReload}
           />
+        </View>
+      )}
+
+      {/* What's being dragged, following the pointer */}
+      {drag && (
+        <View
+          pointerEvents="none"
+          style={{ position: "fixed", left: drag.x + 12, top: drag.y + 8, zIndex: 100, flexDirection: "row", alignItems: "center", height: 32, paddingHorizontal: 10, borderRadius: 9, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#BFDBFE", boxShadow: "0 8px 20px rgba(15,23,42,0.18)" } as object}
+        >
+          <Ionicons name={drag.list.type === "project" ? "git-network-outline" : "list-outline"} size={15} color={listAccent(drag.list.color, theme)} />
+          <Text style={{ marginLeft: 8, fontSize: 13, fontWeight: "600", color: "#0F172A" }}>{drag.list.name}</Text>
         </View>
       )}
 
       <TextPromptModal
         visible={prompt != null}
         title={
-          prompt === "rename" ? (isProject ? "Rename project" : "Rename list") : prompt === "newProject" ? "New project" : prompt === "newGroup" ? "New group" : "New list"
+          prompt === "rename" ? (isProject ? "Rename project" : "Rename list") : prompt === "newProject" ? "New project" : prompt === "newGroup" || prompt === "createGroup" ? "New group" : prompt === "renameGroup" ? "Rename group" : "New list"
         }
-        placeholder={prompt === "newProject" ? "Project name" : prompt === "newGroup" ? "e.g. Work, Home, a client" : "List name"}
-        initialValue={prompt === "rename" ? list?.name ?? "" : ""}
-        confirmLabel={prompt === "rename" ? "Save" : "Create"}
+        placeholder={prompt === "newProject" ? "Project name" : prompt === "newGroup" || prompt === "createGroup" || prompt === "renameGroup" ? "e.g. Work, Home, a client" : "List name"}
+        initialValue={prompt === "rename" ? list?.name ?? "" : prompt === "renameGroup" ? groupTarget?.name ?? "" : ""}
+        confirmLabel={prompt === "rename" || prompt === "renameGroup" ? "Save" : "Create"}
         onCancel={() => setPrompt(null)}
         onSubmit={(name) => {
           const mode = prompt;
           setPrompt(null);
           if (mode === "rename" && list) {
             updateTodoList(list._id, { name }).then(refresh, fail);
+          } else if (mode === "createGroup") {
+            createTodoGroup(name).then(loadOverview, fail);
+          } else if (mode === "renameGroup" && groupTarget) {
+            updateTodoGroup(groupTarget._id, { name }).then(loadOverview, fail);
           } else if (mode === "newGroup" && list) {
             // A new group, with the open list or project as its first member.
             createTodoGroup(name)
@@ -497,7 +642,9 @@ function ListRow({
   count,
   on,
   indent,
+  faded,
   onPress,
+  onMouseDown,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
@@ -506,17 +653,22 @@ function ListRow({
   on: boolean;
   // Sits under a group's name.
   indent?: boolean;
+  // Being dragged somewhere else.
+  faded?: boolean;
   onPress: () => void;
+  onMouseDown?: (e: { clientX: number; clientY: number; button?: number }) => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      {...(onMouseDown ? ({ onMouseDown } as object) : null)}
       style={({ hovered }: Row) => ({
         flexDirection: "row",
         alignItems: "center",
         height: 38,
         paddingHorizontal: 10,
         marginLeft: indent ? 10 : 0,
+        opacity: faded ? 0.4 : 1,
         borderRadius: 10,
         backgroundColor: on ? "#E0EAFF" : hovered ? "#EEF2F7" : "transparent",
       })}

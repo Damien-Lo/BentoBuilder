@@ -70,14 +70,14 @@ export const WEB_SECTIONS: WebSection[] = [
   },
   {
     id: "lists",
-    label: "Lists",
+    label: "Tasks",
     icon: "checkbox-outline",
     path: "/lists/tasks",
     // A single list's page: could be a checklist or a shopping list.
     also: ["/lists"],
     tabs: [
-      { label: "Tasks", path: "/lists/tasks", also: ["/lists/task", "/lists/deleted"] },
       { label: "Overview", path: "/lists", exact: true },
+      { label: "Lists & projects", path: "/lists/tasks", also: ["/lists/task", "/lists/deleted"] },
       { label: "Checklists", path: "/lists/checklists" },
       { label: "Shopping", path: "/lists/shopping" },
     ],

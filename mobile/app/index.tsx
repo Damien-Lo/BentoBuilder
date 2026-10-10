@@ -40,8 +40,8 @@ const SECTIONS: Section[] = [
   },
   {
     id: "lists",
-    name: "Lists",
-    description: "Tasks, checklists & shopping",
+    name: "Tasks",
+    description: "Lists, projects, checklists & shopping",
     icon: "checkbox-outline",
     iconColor: "#4B55C9",
     iconBg: "#EEF0FB",

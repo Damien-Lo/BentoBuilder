@@ -5,6 +5,7 @@ import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 
 import { showActions } from "@/src/components/todo/theme";
 import { deleteCalendarEvent, type EventCalendar, type EventOccurrence, type SeriesScope } from "@/src/services/calendarApi";
+import { getTodoTask, scheduleTodoTask } from "@/src/services/todoApi";
 import { parseLocalDate } from "@/src/utils/mealPlan";
 
 import { CalendarEditSheet, confirmDeleteCalendar } from "../CalendarSheets";
@@ -50,7 +51,7 @@ export function WebCalendarScreen() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
   const data = useCalendarData(focusDate);
-  const { today, weekStartDay, calendars, calendarsById, visibleEvents, reload } = data;
+  const { today, weekStartDay, calendars, calendarsById, visibleEvents, reload, toggleCalendar } = data;
   const [now, setNow] = useState(currentMinutes());
   const [peek, setPeek] = useState<EventOccurrence | null>(null);
   const [openBlock, setOpenBlock] = useState<EventOccurrence | null>(null);
@@ -62,6 +63,44 @@ export function WebCalendarScreen() {
   const hiddenCalendars = calendars.filter((c) => !c.visible);
   // The event card: a new event's starting point, or the event being edited.
   const [editor, setEditor] = useState<EventDraft | null>(null);
+
+  // Booking time for a task: while this is set, a click or drag on a day
+  // books a block for the task instead of starting an event. `schedule=<id>`
+  // in the address opens straight into it — a task's "Schedule" does that.
+  const { schedule } = useLocalSearchParams<{ schedule?: string }>();
+  const [scheduling, setScheduling] = useState<{ id: string; title: string; blocks: number; fromTask: boolean } | null>(null);
+  function startScheduling(id: string, fromTask: boolean) {
+    setScheduling({ id, title: "", blocks: 0, fromTask });
+    // Blocks are drawn on the time grid.
+    setView((v) => (v === "month" ? "week" : v));
+    getTodoTask(id).then(
+      (task) => setScheduling((prev) => (prev?.id === id ? { ...prev, title: task.title, blocks: task.workBlocks.length } : prev)),
+      () => setScheduling((prev) => (prev?.id === id ? null : prev)),
+    );
+  }
+  useEffect(() => {
+    if (schedule) startScheduling(schedule, true);
+  }, [schedule]);
+  async function bookBlock(date: string, startMinutes: number, endMinutes: number) {
+    if (!scheduling) return;
+    try {
+      await scheduleTodoTask(scheduling.id, { date, startMinutes, endMinutes });
+      setScheduling((prev) => prev && { ...prev, blocks: prev.blocks + 1 });
+      // Make sure it shows: booked time is drawn through the Tasks calendar.
+      const tasksCalendar = calendars.find((c) => c.isTasks);
+      if (tasksCalendar && !tasksCalendar.visible) void toggleCalendar(tasksCalendar);
+      reload();
+    } catch (error) {
+      Alert.alert("Couldn't schedule", error instanceof Error ? error.message : "Something went wrong.");
+    }
+  }
+  function stopScheduling() {
+    const fromTask = scheduling?.fromTask;
+    setScheduling(null);
+    // Back to the task it was opened from.
+    if (fromTask && router.canGoBack()) router.back();
+    else if (schedule) router.setParams({ schedule: undefined });
+  }
 
   // `new=<date>` in the address opens straight into a new event (Home's
   // "New event" button).
@@ -327,6 +366,25 @@ export function WebCalendarScreen() {
           </View>
         </View>
 
+        {scheduling && (
+          <View style={{ flexDirection: "row", alignItems: "center", minHeight: 46, paddingHorizontal: 16, gap: 10, backgroundColor: "#EFF6FF", borderBottomWidth: 1, borderBottomColor: "#BFDBFE" }}>
+            <Ionicons name="time-outline" size={18} color="#1D4ED8" />
+            <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 14, color: "#1E3A8A" }}>
+              Booking time for <Text style={{ fontWeight: "700" }}>{scheduling.title || "…"}</Text>
+            </Text>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: "#1D4ED8" }}>
+              {view === "month" ? "Switch to a day or week view, then drag" : "Click a time for an hour, or drag out a block"}
+              {scheduling.blocks > 0 ? ` · ${scheduling.blocks} booked` : ""}
+            </Text>
+            <Pressable
+              onPress={stopScheduling}
+              style={({ hovered }: { hovered?: boolean }) => ({ height: 30, paddingHorizontal: 14, justifyContent: "center", borderRadius: 8, backgroundColor: hovered ? "#1D4ED8" : "#2563EB" })}
+            >
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#FFFFFF" }}>Done</Text>
+            </Pressable>
+          </View>
+        )}
+
         {view === "month" ? (
           <WebMonthGrid
             focusDate={focusDate}
@@ -350,7 +408,7 @@ export function WebCalendarScreen() {
             events={visibleEvents}
             calendarsById={calendarsById}
             onPressEvent={pressEvent}
-            onCreate={newEvent}
+            onCreate={scheduling ? (date, start, end) => void bookBlock(date, start, end) : newEvent}
             onPressDay={(date) => {
               setFocusDate(date);
               setView("day");
@@ -394,8 +452,10 @@ export function WebCalendarScreen() {
           reload();
         }}
         onOpenTask={openTask}
-        // Booking more time by dragging is a phone gesture for now.
-        onScheduleAnother={(taskId) => router.push({ pathname: "/lists/task/[id]", params: { id: taskId } })}
+        onScheduleAnother={(taskId) => {
+          setOpenBlock(null);
+          startScheduling(taskId, false);
+        }}
       />
 
       <CalendarEditSheet
