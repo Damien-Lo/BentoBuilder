@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AddTaskBar, type NewTaskInput } from "@/src/components/todo/AddTaskBar";
 import { openListOptions } from "@/src/components/todo/listActions";
+import { ProjectPlan, ProjectSummary } from "@/src/components/todo/ProjectPlan";
 import { PriorityPill, ProgressBar, StatusPill, TaskNumber } from "@/src/components/todo/TaskBits";
 import { TextPromptModal } from "@/src/components/todo/TextPromptModal";
 import {
@@ -33,6 +34,7 @@ import {
   getSmartTasks,
   getTodoOverview,
   updateTodoList,
+  turnTaskIntoProject,
   updateTodoTask,
   type SmartListId,
   type TodoGroup,
@@ -60,6 +62,7 @@ export default function TodoListScreen() {
   const accent = listAccent(smart?.color ?? list?.color, theme);
   const title = smart?.name ?? list?.name ?? "";
   const isChecklist = list?.type === "checklist";
+  const isProject = list?.type === "project";
   const noun = isChecklist ? "item" : "task";
 
   const refresh = useCallback(() => {
@@ -140,6 +143,26 @@ export default function TodoListScreen() {
       });
   }
 
+  // Holding a task in an ordinary list: it can grow into a project.
+  function taskMenu(task: TodoTask) {
+    showActions(task.title, [
+      { label: "Open", onPress: () => openTask(task) },
+      {
+        label: "Turn into a project",
+        onPress: () =>
+          Alert.alert(
+            `Turn "${task.title}" into a project?`,
+            (task.subtaskCount > 0 ? "The task becomes the project, and its subtasks become the project's tasks." : "It becomes an empty project you can add tasks and phases to.") +
+              (task.workBlocks.length > 0 ? ` The time booked on it (${task.workBlocks.length} block${task.workBlocks.length === 1 ? "" : "s"}) comes off the calendar.` : ""),
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Make it a project", onPress: () => void turnTaskIntoProject(task._id).then((project) => router.replace({ pathname: "/lists/[id]", params: { id: project._id } }), fail) },
+            ],
+          ),
+      },
+    ]);
+  }
+
   function openTask(task: TodoTask) {
     if (isChecklist) openChecklistItem(task);
     else router.push({ pathname: "/lists/task/[id]", params: { id: task._id } });
@@ -157,6 +180,7 @@ export default function TodoListScreen() {
         description: input.description,
       });
       setTasks((prev) => [...prev, created]);
+      if (isProject) refresh();
     } catch (error) {
       fail(error);
     }
@@ -174,16 +198,14 @@ export default function TodoListScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        {/* Header */}
+        {/* Header: the title and, for a project, its details beneath it. */}
+        <View style={{ backgroundColor: theme.headerBg, borderBottomWidth: 1, borderBottomColor: theme.cardBorder }}>
         <View
           style={{
             flexDirection: "row",
             alignItems: "center",
             paddingHorizontal: 12,
             paddingVertical: 12,
-            backgroundColor: theme.headerBg,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.cardBorder,
           }}
         >
           <Pressable
@@ -201,7 +223,7 @@ export default function TodoListScreen() {
             <Text style={{ marginTop: 2, fontSize: 14, color: theme.textMuted }} numberOfLines={1}>
               {smart?.id === "myday"
                 ? longToday()
-                : `${isChecklist ? "Checklist · " : ""}${open.length} ${noun}${open.length === 1 ? "" : "s"}${done.length ? ` · ${done.length} ${isChecklist ? "ticked" : "completed"}` : ""}`}
+                : `${isChecklist ? "Checklist · " : isProject ? "Project · " : ""}${open.length} ${noun}${open.length === 1 ? "" : "s"}${done.length ? ` · ${done.length} ${isChecklist ? "ticked" : "completed"}` : ""}`}
             </Text>
           </View>
           {list && (
@@ -213,6 +235,7 @@ export default function TodoListScreen() {
                   groups,
                   onRename: () => setRenaming(true),
                   onChanged: refresh,
+                  allowProject: true,
                   onDeleted: () => router.back(),
                   // It now belongs on a different tab — go back to the tabs.
                   onMoved: () => router.back(),
@@ -225,6 +248,8 @@ export default function TodoListScreen() {
             </Pressable>
           )}
         </View>
+        {isProject && list && <ProjectSummary project={list} tasks={tasks} accent={accent} theme={theme} onOpenTask={openTask} onChanged={refresh} />}
+        </View>
 
         <AddTaskBar
           accent={accent}
@@ -235,26 +260,54 @@ export default function TodoListScreen() {
 
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40 }}>
 
-          {open.length === 0 && done.length === 0 && (
+          {open.length === 0 && done.length === 0 && !isProject && (
             <Text style={{ color: theme.textFaint, fontSize: 16, textAlign: "center", marginTop: 48 }}>
               {smart?.id === "myday" ? "Nothing planned for today yet." : `No ${noun}s yet.`}
             </Text>
           )}
 
-          {open.map((task) => (
-            <TaskCard
-              key={task._id}
-              task={task}
-              theme={theme}
+          {/* A project: its summary, then the open tasks under their phases. */}
+          {isProject && list && (
+            <ProjectPlan
+              project={list}
+              tasks={tasks}
               accent={accent}
-              showListName={!!smart}
-              inMyDayView={smart?.id === "myday"}
-              onToggle={() => toggleComplete(task)}
-              onStar={() => toggleImportant(task)}
-              checklist={isChecklist}
-              onOpen={() => openTask(task)}
+              theme={theme}
+              onOpenTask={openTask}
+              onChanged={refresh}
+              renderTask={(task, onLongPress) => (
+                <TaskCard
+                  task={task}
+                  theme={theme}
+                  accent={accent}
+                  showListName={false}
+                  inMyDayView={false}
+                  onToggle={() => toggleComplete(task)}
+                  onStar={() => toggleImportant(task)}
+                  checklist={false}
+                  onOpen={() => openTask(task)}
+                  onLongPress={onLongPress}
+                />
+              )}
             />
-          ))}
+          )}
+
+          {!isProject &&
+            open.map((task) => (
+              <TaskCard
+                key={task._id}
+                task={task}
+                theme={theme}
+                accent={accent}
+                showListName={!!smart}
+                inMyDayView={smart?.id === "myday"}
+                onToggle={() => toggleComplete(task)}
+                onStar={() => toggleImportant(task)}
+                checklist={isChecklist}
+                onOpen={() => openTask(task)}
+                onLongPress={isChecklist || task.parent ? undefined : () => taskMenu(task)}
+              />
+            ))}
 
           {done.length > 0 && (
             <>
@@ -318,8 +371,8 @@ export default function TodoListScreen() {
       {list && (
         <TextPromptModal
           visible={renaming}
-          title="Rename list"
-          placeholder="List name"
+          title={isProject ? "Rename project" : "Rename list"}
+          placeholder={isProject ? "Project name" : "List name"}
           initialValue={list.name}
           confirmLabel="Save"
           onCancel={() => setRenaming(false)}
@@ -343,6 +396,7 @@ function TaskCard({
   onToggle,
   onStar,
   onOpen,
+  onLongPress,
 }: {
   task: TodoTask;
   theme: TodoTheme;
@@ -354,6 +408,7 @@ function TaskCard({
   onToggle: () => void;
   onStar: () => void;
   onOpen: () => void;
+  onLongPress?: () => void;
 }) {
   const meta: { text: string; icon?: keyof typeof Ionicons.glyphMap; color?: string }[] = [];
   if (!checklist) {
@@ -362,6 +417,7 @@ function TaskCard({
     if (task.subtaskCount > 0) {
       meta.push({ text: `${task.subtaskCount - task.openSubtaskCount}/${task.subtaskCount}`, icon: "git-merge-outline" });
     }
+    if (task.startDate && !task.milestone) meta.push({ text: `From ${friendlyDate(task.startDate)}`, icon: "flag-outline" });
     if (task.doDate) meta.push({ text: `Do ${friendlyDate(task.doDate)}`, icon: "play-circle-outline" });
     if (task.dueDate) {
       const overdue = !task.completed && isOverdue(task.dueDate);
@@ -376,6 +432,7 @@ function TaskCard({
   return (
     <Pressable
       onPress={onOpen}
+      onLongPress={onLongPress}
       className="active:opacity-80"
       style={{
         flexDirection: "row",
@@ -427,10 +484,14 @@ function TaskCard({
           style={{
             fontSize: 16,
             lineHeight: 21,
+            fontWeight: task.milestone ? "700" : "400",
             color: task.completed ? theme.textFaint : theme.text,
             textDecorationLine: task.completed ? "line-through" : "none",
           }}
         >
+          {/* A milestone: a deliverable or checkpoint in a project. */}
+          {task.milestone && <Ionicons name="diamond" size={13} color={accent} />}
+          {task.milestone ? " " : ""}
           {task.title}
         </Text>
         {meta.length > 0 && (

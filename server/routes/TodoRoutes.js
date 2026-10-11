@@ -308,7 +308,8 @@ router.delete("/lists/:id", async (req, res) => {
 
 // --- Tasks ---
 
-const LIST_FIELDS = "name color isDefault type";
+// (A project's phases come too, so a task's page can offer them.)
+const LIST_FIELDS = "name color isDefault type phases";
 
 function cleanStrings(value) {
   if (!Array.isArray(value)) return [];
@@ -673,7 +674,10 @@ router.patch("/tasks/:id", async (req, res) => {
     if (b.doDate !== undefined) task.doDate = typeof b.doDate === "string" && DATE_RE.test(b.doDate) ? b.doDate : null;
     if (b.startDate !== undefined) task.startDate = typeof b.startDate === "string" && DATE_RE.test(b.startDate) ? b.startDate : null;
     if (b.milestone !== undefined) task.milestone = !!b.milestone;
+    // Moved to another phase from its own page: it goes to the end of it.
+    const rephased = b.phase !== undefined && !task.parent && String(b.phase || "") !== String(task.phase || "");
     if (b.phase !== undefined) task.phase = b.phase || null;
+    if (rephased) task.order = 1e6;
     if (b.priority !== undefined) {
       if (!TASK_PRIORITIES.includes(b.priority)) throw new Error("Unknown priority");
       task.priority = b.priority;
@@ -693,6 +697,12 @@ router.patch("/tasks/:id", async (req, res) => {
     if (b.completed !== undefined) setCompleted(task, !!b.completed);
 
     await task.save();
+    if (rephased) {
+      await renumberProject(task.list);
+      const placed = await TodoTask.findById(task._id).select("order number");
+      task.order = placed.order;
+      task.number = placed.number;
+    }
     if (task.completed && b.completeSubtasks) {
       for (const sub of await descendantsOf([task._id])) {
         if (!sub.completed) {

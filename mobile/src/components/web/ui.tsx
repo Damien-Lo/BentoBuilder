@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState, type ReactNode } from "react";
-import { Pressable, ScrollView, Text, View, type DimensionValue, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, Pressable, ScrollView, Text, View, type DimensionValue, type StyleProp, type ViewStyle } from "react-native";
 
 import { themeColor } from "./theme";
 
@@ -9,6 +9,11 @@ import { themeColor } from "./theme";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 type Hover = { hovered?: boolean };
+
+// A style that depends on the pointer being over it. In a browser it's
+// passed on as a function; on the phone — where nothing hovers, and a
+// Pressable's style can't be a function — it's worked out once.
+export const hoverable = <T,>(style: (state: Hover) => T): T | ((state: Hover) => T) => (Platform.OS === "web" ? style : style({}));
 
 // The chosen segment of a Segmented control: raised off its track in
 // either theme (white on grey, or a lighter slate on the dark).
@@ -215,14 +220,14 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
           <Pressable
             key={option.value}
             onPress={() => onChange(option.value)}
-            style={({ hovered }: Hover) => ({
+            style={hoverable(({ hovered }) => ({
               height: 30,
               paddingHorizontal: 12,
               justifyContent: "center",
               borderRadius: 8,
               backgroundColor: on ? SEGMENT_ON : hovered ? "#E2E8F0" : "transparent",
               boxShadow: on ? "0 1px 2px rgba(15,23,42,0.12)" : undefined,
-            })}
+            }))}
           >
             <Text style={{ fontSize: 13, fontWeight: on ? "700" : "500", color: on ? WEB.blueDark : "#475569" }}>{option.label}</Text>
           </Pressable>

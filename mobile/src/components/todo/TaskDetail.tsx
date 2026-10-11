@@ -102,6 +102,8 @@ export function TaskDetail({
   const [newSubtask, setNewSubtask] = useState("");
   // Which date is being picked: this task's, or one of its subtasks'.
   const [pickingDateFor, setPickingDateFor] = useState<TodoTask | null>(null);
+  // In a project: picking the day work on it starts.
+  const [pickingStart, setPickingStart] = useState(false);
   // The page stops scrolling while a subtask card is being dragged.
   const [treeDragging, setTreeDragging] = useState(false);
   // The percentage under the finger while the progress slider is dragged.
@@ -239,6 +241,9 @@ export function TaskDetail({
 
   const accent = listAccent(task.list.color, theme);
   const isSubtask = task.depth > 0;
+  // A project's own tasks (not their subtasks) have a place in its plan.
+  const inProject = task.list.type === "project" && !isSubtask;
+  const phases = [...(task.list.phases ?? [])].sort((a, b) => a.order - b.order);
   const parent = task.ancestors[task.ancestors.length - 1];
   const overdue = !!task.dueDate && !task.completed && isOverdue(task.dueDate);
   const canHaveSubtasks = task.depth < MAX_DEPTH;
@@ -438,6 +443,39 @@ export function TaskDetail({
                 </Pressable>
               )}
             </Row>
+            {/* In a project: when work starts (its span on the timeline with
+                the due date), whether it's a milestone, and its phase. */}
+            {inProject && !task.milestone && (
+              <Row icon="flag-outline" label="Start date" border onPress={() => setPickingStart(true)}>
+                <Text className={`text-base ${task.startDate ? "text-slate-900" : "text-slate-400"}`}>{task.startDate ? friendlyDate(task.startDate) : "None"}</Text>
+                {task.startDate && (
+                  <Pressable hitSlop={10} onPress={() => save(task, { startDate: null })} className="ml-2">
+                    <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                  </Pressable>
+                )}
+              </Row>
+            )}
+            {inProject && (
+              <Row icon="diamond-outline" label="Milestone" border onPress={() => save(task, { milestone: !task.milestone })}>
+                <Toggle value={!!task.milestone} />
+              </Row>
+            )}
+            {inProject && phases.length > 0 && (
+              <Row
+                icon="layers-outline"
+                label="Phase"
+                border
+                onPress={() =>
+                  showActions("Phase", [
+                    ...phases.map((phase) => ({ label: phase._id === task.phase ? `${phase.name} ✓` : phase.name, onPress: () => save(task, { phase: phase._id }) })),
+                    ...(task.phase ? [{ label: "No phase", onPress: () => save(task, { phase: null }) }] : []),
+                  ])
+                }
+              >
+                <Text className={`text-base ${phases.some((p) => p._id === task.phase) ? "text-slate-900" : "text-slate-400"}`}>{phases.find((p) => p._id === task.phase)?.name ?? "None"}</Text>
+                <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 4 }} />
+              </Row>
+            )}
             {/* Do date: tapping it opens the calendar to drag out a block of
                 time for this task alone. */}
             <Row icon="play-circle-outline" label="Do date" border onPress={openScheduler}>
@@ -610,6 +648,16 @@ export function TaskDetail({
         </ScrollView>
       </KeyboardAvoidingView>
 
+      <DatePickerModal
+        visible={pickingStart}
+        title="Start date"
+        value={task.startDate ?? task.dueDate ?? todayStr()}
+        onCancel={() => setPickingStart(false)}
+        onConfirm={(value) => {
+          setPickingStart(false);
+          save(task, { startDate: value });
+        }}
+      />
       <DatePickerModal
         visible={pickingDateFor !== null}
         title="Due date"

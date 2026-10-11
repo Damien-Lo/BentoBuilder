@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { addDays, daysBetween, MONTHS_SHORT, WEEKDAYS_SHORT } from "@/src/components/calendar/calendarUtils";
 import { Choice, compactDate, DateField } from "@/src/components/web/fields";
-import { Card, Empty, Segmented, WEB } from "@/src/components/web/ui";
+import { Card, Empty, hoverable, Segmented, WEB } from "@/src/components/web/ui";
 import { themeColor } from "@/src/components/web/theme";
 import {
   addProjectPhase,
@@ -806,7 +806,9 @@ const MORE_WEEKS = 12;
 const MAX_EXTRA_WEEKS = 156;
 const ROW = 34;
 
-function TimelineTab({
+// (Also the phone's timeline, opened from a project's page: `compact` gives
+// it a narrower column of names and puts the view switch above the chart.)
+export function TimelineTab({
   project,
   tasks,
   phases,
@@ -815,6 +817,7 @@ function TimelineTab({
   today,
   selectedTaskId,
   onOpenTask,
+  compact = false,
 }: {
   project: TodoList;
   tasks: TodoTask[];
@@ -824,7 +827,10 @@ function TimelineTab({
   today: string;
   selectedTaskId?: string;
   onOpenTask: (id: string) => void;
+  compact?: boolean;
 }) {
+  const labels = compact ? 124 : LABELS;
+  const gutter = compact ? 12 : 28;
   const [width, setWidth] = useState(0);
   const scroller = useRef<ScrollView>(null);
   // Two ways to look at it: the whole project squeezed into the width, or
@@ -860,7 +866,7 @@ function TimelineTab({
   const dated = tasks.filter((t) => spanOf(t));
   const undated = tasks.filter((t) => !spanOf(t));
   const points = [today, project.startDate, project.targetDate, ...dated.flatMap((t) => [spanOf(t)!.from, spanOf(t)!.to])].filter((d): d is string => !!d).sort();
-  const room = Math.max(0, width - LABELS);
+  const room = Math.max(0, width - labels);
   const fit = zoom === "project";
   // Whole project: a day of margin each side, and every day the same share
   // of the width. Two weeks: fourteen days across, with a couple of months
@@ -916,7 +922,19 @@ function TimelineTab({
   const barColor = (task: TodoTask) => (task.completed ? "#10B981" : task.status === "in_progress" ? accent : task.status === "on_hold" ? "#D97706" : "#94A3B8");
 
   return (
-    <View style={{ flex: 1, paddingHorizontal: 28, paddingBottom: 20 }} onLayout={(e) => setWidth(e.nativeEvent.layout.width - 56)}>
+    <View style={{ flex: 1, paddingHorizontal: gutter, paddingBottom: compact ? 12 : 20 }} onLayout={(e) => setWidth(e.nativeEvent.layout.width - gutter * 2)}>
+      {compact && tasks.length > 0 && (
+        <View style={{ alignSelf: "flex-start", marginBottom: 10 }}>
+          <Segmented
+            options={[
+              { value: "project", label: "Whole project" },
+              { value: "weeks", label: "2 weeks" },
+            ]}
+            value={zoom}
+            onChange={setZoom}
+          />
+        </View>
+      )}
       {tasks.length === 0 ? (
         <Empty icon="analytics-outline" text="Add tasks on the Plan tab, give them dates, and they'll be laid out here" />
       ) : (
@@ -924,9 +942,9 @@ function TimelineTab({
           <ScrollView>
             <View style={{ flexDirection: "row" }}>
               {/* Names, down the left */}
-              <View style={{ width: LABELS, borderRightWidth: 1, borderRightColor: WEB.border }}>
+              <View style={{ width: labels, borderRightWidth: 1, borderRightColor: WEB.border }}>
                 <View style={{ height: 52, justifyContent: "center", paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: WEB.border, backgroundColor: "#F8FAFC" }}>
-                  <View style={{ alignSelf: "flex-start" }}>
+                  <View style={{ alignSelf: "flex-start", display: compact ? "none" : "flex" }}>
                     <Segmented
                       options={[
                         { value: "project", label: "Whole project" },
@@ -950,7 +968,7 @@ function TimelineTab({
                         <Pressable
                           key={task._id}
                           onPress={() => onOpenTask(task._id)}
-                          style={({ hovered }: Hover) => ({ height: ROW, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, backgroundColor: selectedTaskId === task._id ? "#EFF6FF" : hovered ? "#F8FAFC" : "#FFFFFF" })}
+                          style={hoverable(({ hovered }) => ({ height: ROW, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, backgroundColor: selectedTaskId === task._id ? "#EFF6FF" : hovered ? "#F8FAFC" : "#FFFFFF" }))}
                         >
                           <Ionicons name={task.completed ? "checkmark-circle" : task.milestone ? "diamond" : "ellipse-outline"} size={13} color={task.completed ? WEB.green : task.milestone ? accent : WEB.faint} />
                           <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontSize: 13, color: task.completed ? WEB.faint : WEB.text }}>
@@ -980,7 +998,7 @@ function TimelineTab({
                       {months.map((m) => (
                         <View key={m.key} style={{ position: "absolute", left: m.left, width: m.width, height: 24, justifyContent: "center", paddingLeft: 6, borderLeftWidth: 1, borderLeftColor: WEB.border }}>
                           {/* (Stays in view while any of its month is.) */}
-                          <Text numberOfLines={1} style={{ position: "sticky", left: 6, alignSelf: "flex-start", fontSize: 12, fontWeight: "700", color: WEB.body } as object}>
+                          <Text numberOfLines={1} style={[{ alignSelf: "flex-start", fontSize: 12, fontWeight: "700", color: WEB.body }, Platform.OS === "web" ? ({ position: "sticky", left: 6 } as object) : null]}>
                             {m.label}
                           </Text>
                         </View>
@@ -1040,7 +1058,7 @@ function TimelineTab({
                                 <Pressable
                                   onPress={() => onOpenTask(task._id)}
                                   accessibilityLabel={task.title}
-                                  style={({ hovered }: Hover) => ({
+                                  style={hoverable(({ hovered }) => ({
                                     position: "absolute",
                                     left: x(span.from) + 2,
                                     width: Math.max(6, (daysBetween(span.from, span.to) + 1) * dayWidth - 4),
@@ -1052,7 +1070,7 @@ function TimelineTab({
                                     opacity: hovered ? 0.85 : 1,
                                     borderWidth: overdue || selectedTaskId === task._id ? 2 : 0,
                                     borderColor: overdue ? WEB.red : "#1D4ED8",
-                                  })}
+                                  }))}
                                 >
                                   {/* How far through it is, as a darker stretch from the left. */}
                                   {!task.completed && (task.progress ?? 0) > 0 && <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${task.progress}%`, backgroundColor: "rgba(15,23,42,0.22)" }} />}
@@ -1083,20 +1101,20 @@ function TimelineTab({
                     <Pressable
                       key={task._id}
                       onPress={() => onOpenTask(task._id)}
-                      style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 28, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: "#CBD5E1", backgroundColor: hovered ? "#F1F5F9" : "#FFFFFF" })}
+                      style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", height: 28, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: "#CBD5E1", backgroundColor: hovered ? "#F1F5F9" : "#FFFFFF" }))}
                     >
                       {task.milestone && <Ionicons name="diamond-outline" size={11} color={accent} style={{ marginRight: 5 }} />}
                       <Text style={{ fontSize: 12, color: task.completed ? WEB.faint : WEB.body }}>{task.title}</Text>
                     </Pressable>
                   ))}
                 </View>
-                <Text style={{ marginTop: 8, fontSize: 12, color: WEB.faint }}>Give these a start or due date on the Plan tab to place them on the timeline.</Text>
+                <Text style={{ marginTop: 8, fontSize: 12, color: WEB.faint }}>{compact ? "Give these a start or due date to place them on the timeline." : "Give these a start or due date on the Plan tab to place them on the timeline."}</Text>
               </View>
             )}
           </ScrollView>
 
           {/* Key */}
-          <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 14, paddingHorizontal: 12, height: 34, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: "#F8FAFC" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: 14, rowGap: 4, paddingHorizontal: 12, paddingVertical: 8, minHeight: 34, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: "#F8FAFC" }}>
             <Key color="#94A3B8" label="Not started" />
             <Key color={accent} label="In progress" />
             <Key color="#D97706" label="On hold" />
@@ -1108,7 +1126,7 @@ function TimelineTab({
             {!fit && (
               <Pressable
                 onPress={() => goTo(today, true)}
-                style={({ hovered }: Hover) => ({ marginLeft: "auto", height: 24, paddingHorizontal: 10, justifyContent: "center", borderRadius: 7, backgroundColor: hovered ? "#DBEAFE" : "#EFF6FF" })}
+                style={hoverable(({ hovered }) => ({ marginLeft: "auto", height: 24, paddingHorizontal: 10, justifyContent: "center", borderRadius: 7, backgroundColor: hovered ? "#DBEAFE" : "#EFF6FF" }))}
               >
                 <Text style={{ fontSize: 12, fontWeight: "600", color: "#1D4ED8" }}>Today</Text>
               </Pressable>

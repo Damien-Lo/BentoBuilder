@@ -57,7 +57,7 @@ export type TaskPriority = "low" | "medium" | "high" | "urgent";
 // tasks list it's a full task, and subtasks are tasks with a `parent`.
 export interface TodoTask {
   _id: string;
-  list: Pick<TodoList, "_id" | "name" | "color" | "isDefault" | "type">;
+  list: Pick<TodoList, "_id" | "name" | "color" | "isDefault" | "type" | "phases">;
   parent: string | null;
   depth: number;
   // Short reference number ("#12"); older tasks may have none.

@@ -174,6 +174,7 @@ function PhoneTasksTabScreen() {
             groups,
             onRename: () => setPrompt({ kind: "renameList", list }),
             onChanged: refresh,
+            allowProject: true,
             onDeleted: refresh,
           })
         }
@@ -194,6 +195,7 @@ function PhoneTasksTabScreen() {
   function groupOptions(group: TodoGroup) {
     showActions(group.name, [
       { label: "New list in this group", onPress: () => startNewList(group._id) },
+      { label: "New project in this group", onPress: () => setPrompt({ kind: "newList", group: group._id, type: "project" }) },
       { label: "Rename group", onPress: () => setPrompt({ kind: "renameGroup", group }) },
       {
         label: "Delete group",
@@ -218,13 +220,14 @@ function PhoneTasksTabScreen() {
             groups,
             onRename: () => setPrompt({ kind: "renameList", list }),
             onChanged: refresh,
+            allowProject: true,
             onDeleted: refresh,
           })
         }
         className="active:bg-slate-50"
         style={{ flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: theme.rowDivider }}
       >
-        <Ionicons name={list.isDefault ? "home-outline" : list.type === "checklist" ? "checkbox-outline" : "list"} size={20} color={listAccent(list.color, theme)} />
+        <Ionicons name={list.isDefault ? "home-outline" : list.type === "checklist" ? "checkbox-outline" : list.type === "project" ? "git-network-outline" : "list"} size={20} color={listAccent(list.color, theme)} />
         <Text numberOfLines={1} style={{ flex: 1, marginLeft: 14, fontSize: 16, color: theme.text }}>
           {list.name}
         </Text>
@@ -415,9 +418,15 @@ function PhoneTasksTabScreen() {
           <Ionicons name="add" size={26} color={accent} />
           <Text style={{ marginLeft: 12, fontSize: 16, fontWeight: "600", color: accent }}>New List</Text>
         </Pressable>
+        {/* The less common things to make: a project, a group. */}
         <Pressable
-          onPress={() => setPrompt({ kind: "newGroup" })}
-          accessibilityLabel="New group"
+          onPress={() =>
+            showActions("New", [
+              { label: "New project", onPress: () => setPrompt({ kind: "newList", group: null, type: "project" }) },
+              { label: "New group", onPress: () => setPrompt({ kind: "newGroup" }) },
+            ])
+          }
+          accessibilityLabel="New project or group"
           className="active:bg-slate-100"
           style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }}
         >
@@ -434,9 +443,11 @@ function PhoneTasksTabScreen() {
               ? "Rename list"
               : prompt?.kind === "renameGroup"
                 ? "Rename group"
-                : "New list"
+                : prompt?.kind === "newList" && prompt.type === "project"
+                  ? "New project"
+                  : "New list"
         }
-        placeholder={prompt?.kind === "newGroup" || prompt?.kind === "renameGroup" ? "Group name" : "List name"}
+        placeholder={prompt?.kind === "newGroup" || prompt?.kind === "renameGroup" ? "Group name" : prompt?.kind === "newList" && prompt.type === "project" ? "Project name" : "List name"}
         initialValue={
           prompt?.kind === "renameList" ? prompt.list.name : prompt?.kind === "renameGroup" ? prompt.group.name : ""
         }
