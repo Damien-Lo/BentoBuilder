@@ -5,7 +5,7 @@ import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 
 import { KitchenSessionNeeds } from "@/src/components/planner/KitchenSessionNeeds";
 import { showActions } from "@/src/components/todo/theme";
-import { deleteCalendarEvent, type EventCalendar, type EventOccurrence, type SeriesScope } from "@/src/services/calendarApi";
+import { deleteCalendarEvent, isAssistantCalendar, KITCHEN_KINDS, type EventCalendar, type EventOccurrence, type SeriesScope } from "@/src/services/calendarApi";
 import { getTodoTask, scheduleTodoTask } from "@/src/services/todoApi";
 import { parseLocalDate } from "@/src/utils/mealPlan";
 
@@ -60,8 +60,12 @@ export function WebCalendarScreen() {
   const [editingCalendar, setEditingCalendar] = useState<EventCalendar | null | undefined>(undefined);
   // Calendars that are switched off sit in a collapsed section.
   const [showHidden, setShowHidden] = useState(false);
-  const shownCalendars = calendars.filter((c) => c.visible);
-  const hiddenCalendars = calendars.filter((c) => !c.visible);
+  // Calendars you keep yourself, and the ones the app's sections fill for
+  // you (the Kitchen's meals and sessions, your tasks).
+  const ownCalendars = calendars.filter((c) => !isAssistantCalendar(c));
+  const assistants = calendars.filter(isAssistantCalendar);
+  const shownCalendars = ownCalendars.filter((c) => c.visible);
+  const hiddenCalendars = ownCalendars.filter((c) => !c.visible);
   // The event card: a new event's starting point, or the event being edited.
   const [editor, setEditor] = useState<EventDraft | null>(null);
 
@@ -322,6 +326,33 @@ export function WebCalendarScreen() {
               {showHidden && hiddenCalendars.map(calendarRow)}
             </>
           )}
+
+          {/* What the app's sections put on the calendar for you. */}
+          <Text style={{ marginTop: 22, marginBottom: 6, fontSize: 11, fontWeight: "700", letterSpacing: 1, color: "#94A3B8" }}>ASSISTANTS</Text>
+          {assistants.map((calendar) => (
+            <View key={calendar._id}>
+              {calendarRow(calendar)}
+              {/* The Kitchen's kinds, each on or off by itself. */}
+              {calendar.isKitchen &&
+                calendar.visible &&
+                KITCHEN_KINDS.map((kind) => {
+                  const on = !(calendar.hiddenKinds ?? []).includes(kind.value);
+                  const color = calendarColor(calendar);
+                  return (
+                    <Pressable
+                      key={kind.value}
+                      onPress={() => void data.toggleKind(calendar, kind.value)}
+                      style={({ hovered }: { hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", height: 28, paddingLeft: 24, paddingRight: 6, marginHorizontal: -6, borderRadius: 8, backgroundColor: hovered ? "#EEF2F7" : "transparent" })}
+                    >
+                      <View style={{ width: 13, height: 13, borderRadius: 3, alignItems: "center", justifyContent: "center", backgroundColor: on ? color : "#FFFFFF", borderWidth: 1.5, borderColor: color }}>
+                        {on && <Ionicons name="checkmark" size={9} color="#FFFFFF" />}
+                      </View>
+                      <Text style={{ marginLeft: 8, fontSize: 12, color: on ? "#334155" : "#94A3B8" }}>{kind.label}</Text>
+                    </Pressable>
+                  );
+                })}
+            </View>
+          ))}
         </ScrollView>
       </View>
 

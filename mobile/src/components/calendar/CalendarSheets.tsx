@@ -18,7 +18,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import type { EventCalendar } from "@/src/services/calendarApi";
+import { isAssistantCalendar, KITCHEN_KINDS, type EventCalendar } from "@/src/services/calendarApi";
 
 import { CALENDAR_COLORS, calendarColor } from "./calendarUtils";
 
@@ -228,6 +228,7 @@ export function CalendarsDrawer({
   calendars,
   onClose,
   onToggle,
+  onToggleKind,
   onEdit,
   onMealTimes,
   onReorder,
@@ -238,8 +239,10 @@ export function CalendarsDrawer({
   calendars: EventCalendar[];
   onClose: () => void;
   onToggle: (calendar: EventCalendar) => void;
+  // One kind of thing in a calendar (the Kitchen's meals, prep, shopping).
+  onToggleKind: (calendar: EventCalendar, kind: string) => void;
   onEdit: (calendar: EventCalendar) => void;
-  // The Meals calendar's own settings: when each meal usually is.
+  // The Kitchen calendar's meal times: when each meal usually is.
   onMealTimes: () => void;
   // Every calendar's id in its new order, after one was dragged.
   onReorder: (ids: string[]) => void;
@@ -257,8 +260,13 @@ export function CalendarsDrawer({
   const [showHidden, setShowHidden] = useState(false);
   // A row is being dragged: the list mustn't scroll under it.
   const [dragging, setDragging] = useState(false);
-  const shown = calendars.filter((c) => c.visible);
-  const hidden = calendars.filter((c) => !c.visible);
+  // Your own calendars are listed (and reordered) apart from the ones the
+  // app's sections fill for you, which keep their place at the end.
+  const own = calendars.filter((c) => !isAssistantCalendar(c));
+  const assistants = calendars.filter(isAssistantCalendar);
+  const shown = own.filter((c) => c.visible);
+  const hidden = own.filter((c) => !c.visible);
+  const assistantIds = assistants.map((c) => c._id);
 
   useEffect(() => {
     if (visible) setMounted(true);
@@ -307,7 +315,7 @@ export function CalendarsDrawer({
             onEdit={onEdit}
             onMealTimes={onMealTimes}
             onDragChange={setDragging}
-            onReorder={(ids) => onReorder([...ids, ...hidden.map((c) => c._id)])}
+            onReorder={(ids) => onReorder([...ids, ...hidden.map((c) => c._id), ...assistantIds])}
           />
 
           {/* Calendars that are switched off, tucked away. */}
@@ -331,7 +339,7 @@ export function CalendarsDrawer({
                   onEdit={onEdit}
                   onMealTimes={onMealTimes}
                   onDragChange={setDragging}
-                  onReorder={(ids) => onReorder([...shown.map((c) => c._id), ...ids])}
+                  onReorder={(ids) => onReorder([...shown.map((c) => c._id), ...ids, ...assistantIds])}
                 />
               )}
             </>
@@ -340,6 +348,52 @@ export function CalendarsDrawer({
             <Ionicons name="add-circle-outline" size={22} color="#2563EB" />
             <Text className="ml-3 text-base font-semibold text-blue-600">New calendar</Text>
           </Pressable>
+
+          {/* What the app's sections put on the calendar for you. */}
+          <View className="border-y border-slate-100 bg-slate-50 px-5 py-2">
+            <Text className="text-xs font-bold uppercase tracking-widest text-slate-500">Assistants</Text>
+            <Text className="mt-0.5 text-xs text-slate-400">Filled in for you from the Kitchen and your tasks</Text>
+          </View>
+          {assistants.map((calendar) => {
+            const color = calendarColor(calendar);
+            return (
+              <View key={calendar._id} className="border-b border-slate-100">
+                <View className="flex-row items-center pl-5 pr-3" style={{ height: CALENDAR_ROW_HEIGHT }}>
+                  <Pressable onPress={() => onToggle(calendar)} className="flex-1 flex-row items-center self-stretch active:opacity-60">
+                    <View className="h-6 w-6 items-center justify-center rounded-full" style={calendar.visible ? { backgroundColor: color } : { borderWidth: 2, borderColor: color, backgroundColor: "white" }}>
+                      {calendar.visible && <Ionicons name="checkmark" size={15} color="white" />}
+                    </View>
+                    <Text numberOfLines={1} className={`ml-3 flex-1 text-base ${calendar.visible ? "text-slate-900" : "text-slate-400"}`}>
+                      {calendar.name}
+                    </Text>
+                  </Pressable>
+                  {calendar.isMeals && (
+                    <Pressable hitSlop={8} onPress={onMealTimes} accessibilityLabel="Meal times" className="mr-1 h-9 flex-row items-center rounded-full bg-blue-50 px-3 active:bg-blue-100">
+                      <Ionicons name="time-outline" size={16} color="#1D4ED8" />
+                      <Text className="ml-1 text-xs font-semibold text-blue-700">Times</Text>
+                    </Pressable>
+                  )}
+                  <Pressable hitSlop={8} onPress={() => onEdit(calendar)} accessibilityLabel={`Edit ${calendar.name}`} className="h-9 w-9 items-center justify-center rounded-full active:bg-slate-100">
+                    <Ionicons name="settings-outline" size={19} color="#64748B" />
+                  </Pressable>
+                </View>
+                {/* The Kitchen's kinds, each on or off by itself. */}
+                {calendar.isKitchen &&
+                  calendar.visible &&
+                  KITCHEN_KINDS.map((kind) => {
+                    const on = !(calendar.hiddenKinds ?? []).includes(kind.value);
+                    return (
+                      <Pressable key={kind.value} onPress={() => onToggleKind(calendar, kind.value)} className="flex-row items-center pl-14 pr-5 active:bg-slate-50" style={{ height: 40 }}>
+                        <View className="h-5 w-5 items-center justify-center rounded-md" style={on ? { backgroundColor: color } : { borderWidth: 2, borderColor: color, backgroundColor: "white" }}>
+                          {on && <Ionicons name="checkmark" size={13} color="white" />}
+                        </View>
+                        <Text className={`ml-3 text-sm ${on ? "text-slate-700" : "text-slate-400"}`}>{kind.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+              </View>
+            );
+          })}
         </ScrollView>
       </Animated.View>
     </Modal>

@@ -105,10 +105,23 @@ async function getDefaultCalendar() {
   return EventCalendar.create({ name: "Calendar", color: "blue", isDefault: true, order: -1 });
 }
 
+// The Kitchen's calendar: meals, prep sessions and shopping trips in one.
+// (It began as "Meals", with prep and shopping briefly in a calendar of
+// their own; both are brought into this one the first time it's asked for.)
 async function getMealsCalendar() {
-  const existing = await EventCalendar.findOne({ isMeals: true });
-  if (existing) return existing;
-  return EventCalendar.create({ name: "Meals", color: "orange", isMeals: true, order: 999 });
+  let calendar = await EventCalendar.findOne({ isMeals: true });
+  if (!calendar) calendar = await EventCalendar.create({ name: "Kitchen", color: "orange", isMeals: true, isKitchen: true, order: 999 });
+  if (!calendar.isKitchen) {
+    calendar.isKitchen = true;
+    if (calendar.name === "Meals") calendar.name = "Kitchen";
+    await calendar.save();
+  }
+  const separate = await EventCalendar.find({ isKitchen: true, isMeals: { $ne: true } });
+  for (const old of separate) {
+    await CalendarEvent.updateMany({ calendar: old._id }, { $set: { calendar: calendar._id } });
+    await old.deleteOne();
+  }
+  return calendar;
 }
 
 const MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"];
@@ -116,9 +129,12 @@ const MEAL_LABELS = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", 
 
 // An event's meal type follows its calendar: required in Meals, never set
 // anywhere else. Returns the fields to save.
-async function withMealRules(fields, fallbackSlot = null) {
+// (A prep session or shopping trip is in the same calendar and isn't a meal.)
+async function withMealRules(fields, fallbackSlot = null, fallbackKind = null) {
   const calendar = fields.calendar ? await EventCalendar.findById(fields.calendar).select("isMeals") : null;
-  if (!calendar?.isMeals) return { ...fields, mealSlot: null, mealAuto: false };
+  if (!calendar?.isMeals) return { ...fields, mealSlot: null, mealAuto: false, kitchenKind: null };
+  const kitchenKind = fields.kitchenKind ?? fallbackKind;
+  if (kitchenKind) return { ...fields, kitchenKind, mealSlot: null, mealAuto: false };
   const mealSlot = fields.mealSlot ?? fallbackSlot;
   if (!MEAL_SLOTS.includes(mealSlot)) throw new Error("Pick which meal this is (breakfast, lunch, dinner or snack).");
   if (fields.allDay) throw new Error("A meal needs a start and end time.");
@@ -221,9 +237,6 @@ router.get("/calendars", async (req, res) => {
       await EventCalendar.create({ name: "Tasks", color: "indigo", isTasks: true, order: 1000 });
     }
     await getMealsCalendar();
-    if (!(await EventCalendar.exists({ isKitchen: true }))) {
-      await EventCalendar.create({ name: "Kitchen", color: "green", isKitchen: true, order: 998 });
-    }
     const calendars = await EventCalendar.find().sort({ order: 1, createdAt: 1 });
     return res.json({ success: true, data: calendars });
   } catch (error) {
@@ -260,8 +273,9 @@ router.patch("/calendars/reorder", async (req, res) => {
 router.patch("/calendars/:id", async (req, res) => {
   try {
     const { name, color, visible, order } = req.body;
+    const hiddenKinds = Array.isArray(req.body.hiddenKinds) ? req.body.hiddenKinds.map(String) : undefined;
     const update = Object.fromEntries(
-      Object.entries({ name, color, visible, order }).filter(([, v]) => v !== undefined),
+      Object.entries({ name, color, visible, order, hiddenKinds }).filter(([, v]) => v !== undefined),
     );
     const calendar = await EventCalendar.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
     if (!calendar) return fail(res, "Calendar not found", 404);
@@ -278,8 +292,7 @@ router.delete("/calendars/:id", async (req, res) => {
     if (!calendar) return fail(res, "Calendar not found", 404);
     if (calendar.isDefault) return fail(res, "The default calendar can't be deleted");
     if (calendar.isTasks) return fail(res, "The Tasks calendar can't be deleted — hide it instead");
-    if (calendar.isMeals) return fail(res, "The Meals calendar can't be deleted — hide it instead");
-    if (calendar.isKitchen) return fail(res, "The Kitchen calendar can't be deleted — hide it instead");
+    if (calendar.isMeals || calendar.isKitchen) return fail(res, "The Kitchen calendar can't be deleted — hide it instead");
     await CalendarEvent.deleteMany({ calendar: calendar._id });
     await calendar.deleteOne();
     return res.json({ success: true });
@@ -288,7 +301,7 @@ router.delete("/calendars/:id", async (req, res) => {
   }
 });
 
-// GET /meal-times — the Meals calendar's regular times.
+// GET /meal-times — the Kitchen calendar's regular meal times.
 router.get("/meal-times", async (req, res) => {
   try {
     const calendar = await getMealsCalendar();
@@ -382,13 +395,14 @@ router.patch("/events/:id", async (req, res) => {
     const { _id, createdAt, updatedAt, mealAuto, ...fields } = req.body;
     const current = await CalendarEvent.findById(req.params.id);
     if (!current) return fail(res, "Event not found", 404);
-    // A regular meal's series is changed through the Meals calendar's times.
+    // A regular meal's series is changed through the Kitchen calendar's meal times.
     if (current.mealAuto && current.repeat) {
-      return fail(res, "This is a regular meal time. Change it in the Meals calendar's meal times, or edit just one day.");
+      return fail(res, "This is a regular meal time. Change it in the Kitchen calendar's meal times, or edit just one day.");
     }
     const ruled = await withMealRules(
       { ...fields, calendar: fields.calendar ?? current.calendar, allDay: fields.allDay ?? current.allDay },
       current.mealSlot,
+      current.kitchenKind,
     );
     const event = await CalendarEvent.findByIdAndUpdate(req.params.id, ruled, { new: true, runValidators: true });
     return res.json({ success: true, data: event });
@@ -415,11 +429,9 @@ router.post("/events/:id/detach", async (req, res) => {
     const fields = eventFields(req.body);
     delete fields.occurrence;
     const single = await CalendarEvent.create({
-      ...(await withMealRules({ calendar: series.calendar, ...fields }, series.mealSlot)),
+      ...(await withMealRules({ calendar: series.calendar, ...fields }, series.mealSlot, series.kitchenKind)),
       endDate: fields.endDate || fields.date,
       repeat: null,
-      // (Still the prep session or shopping trip its series is.)
-      kitchenKind: series.kitchenKind,
       seriesId: series._id,
       originalDate: occurrence,
     });
@@ -440,8 +452,8 @@ router.post("/events/:id/split", async (req, res) => {
     if (!DATE_RE.test(occurrence ?? "")) return fail(res, "occurrence must be a YYYY-MM-DD date");
     const series = await CalendarEvent.findById(req.params.id);
     if (!series) return fail(res, "Event not found", 404);
-    if (series.mealAuto) return fail(res, "This is a regular meal time. Change it in the Meals calendar's meal times.");
-    const fields = await withMealRules({ calendar: series.calendar, ...eventFields(req.body) }, series.mealSlot);
+    if (series.mealAuto) return fail(res, "This is a regular meal time. Change it in the Kitchen calendar's meal times.");
+    const fields = await withMealRules({ calendar: series.calendar, ...eventFields(req.body) }, series.mealSlot, series.kitchenKind);
     delete fields.occurrence;
 
     if (occurrence <= series.date) {
@@ -481,7 +493,7 @@ router.delete("/events/:id", async (req, res) => {
     }
     const target = await CalendarEvent.findById(req.params.id).select("mealAuto repeat");
     if (target?.mealAuto && target.repeat) {
-      return fail(res, "This is a regular meal time. Turn it off in the Meals calendar's meal times, or delete just one day.");
+      return fail(res, "This is a regular meal time. Turn it off in the Kitchen calendar's meal times, or delete just one day.");
     }
     // ?from=YYYY-MM-DD: "this and following" — end the series the day
     // before (or delete it, if that's its first occurrence).

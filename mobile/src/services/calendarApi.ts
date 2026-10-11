@@ -12,8 +12,32 @@ export interface EventCalendar {
   // The built-in Meals calendar: its events each have a meal type and show
   // that day's food from the planner.
   isMeals?: boolean;
-  // The built-in Kitchen calendar: prep sessions and shopping trips.
+  // The same calendar is the Kitchen's whole calendar: meals, prep
+  // sessions and shopping trips.
   isKitchen?: boolean;
+  // Kinds of thing in it that are switched off while the rest still shows
+  // (the Kitchen's "meals", "prep", "shop").
+  hiddenKinds?: string[];
+}
+
+// The Kitchen calendar's kinds, each shown or hidden on its own.
+export const KITCHEN_KINDS: { value: string; label: string }[] = [
+  { value: "meals", label: "Meals" },
+  { value: "prep", label: "Prep sessions" },
+  { value: "shop", label: "Shopping trips" },
+];
+
+// A calendar the app fills for you from one of its sections (the Kitchen's
+// meals and sessions, your tasks), as against one you keep yourself.
+export const isAssistantCalendar = (calendar: Pick<EventCalendar, "isTasks" | "isMeals" | "isKitchen">) =>
+  !!(calendar.isTasks || calendar.isMeals || calendar.isKitchen);
+
+// Whether an event is on show: its calendar is, and so is its kind.
+export function eventShown(event: { kitchenKind?: string | null; mealSlot?: string | null }, calendar: Pick<EventCalendar, "visible" | "hiddenKinds"> | undefined): boolean {
+  if (!calendar) return true;
+  if (!calendar.visible) return false;
+  const kind = event.kitchenKind ?? (event.mealSlot ? "meals" : null);
+  return !kind || !(calendar.hiddenKinds ?? []).includes(kind);
 }
 
 export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
@@ -112,7 +136,7 @@ const body = (value: unknown) => JSON.stringify(value);
 export const getCalendars = () => request<EventCalendar[]>("/calendars");
 export const createCalendar = (name: string, color: string) =>
   request<EventCalendar>("/calendars", { method: "POST", body: body({ name, color }) });
-export const updateCalendar = (id: string, changes: Partial<Pick<EventCalendar, "name" | "color" | "visible">>) =>
+export const updateCalendar = (id: string, changes: Partial<Pick<EventCalendar, "name" | "color" | "visible" | "hiddenKinds">>) =>
   request<EventCalendar>(`/calendars/${id}`, { method: "PATCH", body: body(changes) });
 // Saves the order the calendars are listed in.
 export const reorderCalendars = (ids: string[]) =>

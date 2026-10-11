@@ -4,6 +4,7 @@ import { Alert } from "react-native";
 import {
   createCalendar,
   deleteCalendar,
+  eventShown,
   getCalendars,
   getEventOccurrences,
   updateCalendar,
@@ -112,7 +113,7 @@ export function useCalendarData(focusDate: string) {
           : "";
       return { ...e, meal: { food, usually: usually || undefined } };
     });
-    return [...taskOccurrences, ...withFood].filter((e) => calendarsById.get(e.calendar)?.visible ?? true);
+    return [...taskOccurrences, ...withFood].filter((e) => eventShown(e, calendarsById.get(e.calendar)));
   }, [events, tasks, mealFood, usualMeals, calendars, calendarsById, today]);
 
   async function toggleCalendar(calendar: EventCalendar) {
@@ -122,6 +123,19 @@ export function useCalendarData(focusDate: string) {
       await updateCalendar(calendar._id, { visible });
     } catch {
       setCalendars((prev) => prev.map((c) => (c._id === calendar._id ? { ...c, visible: !visible } : c)));
+    }
+  }
+
+  // Shows or hides one kind of thing in a calendar (the Kitchen's meals,
+  // prep sessions or shopping trips).
+  async function toggleKind(calendar: EventCalendar, kind: string) {
+    const before = calendar.hiddenKinds ?? [];
+    const hiddenKinds = before.includes(kind) ? before.filter((k) => k !== kind) : [...before, kind];
+    setCalendars((prev) => prev.map((c) => (c._id === calendar._id ? { ...c, hiddenKinds } : c)));
+    try {
+      await updateCalendar(calendar._id, { hiddenKinds });
+    } catch {
+      setCalendars((prev) => prev.map((c) => (c._id === calendar._id ? { ...c, hiddenKinds: before } : c)));
     }
   }
 
@@ -154,6 +168,7 @@ export function useCalendarData(focusDate: string) {
     visibleEvents,
     reload,
     toggleCalendar,
+    toggleKind,
     saveCalendar,
     removeCalendar,
   };

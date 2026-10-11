@@ -166,7 +166,7 @@ export default function MealTimesScreen() {
         </Pressable>
         <View className="ml-1 flex-1">
           <Text className="text-lg font-bold text-slate-950">Meal times</Text>
-          <Text className="text-xs text-slate-500">When you usually eat, for the Meals calendar</Text>
+          <Text className="text-xs text-slate-500">When you usually eat, for the Kitchen calendar</Text>
         </View>
         <Pressable
           onPress={save}

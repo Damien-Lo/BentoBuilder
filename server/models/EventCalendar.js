@@ -20,10 +20,13 @@ const eventCalendarSchema = new mongoose.Schema(
     // shows that day's food from the Kitchen planner. Created on first use,
     // can't be deleted.
     isMeals: { type: Boolean, default: false },
-    // The built-in "Kitchen" calendar: when you prep and when you shop.
-    // What each session is for is worked out from the meal plan, not kept
-    // here. Created on first use, can't be deleted.
+    // The same calendar is the Kitchen's whole calendar (so isKitchen is set
+    // with isMeals): meals, and when you prep and when you shop. What a
+    // session is for is worked out from the meal plan, not kept here.
     isKitchen: { type: Boolean, default: false },
+    // The kinds of thing in a calendar that are switched off while the rest
+    // still shows — the Kitchen's "meals", "prep" and "shop".
+    hiddenKinds: { type: [String], default: [] },
     // Meals calendar only — the regular time of each meal on each day of the
     // week: { breakfast: [Sunday … Saturday], lunch: […], … }, each day
     // either { start, end } (minutes after midnight) or null for none. The
