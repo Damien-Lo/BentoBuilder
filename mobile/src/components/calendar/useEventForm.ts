@@ -68,7 +68,7 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
   // the moment it's saved.
   useEffect(() => {
     if (draft.mode === "new" && !calendarId && calendars.length) {
-      const usable = calendars.filter((c) => !c.isTasks && !c.isMeals);
+      const usable = calendars.filter((c) => !c.isTasks && !c.isMeals && !c.isKitchen);
       setCalendarIdState(
         (usable.find((c) => c.isDefault && c.visible) ?? usable.find((c) => c.visible) ?? usable.find((c) => c.isDefault) ?? usable[0] ?? calendars[0])._id,
       );

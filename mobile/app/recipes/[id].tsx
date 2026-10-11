@@ -22,6 +22,7 @@ import {
   getRecipes,
   type PopulatedIngredient,
   type Recipe,
+  updateRecipe,
 } from "@/src/services/recipeApi";
 import {
   addIngredientToPantry,
@@ -739,6 +740,25 @@ export default function RecipeDetailPage() {
                 </Text>
               </View>
             </View>
+
+            {/* Made ahead (a marinated fillet) or cooked at the meal (rice):
+                only the first is something a prep session is for. */}
+            <Pressable
+              onPress={() => {
+                const madeAhead = !recipe.madeAhead;
+                setRecipe((prev) => (prev ? { ...prev, madeAhead } : prev));
+                updateRecipe(recipe._id, { madeAhead }).catch(() => setRecipe((prev) => (prev ? { ...prev, madeAhead: !madeAhead } : prev)));
+              }}
+              className="mt-4 flex-row items-center"
+            >
+              <View className="flex-1 pr-3">
+                <Text className="text-base font-medium text-slate-900">Made ahead</Text>
+                <Text className="mt-0.5 text-xs leading-4 text-slate-500">Prepped in advance and kept, so it goes on your prep list. Leave off for things cooked at the meal.</Text>
+              </View>
+              <View className={`h-7 w-12 justify-center rounded-full px-1 ${recipe.madeAhead ? "bg-blue-600" : "bg-slate-200"}`}>
+                <View className="h-5 w-5 rounded-full bg-white" style={{ transform: [{ translateX: recipe.madeAhead ? 20 : 0 }] }} />
+              </View>
+            </Pressable>
 
             <Pressable
               disabled={cooking}

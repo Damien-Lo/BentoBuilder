@@ -125,7 +125,7 @@ function servingsRatio(authoredServings: number | undefined, consumedServings: n
 // such thing as half a discrete piece; an approximation for a genuinely
 // uncommon case (recipes are almost always cooked at a whole multiple of
 // their authored servings).
-function recipeLineToRow(line: Recipe["ingredientList"][number], ratio: number): RawRow {
+export function recipeLineToRow(line: Recipe["ingredientList"][number], ratio: number): RawRow {
   const ingredientId = extractId(line.ingredient);
   const matchMode = line.matchMode ?? "quantity";
   const quantity = matchMode === "wholePiece"
@@ -143,7 +143,8 @@ function recipeLineToRow(line: Recipe["ingredientList"][number], ratio: number):
   };
 }
 
-function gatherRows(entry: MealPlanEntry, recipeMap: Map<string, Recipe>): RawRow[] {
+// (Exported for planNeeds.ts, which claims stock across many entries.)
+export function gatherRows(entry: MealPlanEntry, recipeMap: Map<string, Recipe>): RawRow[] {
   const rows: RawRow[] = [];
 
   if (entry.recipe) {

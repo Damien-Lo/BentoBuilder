@@ -221,6 +221,9 @@ router.get("/calendars", async (req, res) => {
       await EventCalendar.create({ name: "Tasks", color: "indigo", isTasks: true, order: 1000 });
     }
     await getMealsCalendar();
+    if (!(await EventCalendar.exists({ isKitchen: true }))) {
+      await EventCalendar.create({ name: "Kitchen", color: "green", isKitchen: true, order: 998 });
+    }
     const calendars = await EventCalendar.find().sort({ order: 1, createdAt: 1 });
     return res.json({ success: true, data: calendars });
   } catch (error) {
@@ -276,6 +279,7 @@ router.delete("/calendars/:id", async (req, res) => {
     if (calendar.isDefault) return fail(res, "The default calendar can't be deleted");
     if (calendar.isTasks) return fail(res, "The Tasks calendar can't be deleted — hide it instead");
     if (calendar.isMeals) return fail(res, "The Meals calendar can't be deleted — hide it instead");
+    if (calendar.isKitchen) return fail(res, "The Kitchen calendar can't be deleted — hide it instead");
     await CalendarEvent.deleteMany({ calendar: calendar._id });
     await calendar.deleteOne();
     return res.json({ success: true });
@@ -414,6 +418,8 @@ router.post("/events/:id/detach", async (req, res) => {
       ...(await withMealRules({ calendar: series.calendar, ...fields }, series.mealSlot)),
       endDate: fields.endDate || fields.date,
       repeat: null,
+      // (Still the prep session or shopping trip its series is.)
+      kitchenKind: series.kitchenKind,
       seriesId: series._id,
       originalDate: occurrence,
     });

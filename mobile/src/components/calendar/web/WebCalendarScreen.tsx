@@ -3,6 +3,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 
+import { KitchenSessionNeeds } from "@/src/components/planner/KitchenSessionNeeds";
 import { showActions } from "@/src/components/todo/theme";
 import { deleteCalendarEvent, type EventCalendar, type EventOccurrence, type SeriesScope } from "@/src/services/calendarApi";
 import { getTodoTask, scheduleTodoTask } from "@/src/services/todoApi";
@@ -568,6 +569,13 @@ function EventPeek({
             )}
             {!!event.description && <PeekRow icon="reorder-three-outline">{event.description}</PeekRow>}
             <PeekRow icon="calendar-outline">{calendar?.name ?? "Calendar"}</PeekRow>
+
+            {/* A prep session or shopping trip: what it's for, from the plan. */}
+            {!!event.kitchenKind && (
+              <ScrollView style={{ marginTop: 14, maxHeight: 320 }}>
+                <KitchenSessionNeeds eventId={event._id} date={event.occurrenceDate} kind={event.kitchenKind} onNavigate={onClose} />
+              </ScrollView>
+            )}
 
             <View style={{ marginTop: 18, flexDirection: "row", alignItems: "center", gap: 8 }}>
               <PeekButton label="Edit" icon="create-outline" primary onPress={() => onEdit(event)} />

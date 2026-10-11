@@ -1,13 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 
-import { addDays, MONTHS_FULL, MONTHS_SHORT, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
+import { addDays, minutesLabel, MONTHS_FULL, MONTHS_SHORT, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
 import { entryName } from "@/src/components/calendar/mealFood";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
+import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
-import { Button, Card, GoalBar, IconButton, Planned, WEB, WebPage } from "@/src/components/web/ui";
+import { Choice, DateField } from "@/src/components/web/fields";
+import { Button, Card, CardLink, Empty, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
+import { createCalendarEvent, getCalendars } from "@/src/services/calendarApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import {
   deleteMealPlanEntry,
@@ -22,6 +25,7 @@ import { DEFAULT_SETTINGS, loadSettings, type AppSettings } from "@/src/services
 import { stopUsualMeal } from "@/src/services/usualMealApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
+import { needAmountLabel, type KitchenSession, type NeedSource } from "@/src/utils/planNeeds";
 
 // The planner in a desktop browser: the whole week at once. A column per
 // day and a row per meal, each cell holding what's planned or eaten, with
@@ -93,6 +97,7 @@ export function WebWeekPlanScreen() {
   const reload = () => {
     loadWeek(week);
     loadKitchen();
+    plan.reload();
   };
 
   const confirm = useEntryConfirm({
@@ -153,7 +158,19 @@ export function WebWeekPlanScreen() {
   const planned = computeDayNutrition(weekEntries.filter((e) => e.status === "planned"), conversions);
   const loggedDays = week.filter((d) => weekEntries.some((e) => e.date === d && e.status === "confirmed")).length;
 
-  // The numbers card has two pages, swiped between: the week, and one day.
+  // What the coming weeks' planned meals need prepping and buying, each
+  // thing under the prep session or shopping trip it falls to.
+  const plan = usePlanNeeds();
+  const [adding, setAdding] = useState<"prep" | "shop" | null>(null);
+  const sessionGroups = <T extends { session: string | null }>(kind: KitchenSession["kind"], list: T[]) =>
+    [
+      ...plan.sessions.filter((s) => s.kind === kind).map((session) => ({ session: session as KitchenSession | null, rows: list.filter((n) => n.session === session.id) })),
+      // Needed before any session that could cover it.
+      { session: null as KitchenSession | null, rows: list.filter((n) => !n.session) },
+    ].filter((group) => group.session || group.rows.length);
+
+  // The numbers card has two pages, swiped between: one day (shown first),
+  // and the week.
   // Clicking a day at the top of the grid picks it and turns to its page.
   const [page, setPage] = useState<0 | 1>(0);
   const [pickedDay, setPickedDay] = useState(today);
@@ -198,13 +215,13 @@ export function WebWeekPlanScreen() {
               const goal = settings.dailyCalorieLimit;
               const pct = (n: number) => `${Math.max(0, Math.min(100, goal ? (n / goal) * 100 : 0))}%` as const;
               const over = !!goal && done > goal * 1.05;
-              const chosen = page === 1 && day === pickedDayShown;
+              const chosen = page === 0 && day === pickedDayShown;
               return (
                 <Pressable
                   key={day}
                   onPress={() => {
                     setPickedDay(day);
-                    turnTo(1);
+                    turnTo(0);
                   }}
                   accessibilityLabel={`Show ${longDay(day)}`}
                   style={({ hovered }: { hovered?: boolean }) => ({
@@ -323,15 +340,6 @@ export function WebWeekPlanScreen() {
               }}
             >
               <Numbers
-                title="This week"
-                subtitle={`${loggedDays} of 7 days logged`}
-                eaten={eaten}
-                planned={planned}
-                days={7}
-                settings={settings}
-                line={loggedDays > 0 ? `${Math.round((eaten.calories ?? 0) / loggedDays)} kcal a day on logged days` : "Nothing logged yet"}
-              />
-              <Numbers
                 title={longDay(pickedDayShown)}
                 subtitle={`${pickedDayShown === today ? "Today · " : ""}${dayCount} eaten${pickedEntries.length > dayCount ? `, ${pickedEntries.length - dayCount} planned` : ""}`}
                 eaten={dayEaten}
@@ -339,6 +347,15 @@ export function WebWeekPlanScreen() {
                 days={1}
                 settings={settings}
                 line={pickedEntries.length ? "" : "Nothing planned or eaten"}
+              />
+              <Numbers
+                title="This week"
+                subtitle={`${loggedDays} of 7 days logged`}
+                eaten={eaten}
+                planned={planned}
+                days={7}
+                settings={settings}
+                line={loggedDays > 0 ? `${Math.round((eaten.calories ?? 0) / loggedDays)} kcal a day on logged days` : "Nothing logged yet"}
               />
             </ScrollView>
             <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingBottom: 14 }}>
@@ -348,22 +365,64 @@ export function WebWeekPlanScreen() {
               </View>
               {/* Which page is showing; click to turn. */}
               {([0, 1] as const).map((n) => (
-                <Pressable key={n} onPress={() => turnTo(n)} accessibilityLabel={n ? "The day" : "The week"} style={{ padding: 4 }}>
+                <Pressable key={n} onPress={() => turnTo(n)} accessibilityLabel={n ? "The week" : "The day"} style={{ padding: 4 }}>
                   <View style={{ width: page === n ? 16 : 7, height: 7, borderRadius: 4, backgroundColor: page === n ? WEB.blue : "#CBD5E1" }} />
                 </Pressable>
               ))}
             </View>
           </Card>
-          <Planned
-            icon="cart-outline"
-            title="Shopping for this plan"
-            text="What the week's planned meals need that the pantry doesn't have, ready to send to the grocery list."
-          />
-          <Planned icon="flame-outline" title="Prep sessions" text="Batch-cooking blocks for the week, booked in the calendar and tied to the recipes they cover." />
+          {/* What the meals still to come need doing first (see planNeeds.ts). */}
+          <Card title="To prep" subtitle="Made ahead for the meals you've planned" action={<CardLink label="Add session" onPress={() => setAdding("prep")} />} padded={false}>
+            {!plan.ready ? (
+              <Empty icon="flame-outline" text="" />
+            ) : plan.prep.length === 0 && !plan.sessions.some((s) => s.kind === "prep") ? (
+              <Empty icon="flame-outline" text="Nothing to prep for what's planned" />
+            ) : (
+              <View style={{ paddingBottom: 8 }}>
+                {sessionGroups("prep", plan.prep).map((group) => (
+                  <View key={group.session?.id ?? "none"}>
+                    <SessionHeading session={group.session} today={today} anySessions={plan.sessions.some((s) => s.kind === "prep")} missing="No prep session in time" />
+                    {group.rows.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 8, fontSize: 12, color: WEB.faint }}>Nothing falls to this one yet</Text>}
+                    {group.rows.map((need) => (
+                      <NeedRow
+                        key={need.ingredientId}
+                        title={need.recipeName}
+                        detail={`${needAmountLabel(need.amount, need.unit)} of ${need.name}${Math.abs(need.batches - 1) > 0.01 ? ` · ${Math.round(need.batches * 10) / 10} batches` : ""}`}
+                        by={need.neededBy}
+                        today={today}
+                        uses={need.for}
+                        onPress={() => router.push({ pathname: "/recipes/[id]", params: { id: need.recipeId } })}
+                      />
+                    ))}
+                  </View>
+                ))}
+              </View>
+            )}
+          </Card>
+          <Card title="To buy" subtitle="Short in the pantry for the plan and its prep" action={<CardLink label="Add trip" onPress={() => setAdding("shop")} />} padded={false}>
+            {!plan.ready ? (
+              <Empty icon="cart-outline" text="" />
+            ) : plan.buy.length === 0 && !plan.sessions.some((s) => s.kind === "shop") ? (
+              <Empty icon="cart-outline" text="The pantry covers what's planned" />
+            ) : (
+              <View style={{ paddingBottom: 8 }}>
+                {sessionGroups("shop", plan.buy).map((group) => (
+                  <View key={group.session?.id ?? "none"}>
+                    <SessionHeading session={group.session} today={today} anySessions={plan.sessions.some((s) => s.kind === "shop")} missing="No shopping trip in time" />
+                    {group.rows.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 8, fontSize: 12, color: WEB.faint }}>Nothing to get on this one yet</Text>}
+                    {group.rows.map((need) => (
+                      <NeedRow key={`${need.ingredientId}-${need.unit}-${need.pieces}`} title={need.name} detail={needAmountLabel(need.amount, need.unit)} by={need.neededBy} today={today} uses={need.for} />
+                    ))}
+                  </View>
+                ))}
+              </View>
+            )}
+          </Card>
         </View>
       </View>
 
       {confirm.modals}
+      <NewSessionDialog kind={adding} today={today} weekStartDay={settings.weekStartDay} onClose={() => setAdding(null)} onCreated={plan.reload} />
     </WebPage>
   );
 }
@@ -405,6 +464,152 @@ function Numbers({
       <GoalBar label="Carbs" value={eaten.carbs ?? 0} planned={planned.carbs ?? 0} goal={goal(settings.dailyCarbsLimit)} unit="g" color="#D97706" />
       <GoalBar label="Fats" value={eaten.fats ?? 0} planned={planned.fats ?? 0} goal={goal(settings.dailyFatsLimit)} unit="g" color="#DB2777" />
     </View>
+  );
+}
+
+// A prep session or shopping trip, as a heading over what falls to it.
+function SessionHeading({ session, today, anySessions, missing }: { session: KitchenSession | null; today: string; anySessions: boolean; missing: string }) {
+  // With no sessions at all there's nothing to group under.
+  if (!session && !anySessions) return null;
+  const d = session ? parseLocalDate(session.date) : null;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, paddingHorizontal: 18, paddingVertical: 6, backgroundColor: session ? "#F8FAFC" : "#FEF2F2" }}>
+      <Ionicons name={session ? "calendar-outline" : "alert-circle-outline"} size={13} color={session ? WEB.muted : WEB.red} />
+      <Text numberOfLines={1} style={{ marginLeft: 6, fontSize: 12, fontWeight: "700", color: session ? WEB.body : WEB.red }}>
+        {session && d ? `${session.date === today ? "Today" : `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`} · ${minutesLabel(session.startMinutes)}–${minutesLabel(session.endMinutes)}` : missing}
+      </Text>
+    </View>
+  );
+}
+
+const HOURS = Array.from({ length: 17 }, (_, i) => ({ value: String((6 + i) * 60), label: minutesLabel((6 + i) * 60) }));
+const LENGTHS = [
+  { value: "30", label: "30 minutes" },
+  { value: "60", label: "1 hour" },
+  { value: "90", label: "1½ hours" },
+  { value: "120", label: "2 hours" },
+  { value: "180", label: "3 hours" },
+];
+
+// Books a prep session or a shopping trip in the Kitchen calendar. It's an
+// ordinary event from then on: move it, or make it repeat, in the calendar.
+function NewSessionDialog({ kind, today, weekStartDay, onClose, onCreated }: { kind: "prep" | "shop" | null; today: string; weekStartDay: number; onClose: () => void; onCreated: () => void }) {
+  const [date, setDate] = useState(today);
+  const [start, setStart] = useState("600");
+  const [length, setLength] = useState("60");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (kind) {
+      setDate(today);
+      setStart(kind === "prep" ? "960" : "600");
+      setLength(kind === "prep" ? "120" : "60");
+    }
+  }, [kind, today]);
+  if (!kind) return null;
+
+  async function create() {
+    try {
+      setSaving(true);
+      const kitchen = (await getCalendars()).find((c) => c.isKitchen);
+      if (!kitchen) throw new Error("The Kitchen calendar is missing.");
+      const startMinutes = Number(start);
+      await createCalendarEvent({
+        title: kind === "prep" ? "Meal prep" : "Grocery shopping",
+        calendar: kitchen._id,
+        allDay: false,
+        date,
+        endDate: date,
+        startMinutes,
+        endMinutes: Math.min(1440, startMinutes + Number(length)),
+        repeat: null,
+        location: "",
+        description: "",
+        remindMinutes: 15,
+        kitchenKind: kind,
+      });
+      onCreated();
+      onClose();
+    } catch (error) {
+      Alert.alert("Couldn't book it", error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const box = { flexDirection: "row" as const, alignItems: "center" as const, height: 38, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: WEB.border, backgroundColor: WEB.card };
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(15,23,42,0.4)" }}>
+        <Pressable style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, cursor: "default" } as object} onPress={onClose} accessibilityLabel="Close" />
+        <View style={{ width: 380, padding: 20, borderRadius: 16, backgroundColor: WEB.card, boxShadow: "0 18px 40px rgba(15,23,42,0.25)" }}>
+          <Text style={{ fontSize: 17, fontWeight: "700", color: WEB.text }}>{kind === "prep" ? "New prep session" : "New shopping trip"}</Text>
+          <Text style={{ marginTop: 3, marginBottom: 14, fontSize: 13, lineHeight: 18, color: WEB.muted }}>
+            {kind === "prep" ? "What to make is worked out from your plan: everything needed from this session until the next." : "What to buy is worked out from your plan and your prep, up to the next trip."}
+          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <DateField value={date} onChange={(d) => d && setDate(d)} clearable={false} weekStartDay={weekStartDay} />
+            <Choice
+              value={start}
+              options={HOURS}
+              onChange={setStart}
+              width={130}
+              renderTrigger={(open) => (
+                <Pressable onPress={open} style={box}>
+                  <Text style={{ fontSize: 14, color: WEB.text }}>{minutesLabel(Number(start))}</Text>
+                  <Ionicons name="chevron-down" size={13} color={WEB.muted} style={{ marginLeft: 6 }} />
+                </Pressable>
+              )}
+            />
+            <Choice
+              value={length}
+              options={LENGTHS}
+              onChange={setLength}
+              width={150}
+              renderTrigger={(open) => (
+                <Pressable onPress={open} style={box}>
+                  <Text style={{ fontSize: 14, color: WEB.text }}>{LENGTHS.find((l) => l.value === length)?.label}</Text>
+                  <Ionicons name="chevron-down" size={13} color={WEB.muted} style={{ marginLeft: 6 }} />
+                </Pressable>
+              )}
+            />
+          </View>
+          <Text style={{ marginTop: 10, fontSize: 12, color: WEB.faint }}>It goes in the Kitchen calendar. To make it weekly, edit it there.</Text>
+          <View style={{ marginTop: 18, flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
+            <Button label="Cancel" onPress={onClose} />
+            <Button label={saving ? "Booking…" : "Book it"} kind="primary" onPress={() => void create()} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// One thing to prep or buy: what, how much, by when, and for which meals.
+function NeedRow({ title, detail, by, today, uses, onPress }: { title: string; detail: string; by: string; today: string; uses: NeedSource[]; onPress?: () => void }) {
+  const d = parseLocalDate(by);
+  const when = by === today ? "today" : `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()}`;
+  const meals = [...new Set(uses.map((u) => u.label))];
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ hovered }: { hovered?: boolean }) => ({ paddingHorizontal: 18, paddingVertical: 8, backgroundColor: hovered && onPress ? "#F8FAFC" : "transparent" })}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: "600", color: WEB.text }}>
+          {title}
+        </Text>
+        <Text style={{ marginLeft: 8, fontSize: 12, fontWeight: by === today ? "700" : "500", color: by === today ? WEB.red : WEB.muted }}>by {when}</Text>
+        {!!onPress && <Ionicons name="chevron-forward" size={13} color={WEB.faint} style={{ marginLeft: 4 }} />}
+      </View>
+      <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 12, color: WEB.muted }}>
+        {detail}
+      </Text>
+      <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 11, color: WEB.faint }}>
+        for {meals.slice(0, 2).join(", ")}
+        {meals.length > 2 ? ` +${meals.length - 2} more` : ""}
+      </Text>
+    </Pressable>
   );
 }
 

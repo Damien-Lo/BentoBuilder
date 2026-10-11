@@ -12,6 +12,8 @@ export interface EventCalendar {
   // The built-in Meals calendar: its events each have a meal type and show
   // that day's food from the planner.
   isMeals?: boolean;
+  // The built-in Kitchen calendar: prep sessions and shopping trips.
+  isKitchen?: boolean;
 }
 
 export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
@@ -59,6 +61,9 @@ export interface CalendarEvent {
   // A regular meal generated from the Meals calendar's times: only single
   // days of it can be edited or deleted here.
   mealAuto?: boolean;
+  // Kitchen calendar: a meal-prep session or a shopping trip. What it's
+  // for is worked out from the meal plan (src/utils/planNeeds.ts).
+  kitchenKind?: "prep" | "shop" | null;
   // Set when this was one occurrence of a repeating event, edited on its
   // own and split off ("only this event").
   seriesId?: string | null;

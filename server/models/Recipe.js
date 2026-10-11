@@ -145,6 +145,11 @@ const recipeSchema = new mongoose.Schema(
       default: "",
     },
 
+    // Made in advance and kept (a marinated fillet, a stock) rather than
+    // cooked at the meal (rice). Only recipes that produce an ingredient
+    // can be; these are what a prep session is for.
+    madeAhead: { type: Boolean, default: false },
+
     isArchived: {
       type: Boolean,
       default: false,

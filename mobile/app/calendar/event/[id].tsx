@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { KitchenSessionNeeds } from "@/src/components/planner/KitchenSessionNeeds";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
@@ -387,6 +388,13 @@ export default function CalendarEventScreen() {
             </View>
           </Detail>
         </View>
+
+        {/* A prep session or shopping trip: what it's for, from the plan. */}
+        {!!event.kitchenKind && (
+          <View className="mb-3">
+            <KitchenSessionNeeds eventId={event._id} date={date ?? event.date} kind={event.kitchenKind} />
+          </View>
+        )}
 
         {/* Food from the planner */}
         {event.mealSlot && (

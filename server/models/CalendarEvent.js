@@ -52,6 +52,8 @@ const calendarEventSchema = new mongoose.Schema(
     // A repeating meal generated from the Meals calendar's regular times
     // (changed there, not by editing the series).
     mealAuto: { type: Boolean, default: false },
+    // Events in the Kitchen calendar: a meal-prep session or a shopping trip.
+    kitchenKind: { type: String, enum: ["prep", "shop", null], default: null },
   },
   { timestamps: true },
 );

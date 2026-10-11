@@ -86,6 +86,9 @@ export interface Recipe {
   imageUrl?: string;
   notes?: string;
   isArchived?: boolean;
+  // Made in advance and kept, rather than cooked at the meal: what a prep
+  // session is for. Only meaningful for a recipe that produces an ingredient.
+  madeAhead?: boolean;
   // Manual curation flag — false ("want to try") is the default for a new
   // recipe, true means the user has confirmed it as a keeper. Distinct from
   // a meal-plan entry's own planned/confirmed status (whether a specific
@@ -131,6 +134,7 @@ export interface CreateRecipeInput {
   nutrition?: RecipeNutrition;
   imageUrl?: string;
   notes?: string;
+  madeAhead?: boolean;
   isConfirmed?: boolean;
   isArchived?: boolean;
   ingredientList?: RecipeIngredientInput[];
