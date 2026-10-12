@@ -18,6 +18,8 @@ import {
   shortDateLabel,
 } from "@/src/components/calendar/calendarUtils";
 import { buildMealFood, mealKey, type MealFood } from "@/src/components/calendar/mealFood";
+import { MealSuggestion, SuggestionsToggle, useSuggestionsToggle } from "@/src/components/planner/MealSuggestion";
+import { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch";
 import { RepeatDaysSheet } from "@/src/components/calendar/RepeatDaysSheet";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { showActions } from "@/src/components/todo/theme";
@@ -42,7 +44,7 @@ import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { makeUsualFromEntry, stopUsualMeal } from "@/src/services/usualMealApi";
 import type { PantryItem } from "@/src/types/pantry";
-import { hexToRgba, parseLocalDate } from "@/src/utils/mealPlan";
+import { hexToRgba, parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
 // One event, as Outlook's event page shows it: the summary card (title,
 // date, time, repeat), then location / notes / reminder, then delete. `date`
@@ -59,6 +61,11 @@ export default function CalendarEventScreen() {
   // The planner entries behind `food`, and what marking one as eaten works
   // from (what's in the pantry, and the recipes and ingredients it uses).
   const [slotEntries, setSlotEntries] = useState<MealPlanEntry[]>([]);
+  // The whole day's plan (null until loaded), and the day it's for: what
+  // the suggestions for this meal are worked out from.
+  const [dayPlan, setDayPlan] = useState<{ day: string; entries: MealPlanEntry[] } | null>(null);
+  const [showSuggestions, toggleSuggestions] = useSuggestionsToggle();
+  const suggested = useSuggestionWatch(dayPlan?.day ?? "", dayPlan?.entries ?? null, showSuggestions);
   // The food being made a usual: picking which days of the week.
   const [repeating, setRepeating] = useState<MealFood["items"][number] | null>(null);
   // Set on the way out to "Add food": what the meal held before, so that
@@ -77,6 +84,7 @@ export default function CalendarEventScreen() {
       const [entries, settings] = await Promise.all([getMealPlanForDate(day), loadSettings()]);
       if (cancelled()) return;
       setSlotEntries(entries.filter((e) => e.slot === slot));
+      setDayPlan({ day, entries });
       const loaded = buildMealFood(entries, settings.unitConversions).get(mealKey(day, slot)) ?? null;
       setFood(loaded);
       // Just back from adding something: this day only, or every week?
@@ -403,8 +411,10 @@ export default function CalendarEventScreen() {
               <Ionicons name="restaurant-outline" size={18} color="#64748B" />
               <Text className="ml-2 flex-1 text-base font-semibold text-slate-900">Food</Text>
               {!!food && (
-                <Text className="text-sm font-semibold text-slate-700">{Math.round(food.nutrition.calories ?? 0)} kcal</Text>
+                <Text className="mr-3 text-sm font-semibold text-slate-700">{Math.round(food.nutrition.calories ?? 0)} kcal</Text>
               )}
+              {/* (Suggestions are only worked out from today on.) */}
+              {occurrence >= todayStr() && <SuggestionsToggle on={showSuggestions} onPress={toggleSuggestions} />}
             </View>
             {food === undefined ? (
               <ActivityIndicator className="my-4" color="#2563EB" />
@@ -433,6 +443,18 @@ export default function CalendarEventScreen() {
                   <Macro label="Fat" value={food.nutrition.fats} />
                 </View>
               </>
+            )}
+            {/* What's suggested for this meal — or, with a main planned, to go with it. */}
+            {food !== undefined && (
+              <MealSuggestion
+                suggested={suggested}
+                slot={event.mealSlot}
+                className="mx-3 mb-3 mt-1"
+                onPlanned={() => {
+                  const slot = event.mealSlot;
+                  if (slot) void loadFood(occurrence, slot);
+                }}
+              />
             )}
             <View className="flex-row border-t border-slate-100">
               <Pressable

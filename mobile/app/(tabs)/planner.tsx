@@ -57,6 +57,7 @@ import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { DishQuantityStepper } from "@/src/components/planner/DishQuantityStepper";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
+import { MealSuggestion, SuggestionsToggle, useSuggestionsToggle } from "@/src/components/planner/MealSuggestion";
 import { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch";
 import { WebWeekPlanScreen } from "@/src/components/planner/web/WebWeekPlanScreen";
 import { useWideWeb } from "@/src/utils/useWideWeb";
@@ -175,6 +176,8 @@ function PhonePlannerScreen() {
   const [isLoading, setIsLoading] = useState(true);
   // The day `entries` was last loaded for (null after a failed load).
   const [entriesDate, setEntriesDate] = useState<string | null>(null);
+  // Whether the suggestion cards are on.
+  const [showSuggestions, toggleSuggestions] = useSuggestionsToggle();
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
   const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
@@ -371,7 +374,7 @@ function PhonePlannerScreen() {
   // What would be suggested for this day's empty meals, worked out unseen,
   // so that what's logged into them is recorded against it — only once the
   // day's plan has really loaded.
-  useSuggestionWatch(selectedDate, entriesDate === selectedDate && !isLoading ? entries : null);
+  const suggested = useSuggestionWatch(selectedDate, entriesDate === selectedDate && !isLoading ? entries : null, showSuggestions);
 
   useEffect(() => {
     loadEntries();
@@ -1870,9 +1873,13 @@ function PhonePlannerScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Day label */}
-        <Text className="mb-5 text-2xl font-bold text-slate-900">
-          {friendlyDayLabel(selectedDate)}
-        </Text>
+        <View className="mb-5 flex-row items-center justify-between">
+          <Text className="text-2xl font-bold text-slate-900">
+            {friendlyDayLabel(selectedDate)}
+          </Text>
+          {/* Suggestions for the empty meals, on or off. */}
+          <SuggestionsToggle on={showSuggestions} onPress={toggleSuggestions} />
+        </View>
 
         {isLoading ? (
           <View className="items-center py-16">
@@ -1931,6 +1938,10 @@ function PhonePlannerScreen() {
             {/* Slots */}
             {SLOTS.map(slot => {
               const slotEntries = entriesBySlot.get(slot.id) ?? [];
+              // A suggestion to take or leave (nothing, with the cards off).
+              const suggestionCard = suggested.offerFor(slot.id) && (
+                <MealSuggestion suggested={suggested} slot={slot.id} className={slotEntries.length ? "mt-2" : ""} onPlanned={(added) => setEntries(prev => [...prev, ...added])} />
+              );
               return (
                 <View key={slot.id} className="mb-5">
                   {/* Slot header */}
@@ -1951,7 +1962,12 @@ function PhonePlannerScreen() {
 
                   {/* Entries */}
                   {slotEntries.length > 0 ? (
-                    slotEntries.map(renderEntry)
+                    <>
+                      {slotEntries.map(renderEntry)}
+                      {suggestionCard}
+                    </>
+                  ) : suggestionCard ? (
+                    suggestionCard
                   ) : lastEntryBySlot?.[slot.id] ? (
                     (() => {
                       const lastEntry = lastEntryBySlot[slot.id]!;
