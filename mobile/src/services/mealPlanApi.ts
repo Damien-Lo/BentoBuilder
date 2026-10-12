@@ -88,6 +88,8 @@ export interface MealPlanEntry {
 
   notes?: string;
   createdAt?: string;
+  // An accepted suggestion, as against something picked by hand.
+  suggested?: boolean;
 }
 
 export interface CreateMealPlanEntryInput {
@@ -108,6 +110,8 @@ export interface CreateMealPlanEntryInput {
   restaurantDishSelections?: RestaurantDishSelection[]; // which of restaurantMeal's dishes were eaten, and how many of each
 
   notes?: string;
+  // An accepted suggestion (see utils/recommend.ts).
+  suggested?: boolean;
 }
 
 async function parseResponse<T>(res: Response): Promise<T> {
@@ -262,4 +266,64 @@ export async function getLastEntriesBeforeDate(before: string): Promise<LastEntr
   const res = await fetch(`${API_BASE_URL}/api/meal-plan/last-entries?before=${encodeURIComponent(before)}`);
   const result = await parseResponse<{ success: boolean; data: LastEntryBySlot }>(res);
   return result.data ?? EMPTY_LAST_ENTRIES;
+}
+
+// Records what was done with a meal suggestion — taken, turned over for
+// another, or waved away — with how it scored. Best-effort: a suggestion
+// still works if the record doesn't save.
+export function logSuggestionEvent(event: {
+  date: string;
+  slot: MealSlot;
+  // "replaced": it was showing, and something else was planned there
+  // instead (`chosen` says what).
+  // "side-…": one side of the plate was swapped, dropped or added, the
+  // rest left as offered (`sideFrom` / `sideTo` are recipe ids).
+  action: "accepted" | "another" | "dismissed" | "replaced" | "side-swapped" | "side-removed" | "side-added";
+  // False when it was worked out in the background, not on screen.
+  shown?: boolean;
+  sideFrom?: string | null;
+  sideTo?: string | null;
+  chosen?: string;
+  // How what was chosen instead scores, by the same factors.
+  chosenCalories?: number;
+  chosenScore?: number;
+  chosenFactors?: Record<string, number>;
+  recipe?: string | null;
+  meal?: string | null;
+  sides?: string[];
+  name: string;
+  calories: number;
+  rank: number;
+  score: number;
+  factors: Record<string, number>;
+}): void {
+  fetch(`${API_BASE_URL}/api/meal-plan/suggestion-events`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(event) }).catch(() => {});
+}
+
+// One saved record of what was done with a suggestion (see logSuggestionEvent).
+export interface SuggestionEventRecord {
+  _id: string;
+  createdAt: string;
+  date: string;
+  slot: MealSlot;
+  action: string;
+  shown: boolean;
+  name: string;
+  calories: number | null;
+  rank: number;
+  score: number | null;
+  factors: Record<string, number>;
+  chosen: string;
+  chosenCalories: number | null;
+  chosenScore: number | null;
+  chosenFactors: Record<string, number> | null;
+  sideFrom: string | null;
+  sideTo: string | null;
+}
+
+// The whole record, newest first, with how many of each action there are.
+export async function getSuggestionEvents(limit = 500): Promise<{ total: number; counts: Record<string, number>; events: SuggestionEventRecord[] }> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/suggestion-events?limit=${limit}`);
+  const result = await parseResponse<{ data?: { total: number; counts: Record<string, number>; events: SuggestionEventRecord[] } }>(res);
+  return result.data ?? { total: 0, counts: {}, events: [] };
 }

@@ -22,6 +22,13 @@ const REPORTS: ReportRow[] = [
     icon: "nutrition-outline",
     route: "/developer/ingredients",
   },
+  {
+    id: "suggestions",
+    label: "Suggestion Record",
+    description: "What's been done with meal suggestions, as saved",
+    icon: "sparkles-outline",
+    route: "/developer/suggestions",
+  },
 ];
 
 export default function DeveloperHomeScreen() {

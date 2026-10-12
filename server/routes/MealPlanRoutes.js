@@ -4,6 +4,7 @@ import PantryItem from "../models/PantryItem.js";
 import UsualMeal from "../models/UsualMeal.js";
 import { syncUsualMeals, todayFrom } from "../services/usualMeals.js";
 import { removeMealPlanEntryContributions } from "../services/groceryContributions.js";
+import SuggestionEvent from "../models/SuggestionEvent.js";
 import {
   CORE_NUTRITION_FIELD_NAMES,
   EXTENDED_NUTRITION_FIELD_NAMES,
@@ -239,6 +240,40 @@ router.get("/last-used", async (req, res) => {
 /**
  * POST /api/meal-plan
  */
+/**
+ * GET /api/meal-plan/suggestion-events?limit=500
+ * The record itself, newest first, with a count by action — for looking
+ * through by hand (Developer → Suggestion record) and, later, to fit to.
+ */
+router.get("/suggestion-events", async (req, res) => {
+  try {
+    const limit = Math.min(5000, Math.max(1, Number(req.query.limit) || 500));
+    const [events, counts, total] = await Promise.all([
+      SuggestionEvent.find().sort({ createdAt: -1 }).limit(limit).lean(),
+      SuggestionEvent.aggregate([{ $group: { _id: "$action", n: { $sum: 1 } } }]),
+      SuggestionEvent.countDocuments(),
+    ]);
+    return res.json({ success: true, data: { total, counts: Object.fromEntries(counts.map((c) => [c._id, c.n])), events } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/meal-plan/suggestion-events
+ * Records what was done with a suggestion (see models/SuggestionEvent.js).
+ * Nothing reads these yet; they're the record to learn from later.
+ */
+router.post("/suggestion-events", async (req, res) => {
+  try {
+    const { date, slot, action, shown, sideFrom, sideTo, chosen, chosenCalories, chosenScore, chosenFactors, recipe, meal, sides, name, calories, rank, score, factors } = req.body;
+    const event = await SuggestionEvent.create({ date, slot, action, shown: shown !== false, sideFrom: sideFrom || null, sideTo: sideTo || null, chosen, chosenCalories, chosenScore, chosenFactors, recipe: recipe || null, meal: meal || null, sides: Array.isArray(sides) ? sides : [], name, calories, rank, score, factors });
+    return res.status(201).json({ success: true, data: { _id: event._id } });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 router.post("/", async (req, res) => {
   try {
     const entry = await MealPlanEntry.create(req.body);

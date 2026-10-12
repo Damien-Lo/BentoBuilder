@@ -57,6 +57,7 @@ import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { DishQuantityStepper } from "@/src/components/planner/DishQuantityStepper";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
+import { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch";
 import { WebWeekPlanScreen } from "@/src/components/planner/web/WebWeekPlanScreen";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { NutritionSummaryCard, type NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
@@ -172,6 +173,8 @@ function PhonePlannerScreen() {
   }, [dateParam, addParam, requestParam]);
   const [entries, setEntries] = useState<MealPlanEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // The day `entries` was last loaded for (null after a failed load).
+  const [entriesDate, setEntriesDate] = useState<string | null>(null);
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
   const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
@@ -354,10 +357,21 @@ function PhonePlannerScreen() {
   const loadEntries = useCallback(() => {
     setIsLoading(true);
     getMealPlanForDate(selectedDate)
-      .then(setEntries)
-      .catch(() => setEntries([]))
+      .then((loaded) => {
+        setEntries(loaded);
+        setEntriesDate(selectedDate);
+      })
+      .catch(() => {
+        setEntries([]);
+        setEntriesDate(null);
+      })
       .finally(() => setIsLoading(false));
   }, [selectedDate]);
+
+  // What would be suggested for this day's empty meals, worked out unseen,
+  // so that what's logged into them is recorded against it — only once the
+  // day's plan has really loaded.
+  useSuggestionWatch(selectedDate, entriesDate === selectedDate && !isLoading ? entries : null);
 
   useEffect(() => {
     loadEntries();

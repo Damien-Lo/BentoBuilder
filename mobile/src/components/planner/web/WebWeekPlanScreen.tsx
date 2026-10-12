@@ -1,18 +1,21 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { addDays, minutesLabel, MONTHS_FULL, MONTHS_SHORT, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
 import { entryName } from "@/src/components/calendar/mealFood";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
+import { noteSuggestions, recordSuggestion, settleSuggestions, type SuggestionAction } from "@/src/components/planner/suggestionRecord";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
 import { Choice, DateField } from "@/src/components/web/fields";
 import { Button, Card, CardLink, Empty, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
 import { createCalendarEvent, getCalendars } from "@/src/services/calendarApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import { getMeals, type Meal } from "@/src/services/mealApi";
 import {
+  createMealPlanEntry,
   deleteMealPlanEntry,
   getMealPlanRange,
   unconfirmMealPlanEntry,
@@ -26,6 +29,7 @@ import { stopUsualMeal } from "@/src/services/usualMealApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
 import { needAmountLabel, type KitchenSession, type NeedSource } from "@/src/utils/planNeeds";
+import { suggestMeals, type Dish, type Macros, type Suggestion, type Suggestions } from "@/src/utils/recommend";
 
 // The planner in a desktop browser: the whole week at once. A column per
 // day and a row per meal, each cell holding what's planned or eaten, with
@@ -51,7 +55,7 @@ export function WebWeekPlanScreen() {
   const [entries, setEntries] = useState<MealPlanEntry[]>([]);
   const [loadedWeek, setLoadedWeek] = useState<string | null>(null);
   // What marking an entry as eaten works from.
-  const [kitchen, setKitchen] = useState<{ recipes: Recipe[]; ingredients: Ingredient[]; pantry: PantryItem[] } | null>(null);
+  const [kitchen, setKitchen] = useState<{ recipes: Recipe[]; ingredients: Ingredient[]; pantry: PantryItem[]; meals: Meal[] } | null>(null);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   const week = useMemo(() => weekOf(focusDate, settings.weekStartDay), [focusDate, settings.weekStartDay]);
@@ -66,8 +70,8 @@ export function WebWeekPlanScreen() {
   }, []);
 
   const loadKitchen = useCallback(() => {
-    Promise.all([getRecipes(), getIngredients(), getPantryItems()])
-      .then(([recipes, ingredients, pantry]) => setKitchen({ recipes, ingredients, pantry }))
+    Promise.all([getRecipes(), getIngredients(), getPantryItems(), getMeals()])
+      .then(([recipes, ingredients, pantry, meals]) => setKitchen({ recipes, ingredients, pantry, meals }))
       .catch(() => {});
   }, []);
 
@@ -98,6 +102,7 @@ export function WebWeekPlanScreen() {
     loadWeek(week);
     loadKitchen();
     plan.reload();
+    loadHistory();
   };
 
   const confirm = useEntryConfirm({
@@ -158,10 +163,149 @@ export function WebWeekPlanScreen() {
   const planned = computeDayNutrition(weekEntries.filter((e) => e.status === "planned"), conversions);
   const loggedDays = week.filter((d) => weekEntries.some((e) => e.date === d && e.status === "confirmed")).length;
 
+  // Suggestions for the empty meals from today on (see utils/recommend.ts):
+  // proposals only — nothing counts one until it's accepted.
+  const [suggesting, setSuggestingState] = useState(() => {
+    try {
+      return globalThis.localStorage?.getItem("web.suggestions") !== "off";
+    } catch {
+      return true;
+    }
+  });
+  const setSuggesting = (on: boolean) => {
+    setSuggestingState(on);
+    try {
+      globalThis.localStorage?.setItem("web.suggestions", on ? "on" : "off");
+    } catch {
+      // Not remembered, but still applied.
+    }
+  };
+  // What you've been eating, as far back as half a year: last week for
+  // the balance, all of it for what you tend to have and with what.
+  const [history, setHistory] = useState<MealPlanEntry[]>([]);
+  const loadHistory = useCallback(() => {
+    getMealPlanRange(addDays(today, -180), addDays(today, -1)).then(setHistory).catch(() => {});
+  }, [today]);
+  useFocusEffect(loadHistory);
+  // Which of a slot's suggestions is showing ("another" turns to the next),
+  // and the slots where they've been waved away.
+  const [turn, setTurn] = useState<Record<string, number>>({});
+  const [waved, setWaved] = useState<string[]>([]);
+  // The sides of an offer as changed by hand, and the ones turned down
+  // there (so a swap moves on to the next, not back), by "date|slot|main".
+  const [sideEdits, setSideEdits] = useState<Record<string, Dish[]>>({});
+  const [picking, setPicking] = useState<{ date: string; slot: MealSlot; offer: Suggestion; rank: number; from: Dish | null } | null>(null);
+  const [sidesPassed, setSidesPassed] = useState<Record<string, string[]>>({});
+
   // What the coming weeks' planned meals need prepping and buying, each
   // thing under the prep session or shopping trip it falls to.
   const plan = usePlanNeeds();
   const [adding, setAdding] = useState<"prep" | "shop" | null>(null);
+  const suggestions = useMemo(() => {
+    if (!suggesting || !kitchen || !ready || !plan.ready) return Object.assign(new Map<string, Suggestion[]>(), { rate: () => null, sidesFor: () => [], find: () => [], aim: () => null }) as Suggestions;
+    const empty = week
+      .filter((d) => d >= today)
+      .flatMap((date) => (["breakfast", "lunch", "dinner"] as const).filter((slot) => !weekEntries.some((e) => e.date === date && e.slot === slot)).map((slot) => ({ date, slot })));
+    // Meals with something planned but nothing eaten can still be added to.
+    const started = week
+      .filter((d) => d >= today)
+      .flatMap((date) => (["breakfast", "lunch", "dinner"] as const).filter((slot) => { const there = weekEntries.filter((e) => e.date === date && e.slot === slot); return there.length > 0 && there.every((e) => e.status !== "confirmed"); }).map((slot) => ({ date, slot })));
+    return suggestMeals({
+      slots: empty,
+      started,
+      entries: [...history, ...weekEntries],
+      recipes: kitchen.recipes,
+      meals: kitchen.meals,
+      ingredients: kitchen.ingredients,
+      pantryItems: kitchen.pantry,
+      conversions,
+      goals: { calories: settings.dailyCalorieLimit, protein: settings.dailyProteinLimit, carbs: settings.dailyCarbsLimit, fats: settings.dailyFatsLimit },
+      sessions: plan.sessions,
+      weekStartDay: settings.weekStartDay,
+      today,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggesting, kitchen, ready, plan.ready, plan.sessions, entries, history, week[0], today, settings]);
+
+  // The suggestion showing in a slot (if any), and where it stands among
+  // that slot's offers.
+  const offerFor = (date: string, slot: MealSlot) => {
+    const key = `${date}|${slot}`;
+    const offers = waved.includes(key) ? [] : suggestions.get(key) ?? [];
+    const rank = offers.length ? (turn[key] ?? 0) % offers.length : 0;
+    const shown = offers[rank] ?? null;
+    // With the sides as you've changed them, if you have.
+    const sides = shown ? sideEdits[`${key}|${shown.main.key}`] : undefined;
+    const offer = shown && sides ? { ...shown, sides, reasons: shown.reasons.filter((r) => !r.startsWith("fits the")), ...(shown.beside ? sides : [shown.main, ...sides]).reduce((sum, d) => ({ calories: sum.calories + d.calories, protein: sum.protein + d.protein, carbs: sum.carbs + d.carbs, fats: sum.fats + d.fats }), { calories: 0, protein: 0, carbs: 0, fats: 0 }) } : shown;
+    // (Sides for a planned main, all dropped, are no offer.)
+    return { key, offers, rank, offer: offer?.beside && !offer.sides.length ? null : offer };
+  };
+
+  // The sides that could still go beside an offer, likeliest first.
+  const sideOptions = (date: string, slot: MealSlot, offer: Suggestion) => {
+    const all = suggestions.sidesFor(offer);
+    const fresh = all.filter((d) => !(sidesPassed[`${date}|${slot}|${offer.main.key}`] ?? []).includes(d.key));
+    return fresh.length ? fresh : all;
+  };
+
+  // Choosing the side yourself (to swap `from` for, or to add with no
+  // `from`): see SidePicker.
+  const chooseSide = (date: string, slot: MealSlot, offer: Suggestion, rank: number, from: Dish | null) => setPicking({ date, slot, offer, rank, from });
+
+  // One side of an offer changed: swapped for the next that could go
+  // there (`to` given, `from` given), dropped, or added.
+  const changeSide = (date: string, slot: MealSlot, offer: Suggestion, rank: number, from: Dish | null, to: Dish | null) => {
+    const sides = from ? offer.sides.flatMap((d) => (d === from ? (to ? [to] : []) : [d])) : to ? [...offer.sides, to] : offer.sides;
+    const plate = `${date}|${slot}|${offer.main.key}`;
+    setSideEdits((prev) => ({ ...prev, [plate]: sides }));
+    if (from) setSidesPassed((prev) => ({ ...prev, [plate]: [...(prev[plate] ?? []), from.key] }));
+    record(from && to ? "side-swapped" : from ? "side-removed" : "side-added", date, slot, offer, rank, to ? { name: to.name } : undefined, { sideFrom: from?.recipe?._id ?? null, sideTo: to?.recipe?._id ?? null });
+  };
+  // What a day's showing suggestions would add, were they all taken.
+  const suggestedOn = (date: string): Macros =>
+    (["breakfast", "lunch", "dinner"] as const)
+      .map((slot) => offerFor(date, slot).offer)
+      .reduce((sum, o) => (o ? { calories: sum.calories + o.calories, protein: sum.protein + o.protein, carbs: sum.carbs + o.carbs, fats: sum.fats + o.fats } : sum), { calories: 0, protein: 0, carbs: 0, fats: 0 });
+
+  const record = (action: SuggestionAction, date: string, slot: MealSlot, offer: Suggestion, rank: number, chosen?: { name: string }, side?: { sideFrom: string | null; sideTo: string | null }) =>
+    recordSuggestion(action, date, slot, offer, rank, { chosen, side });
+
+  // A suggestion was showing and you put something else there instead: the
+  // most telling thing there is about what it should have offered. Noticed
+  // when the plan comes back with that slot filled by hand (see
+  // suggestionRecord.ts, which keeps what was on offer while this screen is
+  // away at the add sheet).
+  useEffect(() => {
+    if (!suggesting || !kitchen || !ready || !plan.ready) return;
+    settleSuggestions(weekEntries, week);
+    noteSuggestions(
+      week,
+      week.flatMap((date) =>
+        (["breakfast", "lunch", "dinner"] as const).flatMap((slot) => {
+          const { key, offer, rank } = offerFor(date, slot);
+          // (An offer to add to a meal that's already started isn't replaced by what's there.)
+          return offer && !weekEntries.some((e) => e.date === date && e.slot === slot) ? [{ key, offer, rank }] : [];
+        }),
+      ),
+      suggestions,
+      true,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, suggestions, turn, waved]);
+
+  // Taking a suggestion plans the main and its sides as ordinary meals.
+  async function acceptSuggestion(date: string, slot: MealSlot, offer: Suggestion, rank: number) {
+    try {
+      for (const dish of offer.beside ? offer.sides : [offer.main, ...offer.sides]) {
+        await createMealPlanEntry({ date, slot, status: "planned", suggested: true, ...(dish.recipe ? { recipe: dish.recipe._id, recipeServings: 1 } : dish.ingredient ? { ingredient: dish.ingredient._id, ingredientQuantity: dish.ingredient.defaultPortionAmount || 1, ingredientUnit: dish.ingredient.defaultPortionUnit ?? "" } : { meal: dish.meal!._id }) });
+      }
+      record("accepted", date, slot, offer, rank);
+      reload();
+    } catch (error) {
+      Alert.alert("Couldn't add it", error instanceof Error ? error.message : "Something went wrong.");
+    }
+  }
+
   const sessionGroups = <T extends { session: string | null }>(kind: KitchenSession["kind"], list: T[]) =>
     [
       ...plan.sessions.filter((s) => s.kind === kind).map((session) => ({ session: session as KitchenSession | null, rows: list.filter((n) => n.session === session.id) })),
@@ -197,6 +341,7 @@ export function WebWeekPlanScreen() {
         <IconButton icon="chevron-back" label="Previous week" onPress={() => setFocusDate((d) => addDays(d, -7))} />
         <IconButton icon="chevron-forward" label="Next week" onPress={() => setFocusDate((d) => addDays(d, 7))} />
         <Text style={{ flex: 1, marginLeft: 6, fontSize: 20, fontWeight: "700", color: WEB.text }}>{range}</Text>
+        <Button label={suggesting ? "Suggestions on" : "Suggestions off"} icon={suggesting ? "sparkles" : "sparkles-outline"} onPress={() => setSuggesting(!suggesting)} />
         <Button label="Grocery list" icon="cart-outline" onPress={() => router.navigate("/grocery-list")} />
       </View>
 
@@ -242,6 +387,12 @@ export function WebWeekPlanScreen() {
                     <Text style={{ fontWeight: "700", color: over ? WEB.red : WEB.text }}>{Math.round(done)}</Text>
                     {ahead > 0 && <Text style={{ color: WEB.faint }}> +{Math.round(ahead)}</Text>} kcal
                   </Text>
+                  {/* What the suggestions showing would add, in their colour. */}
+                  {suggestedOn(day).calories > 0 && (
+                    <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 11, fontWeight: "600", color: "#7C3AED" }}>
+                      <Ionicons name="sparkles" size={9} color="#7C3AED" /> +{Math.round(suggestedOn(day).calories)} suggested
+                    </Text>
+                  )}
                   <View style={{ marginTop: 5, height: 5, borderRadius: 3, backgroundColor: "#EEF2F7", overflow: "hidden", flexDirection: "row" }}>
                     <View style={{ width: pct(done), backgroundColor: over ? WEB.red : WEB.blue }} />
                     <View style={{ width: pct(Math.min(ahead, Math.max(0, (goal ?? 0) - done))), backgroundColor: WEB.blue, opacity: 0.3 }} />
@@ -299,6 +450,81 @@ export function WebWeekPlanScreen() {
                         </Pressable>
                       );
                     })}
+                    {/* Nothing planned: a suggestion, to take or leave. */}
+                    {(() => {
+                      const { key, offers, rank, offer } = offerFor(day, slot.id);
+                      if (!offer) return null;
+                      return (
+                        // One plate, shown as a card a dish: the main can be turned
+                        // over for another plate, a side swapped or dropped, and the
+                        // strip beneath plans or waves away the lot.
+                        <View style={{ marginBottom: 5 }}>
+                          {(offer.beside ? offer.sides : [offer.main, ...offer.sides]).map((dish, position) => {
+                            // (Beside a planned main, every card is a side.)
+                            const index = offer.beside ? position + 1 : position;
+                            const next = index ? (sideOptions(day, slot.id, offer)[0] ?? null) : null;
+                            return (
+                              <View key={dish.key} style={{ marginBottom: 4, borderRadius: 9, borderWidth: 1, borderStyle: "dashed", borderColor: "#C4B5FD", backgroundColor: "#F5F3FF", paddingLeft: 8, paddingRight: 4, paddingVertical: 5 }}>
+                                <Pressable onPress={() => (dish.recipe ? router.push({ pathname: "/recipes/[id]", params: { id: dish.recipe._id } }) : undefined)}>
+                                  <Text numberOfLines={2} style={{ fontSize: 12, fontWeight: "600", lineHeight: 15, color: "#5B21B6" }}>
+                                    {index === 0 && <Ionicons name="sparkles" size={10} color="#7C3AED" />}
+                                    {index === 0 ? " " : ""}
+                                    {dish.name}
+                                  </Text>
+                                </Pressable>
+                                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 1 }}>
+                                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 11, color: "#7C3AED" }}>
+                                    {Math.round(dish.calories)} kcal · P {Math.round(dish.protein)} g
+                                  </Text>
+                                  {index === 0 && offers.length > 1 && (
+                                    <SuggestionButton
+                                      icon="refresh"
+                                      label="Another"
+                                      onPress={() => {
+                                        record("another", day, slot.id, offer, rank);
+                                        setTurn((prev) => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }));
+                                      }}
+                                    />
+                                  )}
+                                  {index > 0 && next && <SuggestionButton icon="swap-horizontal" label={`Swap ${dish.name}`} onPress={() => chooseSide(day, slot.id, offer, rank, dish)} />}
+                                  {index > 0 && <SuggestionButton icon="close" label={`Drop ${dish.name}`} onPress={() => changeSide(day, slot.id, offer, rank, dish, null)} />}
+                                </View>
+                              </View>
+                            );
+                          })}
+                          {/* The plate as a whole. */}
+                          <View style={{ paddingLeft: 4 }}>
+                            <Text numberOfLines={2} style={{ fontSize: 11, lineHeight: 14, color: "#7C3AED" }}>
+                              {offer.sides.length > 0 && <Text style={{ fontWeight: "700" }}>{offer.beside ? "+" : ""}{Math.round(offer.calories)} kcal · P {Math.round(offer.protein)} g</Text>}
+                              {offer.sides.length > 0 && offer.reasons[0] ? " · " : ""}
+                              {offer.reasons[0] ?? ""}
+                            </Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
+                              <Pressable
+                                onPress={() => void acceptSuggestion(day, slot.id, offer, rank)}
+                                accessibilityLabel="Plan it"
+                                style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 24, paddingHorizontal: 9, borderRadius: 7, backgroundColor: hovered ? "#6D28D9" : "#7C3AED" })}
+                              >
+                                <Ionicons name="checkmark" size={13} color="#FFFFFF" />
+                                <Text style={{ marginLeft: 3, fontSize: 11, fontWeight: "700", color: "#FFFFFF" }}>Plan</Text>
+                              </Pressable>
+                              <View style={{ flex: 1 }} />
+                              {offer.sides.length < 3 && sideOptions(day, slot.id, offer).length > 0 && (
+                                <SuggestionButton icon="add" label="Add a side" onPress={() => chooseSide(day, slot.id, offer, rank, null)} />
+                              )}
+                              <SuggestionButton
+                                icon="close"
+                                label="No suggestion here"
+                                onPress={() => {
+                                  record("dismissed", day, slot.id, offer, rank);
+                                  setWaved((prev) => [...prev, key]);
+                                }}
+                              />
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })()}
                     <Pressable
                       onPress={() => addFood(day, slot.id)}
                       accessibilityLabel={`Add ${slot.label.toLowerCase()}`}
@@ -347,6 +573,8 @@ export function WebWeekPlanScreen() {
                 days={1}
                 settings={settings}
                 line={pickedEntries.length ? "" : "Nothing planned or eaten"}
+                suggested={suggestedOn(pickedDayShown)}
+                week={pickedDayShown >= today ? suggestions.aim(pickedDayShown) : null}
               />
               <Numbers
                 title="This week"
@@ -355,6 +583,7 @@ export function WebWeekPlanScreen() {
                 planned={planned}
                 days={7}
                 settings={settings}
+                suggested={week.map(suggestedOn).reduce((sum, m) => ({ calories: sum.calories + m.calories, protein: sum.protein + m.protein, carbs: sum.carbs + m.carbs, fats: sum.fats + m.fats }), { calories: 0, protein: 0, carbs: 0, fats: 0 })}
                 line={loggedDays > 0 ? `${Math.round((eaten.calories ?? 0) / loggedDays)} kcal a day on logged days` : "Nothing logged yet"}
               />
             </ScrollView>
@@ -422,6 +651,18 @@ export function WebWeekPlanScreen() {
       </View>
 
       {confirm.modals}
+      {picking && (
+        <SidePicker
+          title={picking.from ? `Swap ${picking.from.name} for` : `Add beside ${picking.offer.main.name}`}
+          likely={suggestions.sidesFor(picking.offer).slice(0, 4)}
+          find={(query) => suggestions.find(query).filter((d) => d.key !== picking.offer.main.key && !picking.offer.sides.some((s) => s.key === d.key))}
+          onPick={(dish) => {
+            changeSide(picking.date, picking.slot, picking.offer, picking.rank, picking.from, dish);
+            setPicking(null);
+          }}
+          onClose={() => setPicking(null)}
+        />
+      )}
       <NewSessionDialog kind={adding} today={today} weekStartDay={settings.weekStartDay} onClose={() => setAdding(null)} onCreated={plan.reload} />
     </WebPage>
   );
@@ -437,6 +678,8 @@ function Numbers({
   days,
   settings,
   line,
+  suggested,
+  week,
 }: {
   title: string;
   subtitle: string;
@@ -445,8 +688,19 @@ function Numbers({
   days: number;
   settings: AppSettings;
   line: string;
+  // What the suggestions on show would add, if there are any.
+  suggested?: Macros;
+  // The day's calorie aim once the week so far is counted (see the weekly
+  // balance in utils/recommend.ts), where it differs from the plain goal.
+  week?: { aim: number; carry: number } | null;
 }) {
   const goal = (n: number | null) => (n != null ? n * days : null);
+  // Eaten, planned and suggested together, against a goal.
+  const withAll = (key: keyof Macros, target: number | null) => {
+    const total = Math.round((eaten[key] ?? 0) + (planned[key] ?? 0) + (suggested?.[key] ?? 0));
+    return { total, over: target != null && total > target * 1.05, target };
+  };
+  const shifted = week && settings.dailyCalorieLimit && Math.abs(week.aim - settings.dailyCalorieLimit) >= 10 ? week : null;
   return (
     <View style={{ width: PAGE_WIDTH, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14 }}>
       <Text style={{ fontSize: 15, fontWeight: "700", color: WEB.text }}>{title}</Text>
@@ -459,11 +713,111 @@ function Numbers({
       <Text style={{ marginTop: 2, fontSize: 12, color: WEB.muted }}>
         {[line, settings.dailyCalorieLimit ? `goal ${settings.dailyCalorieLimit}${days === 1 ? " kcal" : ""}` : ""].filter(Boolean).join(" · ")}
       </Text>
+      {shifted && (
+        <Text style={{ marginTop: 2, fontSize: 12, lineHeight: 16, color: "#7C3AED" }}>
+          <Ionicons name="sparkles" size={10} color="#7C3AED" /> Suggesting towards <Text style={{ fontWeight: "700" }}>{Math.round(shifted.aim)} kcal</Text>: the week is {Math.abs(Math.round(shifted.carry))} kcal {shifted.carry > 0 ? "over" : "under"} so far
+        </Text>
+      )}
       <GoalBar label="Calories" value={eaten.calories ?? 0} planned={planned.calories ?? 0} goal={goal(settings.dailyCalorieLimit)} unit="kcal" />
       <GoalBar label="Protein" value={eaten.protein ?? 0} planned={planned.protein ?? 0} goal={goal(settings.dailyProteinLimit)} unit="g" />
       <GoalBar label="Carbs" value={eaten.carbs ?? 0} planned={planned.carbs ?? 0} goal={goal(settings.dailyCarbsLimit)} unit="g" color="#D97706" />
       <GoalBar label="Fats" value={eaten.fats ?? 0} planned={planned.fats ?? 0} goal={goal(settings.dailyFatsLimit)} unit="g" color="#DB2777" />
+      {/* Where the suggestions on show would take it. */}
+      {!!suggested && suggested.calories > 0 && (
+        <View style={{ marginTop: 14, borderRadius: 10, borderWidth: 1, borderStyle: "dashed", borderColor: "#C4B5FD", backgroundColor: "#F5F3FF", paddingHorizontal: 10, paddingVertical: 8 }}>
+          <Text style={{ fontSize: 12, fontWeight: "700", color: "#5B21B6" }}>
+            <Ionicons name="sparkles" size={11} color="#7C3AED" /> With the suggestions
+          </Text>
+          <Text style={{ marginTop: 2, fontSize: 11, color: "#7C3AED" }}>
+            they add {Math.round(suggested.calories)} kcal · P {Math.round(suggested.protein)} · C {Math.round(suggested.carbs)} · F {Math.round(suggested.fats)} g
+          </Text>
+          <View style={{ marginTop: 6, flexDirection: "row", flexWrap: "wrap", columnGap: 12, rowGap: 2 }}>
+            {(
+              [
+                ["kcal", withAll("calories", shifted ? shifted.aim : goal(settings.dailyCalorieLimit))],
+                ["P", withAll("protein", goal(settings.dailyProteinLimit))],
+                ["C", withAll("carbs", goal(settings.dailyCarbsLimit))],
+                ["F", withAll("fats", goal(settings.dailyFatsLimit))],
+              ] as const
+            ).map(([label, sum]) => (
+              <Text key={label} style={{ fontSize: 12, color: "#5B21B6" }}>
+                <Text style={{ fontWeight: "700", color: sum.over ? WEB.red : "#5B21B6" }}>{sum.total}</Text>
+                {sum.target != null ? ` / ${Math.round(sum.target)}` : ""} {label}
+              </Text>
+            ))}
+          </View>
+        </View>
+      )}
     </View>
+  );
+}
+
+function SuggestionButton({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityLabel={label}
+      style={({ hovered }: { hovered?: boolean }) => ({ width: 24, height: 22, alignItems: "center", justifyContent: "center", borderRadius: 6, backgroundColor: hovered ? "#DDD6FE" : "transparent" })}
+    >
+      <Ionicons name={icon} size={14} color="#6D28D9" />
+    </Pressable>
+  );
+}
+
+// What to put beside a suggestion's main: the likeliest few, or — typed
+// for — anything among your recipes, saved meals and ingredients.
+function SidePicker({ title, likely, find, onPick, onClose }: { title: string; likely: Dish[]; find: (query: string) => Dish[]; onPick: (dish: Dish) => void; onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const searching = query.trim().length > 0;
+  const rows = searching ? find(query).slice(0, 30) : likely;
+  const kind = (d: Dish) => (d.recipe ? "Recipe" : d.meal ? "Meal" : "Ingredient");
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(15,23,42,0.4)" }}>
+        <Pressable style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, cursor: "default" } as object} onPress={onClose} accessibilityLabel="Close" />
+        <View style={{ width: 400, maxHeight: "80%", padding: 20, borderRadius: 16, backgroundColor: WEB.card, boxShadow: "0 18px 40px rgba(15,23,42,0.25)" }}>
+          <Text numberOfLines={2} style={{ fontSize: 17, fontWeight: "700", color: WEB.text }}>{title}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", height: 38, marginTop: 12, paddingHorizontal: 11, borderRadius: 10, borderWidth: 1, borderColor: WEB.border }}>
+            <Ionicons name="search" size={15} color={WEB.muted} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              autoFocus
+              placeholder="Search recipes, meals and ingredients"
+              placeholderTextColor={WEB.faint}
+              accessibilityLabel="Search"
+              style={{ flex: 1, marginLeft: 8, fontSize: 14, color: WEB.text, outlineStyle: "none" } as object}
+            />
+          </View>
+          <Text style={{ marginTop: 14, marginBottom: 4, fontSize: 11, fontWeight: "700", letterSpacing: 0.4, color: WEB.muted }}>{searching ? "MATCHES" : "GOES WITH IT"}</Text>
+          <ScrollView style={{ marginHorizontal: -8 }}>
+            {rows.map((dish) => (
+              <Pressable
+                key={dish.key}
+                onPress={() => onPick(dish)}
+                accessibilityLabel={`Choose ${dish.name}`}
+                style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 8, borderRadius: 9, backgroundColor: hovered ? WEB.blueSoft : "transparent" })}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: WEB.text }}>{dish.name}</Text>
+                  <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 12, color: WEB.muted }}>
+                    {kind(dish)}
+                    {dish.ingredient ? ` · ${dish.ingredient.defaultPortionAmount || 1} ${dish.ingredient.defaultPortionUnit ?? ""}`.trimEnd() : ""}
+                  </Text>
+                </View>
+                <Text style={{ marginLeft: 10, fontSize: 12, color: WEB.body }}>
+                  {Math.round(dish.calories)} kcal · P {Math.round(dish.protein)} g
+                </Text>
+              </Pressable>
+            ))}
+            {!rows.length && <Text style={{ paddingHorizontal: 8, paddingVertical: 10, fontSize: 13, color: WEB.muted }}>{searching ? "Nothing by that name." : "Nothing you've had beside it yet — search for something."}</Text>}
+          </ScrollView>
+          <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 12 }}>
+            <Button label="Cancel" kind="secondary" onPress={onClose} />
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 

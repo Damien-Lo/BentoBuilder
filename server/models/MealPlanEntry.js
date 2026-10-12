@@ -99,6 +99,10 @@ const mealPlanEntrySchema = new mongoose.Schema(
     // Set when a usual meal filled this in (see models/UsualMeal.js).
     // Removing such an entry skips that usual on this day.
     usual: { type: mongoose.Schema.Types.ObjectId, ref: "UsualMeal", default: null },
+    // True when this was a suggestion that was accepted, rather than
+    // something picked by hand: a rating that follows is a stronger sign
+    // the suggestion was a good one.
+    suggested: { type: Boolean, default: false },
 
     notes:      { type: String, trim: true, default: "" },
     isArchived: { type: Boolean, default: false },

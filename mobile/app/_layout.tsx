@@ -238,6 +238,13 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
+
+        <Stack.Screen
+          name="developer/suggestions"
+          options={{
+            headerShown: false,
+          }}
+        />
       </Stack>
       </WebShell>
       </ServerGate>
