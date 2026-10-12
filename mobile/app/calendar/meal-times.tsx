@@ -6,24 +6,30 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TimePickerModal } from "@/src/components/calendar/CalendarSheets";
 import { RepeatDaysSheet } from "@/src/components/calendar/RepeatDaysSheet";
+import { loadUsualFoods, UsualFoodPicker, type UsualFood } from "@/src/components/calendar/UsualFoodPicker";
 import { durationLabel, minutesLabel, WEEKDAYS_FULL, WEEKDAYS_SHORT } from "@/src/components/calendar/calendarUtils";
+import { DatePickerModal } from "@/src/components/forms";
 import {
   getMealTimes,
+  getMealTimesUntil,
   MEAL_TYPES,
   saveMealTimes,
   type MealTime,
   type MealTimes,
   type MealType,
 } from "@/src/services/calendarApi";
+import { WebMealTimesScreen } from "@/src/components/calendar/web/WebKitchenTimes";
 import { loadSettings } from "@/src/services/settingsService";
 import {
+  createUsualMeal,
   getUsualMeals,
   stopUsualMeal,
   updateUsualMeal,
   usualName,
   type UsualMeal,
 } from "@/src/services/usualMealApi";
-import { SLOT_MAP, todayStr } from "@/src/utils/mealPlan";
+import { parseLocalDate, SLOT_MAP, todayStr } from "@/src/utils/mealPlan";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // What a meal starts at when a day is first switched on.
 const DEFAULT_TIMES: Record<MealType, MealTime> = {
@@ -38,6 +44,11 @@ const DEFAULT_TIMES: Record<MealType, MealTime> = {
 // the repeating meal events follow from today on; earlier days keep the
 // times they had.
 export default function MealTimesScreen() {
+  // A desktop browser gets the week laid out as a table.
+  return useWideWeb() ? <WebMealTimesScreen /> : <PhoneMealTimesScreen />;
+}
+
+function PhoneMealTimesScreen() {
   const router = useRouter();
   const [times, setTimes] = useState<MealTimes | null>(null);
   const [saved, setSaved] = useState("");
@@ -49,15 +60,23 @@ export default function MealTimesScreen() {
   // Usual food: saved as it's changed, separately from the times above.
   const [usuals, setUsuals] = useState<UsualMeal[]>([]);
   const [editingDays, setEditingDays] = useState<UsualMeal | null>(null);
+  // The last day the regular times run to (null = no end), saved with them.
+  const [until, setUntil] = useState<string | null>(null);
+  const [pickingUntil, setPickingUntil] = useState(false);
+  // A usual being added here: first what (`choosing`), then which days.
+  const [foods, setFoods] = useState<UsualFood[] | null>(null);
+  const [choosing, setChoosing] = useState(false);
+  const [adding, setAdding] = useState<UsualFood | null>(null);
   const loadUsuals = () => getUsualMeals().then(setUsuals).catch(() => {});
 
   useEffect(() => {
     loadSettings().then((s) => setWeekStartDay(s.weekStartDay)).catch(() => {});
     void loadUsuals();
-    getMealTimes()
-      .then((loaded) => {
+    Promise.all([getMealTimes(), getMealTimesUntil().catch(() => null)])
+      .then(([loaded, end]) => {
         setTimes(loaded);
-        setSaved(JSON.stringify(loaded));
+        setUntil(end);
+        setSaved(JSON.stringify([loaded, end]));
       })
       .catch((error) =>
         Alert.alert("Couldn't load", error instanceof Error ? error.message : "Something went wrong.", [
@@ -76,7 +95,7 @@ export default function MealTimesScreen() {
 
   const days = Array.from({ length: 7 }, (_, i) => (weekStartDay + i) % 7);
   const current = times[meal][day];
-  const dirty = JSON.stringify(times) !== saved;
+  const dirty = JSON.stringify([times, until]) !== saved;
   const mealLabel = MEAL_TYPES.find((m) => m.value === meal)!.label;
   const mealUsuals = usuals.filter((u) => u.slot === meal);
 
@@ -126,6 +145,16 @@ export default function MealTimesScreen() {
   }
 
   // "Mon, Tue, Wed" in the week's own order; "Every day" / "Weekdays" when so.
+  // Everything a usual can be, loaded the first time one is added.
+  function chooseUsual() {
+    setChoosing(true);
+    if (foods) return;
+    loadUsualFoods().then(setFoods, () => {
+      setChoosing(false);
+      Alert.alert("Couldn't load", "Check your connection and try again.");
+    });
+  }
+
   function daysLabel(weekdays: number[]): string {
     if (weekdays.length === 7) return "Every day";
     if (weekdays.length === 5 && [1, 2, 3, 4, 5].every((d) => weekdays.includes(d))) return "Weekdays";
@@ -136,9 +165,9 @@ export default function MealTimesScreen() {
     if (!times) return;
     try {
       setSaving(true);
-      const result = await saveMealTimes(times, todayStr());
+      const result = await saveMealTimes(times, todayStr(), until);
       setTimes(result);
-      setSaved(JSON.stringify(result));
+      setSaved(JSON.stringify([result, until]));
       router.back();
     } catch (error) {
       Alert.alert("Couldn't save", error instanceof Error ? error.message : "Something went wrong.");
@@ -253,6 +282,24 @@ export default function MealTimesScreen() {
           <CopyButton label="Copy to weekdays" onPress={() => setDayTime([1, 2, 3, 4, 5], current)} />
         </View>
 
+        {/* How long the regular times run */}
+        <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">Run until</Text>
+        <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+          <View className="flex-row items-center pl-4 pr-2" style={{ minHeight: 56 }}>
+            <Pressable onPress={() => setPickingUntil(true)} className="flex-1 py-3 active:opacity-60">
+              <Text className="text-base font-semibold text-slate-900">
+                {until ? parseLocalDate(until).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "long", year: "numeric" }) : "No end date"}
+              </Text>
+              <Text className="mt-0.5 text-xs text-slate-500">{until ? "Every meal's regular time stops after this day." : "Tap to set a last day for all the regular times."}</Text>
+            </Pressable>
+            {!!until && (
+              <Pressable onPress={() => setUntil(null)} hitSlop={6} accessibilityLabel="No end date" className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100">
+                <Ionicons name="close-circle" size={20} color="#94A3B8" />
+              </Pressable>
+            )}
+          </View>
+        </View>
+
         {/* Usual food for this meal */}
         <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">
           Usual {mealLabel.toLowerCase()}
@@ -260,8 +307,7 @@ export default function MealTimesScreen() {
         <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
           {mealUsuals.length === 0 ? (
             <Text className="px-4 py-3.5 text-sm leading-5 text-slate-500">
-              Nothing yet. To have the same {mealLabel.toLowerCase()} every week, open that meal in the calendar, tap the
-              food and choose &quot;Have this every week&quot;.
+              Nothing yet. Add what you have for {mealLabel.toLowerCase()} most weeks, and it&apos;s planned for you on those days.
             </Text>
           ) : (
             mealUsuals.map((usual, index) => (
@@ -296,6 +342,10 @@ export default function MealTimesScreen() {
             ))
           )}
         </View>
+        <Pressable onPress={chooseUsual} className="mt-2 flex-row items-center justify-center rounded-2xl bg-blue-50 py-3 active:bg-blue-100">
+          <Ionicons name="add" size={18} color="#1D4ED8" />
+          <Text className="ml-1 font-semibold text-blue-700">Add a usual {mealLabel.toLowerCase()}</Text>
+        </Pressable>
         <Text className="mt-2 px-1 text-xs leading-4 text-slate-500">
           Usual food is added to your planner as planned, two weeks ahead. Changes here apply straight away.
         </Text>
@@ -320,6 +370,46 @@ export default function MealTimesScreen() {
           const usual = editingDays;
           setEditingDays(null);
           if (usual) updateUsualMeal(usual._id, { weekdays }).then(loadUsuals, usualFail);
+        }}
+      />
+
+      {/* A new usual: what… */}
+      {choosing && (
+        <UsualFoodPicker
+          title={`Usual ${mealLabel.toLowerCase()}`}
+          foods={foods}
+          onPick={(food) => {
+            setChoosing(false);
+            // (After the picker has gone: iOS can't present over it.)
+            setTimeout(() => setAdding(food), 350);
+          }}
+          onClose={() => setChoosing(false)}
+        />
+      )}
+      {/* …then on which days. */}
+      <RepeatDaysSheet
+        visible={!!adding}
+        title={`Have ${adding?.name ?? "this"} every week`}
+        subtitle={`It will be added to your planner as planned ${mealLabel.toLowerCase()} on these days, two weeks ahead.`}
+        initialDays={[day]}
+        weekStartDay={weekStartDay}
+        confirmLabel="Add as usual"
+        onCancel={() => setAdding(null)}
+        onConfirm={(weekdays) => {
+          const food = adding;
+          setAdding(null);
+          if (food) createUsualMeal({ slot: meal, weekdays, ...food.input }).then(loadUsuals, usualFail);
+        }}
+      />
+
+      <DatePickerModal
+        visible={pickingUntil}
+        title="Run until"
+        value={until ?? `${new Date().getFullYear()}-12-31`}
+        onCancel={() => setPickingUntil(false)}
+        onConfirm={(value) => {
+          setUntil(value);
+          setPickingUntil(false);
         }}
       />
 

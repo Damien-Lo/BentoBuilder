@@ -38,7 +38,7 @@ export const WEB_SECTIONS: WebSection[] = [
     path: "/calendar",
     tabs: [
       { label: "Calendar", path: "/calendar", also: ["/calendar/edit", "/calendar/event"] },
-      { label: "Meal times", path: "/calendar/meal-times" },
+      { label: "Meal times", path: "/calendar/meal-times", also: ["/calendar/sessions"] },
     ],
   },
   {
@@ -147,7 +147,7 @@ export function resolveWebRoute(pathname: string): { section: WebSection | null;
 
 // Pages laid out for the desktop, given the whole pane. Everything else is
 // a phone-shaped page, shown as a column in the middle.
-const DESKTOP_PAGES = ["/", "/calendar", "/planner", "/RecipesMainPage", "/PantryMainPage", "/health", "/lists", "/lists/tasks", "/lists/checklists", "/lists/shopping", "/receipts"];
+const DESKTOP_PAGES = ["/", "/calendar", "/calendar/meal-times", "/calendar/sessions", "/planner", "/RecipesMainPage", "/PantryMainPage", "/health", "/lists", "/lists/tasks", "/lists/checklists", "/lists/shopping", "/receipts"];
 
 export function isDesktopPage(pathname: string, params: Record<string, unknown>): boolean {
   // The planner opened to add food is the phone's own add sheet.

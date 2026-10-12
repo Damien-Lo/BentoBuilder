@@ -347,7 +347,15 @@ export function WebCalendarScreen() {
                       <View style={{ width: 13, height: 13, borderRadius: 3, alignItems: "center", justifyContent: "center", backgroundColor: on ? color : "#FFFFFF", borderWidth: 1.5, borderColor: color }}>
                         {on && <Ionicons name="checkmark" size={9} color="#FFFFFF" />}
                       </View>
-                      <Text style={{ marginLeft: 8, fontSize: 12, color: on ? "#334155" : "#94A3B8" }}>{kind.label}</Text>
+                      <Text style={{ flex: 1, marginLeft: 8, fontSize: 12, color: on ? "#334155" : "#94A3B8" }}>{kind.label}</Text>
+                      {/* Its regular times: the meals', or this kind of session's. */}
+                      <Pressable
+                        onPress={() => router.push(kind.value === "meals" ? "/calendar/meal-times" : { pathname: "/calendar/sessions", params: { kind: kind.value } })}
+                        accessibilityLabel={`${kind.label}: regular times`}
+                        hitSlop={4}
+                      >
+                        <Ionicons name="settings-outline" size={13} color="#94A3B8" />
+                      </Pressable>
                     </Pressable>
                   );
                 })}

@@ -26,6 +26,7 @@ import {
   REPEAT_OPTIONS,
   shortDateLabel,
   WEEKDAYS_FULL,
+  untilAfter,
   weeklyDays,
 } from "@/src/components/calendar/calendarUtils";
 import { loadSettings } from "@/src/services/settingsService";
@@ -42,6 +43,8 @@ import {
   type EventCalendar,
   type EventInput,
   MEAL_TYPES,
+  SESSION_TYPES,
+  type KitchenKind,
   type MealType,
   type RepeatFrequency,
 } from "@/src/services/calendarApi";
@@ -108,6 +111,10 @@ export default function EditCalendarEventScreen() {
   const [remindMinutes, setRemindMinutes] = useState<number | null>(15);
   // Events in the Meals calendar: which meal this is (required there).
   const [mealSlot, setMealSlot] = useState<MealType | null>(null);
+  // Kitchen calendar, instead of a meal: a prep session or a shopping trip.
+  const [kitchenKind, setKitchenKind] = useState<KitchenKind | null>(null);
+  // "Until … or after N times": the N being typed.
+  const [times, setTimes] = useState("");
 
   const [dateTarget, setDateTarget] = useState<DateTarget>(null);
   const [timeTarget, setTimeTarget] = useState<TimeTarget>(null);
@@ -151,6 +158,7 @@ export default function EditCalendarEventScreen() {
           setDescription(event.description);
           setRemindMinutes(event.remindMinutes);
           setMealSlot(event.mealSlot ?? null);
+          setKitchenKind(event.kitchenKind ?? null);
         } else {
           setCalendarId((loadedCalendars.find((c) => c.isDefault) ?? loadedCalendars[0])?._id ?? "");
         }
@@ -174,9 +182,26 @@ export default function EditCalendarEventScreen() {
 
   function pickMeal(slot: MealType) {
     // An untouched or default title follows the meal.
-    const labels = MEAL_TYPES.map((m) => m.label);
+    const labels = [...MEAL_TYPES.map((m) => m.label), ...SESSION_TYPES.map((x) => x.title)];
     if (!title.trim() || labels.includes(title.trim())) setTitle(MEAL_TYPES.find((m) => m.value === slot)!.label);
     setMealSlot(slot);
+    setKitchenKind(null);
+  }
+
+  // A prep session or shopping trip instead of a meal.
+  function pickSession(kind: KitchenKind) {
+    const labels = [...MEAL_TYPES.map((m) => m.label), ...SESSION_TYPES.map((x) => x.title)];
+    if (!title.trim() || labels.includes(title.trim())) setTitle(SESSION_TYPES.find((x) => x.value === kind)!.title);
+    setKitchenKind(kind);
+    setMealSlot(null);
+  }
+
+  // "Ends after N times", kept as the date that falls on.
+  function endAfterTimes() {
+    const n = Number(times);
+    if (!repeatFrequency || !date || !(n >= 1)) return;
+    setRepeatUntil(untilAfter(date, repeatFrequency, repeatDays, n));
+    setTimes("");
   }
 
   // A timed event ending at or before its start runs into the next day.
@@ -217,8 +242,8 @@ export default function EditCalendarEventScreen() {
       Alert.alert("Add a title", "Give your event a title.");
       return;
     }
-    if (isMeal && !mealSlot) {
-      Alert.alert("Which meal is this?", "Pick breakfast, lunch, dinner or snack, so it can show that meal from your planner.");
+    if (isMeal && !mealSlot && !kitchenKind) {
+      Alert.alert("What is this?", "Pick a meal, so it can show that meal from your planner — or a prep session or shopping trip.");
       return;
     }
     if (isMeal && (allDay || endDate > date)) {
@@ -248,7 +273,8 @@ export default function EditCalendarEventScreen() {
       location: location.trim(),
       description: description.trim(),
       remindMinutes,
-      mealSlot: isMeal ? mealSlot : null,
+      mealSlot: isMeal && !kitchenKind ? mealSlot : null,
+      kitchenKind: isMeal ? kitchenKind : null,
     };
     try {
       setSaving(true);
@@ -384,8 +410,8 @@ export default function EditCalendarEventScreen() {
           {/* Which meal — only in the Meals calendar */}
           {isMeal && (
             <View className="mb-3 rounded-3xl border border-slate-200 bg-white p-4">
-              <Text className="text-sm font-semibold text-slate-900">Meal</Text>
-              <Text className="mt-0.5 text-xs text-slate-500">Shows this meal from your planner on the day.</Text>
+              <Text className="text-sm font-semibold text-slate-900">Meal or session</Text>
+              <Text className="mt-0.5 text-xs text-slate-500">A meal shows its food from your planner; a session shows what to prep or buy.</Text>
               <View className="mt-3 flex-row gap-2">
                 {MEAL_TYPES.map((meal) => {
                   const on = mealSlot === meal.value;
@@ -396,6 +422,20 @@ export default function EditCalendarEventScreen() {
                       className={`flex-1 items-center rounded-xl py-2.5 ${on ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"}`}
                     >
                       <Text className={`text-[13px] font-semibold ${on ? "text-white" : "text-slate-700"}`}>{meal.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <View className="mt-2 flex-row gap-2">
+                {SESSION_TYPES.map((session) => {
+                  const on = kitchenKind === session.value;
+                  return (
+                    <Pressable
+                      key={session.value}
+                      onPress={() => pickSession(session.value)}
+                      className={`flex-1 items-center rounded-xl py-2.5 ${on ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"}`}
+                    >
+                      <Text className={`text-[13px] font-semibold ${on ? "text-white" : "text-slate-700"}`}>{session.label}</Text>
                     </Pressable>
                   );
                 })}
@@ -505,6 +545,24 @@ export default function EditCalendarEventScreen() {
                 <Text className="text-base text-slate-500">{repeatUntil ? shortDateLabel(repeatUntil) : "Forever"}</Text>
               </Row>
             )}
+            {/* Or a number of times, kept as the date that falls on. */}
+            {repeatFrequency && (
+              <Row icon="repeat-outline" label="Or after" border hideChevron>
+                <TextInput
+                  value={times}
+                  onChangeText={(text) => setTimes(text.replace(/[^0-9]/g, ""))}
+                  onSubmitEditing={endAfterTimes}
+                  onBlur={endAfterTimes}
+                  placeholder="10"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                  accessibilityLabel="Number of times"
+                  className="w-14 rounded-lg bg-slate-100 px-2 py-1.5 text-center text-base text-slate-900"
+                />
+                <Text className="ml-2 text-base text-slate-500">times</Text>
+              </Row>
+            )}
           </Card>
 
           {/* Where / details */}
@@ -590,7 +648,10 @@ export default function EditCalendarEventScreen() {
           setCalendarId(next);
           // Meals are timed; other calendars have no meal type.
           if (calendars.find((c) => c._id === next)?.isMeals) setAllDay(false);
-          else setMealSlot(null);
+          else {
+            setMealSlot(null);
+            setKitchenKind(null);
+          }
         }}
         onClose={() => setSheet(null)}
       />

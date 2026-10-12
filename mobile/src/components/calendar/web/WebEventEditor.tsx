@@ -2,7 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
-import { MEAL_TYPES, type EventCalendar, type EventOccurrence } from "@/src/services/calendarApi";
+import { TimeField } from "@/src/components/web/fields";
+import { MEAL_TYPES, SESSION_TYPES, type EventCalendar, type EventOccurrence } from "@/src/services/calendarApi";
 import { hexToRgba, parseLocalDate } from "@/src/utils/mealPlan";
 
 import {
@@ -97,6 +98,14 @@ function EditorCard({
   const form = useEventForm(draft, calendars, onSaved);
   // Which dropdown is open, if any (one at a time).
   const [open, setOpen] = useState<string | null>(null);
+  // "Until … or after N times": the N being typed.
+  const [times, setTimes] = useState("");
+  const endAfterTimes = () => {
+    if (!Number(times)) return;
+    form.endAfter(Number(times));
+    setTimes("");
+    setOpen(null);
+  };
   const toggle = (id: string) => setOpen((prev) => (prev === id ? null : id));
   const color = calendarColor(form.calendar);
   const editingId = draft.mode === "edit" ? draft.id : null;
@@ -259,6 +268,26 @@ function EditorCard({
                       </Pressable>
                     );
                   })}
+                  {/* …or not a meal at all: time to prep, or to shop. */}
+                  <View style={{ width: 1, marginHorizontal: 2, backgroundColor: "#E2E8F0" }} />
+                  {SESSION_TYPES.map((session) => {
+                    const on = form.kitchenKind === session.value;
+                    return (
+                      <Pressable
+                        key={session.value}
+                        onPress={() => form.pickSession(session.value)}
+                        style={({ hovered }: Hover) => ({
+                          height: 34,
+                          paddingHorizontal: 14,
+                          justifyContent: "center",
+                          borderRadius: 10,
+                          backgroundColor: on ? "#2563EB" : hovered ? "#E2E8F0" : "#F1F5F9",
+                        })}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: "600", color: on ? "#FFFFFF" : "#334155" }}>{session.label}</Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
                 <Text style={{ marginLeft: 10, alignSelf: "center", fontSize: 12, color: "#94A3B8" }}>shows this meal from your planner</Text>
               </FormRow>
@@ -315,38 +344,13 @@ function EditorCard({
                 </>
               ) : (
                 <>
+                  {/* Typed or picked from the list. */}
                   <View style={{ marginLeft: 8 }}>
-                    <FieldButton onPress={() => toggle("start")} minWidth={92}>
-                      <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: "#0F172A" }}>{minutesLabel(form.startMinutes)}</Text>
-                    </FieldButton>
-                    {open === "start" && (
-                      <TimeList
-                        options={startOptions}
-                        value={form.startMinutes}
-                        width={120}
-                        onPick={(value) => {
-                          form.changeStartTime(value);
-                          setOpen(null);
-                        }}
-                      />
-                    )}
+                    <TimeField minutes={form.startMinutes} options={startOptions} label="Starts" onChange={form.changeStartTime} onOpenChange={(on) => setOpen(on ? "start" : null)} />
                   </View>
                   <Text style={{ alignSelf: "center", marginHorizontal: 8, fontSize: 13, color: "#64748B" }}>to</Text>
                   <View>
-                    <FieldButton onPress={() => toggle("end")} minWidth={92}>
-                      <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: "#0F172A" }}>{minutesLabel(form.endMinutes)}</Text>
-                    </FieldButton>
-                    {open === "end" && (
-                      <TimeList
-                        options={endOptions}
-                        value={form.endMinutes % 1440}
-                        width={210}
-                        onPick={(value) => {
-                          form.changeEndTime(value);
-                          setOpen(null);
-                        }}
-                      />
-                    )}
+                    <TimeField minutes={form.endMinutes} options={endOptions} listWidth={210} label="Ends" onChange={form.changeEndTime} onOpenChange={(on) => setOpen(on ? "end" : null)} />
                   </View>
                 </>
               )}
@@ -462,6 +466,28 @@ function EditorCard({
                           >
                             <Text style={{ fontSize: 13, fontWeight: "600", color: "#334155" }}>Repeat forever</Text>
                           </Pressable>
+                          {/* Or a number of times, kept as the date that falls on. */}
+                          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
+                            <Text style={{ fontSize: 13, color: "#64748B" }}>or after</Text>
+                            <TextInput
+                              value={times}
+                              onChangeText={(text) => setTimes(text.replace(/[^0-9]/g, ""))}
+                              placeholder="10"
+                              placeholderTextColor="#94A3B8"
+                              inputMode="numeric"
+                              accessibilityLabel="Number of times"
+                              onSubmitEditing={endAfterTimes}
+                              style={{ width: 52, height: 32, marginHorizontal: 8, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: "#E2E8F0", fontSize: 14, color: "#0F172A", textAlign: "center" }}
+                            />
+                            <Text style={{ flex: 1, fontSize: 13, color: "#64748B" }}>times</Text>
+                            <Pressable
+                              onPress={endAfterTimes}
+                              accessibilityLabel="End after that many times"
+                              style={({ hovered }: Hover) => ({ height: 32, paddingHorizontal: 12, justifyContent: "center", borderRadius: 8, backgroundColor: hovered ? "#1D4ED8" : "#2563EB" })}
+                            >
+                              <Text style={{ fontSize: 13, fontWeight: "600", color: "#FFFFFF" }}>Set</Text>
+                            </Pressable>
+                          </View>
                         </Popover>
                       )}
                     </View>
@@ -647,25 +673,6 @@ function Option({ label, selected, dot, onPress }: { label: string; selected: bo
       </Text>
       {selected && <Ionicons name="checkmark" size={14} color="#1D4ED8" />}
     </Pressable>
-  );
-}
-
-// A scrolling list of times, opened on the one that's set.
-function TimeList({ options, value, width, onPick }: { options: { value: number; label: string }[]; value: number; width: number; onPick: (value: number) => void }) {
-  const list = useRef<ScrollView>(null);
-  const index = Math.max(0, options.findIndex((o) => o.value === value));
-  useEffect(() => {
-    list.current?.scrollTo({ y: Math.max(0, index * 34 - 102), animated: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return (
-    <Popover width={width}>
-      <ScrollView ref={list} style={{ maxHeight: 272 }}>
-        {options.map((option) => (
-          <Option key={option.value} label={option.label} selected={option.value === value} onPress={() => onPick(option.value)} />
-        ))}
-      </ScrollView>
-    </Popover>
   );
 }
 

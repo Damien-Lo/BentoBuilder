@@ -41,6 +41,14 @@ export function eventShown(event: { kitchenKind?: string | null; mealSlot?: stri
 }
 
 export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+// The Kitchen calendar's other kinds of event: what a session is for is
+// worked out from the meal plan, so all one needs is a time.
+export type KitchenKind = "prep" | "shop";
+export const SESSION_TYPES: { value: KitchenKind; label: string; title: string }[] = [
+  { value: "prep", label: "Prep session", title: "Meal prep" },
+  { value: "shop", label: "Shopping trip", title: "Grocery shopping" },
+];
+
 export const MEAL_TYPES: { value: MealType; label: string }[] = [
   { value: "breakfast", label: "Breakfast" },
   { value: "lunch", label: "Lunch" },
@@ -146,8 +154,10 @@ export const deleteCalendar = (id: string) => request<void>(`/calendars/${id}`, 
 export const getMealTimes = () => request<MealTimes>("/meal-times");
 // Saves the regular meal times; the repeating meal events follow from
 // `today` on (earlier days keep the times they had).
-export const saveMealTimes = (mealTimes: MealTimes, today: string) =>
-  request<MealTimes>("/meal-times", { method: "PUT", body: body({ mealTimes, today }) });
+// (`until`: the last day they run to, or null for no end.)
+export const saveMealTimes = (mealTimes: MealTimes, today: string, until?: string | null) =>
+  request<MealTimes>("/meal-times", { method: "PUT", body: body({ mealTimes, today, until }) });
+export const getMealTimesUntil = () => request<string | null>("/meal-times/until");
 
 export const getEventOccurrences = (from: string, to: string) =>
   request<EventOccurrence[]>(`/events?from=${from}&to=${to}`);

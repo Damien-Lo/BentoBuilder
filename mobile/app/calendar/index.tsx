@@ -485,6 +485,10 @@ function PhoneCalendarScreen() {
         onClose={() => setDrawerOpen(false)}
         onToggle={(c) => void toggleCalendar(c)}
         onToggleKind={(c, kind) => void toggleKind(c, kind)}
+        onKindSettings={(kind) => {
+          setDrawerOpen(false);
+          router.push(kind === "meals" ? "/calendar/meal-times" : { pathname: "/calendar/sessions", params: { kind } });
+        }}
         onEdit={(c) => {
           afterDrawer.current = c;
           setDrawerOpen(false);

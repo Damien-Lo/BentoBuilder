@@ -57,6 +57,11 @@ export const makeUsualFromEntry = (entryId: string, weekdays: number[]) =>
     body: JSON.stringify({ weekdays, today: todayStr() }),
   });
 
+// A usual set up directly: one serving of a recipe, a saved meal, or a
+// portion of an ingredient, on `weekdays` from today.
+export const createUsualMeal = (input: { slot: MealSlot; weekdays: number[]; recipe?: string; meal?: string; ingredient?: string; ingredientQuantity?: number; ingredientUnit?: string }) =>
+  request<UsualMeal>("", { method: "POST", body: JSON.stringify({ ...input, today: todayStr() }) });
+
 export const updateUsualMeal = (id: string, changes: { active?: boolean; weekdays?: number[] }) =>
   request<UsualMeal>(`/${id}`, { method: "PATCH", body: JSON.stringify({ ...changes, today: todayStr() }) });
 

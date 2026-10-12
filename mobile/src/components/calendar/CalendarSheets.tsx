@@ -229,6 +229,7 @@ export function CalendarsDrawer({
   onClose,
   onToggle,
   onToggleKind,
+  onKindSettings,
   onEdit,
   onMealTimes,
   onReorder,
@@ -241,6 +242,8 @@ export function CalendarsDrawer({
   onToggle: (calendar: EventCalendar) => void;
   // One kind of thing in a calendar (the Kitchen's meals, prep, shopping).
   onToggleKind: (calendar: EventCalendar, kind: string) => void;
+  // The regular times of one of those kinds ("meals", "prep", "shop").
+  onKindSettings: (kind: string) => void;
   onEdit: (calendar: EventCalendar) => void;
   // The Kitchen calendar's meal times: when each meal usually is.
   onMealTimes: () => void;
@@ -387,7 +390,11 @@ export function CalendarsDrawer({
                         <View className="h-5 w-5 items-center justify-center rounded-md" style={on ? { backgroundColor: color } : { borderWidth: 2, borderColor: color, backgroundColor: "white" }}>
                           {on && <Ionicons name="checkmark" size={13} color="white" />}
                         </View>
-                        <Text className={`ml-3 text-sm ${on ? "text-slate-700" : "text-slate-400"}`}>{kind.label}</Text>
+                        <Text className={`ml-3 flex-1 text-sm ${on ? "text-slate-700" : "text-slate-400"}`}>{kind.label}</Text>
+                        {/* Its regular times: the meals', or this kind of session's. */}
+                        <Pressable hitSlop={8} onPress={() => onKindSettings(kind.value)} accessibilityLabel={`${kind.label}: regular times`} className="h-9 w-9 items-center justify-center rounded-full active:bg-slate-100">
+                          <Ionicons name="settings-outline" size={17} color="#64748B" />
+                        </Pressable>
                       </Pressable>
                     );
                   })}

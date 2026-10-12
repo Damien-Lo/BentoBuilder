@@ -7,17 +7,19 @@ import {
   detachCalendarEvent,
   getCalendarEvent,
   MEAL_TYPES,
+  SESSION_TYPES,
   splitCalendarEvent,
   updateCalendarEvent,
   type EventCalendar,
   type EventInput,
+  type KitchenKind,
   type MealType,
   type RepeatFrequency,
   type SeriesScope,
 } from "@/src/services/calendarApi";
 import { parseLocalDate } from "@/src/utils/mealPlan";
 
-import { addDays, daysBetween, weeklyDays } from "./calendarUtils";
+import { addDays, daysBetween, untilAfter, weeklyDays } from "./calendarUtils";
 
 // What the event form is for: a new event starting from a day and time, or
 // an existing one. For a repeating event, `occurrence` is the day that was
@@ -62,6 +64,8 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
   const [remindMinutes, setRemindMinutes] = useState<number | null>(15);
   // Events in the Meals calendar: which meal this is (required there).
   const [mealSlot, setMealSlot] = useState<MealType | null>(null);
+  // Kitchen calendar, instead of a meal: a prep session or a shopping trip.
+  const [kitchenKind, setKitchenKind] = useState<KitchenKind | null>(null);
 
   // A new event goes in a calendar that's on show — the default one if it
   // is, else the first that is — so it doesn't vanish into a hidden calendar
@@ -108,6 +112,7 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
         setDescription(event.description);
         setRemindMinutes(event.remindMinutes);
         setMealSlot(event.mealSlot ?? null);
+        setKitchenKind(event.kitchenKind ?? null);
         setLoading(false);
       })
       .catch((error) => {
@@ -133,7 +138,10 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
     setCalendarIdState(next);
     // Meals are timed; other calendars have no meal type.
     if (calendars.find((c) => c._id === next)?.isMeals) setAllDayState(false);
-    else setMealSlot(null);
+    else {
+      setMealSlot(null);
+      setKitchenKind(null);
+    }
   }
 
   function setAllDay(next: boolean) {
@@ -146,9 +154,23 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
 
   function pickMeal(slot: MealType) {
     // An untouched or default title follows the meal.
-    const labels = MEAL_TYPES.map((m) => m.label);
+    const labels = [...MEAL_TYPES.map((m) => m.label), ...SESSION_TYPES.map((s) => s.title)];
     if (!title.trim() || labels.includes(title.trim())) setTitle(MEAL_TYPES.find((m) => m.value === slot)!.label);
     setMealSlot(slot);
+    setKitchenKind(null);
+  }
+
+  // A prep session or shopping trip instead of a meal.
+  function pickSession(kind: KitchenKind) {
+    const labels = [...MEAL_TYPES.map((m) => m.label), ...SESSION_TYPES.map((s) => s.title)];
+    if (!title.trim() || labels.includes(title.trim())) setTitle(SESSION_TYPES.find((s) => s.value === kind)!.title);
+    setKitchenKind(kind);
+    setMealSlot(null);
+  }
+
+  // "Ends after N times", kept as the date that falls on.
+  function endAfter(times: number) {
+    if (repeatFrequency && date && times >= 1) setRepeatUntil(untilAfter(date, repeatFrequency, repeatDays, times));
   }
 
   function changeStartDate(next: string) {
@@ -201,8 +223,8 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
       Alert.alert("Add a title", "Give your event a title.");
       return;
     }
-    if (isMeal && !mealSlot) {
-      Alert.alert("Which meal is this?", "Pick breakfast, lunch, dinner or snack, so it can show that meal from your planner.");
+    if (isMeal && !mealSlot && !kitchenKind) {
+      Alert.alert("What is this?", "Pick a meal, so it can show that meal from your planner — or a prep session or shopping trip.");
       return;
     }
     if (isMeal && (allDay || endDate > date)) {
@@ -232,7 +254,8 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
       location: location.trim(),
       description: description.trim(),
       remindMinutes,
-      mealSlot: isMeal ? mealSlot : null,
+      mealSlot: isMeal && !kitchenKind ? mealSlot : null,
+      kitchenKind: isMeal ? kitchenKind : null,
     };
     try {
       setSaving(true);
@@ -311,6 +334,9 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
     setRemindMinutes,
     mealSlot,
     pickMeal,
+    kitchenKind,
+    pickSession,
+    endAfter,
     save,
     confirmDelete,
   };

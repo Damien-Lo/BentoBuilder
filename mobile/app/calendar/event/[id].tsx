@@ -68,9 +68,6 @@ export default function CalendarEventScreen() {
   const suggested = useSuggestionWatch(dayPlan?.day ?? "", dayPlan?.entries ?? null, showSuggestions);
   // The food being made a usual: picking which days of the week.
   const [repeating, setRepeating] = useState<MealFood["items"][number] | null>(null);
-  // Set on the way out to "Add food": what the meal held before, so that
-  // on coming back the new food can be offered as a usual.
-  const beforeAdd = useRef<Set<string> | null>(null);
   const [kitchen, setKitchen] = useState<{
     recipes: Recipe[];
     ingredients: Ingredient[];
@@ -87,32 +84,9 @@ export default function CalendarEventScreen() {
       setDayPlan({ day, entries });
       const loaded = buildMealFood(entries, settings.unitConversions).get(mealKey(day, slot)) ?? null;
       setFood(loaded);
-      // Just back from adding something: this day only, or every week?
-      const before = beforeAdd.current;
-      beforeAdd.current = null;
-      const added = before && loaded?.items.find((item) => !before.has(item.id) && !item.usual);
-      if (added) askHowOften(added, day, slot);
     } catch {
       if (!cancelled()) setFood(null);
     }
-  }
-
-  function askHowOften(item: MealFood["items"][number], day: string, slot: MealType) {
-    const weekday = parseLocalDate(day).getDay();
-    const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][weekday];
-    Alert.alert(`${item.name} added`, "Have it just this day, or make it one of your usual meals?", [
-      { text: "Just this day", style: "cancel" },
-      {
-        text: `Every ${dayName}`,
-        onPress: () =>
-          void makeUsualFromEntry(item.id, [weekday]).then(
-            () => loadFood(day, slot),
-            (error) => Alert.alert("Couldn't save", error instanceof Error ? error.message : "Something went wrong."),
-          ),
-      },
-      // (After the alert has gone: iOS can't present over it.)
-      { text: "Choose days…", onPress: () => setTimeout(() => setRepeating(item), 350) },
-    ]);
   }
 
   // Marking food as eaten runs the planner's own confirm, here on this page:
@@ -163,8 +137,6 @@ export default function CalendarEventScreen() {
       return () => {
         cancelled = true;
       };
-      // (loadFood only uses what it's passed, refs and setters.)
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id, date, router]),
   );
 
@@ -194,7 +166,6 @@ export default function CalendarEventScreen() {
   // Adding food hands over to the planner's add sheet for this day and
   // meal; coming back here reloads the food.
   function openPlanner(action?: { add?: MealType }) {
-    if (action?.add) beforeAdd.current = new Set(slotEntries.map((e) => e._id));
     router.navigate({
       pathname: "/planner",
       params: { date: occurrence, from: "calendar", t: String(Date.now()), ...action },

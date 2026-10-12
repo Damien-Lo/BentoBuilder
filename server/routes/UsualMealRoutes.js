@@ -61,6 +61,26 @@ router.post("/from-entry/:entryId", async (req, res) => {
 });
 
 /**
+ * POST /api/usual-meals  { slot, weekdays, recipe | meal | ingredient (+ ingredientQuantity, ingredientUnit), today }
+ * A usual set up on its own (the Kitchen calendar's meal times page),
+ * starting today.
+ */
+router.post("/", async (req, res) => {
+  try {
+    const today = todayFrom(req.body.today);
+    const item = usualItemFields(req.body);
+    if (!item.meal && !item.recipe && !item.ingredient) return fail(res, "Pick what you usually have");
+    const weekdays = cleanDays(req.body.weekdays);
+    if (!weekdays.length) return fail(res, "Pick at least one day");
+    const usual = await UsualMeal.create({ slot: req.body.slot, weekdays, ...item, startDate: today });
+    await syncUsualMeals(today);
+    return res.status(201).json({ success: true, data: await populated(UsualMeal.findById(usual._id)) });
+  } catch (error) {
+    return fail(res, error);
+  }
+});
+
+/**
  * PATCH /api/usual-meals/:id  { active?, weekdays?, today }
  * Switch it off or on, or change which days it's on. Planned entries on
  * days it no longer covers are cleared; confirmed ones are never touched.

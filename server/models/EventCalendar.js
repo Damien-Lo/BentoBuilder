@@ -32,6 +32,9 @@ const eventCalendarSchema = new mongoose.Schema(
     // either { start, end } (minutes after midnight) or null for none. The
     // repeating meal events are generated from this.
     mealTimes: { type: mongoose.Schema.Types.Mixed, default: null },
+    // The last day the regular meal times run to ("YYYY-MM-DD"), or null
+    // for no end.
+    mealTimesUntil: { type: String, default: null },
   },
   { timestamps: true },
 );

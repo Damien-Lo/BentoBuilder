@@ -1,18 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 import { addDays, minutesLabel, MONTHS_FULL, MONTHS_SHORT, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
 import { entryName } from "@/src/components/calendar/mealFood";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { SidePicker } from "@/src/components/planner/SidePicker";
+import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { noteSuggestions, recordSuggestion, settleSuggestions, type SuggestionAction } from "@/src/components/planner/suggestionRecord";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
-import { Choice, DateField } from "@/src/components/web/fields";
 import { Button, Card, CardLink, Empty, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
-import { createCalendarEvent, getCalendars } from "@/src/services/calendarApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
 import {
@@ -665,7 +664,18 @@ export function WebWeekPlanScreen() {
           onClose={() => setPicking(null)}
         />
       )}
-      <NewSessionDialog kind={adding} today={today} weekStartDay={settings.weekStartDay} onClose={() => setAdding(null)} onCreated={plan.reload} />
+      {adding && (
+        <SessionBooker
+          kind={adding}
+          today={today}
+          // The week being planned, unless that's behind us.
+          start={week[6] >= today ? week[0] : today}
+          onClose={() => {
+            setAdding(null);
+            plan.reload();
+          }}
+        />
+      )}
     </WebPage>
   );
 }
@@ -778,108 +788,6 @@ function SessionHeading({ session, today, anySessions, missing }: { session: Kit
         {session && d ? `${session.date === today ? "Today" : `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`} · ${minutesLabel(session.startMinutes)}–${minutesLabel(session.endMinutes)}` : missing}
       </Text>
     </View>
-  );
-}
-
-const HOURS = Array.from({ length: 17 }, (_, i) => ({ value: String((6 + i) * 60), label: minutesLabel((6 + i) * 60) }));
-const LENGTHS = [
-  { value: "30", label: "30 minutes" },
-  { value: "60", label: "1 hour" },
-  { value: "90", label: "1½ hours" },
-  { value: "120", label: "2 hours" },
-  { value: "180", label: "3 hours" },
-];
-
-// Books a prep session or a shopping trip in the Kitchen calendar. It's an
-// ordinary event from then on: move it, or make it repeat, in the calendar.
-function NewSessionDialog({ kind, today, weekStartDay, onClose, onCreated }: { kind: "prep" | "shop" | null; today: string; weekStartDay: number; onClose: () => void; onCreated: () => void }) {
-  const [date, setDate] = useState(today);
-  const [start, setStart] = useState("600");
-  const [length, setLength] = useState("60");
-  const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    if (kind) {
-      setDate(today);
-      setStart(kind === "prep" ? "960" : "600");
-      setLength(kind === "prep" ? "120" : "60");
-    }
-  }, [kind, today]);
-  if (!kind) return null;
-
-  async function create() {
-    try {
-      setSaving(true);
-      const kitchen = (await getCalendars()).find((c) => c.isKitchen);
-      if (!kitchen) throw new Error("The Kitchen calendar is missing.");
-      const startMinutes = Number(start);
-      await createCalendarEvent({
-        title: kind === "prep" ? "Meal prep" : "Grocery shopping",
-        calendar: kitchen._id,
-        allDay: false,
-        date,
-        endDate: date,
-        startMinutes,
-        endMinutes: Math.min(1440, startMinutes + Number(length)),
-        repeat: null,
-        location: "",
-        description: "",
-        remindMinutes: 15,
-        kitchenKind: kind,
-      });
-      onCreated();
-      onClose();
-    } catch (error) {
-      Alert.alert("Couldn't book it", error instanceof Error ? error.message : "Something went wrong.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const box = { flexDirection: "row" as const, alignItems: "center" as const, height: 38, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: WEB.border, backgroundColor: WEB.card };
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(15,23,42,0.4)" }}>
-        <Pressable style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, cursor: "default" } as object} onPress={onClose} accessibilityLabel="Close" />
-        <View style={{ width: 380, padding: 20, borderRadius: 16, backgroundColor: WEB.card, boxShadow: "0 18px 40px rgba(15,23,42,0.25)" }}>
-          <Text style={{ fontSize: 17, fontWeight: "700", color: WEB.text }}>{kind === "prep" ? "New prep session" : "New shopping trip"}</Text>
-          <Text style={{ marginTop: 3, marginBottom: 14, fontSize: 13, lineHeight: 18, color: WEB.muted }}>
-            {kind === "prep" ? "What to make is worked out from your plan: everything needed from this session until the next." : "What to buy is worked out from your plan and your prep, up to the next trip."}
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <DateField value={date} onChange={(d) => d && setDate(d)} clearable={false} weekStartDay={weekStartDay} />
-            <Choice
-              value={start}
-              options={HOURS}
-              onChange={setStart}
-              width={130}
-              renderTrigger={(open) => (
-                <Pressable onPress={open} style={box}>
-                  <Text style={{ fontSize: 14, color: WEB.text }}>{minutesLabel(Number(start))}</Text>
-                  <Ionicons name="chevron-down" size={13} color={WEB.muted} style={{ marginLeft: 6 }} />
-                </Pressable>
-              )}
-            />
-            <Choice
-              value={length}
-              options={LENGTHS}
-              onChange={setLength}
-              width={150}
-              renderTrigger={(open) => (
-                <Pressable onPress={open} style={box}>
-                  <Text style={{ fontSize: 14, color: WEB.text }}>{LENGTHS.find((l) => l.value === length)?.label}</Text>
-                  <Ionicons name="chevron-down" size={13} color={WEB.muted} style={{ marginLeft: 6 }} />
-                </Pressable>
-              )}
-            />
-          </View>
-          <Text style={{ marginTop: 10, fontSize: 12, color: WEB.faint }}>It goes in the Kitchen calendar. To make it weekly, edit it there.</Text>
-          <View style={{ marginTop: 18, flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
-            <Button label="Cancel" onPress={onClose} />
-            <Button label={saving ? "Booking…" : "Book it"} kind="primary" onPress={() => void create()} />
-          </View>
-        </View>
-      </View>
-    </Modal>
   );
 }
 

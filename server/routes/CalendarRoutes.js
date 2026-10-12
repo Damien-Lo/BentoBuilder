@@ -133,7 +133,8 @@ const MEAL_LABELS = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", 
 async function withMealRules(fields, fallbackSlot = null, fallbackKind = null) {
   const calendar = fields.calendar ? await EventCalendar.findById(fields.calendar).select("isMeals") : null;
   if (!calendar?.isMeals) return { ...fields, mealSlot: null, mealAuto: false, kitchenKind: null };
-  const kitchenKind = fields.kitchenKind ?? fallbackKind;
+  // (An explicit null turns a session back into a meal.)
+  const kitchenKind = fields.kitchenKind !== undefined ? fields.kitchenKind : fallbackKind;
   if (kitchenKind) return { ...fields, kitchenKind, mealSlot: null, mealAuto: false };
   const mealSlot = fields.mealSlot ?? fallbackSlot;
   if (!MEAL_SLOTS.includes(mealSlot)) throw new Error("Pick which meal this is (breakfast, lunch, dinner or snack).");
@@ -162,13 +163,15 @@ const seriesKey = (start, end, weekdays) => `${start}-${end}:${[...weekdays].sor
 // Makes the repeating meal events match `times` from `today` on. A series
 // that already matches is left alone; one that doesn't ends yesterday (so
 // the past keeps the times it had) and a new one starts today. Days skipped
-// or edited on their own stay skipped in the new series.
-async function applyMealTimes(calendar, times, today) {
+// or edited on their own stay skipped in the new series. With `until`, the
+// series stop after that day (and none run at all once it's passed).
+async function applyMealTimes(calendar, times, today, until = null) {
+  const over = !!until && until < today;
   for (const slot of MEAL_SLOTS) {
     // The series wanted: one per distinct time, on the days that share it.
     const wanted = new Map();
     times[slot].forEach((time, day) => {
-      if (!time) return;
+      if (!time || over) return;
       const key = `${time.start}-${time.end}`;
       wanted.set(key, { ...time, weekdays: [...(wanted.get(key)?.weekdays ?? []), day] });
     });
@@ -185,9 +188,14 @@ async function applyMealTimes(calendar, times, today) {
     const carried = new Set();
     for (const series of active) {
       const key = seriesKey(series.startMinutes, series.endMinutes, series.repeat.weekdays ?? []);
-      // (One already set to end isn't a match: it would stop short.)
-      if (wantedKeys.has(key) && !kept.has(key) && !series.repeat.until) {
+      // The same times on the same days: it stays, running to the end
+      // that's now wanted.
+      if (wantedKeys.has(key) && !kept.has(key)) {
         kept.add(key);
+        if ((series.repeat.until ?? null) !== until) {
+          series.repeat.until = until;
+          await series.save();
+        }
         continue;
       }
       for (const d of series.excludedDates ?? []) if (d >= today) carried.add(d);
@@ -207,6 +215,8 @@ async function applyMealTimes(calendar, times, today) {
       // Its first day: today, or the next day it falls on.
       let first = today;
       while (!want.weekdays.includes(toDate(first).getUTCDay())) first = addDays(first, 1);
+      // (Its days don't come round again before the end.)
+      if (until && first > until) continue;
       await CalendarEvent.create({
         title: MEAL_LABELS[slot],
         calendar: calendar._id,
@@ -214,7 +224,7 @@ async function applyMealTimes(calendar, times, today) {
         endDate: first,
         startMinutes: want.start,
         endMinutes: want.end,
-        repeat: { frequency: "weekly", interval: 1, weekdays: want.weekdays, until: null },
+        repeat: { frequency: "weekly", interval: 1, weekdays: want.weekdays, until },
         excludedDates: [...carried].filter((d) => want.weekdays.includes(toDate(d).getUTCDay())),
         remindMinutes: null,
         mealSlot: slot,
@@ -311,15 +321,28 @@ router.get("/meal-times", async (req, res) => {
   }
 });
 
-// PUT /meal-times  { mealTimes, today } — saves them and brings the
-// repeating meal events into line from `today` on.
+// GET /meal-times/until — the last day they run to, or null.
+router.get("/meal-times/until", async (req, res) => {
+  try {
+    return res.json({ success: true, data: (await getMealsCalendar()).mealTimesUntil ?? null });
+  } catch (error) {
+    return fail(res, error, 500);
+  }
+});
+
+// PUT /meal-times  { mealTimes, today, until? } — saves them and brings the
+// repeating meal events into line from `today` on. `until` (a date, or null
+// for no end) is left as it was when not sent.
 router.put("/meal-times", async (req, res) => {
   try {
     const { today } = req.body;
     if (!DATE_RE.test(today ?? "")) return fail(res, "today must be a YYYY-MM-DD date");
     const calendar = await getMealsCalendar();
     const times = cleanMealTimes(req.body.mealTimes);
-    await applyMealTimes(calendar, times, today);
+    const until = req.body.until === undefined ? (calendar.mealTimesUntil ?? null) : req.body.until || null;
+    if (until && !DATE_RE.test(until)) return fail(res, "until must be a YYYY-MM-DD date");
+    await applyMealTimes(calendar, times, today, until);
+    calendar.mealTimesUntil = until;
     calendar.mealTimes = times;
     calendar.markModified("mealTimes");
     await calendar.save();

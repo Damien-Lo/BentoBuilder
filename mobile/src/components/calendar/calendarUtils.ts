@@ -1,5 +1,5 @@
 import { TODO_LIST_COLORS } from "@/src/components/todo/theme";
-import type { EventCalendar, EventOccurrence, EventRepeat } from "@/src/services/calendarApi";
+import type { EventCalendar, EventOccurrence, EventRepeat, RepeatFrequency } from "@/src/services/calendarApi";
 import { parseLocalDate, toDateStr } from "@/src/utils/mealPlan";
 
 // Calendar colours reuse the to-do list palette (Tailwind 600 shades).
@@ -78,6 +78,21 @@ export function minutesLabel(minutes: number): string {
   return `${String(m === 1440 ? 24 : h).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
+// A time as typed, in minutes after midnight: "7", "730", "7:30", "19.15",
+// "7pm", "7:30 am" — and "24:00" for the day's end. Null when it isn't one.
+export function parseTime(text: string): number | null {
+  const m = text.trim().toLowerCase().match(/^(\d{1,2})(?:[:.h ]?(\d{2}))?\s*(a|am|p|pm)?$/);
+  if (!m) return null;
+  let hours = Number(m[1]);
+  const minutes = Number(m[2] ?? 0);
+  if (m[3]) {
+    if (hours < 1 || hours > 12) return null;
+    hours = (hours % 12) + (m[3].startsWith("p") ? 12 : 0);
+  }
+  if (minutes > 59 || hours > 24 || (hours === 24 && minutes > 0)) return null;
+  return hours * 60 + minutes;
+}
+
 export function durationLabel(minutes: number): string {
   if (minutes <= 0) return "0 minutes";
   const h = Math.floor(minutes / 60);
@@ -134,6 +149,24 @@ export function repeatLabel(repeat: EventRepeat | null, date: string): string | 
 export function weeklyDays(repeat: Pick<EventRepeat, "weekdays"> | null | undefined, date: string): number[] {
   const days = repeat?.weekdays?.length ? repeat.weekdays : [parseLocalDate(date).getDay()];
   return [...new Set(days)].sort((a, b) => a - b);
+}
+
+// The date a repeat's `count`-th occurrence falls on: what "ends after N
+// times" is saved as (a repeat only stores the last date it can start on).
+export function untilAfter(date: string, frequency: RepeatFrequency, weekdays: number[], count: number): string {
+  const times = Math.max(1, Math.floor(count));
+  if (frequency === "monthly" || frequency === "yearly") {
+    const d = parseLocalDate(date);
+    if (frequency === "monthly") d.setMonth(d.getMonth() + times - 1);
+    else d.setFullYear(d.getFullYear() + times - 1);
+    return toDateStr(d);
+  }
+  const on = frequency === "daily" ? [0, 1, 2, 3, 4, 5, 6] : frequency === "weekdays" ? [1, 2, 3, 4, 5] : weeklyDays({ weekdays }, date);
+  let day = date;
+  // (The first is the first matching day on or after the start.)
+  for (let seen = 0; ; day = addDays(day, 1)) {
+    if (on.includes(parseLocalDate(day).getDay()) && ++seen === times) return day;
+  }
 }
 
 // "Friday", or "Mon, Wed, Fri", or "weekdays".
