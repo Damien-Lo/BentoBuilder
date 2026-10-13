@@ -3,7 +3,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
-import { addDays, minutesLabel, MONTHS_FULL, MONTHS_SHORT, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
+import { addDays, durationLabel, minutesLabel, MONTHS_FULL, MONTHS_SHORT, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
 import { entryName } from "@/src/components/calendar/mealFood";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { SidePicker } from "@/src/components/planner/SidePicker";
@@ -12,6 +12,7 @@ import { noteSuggestions, recordSuggestion, settleSuggestions, type SuggestionAc
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
 import { Button, Card, CardLink, Empty, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
+import { createGroceryItem, getGroceryItems } from "@/src/services/groceryListApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
 import {
@@ -190,7 +191,25 @@ export function WebWeekPlanScreen() {
   // Which of a slot's suggestions is showing ("another" turns to the next),
   // and the slots where they've been waved away.
   const [turn, setTurn] = useState<Record<string, number>>({});
-  const [waved, setWaved] = useState<string[]>([]);
+  // (Remembered in the browser, for the days still to come.)
+  const [waved, setWavedState] = useState<string[]>(() => {
+    try {
+      const kept: unknown = JSON.parse(globalThis.localStorage?.getItem("web.suggestions.waved") ?? "[]");
+      return Array.isArray(kept) ? kept.filter((k): k is string => typeof k === "string" && k.slice(0, 10) >= todayStr()) : [];
+    } catch {
+      return [];
+    }
+  });
+  const setWaved = (update: (prev: string[]) => string[]) =>
+    setWavedState((prev) => {
+      const next = update(prev);
+      try {
+        globalThis.localStorage?.setItem("web.suggestions.waved", JSON.stringify(next));
+      } catch {
+        // Not remembered, but still applied.
+      }
+      return next;
+    });
   // The sides of an offer as changed by hand, and the ones turned down
   // there (so a swap moves on to the next, not back), by "date|slot|main".
   const [sideEdits, setSideEdits] = useState<Record<string, Dish[]>>({});
@@ -264,7 +283,7 @@ export function WebWeekPlanScreen() {
   };
   // What a day's showing suggestions would add, were they all taken.
   const suggestedOn = (date: string): Macros =>
-    (["breakfast", "lunch", "dinner"] as const)
+    (["breakfast", "lunch", "dinner", "snack"] as const)
       .map((slot) => offerFor(date, slot).offer)
       .reduce((sum, o) => (o ? { calories: sum.calories + o.calories, protein: sum.protein + o.protein, carbs: sum.carbs + o.carbs, fats: sum.fats + o.fats } : sum), { calories: 0, protein: 0, carbs: 0, fats: 0 });
 
@@ -293,6 +312,55 @@ export function WebWeekPlanScreen() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, suggestions, turn, waved]);
+
+  // The To buy list, put on the grocery list: what isn't on it is added,
+  // and what's on it for less is topped up to what the plan needs. Pressed
+  // again it only adds what's new, so it can be run whenever the plan
+  // changes. (Things already bought and ticked off are left to the pantry.)
+  const [sendingBuy, setSendingBuy] = useState(false);
+  async function buyListToGrocery() {
+    if (sendingBuy || !plan.buy.length) return;
+    try {
+      setSendingBuy(true);
+      const idOf = (ingredient: unknown) => (typeof ingredient === "string" ? ingredient : ((ingredient as { _id?: string } | null)?._id ?? ""));
+      const listed = (await getGroceryItems()).filter((item) => item.status === "toBuy");
+      let added = 0;
+      let topped = 0;
+      for (const need of plan.buy) {
+        const there = listed.find((item) => idOf(item.ingredient) === need.ingredientId && (item.unit || "") === (need.unit || ""));
+        const short = Math.round((need.amount - (there?.quantity ?? 0)) * 100) / 100;
+        if (there && short <= 0) continue;
+        // (Adding to something already listed adds to its amount.)
+        await createGroceryItem({ ingredient: need.ingredientId, name: need.name, quantity: there ? short : need.amount, unit: need.unit });
+        if (there) topped += 1;
+        else added += 1;
+      }
+      const same = plan.buy.length - added - topped;
+      Alert.alert(
+        added + topped ? "Grocery list updated" : "Already on your grocery list",
+        [added ? `${added} added` : "", topped ? `${topped} topped up` : "", same ? `${same} already there` : ""].filter(Boolean).join(" · "),
+      );
+    } catch (error) {
+      Alert.alert("Couldn't update the grocery list", error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setSendingBuy(false);
+    }
+  }
+
+  // How long a session's prep would take against how long it is: each
+  // recipe's prep and cook time, once a batch (rounded up). A guide only —
+  // things cook side by side, and not every recipe has its times set.
+  const prepLoad = (rows: typeof plan.prep) => {
+    let minutes = 0;
+    let untimed = 0;
+    for (const need of rows) {
+      const recipe = kitchen?.recipes.find((r) => r._id === need.recipeId);
+      const each = (recipe?.prepTimeMinutes ?? 0) + (recipe?.cookTimeMinutes ?? 0);
+      if (each > 0) minutes += each * Math.max(1, Math.ceil(need.batches - 0.01));
+      else untimed += 1;
+    }
+    return { minutes, untimed };
+  };
 
   // Taking a suggestion plans the main and its sides as ordinary meals.
   async function acceptSuggestion(date: string, slot: MealSlot, offer: Suggestion, rank: number) {
@@ -611,7 +679,7 @@ export function WebWeekPlanScreen() {
               <View style={{ paddingBottom: 8 }}>
                 {sessionGroups("prep", plan.prep).map((group) => (
                   <View key={group.session?.id ?? "none"}>
-                    <SessionHeading session={group.session} today={today} anySessions={plan.sessions.some((s) => s.kind === "prep")} missing="No prep session in time" />
+                    <SessionHeading session={group.session} today={today} anySessions={plan.sessions.some((s) => s.kind === "prep")} missing="No prep session in time" load={group.rows.length ? prepLoad(group.rows) : undefined} />
                     {group.rows.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 8, fontSize: 12, color: WEB.faint }}>Nothing falls to this one yet</Text>}
                     {group.rows.map((need) => (
                       <NeedRow
@@ -629,7 +697,17 @@ export function WebWeekPlanScreen() {
               </View>
             )}
           </Card>
-          <Card title="To buy" subtitle="Short in the pantry for the plan and its prep" action={<CardLink label="Add trip" onPress={() => setAdding("shop")} />} padded={false}>
+          <Card
+            title="To buy"
+            subtitle="Short in the pantry for the plan and its prep"
+            action={
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+                {plan.buy.length > 0 && <CardLink label={sendingBuy ? "Adding…" : "To grocery list"} onPress={() => void buyListToGrocery()} />}
+                <CardLink label="Add trip" onPress={() => setAdding("shop")} />
+              </View>
+            }
+            padded={false}
+          >
             {!plan.ready ? (
               <Empty icon="cart-outline" text="" />
             ) : plan.buy.length === 0 && !plan.sessions.some((s) => s.kind === "shop") ? (
@@ -777,7 +855,20 @@ function SuggestionButton({ icon, label, onPress }: { icon: keyof typeof Ionicon
 }
 
 // A prep session or shopping trip, as a heading over what falls to it.
-function SessionHeading({ session, today, anySessions, missing }: { session: KitchenSession | null; today: string; anySessions: boolean; missing: string }) {
+function SessionHeading({
+  session,
+  today,
+  anySessions,
+  missing,
+  load,
+}: {
+  session: KitchenSession | null;
+  today: string;
+  anySessions: boolean;
+  missing: string;
+  // For a prep session: about how long what falls to it takes, and how many of its recipes have no times set.
+  load?: { minutes: number; untimed: number };
+}) {
   // With no sessions at all there's nothing to group under.
   if (!session && !anySessions) return null;
   const d = session ? parseLocalDate(session.date) : null;
@@ -787,6 +878,18 @@ function SessionHeading({ session, today, anySessions, missing }: { session: Kit
       <Text numberOfLines={1} style={{ marginLeft: 6, fontSize: 12, fontWeight: "700", color: session ? WEB.body : WEB.red }}>
         {session && d ? `${session.date === today ? "Today" : `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`} · ${minutesLabel(session.startMinutes)}–${minutesLabel(session.endMinutes)}` : missing}
       </Text>
+      {!!load &&
+        (load.minutes > 0 || load.untimed > 0) &&
+        (() => {
+          const length = session ? session.endMinutes - session.startMinutes : null;
+          const over = length != null && load.minutes > length;
+          return (
+            <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, textAlign: "right", fontSize: 11, fontWeight: over ? "700" : "400", color: over ? WEB.red : WEB.muted }}>
+              {load.minutes > 0 ? `about ${durationLabel(load.minutes)}${over ? `, over its ${durationLabel(length!)}` : ""}` : ""}
+              {load.untimed > 0 ? `${load.minutes > 0 ? " · " : ""}${load.untimed} with no times set` : ""}
+            </Text>
+          );
+        })()}
     </View>
   );
 }

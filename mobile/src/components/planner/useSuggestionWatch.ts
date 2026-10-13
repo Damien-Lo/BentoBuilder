@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -38,7 +39,22 @@ export function useSuggestionWatch(date: string, dayEntries: MealPlanEntry[] | n
   // where they've been waved away, and an offer's sides as changed by hand
   // — by "date|slot" (and the main, for the sides).
   const [turn, setTurn] = useState<Record<string, number>>({});
-  const [waved, setWaved] = useState<string[]>([]);
+  const [waved, setWavedState] = useState<string[]>([]);
+  // (Remembered on the device, for the days still to come.)
+  useEffect(() => {
+    AsyncStorage.getItem("planner.suggestions.waved")
+      .then((kept) => {
+        const list: unknown = JSON.parse(kept ?? "[]");
+        if (Array.isArray(list)) setWavedState((prev) => [...new Set([...prev, ...list.filter((k): k is string => typeof k === "string" && k.slice(0, 10) >= today)])]);
+      })
+      .catch(() => {});
+  }, [today]);
+  const setWaved = (update: (prev: string[]) => string[]) =>
+    setWavedState((prev) => {
+      const next = update(prev);
+      AsyncStorage.setItem("planner.suggestions.waved", JSON.stringify(next)).catch(() => {});
+      return next;
+    });
   const [sideEdits, setSideEdits] = useState<Record<string, Dish[]>>({});
 
   useFocusEffect(

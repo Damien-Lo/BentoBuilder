@@ -88,6 +88,8 @@ export interface Suggestion extends Macros {
   // and its totals — is only the sides to go with it.
   base?: number;
   beside?: boolean;
+  // How many things it needs that aren't in the pantry (to buy or to prep).
+  missing?: number;
 }
 
 // The offers by "date|slot", and a way to score what was planned in a slot
@@ -141,7 +143,11 @@ const asEntry = (dish: Dish, date: string, slot: MealSlot) =>
     date,
     slot,
     status: "planned",
-    ...(dish.recipe ? { recipe: dish.recipe, recipeServings: 1 } : { meal: dish.meal }),
+    ...(dish.recipe
+      ? { recipe: dish.recipe, recipeServings: 1 }
+      : dish.ingredient
+        ? { ingredient: dish.ingredient, ingredientQuantity: dish.ingredient.defaultPortionAmount || 1, ingredientUnit: dish.ingredient.defaultPortionUnit ?? "" }
+        : { meal: dish.meal }),
   }) as unknown as MealPlanEntry;
 
 export function suggestMeals({
@@ -505,6 +511,7 @@ export function suggestMeals({
     };
     const score = (Object.keys(SUGGESTION_WEIGHTS) as Factor[]).reduce((sum, f) => sum + SUGGESTION_WEIGHTS[f] * factors[f], 0);
     return {
+      missing,
       score,
       factors,
       reasons: reasons
@@ -517,6 +524,28 @@ export function suggestMeals({
   // Each open slot's room and what had been taken when it came up, kept so
   // that what's planned there instead can be scored the same way.
   const context = new Map<string, { room: number; before: number }>();
+
+  // The next shopping trip booked, if any.
+  const nextShop = sessions
+    .filter((x) => x.kind === "shop" && x.date >= today)
+    .map((x) => x.date)
+    .sort()[0];
+
+  // What can be had as a snack: recipes marked for it, saved meals and
+  // single things (a bar, a shake — one portion) you've had as one.
+  const snackPool: Dish[] = [
+    ...recipeDishes.filter((d) => d.recipe!.mealCategory?.includes("snack") && (hadFor.get(`${d.key}|snack`) ?? 0) > 0),
+    ...mealDishes.filter((d) => (hadFor.get(`${d.key}|snack`) ?? 0) > 0),
+    ...[...new Set(entries.filter((e) => e.slot === "snack" && e.ingredient).map((e) => idOf(e.ingredient)))].flatMap((id) => {
+      const ingredient = ingredients.find((i) => i._id === id);
+      if (!ingredient || ingredient.isArchived) return [];
+      const n = scaleIngredientNutrition(ingredient, ingredient.defaultPortionAmount || 1);
+      const dish: Dish = { key: `i:${id}`, name: ingredient.name, ingredient, calories: n.calories ?? 0, protein: n.protein ?? 0, carbs: n.carbs ?? 0, fats: n.fats ?? 0 };
+      // (Not a vitamin or a cup of tea.)
+      return dish.calories >= 50 ? [dish] : [];
+    }),
+  ];
+  const snackTimes = (key: string) => (key.startsWith("i:") ? entries.filter((e) => e.slot === "snack" && idOf(e.ingredient) === key.slice(2)).length : (hadFor.get(`${key}|snack`) ?? 0));
 
   // A meal with something planned is still offered more while it holds
   // less than this much of its usual size.
@@ -630,7 +659,12 @@ export function suggestMeals({
         });
       }
 
-      shortlist.set(slot, scored.sort((x, y) => y.score - x.score).slice(0, 6));
+      // Before the next shopping trip there's only what's in the pantry to
+      // cook from: where anything on offer needs nothing, only those are
+      // offered. (With no trip booked, nothing's ruled out — "needs N
+      // things" is then the prompt to book one.)
+      const onHand = nextShop && date < nextShop ? scored.filter((x) => x.missing === 0) : [];
+      shortlist.set(slot, (onHand.length ? onHand : scored).sort((x, y) => y.score - x.score).slice(0, 6));
     }
 
     // Of each meal's best few, the set that lands the day nearest its
@@ -663,6 +697,9 @@ export function suggestMeals({
       }
     };
     pick(0, []);
+
+    // (Whether a snack could still be suggested for the day.)
+    const snackOpen = snackPool.length > 0 && !dayEntries.some((e) => e.slot === "snack");
 
     // Then the sides are tuned to what the day is still short of or over
     // on: one added or taken away at a time, while that brings the day
@@ -701,7 +738,8 @@ export function suggestMeals({
           const gain = off - offTarget(shift(totals, side, -1));
           if (gain > (best?.gain ?? 0.01)) best = { plate, side, sign: -1, gain };
         }
-        if (plate.sides.length >= 3) continue;
+        // (A third side only where there's no snack to close the gap with.)
+        if (plate.sides.length >= (snackOpen ? 2 : 3)) continue;
         for (const side of recipeDishes) {
           if (onDay.has(side.key) || sideUse(side.key) <= 0 || !(side.protein < 12 || side.calories < 150)) continue;
           if (plate.calories + (plate.base ?? 0) + side.calories > (rooms.get(slot) ?? 0) * 1.35) continue;
@@ -727,6 +765,30 @@ export function suggestMeals({
         if (!first.beside) taken.push({ date, key: first.main.key });
         stock = stock.filter((p) => !first.claims.includes(p._id));
         for (const side of first.sides) sideCount.set(side.key, (sideCount.get(side.key) ?? 0) + 1);
+      }
+    }
+
+    // What the day is still short of, once its meals are settled, is
+    // offered as a snack: the one (of those you have) that brings the day
+    // nearest its targets.
+    const settled = dayTotals();
+    const gap = aim - settled.calories;
+    if (snackOpen && gap > aim * 0.05) {
+      const off = offTarget(settled);
+      const snacks = snackPool
+        .filter((d) => d.calories <= gap * 1.3 + 50)
+        .map((d) => ({ d, gain: off - offTarget(shift(settled, d, 1)) + Math.min(5, snackTimes(d.key)) * 0.02 }))
+        .filter((x) => x.gain > 0.02)
+        .sort((x, y) => y.gain - x.gain)
+        .slice(0, count)
+        .map(({ d }) => {
+          const rated = rate(d, [d], d, [asEntry(d, date, "snack")], date, "snack", Math.max(gap, 50), taken, stock);
+          return { main: d, sides: [], calories: d.calories, protein: d.protein, carbs: d.carbs, fats: d.fats, ...rated, reasons: [`closes the ${Math.round(gap / 10) * 10} kcal the day is short`, ...rated.reasons], claims: [] } as Suggestion;
+        });
+      if (snacks.length) {
+        out.set(`${date}|snack`, snacks);
+        suggestedKcal.set(date, (suggestedKcal.get(date) ?? 0) + snacks[0].calories);
+        taken.push({ date, key: snacks[0].main.key });
       }
     }
   }
