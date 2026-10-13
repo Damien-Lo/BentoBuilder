@@ -10,7 +10,7 @@ import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { loadSettings } from "@/src/services/settingsService";
 import type { PantryItem } from "@/src/types/pantry";
 import { todayStr } from "@/src/utils/mealPlan";
-import { computePlanNeeds, kitchenSessions, type BuyNeed, type KitchenSession, type PrepNeed, type StockCheck } from "@/src/utils/planNeeds";
+import { computePlanNeeds, kitchenSessions, type BuyNeed, type KitchenIssue, type KitchenSession, type KitchenTask, type PrepNeed, type StockCheck } from "@/src/utils/planNeeds";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 // How far ahead the plan is read: far enough to see what a session covers
@@ -31,7 +31,7 @@ interface Loaded {
 // (see utils/planNeeds.ts). Loaded on coming to the screen and on `reload`;
 // nothing is stored — it's worked out from the plan, the pantry and the
 // Kitchen calendar as they stand.
-export function usePlanNeeds(): { ready: boolean; today: string; sessions: KitchenSession[]; prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[]; reload: () => void } {
+export function usePlanNeeds(): { ready: boolean; today: string; sessions: KitchenSession[]; prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[]; tasks: KitchenTask[]; issues: KitchenIssue[]; reload: () => void } {
   const today = todayStr();
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
@@ -44,7 +44,7 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
   useFocusEffect(reload);
 
   return useMemo(() => {
-    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], checks: [], reload };
+    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], checks: [], tasks: [], issues: [], reload };
     const sessions = kitchenSessions(loaded.occurrences, today);
     const needs = computePlanNeeds(
       loaded.entries.filter((e) => e.status === "planned" && e.date >= today),
@@ -53,6 +53,7 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
       loaded.pantry,
       loaded.conversions,
       sessions,
+      today,
     );
     return { ready: true, today, sessions, ...needs, reload };
   }, [loaded, today, reload]);

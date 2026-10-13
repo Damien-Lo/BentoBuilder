@@ -54,6 +54,8 @@ export interface Ingredient {
   // When true, this ingredient never shows as low/out of stock (e.g. tap
   // water) — stock tracking is skipped for it entirely.
   isAlwaysAvailable?: boolean;
+  // Cooked straight from the freezer, not thawed first. Null = not answered yet.
+  cooksFromFrozen?: boolean | null;
 
   // Where a new pantry entry usually goes, and how long one usually lasts —
   // both prefill (don't force) the log-to-pantry form. Duration fields are
@@ -124,6 +126,8 @@ export interface CreateIngredientInput {
   lowStockThreshold?: number;
 
   isAlwaysAvailable?: boolean;
+  // Cooked straight from the freezer, not thawed first. Null = not answered yet.
+  cooksFromFrozen?: boolean | null;
 
   defaultStorageLocation?: string | null;
   defaultExpiryDurationAmount?: number | null;
@@ -145,6 +149,8 @@ export interface IngredientAvailability {
   ingredientId: string;
   isGeneric: boolean;
   isAlwaysAvailable?: boolean;
+  // Cooked straight from the freezer, not thawed first. Null = not answered yet.
+  cooksFromFrozen?: boolean | null;
   variantCount: number;
   unit?: string;
   totalInOwnUnit: number;

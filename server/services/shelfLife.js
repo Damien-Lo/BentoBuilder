@@ -5,12 +5,16 @@ import StorageLocation from "../models/StorageLocation.js";
 // How long things keep, by where they're kept — worked out from what's been
 // done with them before, never asked up front.
 //
-// A pantry entry has one expiry date: the one for where it is now. Moving
-// it (out of the freezer to thaw, into the freezer to save it) gives it a
-// new one, and each move is kept on the entry (PantryItem.moves). The next
-// time the same ingredient makes the same kind of move, the date offered is
-// the middle of what it was given the last few times; until there's any
-// history, a plain default.
+// A pantry entry has one expiry date: the one for the state it's in now.
+// A change of state gives it a new one, and each change is kept on the
+// entry (PantryItem.moves). So far a change is one of two things — a move
+// between storage locations (out of the freezer to thaw, into it to keep),
+// or being opened (the seal broken, the packaging off) — but nothing here
+// depends on which: a change has a `kind`, and the next time the same
+// ingredient goes through the same kind, the date offered is the middle of
+// what it was given the last few times; until there's any history, a plain
+// default. A new kind of change needs a name, a default, and something
+// that triggers it.
 
 // Entries from before moves were recorded aren't learned from: their dates
 // weren't kept with this in mind (frozen things carry fridge dates).
@@ -32,7 +36,10 @@ export function moveKind(fromName, toName) {
   return placeKind(fromName) === "frozen" && to !== "frozen" ? "thawed" : to;
 }
 
-function defaultDays(kind, ingredient) {
+// (`place`: the kind of place it's in, for a change that isn't a move.)
+function defaultDays(kind, ingredient, place = "shelf") {
+  // Opened: days in the fridge, a month on a shelf or in the freezer.
+  if (kind === "opened") return place === "chilled" ? 5 : 30;
   if (kind === "frozen") return 90;
   if (kind === "thawed") return /protein|meat|fish|seafood|poultry/i.test(ingredient?.category?.name ?? "") ? 2 : 4;
   if (kind === "chilled") return 7;
@@ -66,7 +73,7 @@ async function spansFor(ingredientIds, kind, locationKinds) {
 
 // How many days `ingredientId` should be given after a move of `kind`, and
 // whether that's from its own history ("learned") or a default.
-export async function suggestShelfDays(ingredientId, kind) {
+export async function suggestShelfDays(ingredientId, kind, place = "shelf") {
   const ingredient = await Ingredient.findById(ingredientId).populate("category").lean();
   const locationKinds = new Map((await StorageLocation.find().lean()).map((l) => [String(l._id), placeKind(l.name)]));
   // Its own first; failing that, its generic's and that generic's other brands.
@@ -78,5 +85,5 @@ export async function suggestShelfDays(ingredientId, kind) {
       spans = await spansFor(family.map((i) => i._id), kind, locationKinds);
     }
   }
-  return spans.length ? { days: middle(spans), learned: true } : { days: defaultDays(kind, ingredient), learned: false };
+  return spans.length ? { days: middle(spans), learned: true } : { days: defaultDays(kind, ingredient, place), learned: false };
 }

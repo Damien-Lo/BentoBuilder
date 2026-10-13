@@ -141,6 +141,15 @@ const ingredientSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Whether it's cooked straight from the freezer (dumplings, noodles)
+    // rather than thawed first (a fillet). Null until it's been answered —
+    // the kitchen's thaw task asks, once, the first time it matters; until
+    // then a guess is made from what it is (see mobile's planNeeds.ts).
+    cooksFromFrozen: {
+      type: Boolean,
+      default: null,
+    },
+
     // Where a new pantry entry for this ingredient usually goes — prefills
     // (doesn't force) the storage location when logging a purchase.
     defaultStorageLocation: {

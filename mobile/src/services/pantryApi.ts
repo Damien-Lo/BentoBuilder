@@ -16,6 +16,8 @@ export interface CreatePantryItemInput {
   // Update calls send null to explicitly clear an existing expiry date
   // (e.g. a split side with no expiry) — undefined just omits the field.
   expiryDate?: string | null;
+  // The day it was opened (the seal broken, the packaging off), if it has been.
+  openedDate?: string | null;
   // Same null-to-clear/undefined-to-omit convention as expiryDate.
   purchasePrice?: number | null;
   // Same null-to-clear/undefined-to-omit convention as expiryDate.
@@ -109,18 +111,20 @@ export async function addIngredientToPantry(
   return result.data;
 }
 
-// The expiry date to offer when an entry is moved to another storage
-// location: what that ingredient has been given on that kind of move before
-// (`learned`), or a default. `kind` says what the move amounts to.
+// The expiry date to offer when an entry changes state — moved to another
+// storage location (`to`), or opened: what that ingredient has been given
+// on that kind of change before (`learned`), or a default. `kind` says what
+// the change amounts to.
 export interface MoveSuggestion {
-  kind: "thawed" | "frozen" | "chilled" | "shelf";
+  kind: "thawed" | "frozen" | "chilled" | "shelf" | "opened";
   days: number;
   learned: boolean;
   expiryDate: string;
 }
 
-export async function getMoveSuggestion(pantryItemId: string, toLocationId: string, today: string): Promise<MoveSuggestion> {
-  const response = await fetch(`${API_BASE_URL}/api/pantry/${pantryItemId}/move-suggestion?to=${toLocationId}&today=${today}`);
+export async function getMoveSuggestion(pantryItemId: string, change: { to: string } | { kind: "opened" }, today: string): Promise<MoveSuggestion> {
+  const what = "to" in change ? `to=${change.to}` : `kind=${change.kind}`;
+  const response = await fetch(`${API_BASE_URL}/api/pantry/${pantryItemId}/move-suggestion?${what}&today=${today}`);
   const result = await parseResponse<{ success: boolean; data: MoveSuggestion }>(response);
   return result.data;
 }

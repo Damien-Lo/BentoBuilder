@@ -93,6 +93,69 @@ export interface StockCheck {
   for: NeedSource[];
 }
 
+// Something the kitchen needs doing on a day: a shopping trip or prep
+// session that's booked, something to take out of the freezer in time,
+// something a recipe says to start early, something to use before it goes.
+// Worked out, never stored: each is done by the thing itself changing (the
+// entry is moved to the fridge, the item is bought), after which it's gone.
+export interface KitchenTask {
+  id: string;
+  kind: "shop" | "prep" | "thaw" | "ahead" | "use";
+  // The day to do it, and the time of day where it has one.
+  date: string;
+  minutes?: number;
+  title: string;
+  detail: string;
+  // Should already have been done (frozen, and the meal is today).
+  late?: boolean;
+  // thaw, the first time for an ingredient: it isn't known yet whether
+  // it's thawed or cooked from frozen — the task asks.
+  asks?: boolean;
+  // What it's about.
+  pantryItemId?: string;
+  ingredientId?: string;
+  recipeId?: string;
+  sessionId?: string;
+  // thaw / use: how much, and the day it's wanted or dated.
+  amount?: number;
+  unit?: string;
+  by?: string;
+  for?: NeedSource[];
+}
+
+// Something wrong with the plan as it stands, to be put right by changing
+// the plan, the calendar or the pantry.
+export interface KitchenIssue {
+  id: string;
+  kind: "no-trip" | "no-prep" | "prep-over" | "past-date" | "thaw-late";
+  // Which side of the kitchen it belongs to.
+  about: "buy" | "prep" | "pantry";
+  title: string;
+  detail: string;
+  // The first day it bites.
+  date: string;
+  count: number;
+  sessionId?: string;
+}
+
+// When a meal is, for working back from, where nothing more exact is known.
+const SLOT_MINUTES: Record<string, number> = { breakfast: 7 * 60 + 30, lunch: 12 * 60, dinner: 19 * 60, snack: 15 * 60 + 30 };
+
+const shiftDay = (date: string, days: number) => {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+// Whether an ingredient is thawed before it's cooked: what's been answered
+// for it, else a guess — raw meat and fish are, the rest (dumplings,
+// noodles, bread, vegetables) go in frozen.
+export function thawsFirst(ingredient: Ingredient): { thaws: boolean; known: boolean } {
+  if (ingredient.cooksFromFrozen != null) return { thaws: !ingredient.cooksFromFrozen, known: true };
+  const category = typeof ingredient.category === "object" && ingredient.category ? (ingredient.category.name ?? "") : "";
+  return { thaws: /protein|meat|fish|seafood|poultry/i.test(category), known: false };
+}
+
 const idOf = (value: unknown): string =>
   typeof value === "string" ? value : typeof value === "object" && value !== null && "_id" in value ? String((value as { _id?: unknown })._id ?? "") : "";
 
@@ -111,7 +174,9 @@ export function computePlanNeeds(
   globalConversions: CustomUnitConversion[],
   // The sessions still to come; without any, everything is unscheduled.
   sessions: KitchenSession[] = [],
-): { prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[] } {
+  // Given, the kitchen's tasks and issues are worked out too.
+  today?: string,
+): { prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[]; tasks: KitchenTask[]; issues: KitchenIssue[] } {
   // The last session of a kind on or before `date`.
   const sessionBy = (kind: KitchenSession["kind"], date: string) =>
     sessions
@@ -123,7 +188,10 @@ export function computePlanNeeds(
   // What's left of each ingredient after the meals so far have claimed
   // theirs, lot by lot (a pantry entry each, soonest to expire first): an
   // amount in the ingredient's own unit, or one usable piece.
-  type Lot = { expires: string | null; amount: number };
+  type Lot = { expires: string | null; amount: number; item: PantryItem };
+  // Frozen entries the plan draws on: how much, in what, and for when.
+  const thawing = new Map<string, { item: PantryItem; amount: number; unit: string; by: string; for: NeedSource[] }>();
+  const inFreezer = (item: PantryItem) => /freez/i.test(typeof item.storageLocation === "object" && item.storageLocation ? (item.storageLocation.name ?? "") : "");
   const left = new Map<string, Lot[]>();
   const checks = new Map<string, StockCheck>();
   const idOfItem = (item: PantryItem) => (typeof item.ingredient === "string" ? item.ingredient : (item.ingredient?._id ?? ""));
@@ -137,7 +205,7 @@ export function computePlanNeeds(
       left.set(
         key,
         entriesOf(ing)
-          .map((item) => ({ expires: item.expiryDate ? item.expiryDate.slice(0, 10) : null, amount: measure(item) }))
+          .map((item) => ({ expires: item.expiryDate ? item.expiryDate.slice(0, 10) : null, amount: measure(item), item }))
           .filter((lot) => lot.amount > 0)
           .sort((a, b) => (a.expires ?? "9").localeCompare(b.expires ?? "9")),
       );
@@ -146,7 +214,7 @@ export function computePlanNeeds(
   };
   // Takes up to `wanted`: first from what's good on `due`, then from what
   // will be past its date by then — noting the meal as one to check.
-  const claim = (from: Lot[], wanted: number, due: string, ing: Ingredient, source: NeedSource) => {
+  const claim = (from: Lot[], wanted: number, due: string, ing: Ingredient, source: NeedSource, unit: string) => {
     let got = 0;
     const good = (lot: Lot) => !lot.expires || lot.expires >= due;
     for (const pass of [true, false]) {
@@ -156,6 +224,13 @@ export function computePlanNeeds(
         const take = Math.min(lot.amount, wanted - got);
         lot.amount -= take;
         got += take;
+        if (today && take > 0 && inFreezer(lot.item)) {
+          const out = thawing.get(lot.item._id) ?? { item: lot.item, amount: 0, unit, by: due, for: [] };
+          thawing.set(lot.item._id, out);
+          out.amount += take;
+          if (due < out.by) out.by = due;
+          if (!out.for.some((f) => f.date === source.date && f.label === source.label)) out.for.push(source);
+        }
         if (!pass) {
           const check = checks.get(ing._id) ?? { ingredientId: ing._id, name: ing.name, expired: lot.expires!, neededBy: due, for: [] };
           checks.set(ing._id, check);
@@ -187,7 +262,7 @@ export function computePlanNeeds(
       const key = `${ing._id}|pieces|${row.pieceMinWeight}|${row.pieceMaxWeight}|${row.pieceWeightUnit}`;
       // (Each pantry entry is one piece, if it's the right size.)
       const pieces = lots(key, ing, (item) => countQualifyingPantryPieces(ing, row.pieceMinWeight ?? 0, row.pieceMaxWeight ?? Infinity, row.pieceWeightUnit ?? "g", ingredients, [item], globalConversions));
-      const short = row.quantity - claim(pieces, row.quantity, due, ing, source);
+      const short = row.quantity - claim(pieces, row.quantity, due, ing, source, row.unit || ing.pieceLabel || "piece");
       if (short > 0) {
         const trip = sessionBy("shop", due);
         const needKey = `${key}|${trip?.id}`;
@@ -205,7 +280,7 @@ export function computePlanNeeds(
     const needed = converted ?? row.quantity;
     const key = `${ing._id}|${unit}`;
     const stock = lots(key, ing, (item) => getIngredientStockInUnit(ing, unit, ingredients, [item], globalConversions));
-    const short = needed - claim(stock, needed, due, ing, source);
+    const short = needed - claim(stock, needed, due, ing, source, unit);
     if (short <= 1e-6) return;
 
     const recipe = recipeMap.get(idOf(ing.productionRecipe));
@@ -246,7 +321,111 @@ export function computePlanNeeds(
   }
 
   const soonest = <T extends { neededBy: string; name: string }>(list: T[]) => list.sort((a, b) => a.neededBy.localeCompare(b.neededBy) || a.name.localeCompare(b.name));
-  return { prep: soonest([...prep.values()]), buy: soonest([...buy.values()]), checks: soonest([...checks.values()]) };
+  const needs = { prep: soonest([...prep.values()]), buy: soonest([...buy.values()]), checks: soonest([...checks.values()]) };
+  if (!today) return { ...needs, tasks: [], issues: [] };
+
+  // --- What that leaves to do, and what's wrong ---
+  const tasks: KitchenTask[] = [];
+  const issues: KitchenIssue[] = [];
+  const names = (list: { name: string }[]) => `${list.slice(0, 3).map((n) => n.name).join(", ")}${list.length > 3 ? ` and ${list.length - 3} more` : ""}`;
+
+  // The booked sessions, each with what falls to it.
+  for (const session of sessions) {
+    const rows = session.kind === "shop" ? needs.buy.filter((n) => n.session === session.id) : needs.prep.filter((n) => n.session === session.id);
+    tasks.push({
+      id: `${session.kind}:${session.id}`,
+      kind: session.kind,
+      date: session.date,
+      minutes: session.startMinutes,
+      title: session.kind === "shop" ? "Shopping trip" : "Prep session",
+      detail: rows.length ? (session.kind === "shop" ? `${rows.length} thing${rows.length === 1 ? "" : "s"} to get: ${names(rows)}` : `To make: ${names(rows.map((r) => ({ name: (r as PrepNeed).recipeName })))}`) : session.kind === "shop" ? "Nothing on the list for it yet" : "Nothing falls to it yet",
+      sessionId: session.id,
+    });
+    // A prep session with more to make than it has time for.
+    if (session.kind === "prep") {
+      const minutes = (rows as PrepNeed[]).reduce((sum, need) => {
+        const recipe = recipeMap.get(need.recipeId);
+        return sum + ((recipe?.prepTimeMinutes ?? 0) + (recipe?.cookTimeMinutes ?? 0)) * Math.max(1, Math.ceil(need.batches - 0.01));
+      }, 0);
+      const length = session.endMinutes - session.startMinutes;
+      if (minutes > length) {
+        issues.push({ id: `prep-over:${session.id}`, kind: "prep-over", about: "prep", title: "A prep session is over-full", detail: `About ${minutes} min of prep in a ${length} min session`, date: session.date, count: rows.length, sessionId: session.id });
+      }
+    }
+  }
+
+  // Out of the freezer the evening before — unless it's cooked from frozen.
+  for (const out of thawing.values()) {
+    const own = ingredientMap.get(idOfItem(out.item));
+    if (!own) continue;
+    const { thaws, known } = thawsFirst(own);
+    if (!thaws) continue;
+    const late = out.by <= today;
+    tasks.push({
+      id: `thaw:${out.item._id}`,
+      kind: "thaw",
+      date: late ? today : shiftDay(out.by, -1),
+      title: `Take ${own.name} out of the freezer`,
+      detail: `${needAmountLabel(out.amount, out.unit)} for ${out.for[0]?.label ?? "a meal"}`,
+      late,
+      asks: !known,
+      pantryItemId: out.item._id,
+      ingredientId: own._id,
+      amount: out.amount,
+      unit: out.unit,
+      by: out.by,
+      for: out.for,
+    });
+  }
+  const lateThaws = tasks.filter((t) => t.kind === "thaw" && t.late);
+  if (lateThaws.length) {
+    issues.push({ id: "thaw-late", kind: "thaw-late", about: "pantry", title: "Still frozen, and needed today", detail: lateThaws.map((t) => t.title.replace(/^Take | out of the freezer$/g, "")).join(", "), date: today, count: lateThaws.length });
+  }
+
+  // What a recipe says to start early.
+  for (const entry of inOrder) {
+    const ahead = entry.recipe?.startAhead;
+    if (!entry.recipe || !ahead?.hours || ahead.hours <= 0) continue;
+    const at = (SLOT_MINUTES[entry.slot] ?? 12 * 60) - Math.round(ahead.hours * 60);
+    const daysBack = at < 0 ? Math.ceil(-at / 1440) : 0;
+    tasks.push({
+      id: `ahead:${entry._id}`,
+      kind: "ahead",
+      date: shiftDay(entry.date, -daysBack),
+      minutes: at + daysBack * 1440,
+      title: ahead.note || `Start ${entry.recipe.name}`,
+      detail: `for ${entry.recipe.name}`,
+      recipeId: entry.recipe._id,
+      by: entry.date,
+    });
+  }
+
+  // About to go, with nothing planned that uses it up: use it or freeze it.
+  // (Only what's been thawed, or bought in the last three weeks — an old
+  // entry's date says more about the pantry's upkeep than about the food.)
+  const spoken = new Set([...left.values()].flatMap((list) => list.filter((lot) => lot.amount <= 1e-9).map((lot) => lot.item._id)));
+  const horizon = shiftDay(today, 2);
+  const recent = shiftDay(today, -21);
+  for (const item of pantryItems) {
+    const expires = item.expiryDate?.slice(0, 10);
+    if (!expires || expires < today || expires > horizon || (item.quantityAvailable ?? 0) <= 0 || spoken.has(item._id) || inFreezer(item)) continue;
+    const thawed = (item.moves ?? []).some((m) => m.kind === "thawed");
+    if (!thawed && (item.purchaseDate ?? "").slice(0, 10) < recent) continue;
+    const own = ingredientMap.get(idOfItem(item));
+    if (!own || own.isAlwaysAvailable) continue;
+    tasks.push({ id: `use:${item._id}`, kind: "use", date: today, title: `Use or freeze ${own.name}`, detail: thawed ? "thawed, and near its date" : "near its date, and nothing planned uses it up", pantryItemId: item._id, ingredientId: own._id, amount: item.quantityAvailable, unit: item.quantityUnit, by: expires });
+  }
+
+  // What can't happen as things stand.
+  const noTrip = needs.buy.filter((n) => !n.session);
+  if (noTrip.length) issues.push({ id: "no-trip", kind: "no-trip", about: "buy", title: `${noTrip.length} thing${noTrip.length === 1 ? "" : "s"} needed before any shopping trip`, detail: names(noTrip), date: noTrip[0].neededBy, count: noTrip.length });
+  const noPrep = needs.prep.filter((n) => !n.session);
+  if (noPrep.length) issues.push({ id: "no-prep", kind: "no-prep", about: "prep", title: `${noPrep.length} thing${noPrep.length === 1 ? "" : "s"} to make with no prep session in time`, detail: names(noPrep.map((n) => ({ name: n.recipeName }))), date: noPrep[0].neededBy, count: noPrep.length });
+  if (needs.checks.length) issues.push({ id: "past-date", kind: "past-date", about: "pantry", title: `${needs.checks.length} thing${needs.checks.length === 1 ? "" : "s"} in the pantry past ${needs.checks.length === 1 ? "its" : "their"} date`, detail: names(needs.checks), date: needs.checks[0].neededBy, count: needs.checks.length });
+
+  tasks.sort((a, b) => a.date.localeCompare(b.date) || (a.minutes ?? 0) - (b.minutes ?? 0));
+  issues.sort((a, b) => a.date.localeCompare(b.date));
+  return { ...needs, tasks, issues };
 }
 
 // "1.5 tbsp", "2 fillets", "350 g": an amount short enough to read in a list.

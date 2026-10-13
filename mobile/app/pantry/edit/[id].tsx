@@ -79,6 +79,8 @@ interface FormState {
   storageLocationName: string;
   purchaseDate: string;
   expiryDate: string;
+  // The day it was opened, or "" while it's still sealed.
+  openedDate: string;
   purchasePrice: string;
   storeId: string;
   storeName: string;
@@ -93,6 +95,7 @@ function itemToForm(item: PantryItem): FormState {
     storageLocationName: getReferenceName(item.storageLocation as unknown),
     purchaseDate: toDateOnly(item.purchaseDate),
     expiryDate: toDateOnly(item.expiryDate),
+    openedDate: toDateOnly(item.openedDate),
     purchasePrice: item.purchasePrice != null ? String(item.purchasePrice) : "",
     storeId: getReferenceId(item.store as unknown),
     storeName: getReferenceName(item.store as unknown),
@@ -123,6 +126,32 @@ export default function EditPantryItemScreen() {
   // Picking a location. Somewhere new is a move: the expiry date becomes
   // the one for there — what this ingredient was given on that kind of move
   // before, or a usual figure — still to be changed by hand before saving.
+  // Opening it — the seal broken, the packaging off — is the same kind of
+  // thing as a move: a change of state, with a new expiry date offered.
+  function toggleOpened() {
+    if (!item || !form) return;
+    const original = itemToForm(item);
+    if (form.openedDate) {
+      update("openedDate", "");
+      // (Back to the date it had, unless it's also been moved.)
+      if (move?.kind === "opened") {
+        setMove(null);
+        update("expiryDate", original.expiryDate);
+      }
+      return;
+    }
+    update("openedDate", todayDateInputString());
+    getMoveSuggestion(item._id, { kind: "opened" }, todayDateInputString()).then(
+      (suggestion) => {
+        // A move's date stands if there's one already: it's the bigger change.
+        if (move) return;
+        setMove(suggestion);
+        update("expiryDate", suggestion.expiryDate);
+      },
+      () => {},
+    );
+  }
+
   function pickLocation(loc: SelectOption) {
     if (!item || !form) return;
     update("storageLocationId", loc._id);
@@ -130,11 +159,14 @@ export default function EditPantryItemScreen() {
     setShowLocationPicker(false);
     const original = itemToForm(item);
     if (loc._id === original.storageLocationId) {
-      setMove(null);
-      update("expiryDate", original.expiryDate);
+      // (Unless it's been opened here too: then that's the change standing.)
+      if (move?.kind !== "opened") {
+        setMove(null);
+        update("expiryDate", original.expiryDate);
+      }
       return;
     }
-    getMoveSuggestion(item._id, loc._id, todayDateInputString()).then(
+    getMoveSuggestion(item._id, { to: loc._id }, todayDateInputString()).then(
       (suggestion) => {
         setMove(suggestion);
         update("expiryDate", suggestion.expiryDate);
@@ -244,6 +276,7 @@ export default function EditPantryItemScreen() {
         storageLocation: form.storageLocationId,
         purchaseDate: form.purchaseDate || undefined,
         expiryDate: form.expiryDate || undefined,
+        openedDate: form.openedDate || null,
         purchasePrice: price,
         store: store ? store._id : null,
         notes: form.notes.trim() || undefined,
@@ -440,12 +473,19 @@ export default function EditPantryItemScreen() {
               )}
             </View>
 
-            {/* A move: what the new date is, and why. */}
+            {/* Sealed, or opened: opening it changes how long it keeps. */}
+            <Pressable onPress={toggleOpened} accessibilityRole="checkbox" accessibilityLabel="Opened" className="mt-3 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 active:bg-slate-50" style={{ height: 52 }}>
+              <Ionicons name={form.openedDate ? "checkbox" : "square-outline"} size={20} color={form.openedDate ? "#2563EB" : "#64748B"} />
+              <Text className="ml-3 flex-1 text-base text-slate-900">Opened</Text>
+              <Text className="text-sm text-slate-500">{form.openedDate ? formatDateDisplay(form.openedDate) : "Still sealed"}</Text>
+            </Pressable>
+
+            {/* A change of state: what the new date is, and why. */}
             {move && (
               <View className="mb-3 mt-3 flex-row rounded-2xl bg-violet-50 px-3 py-2.5">
-                <Ionicons name={move.kind === "thawed" ? "water-outline" : move.kind === "frozen" ? "snow-outline" : "swap-horizontal"} size={17} color="#6D28D9" style={{ marginTop: 1 }} />
+                <Ionicons name={move.kind === "thawed" ? "water-outline" : move.kind === "frozen" ? "snow-outline" : move.kind === "opened" ? "cut-outline" : "swap-horizontal"} size={17} color="#6D28D9" style={{ marginTop: 1 }} />
                 <Text className="ml-2 flex-1 text-[13px] leading-5 text-violet-900">
-                  {move.kind === "thawed" ? "Out of the freezer" : move.kind === "frozen" ? "Into the freezer" : `Moved to ${form.storageLocationName}`}: the expiry date is now{" "}
+                  {move.kind === "thawed" ? "Out of the freezer" : move.kind === "frozen" ? "Into the freezer" : move.kind === "opened" ? "Opened" : `Moved to ${form.storageLocationName}`}: the expiry date is now{" "}
                   <Text className="font-semibold">{formatDateDisplay(move.expiryDate)}</Text>, {move.days} day{move.days === 1 ? "" : "s"} from today (
                   {move.learned ? "what you\u2019ve given it before" : "a usual figure"}). Change it below if that isn&apos;t right.
                 </Text>

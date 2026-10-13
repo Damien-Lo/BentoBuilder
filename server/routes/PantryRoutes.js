@@ -3,7 +3,7 @@ import Ingredient from "../models/Ingredient.js";
 import PantryItem from "../models/PantryItem.js";
 import MealPlanEntry from "../models/MealPlanEntry.js";
 import StorageLocation from "../models/StorageLocation.js";
-import { moveKind, suggestShelfDays } from "../services/shelfLife.js";
+import { moveKind, placeKind, suggestShelfDays } from "../services/shelfLife.js";
 
 const router = express.Router();
 
@@ -178,19 +178,32 @@ router.post("/", async (req, res) => {
  */
 /**
  * GET /api/pantry/:id/move-suggestion?to=<storageLocationId>&today=YYYY-MM-DD
- * The expiry date to offer when this entry is moved there: from what the
- * ingredient has been given on that kind of move before, or a default.
+ * GET /api/pantry/:id/move-suggestion?kind=opened&today=YYYY-MM-DD
+ * The expiry date to offer when this entry changes state — moved to
+ * another location, or opened: from what the ingredient has been given on
+ * that kind of change before, or a default. (Opening never makes it last
+ * longer than the date it already has.)
  */
 router.get("/:id/move-suggestion", async (req, res) => {
   try {
     const item = await PantryItem.findById(req.params.id).populate("storageLocation");
-    const to = await StorageLocation.findById(req.query.to);
-    if (!item || !to) return res.status(404).json({ success: false, message: "Pantry item or location not found" });
-    const kind = moveKind(item.storageLocation?.name, to.name);
-    const { days, learned } = await suggestShelfDays(item.ingredient, kind);
-    const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.today ?? "") ? new Date(`${req.query.today}T12:00:00Z`) : new Date();
-    from.setUTCDate(from.getUTCDate() + days);
-    return res.json({ success: true, data: { kind, days, learned, expiryDate: from.toISOString().slice(0, 10) } });
+    if (!item) return res.status(404).json({ success: false, message: "Pantry item not found" });
+    const opened = req.query.kind === "opened";
+    const to = opened ? null : await StorageLocation.findById(req.query.to);
+    if (!opened && !to) return res.status(404).json({ success: false, message: "Location not found" });
+    const kind = opened ? "opened" : moveKind(item.storageLocation?.name, to.name);
+    const { days, learned } = await suggestShelfDays(item.ingredient, kind, placeKind(item.storageLocation?.name));
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(req.query.today ?? "") ? new Date(`${req.query.today}T12:00:00Z`) : new Date();
+    const until = new Date(today);
+    until.setUTCDate(until.getUTCDate() + days);
+    let expiryDate = until.toISOString().slice(0, 10);
+    let shown = days;
+    const current = item.expiryDate ? item.expiryDate.toISOString().slice(0, 10) : null;
+    if (opened && current && current >= today.toISOString().slice(0, 10) && current < expiryDate) {
+      expiryDate = current;
+      shown = Math.round((new Date(`${current}T12:00:00Z`) - today) / 86_400_000);
+    }
+    return res.json({ success: true, data: { kind, days: shown, learned, expiryDate } });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });
   }
@@ -198,27 +211,24 @@ router.get("/:id/move-suggestion", async (req, res) => {
 
 router.patch("/:id", async (req, res) => {
   try {
-    // A change of storage location is a move: kept on the entry, with the
-    // expiry date it had and the one it's given now.
+    // A change of state — moved to another storage location, or opened —
+    // is kept on the entry, with the expiry date it had and the one it's
+    // given now.
     const { moves: _ignored, ...changes } = req.body;
     const update = { ...changes };
-    if (changes.storageLocation) {
+    if (changes.storageLocation || changes.openedDate) {
       const current = await PantryItem.findById(req.params.id).populate("storageLocation");
-      if (current && String(current.storageLocation?._id) !== String(changes.storageLocation)) {
+      const expiryAfter = changes.expiryDate !== undefined ? changes.expiryDate || null : current?.expiryDate;
+      const kept = [];
+      if (current && changes.storageLocation && String(current.storageLocation?._id) !== String(changes.storageLocation)) {
         const to = await StorageLocation.findById(changes.storageLocation);
-        if (to) {
-          update.$push = {
-            moves: {
-              at: new Date(),
-              from: current.storageLocation?._id,
-              to: to._id,
-              kind: moveKind(current.storageLocation?.name, to.name),
-              expiryBefore: current.expiryDate,
-              expiryAfter: changes.expiryDate !== undefined ? changes.expiryDate || null : current.expiryDate,
-            },
-          };
-        }
+        if (to) kept.push({ at: new Date(), from: current.storageLocation?._id, to: to._id, kind: moveKind(current.storageLocation?.name, to.name), expiryBefore: current.expiryDate, expiryAfter });
       }
+      if (current && changes.openedDate && !current.openedDate) {
+        const where = changes.storageLocation || current.storageLocation?._id;
+        kept.push({ at: new Date(), from: where, to: where, kind: "opened", expiryBefore: current.expiryDate, expiryAfter });
+      }
+      if (kept.length) update.$push = { moves: { $each: kept } };
     }
     const pantryItem = await PantryItem.findByIdAndUpdate(
       req.params.id,

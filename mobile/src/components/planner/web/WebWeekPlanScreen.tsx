@@ -671,6 +671,48 @@ export function WebWeekPlanScreen() {
             </View>
           </Card>
           {/* What the meals still to come need doing first (see planNeeds.ts). */}
+          {/* What the kitchen needs doing, today and tomorrow, and what's wrong with the plan. */}
+          {plan.ready && (plan.tasks.some((t) => t.date <= addDays(today, 1)) || plan.issues.length > 0) && (
+            <Card title="Kitchen tasks" subtitle="Today and tomorrow" padded={false}>
+              <View style={{ paddingBottom: 8 }}>
+                {plan.tasks
+                  .filter((t) => t.date <= addDays(today, 1))
+                  .map((task) => (
+                    <View key={task.id} style={{ flexDirection: "row", paddingHorizontal: 18, paddingVertical: 7 }}>
+                      <Ionicons
+                        name={task.kind === "shop" ? "cart-outline" : task.kind === "prep" ? "flame-outline" : task.kind === "thaw" ? "snow-outline" : task.kind === "ahead" ? "timer-outline" : "hourglass-outline"}
+                        size={16}
+                        color={task.late ? WEB.red : WEB.blue}
+                        style={{ marginTop: 2 }}
+                      />
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text numberOfLines={2} style={{ fontSize: 14, fontWeight: "600", color: WEB.text }}>
+                          {task.title}
+                        </Text>
+                        <Text numberOfLines={2} style={{ marginTop: 1, fontSize: 12, color: task.late ? WEB.red : WEB.muted }}>
+                          {task.date === today ? "Today" : "Tomorrow"}
+                          {task.minutes != null ? ` ${minutesLabel(((task.minutes % 1440) + 1440) % 1440)}` : task.kind === "thaw" && !task.late ? " evening" : ""} · {task.late ? "still frozen: thaw it sealed in cold water, about an hour · " : ""}
+                          {task.detail}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                {plan.issues.map((issue) => (
+                  <View key={issue.id} style={{ flexDirection: "row", paddingHorizontal: 18, paddingVertical: 7 }}>
+                    <Ionicons name="alert-circle-outline" size={16} color={issue.kind === "past-date" ? WEB.amber : WEB.red} style={{ marginTop: 2 }} />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text numberOfLines={2} style={{ fontSize: 14, fontWeight: "600", color: WEB.text }}>
+                        {issue.title}
+                      </Text>
+                      <Text numberOfLines={2} style={{ marginTop: 1, fontSize: 12, color: WEB.muted }}>
+                        {issue.detail}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </Card>
+          )}
           <Card title="To prep" subtitle="Made ahead for the meals you've planned" action={<CardLink label="Add session" onPress={() => setAdding("prep")} />} padded={false}>
             {!plan.ready ? (
               <Empty icon="flame-outline" text="" />

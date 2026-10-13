@@ -149,6 +149,13 @@ const recipeSchema = new mongoose.Schema(
     // cooked at the meal (rice). Only recipes that produce an ingredient
     // can be; these are what a prep session is for.
     madeAhead: { type: Boolean, default: false },
+    // Something to start before cooking that isn't a recipe of its own —
+    // soak, salt overnight, take out to come to room temperature: how many
+    // hours before the meal, and what. The kitchen's tasks list it in time.
+    startAhead: {
+      hours: { type: Number, min: 0, default: null },
+      note: { type: String, trim: true, default: "" },
+    },
 
     isArchived: {
       type: Boolean,
