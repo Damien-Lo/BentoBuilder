@@ -98,13 +98,18 @@ export interface RawRow {
   pieceMaxWeight?: number;
   pieceWeightUnit?: string;
   askAmount?: boolean;
+  // How much of this amount is actually eaten (a marinade mostly thrown
+  // away, a dip only partly taken up): what its recipe line says, times
+  // that of the line it was made for when it comes from a sub-recipe. All
+  // of it is still deducted from the pantry; only the nutrition counts less.
+  nutritionFactor?: number;
 }
 
 // A quantity-mode row not tied to any particular recipe line - the default
 // for bare-ingredient meal-plan entries and anywhere else a row is built
 // without its own match-mode fields to carry through.
-function quantityRow(ingredientId: string, quantity: number, unit: string): RawRow {
-  return { ingredientId, quantity, unit, matchMode: "quantity" };
+function quantityRow(ingredientId: string, quantity: number, unit: string, nutritionFactor = 1): RawRow {
+  return { ingredientId, quantity, unit, matchMode: "quantity", nutritionFactor };
 }
 
 // A recipe's ingredientList is authored for its own `servings` — actually
@@ -140,6 +145,7 @@ export function recipeLineToRow(line: Recipe["ingredientList"][number], ratio: n
     pieceMaxWeight: line.pieceMaxWeight ?? undefined,
     pieceWeightUnit: line.pieceWeightUnit,
     askAmount: matchMode === "quantity" && !!line.askAmount,
+    nutritionFactor: line.nutritionFactor ?? 1,
   };
 }
 
@@ -250,21 +256,27 @@ function expandProducedIngredientRows(
     const covered = Math.min(neededInNative, availableInNative);
     const shortfall = round(neededInNative - covered);
 
+    const factor = row.nutritionFactor ?? 1;
     if (covered > 0) {
-      result.push(quantityRow(row.ingredientId, covered, nativeUnit));
+      result.push(quantityRow(row.ingredientId, covered, nativeUnit, factor));
     }
 
     if (shortfall <= 0) continue;
 
     const productionRecipe = recipeMap.get(productionRecipeId);
     if (!productionRecipe || visitedRecipeIds.has(productionRecipeId)) {
-      result.push(quantityRow(row.ingredientId, shortfall, nativeUnit));
+      result.push(quantityRow(row.ingredientId, shortfall, nativeUnit, factor));
       continue;
     }
 
     const totalYield = (productionRecipe.servings || 1) * (ing.defaultPortionAmount || 1);
     const scale = shortfall / totalYield;
-    const subRows: RawRow[] = productionRecipe.ingredientList.map((line) => recipeLineToRow(line, scale));
+    // (What goes into it counts as far as its own line says, and no further
+    // than the thing it makes does.)
+    const subRows: RawRow[] = productionRecipe.ingredientList.map((line) => {
+      const sub = recipeLineToRow(line, scale);
+      return { ...sub, nutritionFactor: (sub.nutritionFactor ?? 1) * factor };
+    });
 
     const nextVisited = new Set(visitedRecipeIds);
     nextVisited.add(productionRecipeId);
@@ -765,7 +777,9 @@ export function applyAmountOverrides(
   }
   for (const ingredientId of applied) {
     const override = overrides[ingredientId];
-    nextRows.push(quantityRow(ingredientId, override.quantity, override.unit));
+    // (The amount is yours; how much of it is eaten is still the recipe's.)
+    const factor = rows.find((r) => r.ingredientId === ingredientId && r.matchMode === "quantity")?.nutritionFactor ?? 1;
+    nextRows.push(quantityRow(ingredientId, override.quantity, override.unit, factor));
   }
 
   return { requirements: nextRequirements, rows: nextRows };

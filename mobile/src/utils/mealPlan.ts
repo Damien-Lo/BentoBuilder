@@ -332,9 +332,10 @@ export function computeConfirmNutrition(
     if (row.matchMode === "wholePiece") continue;
     const ingredient = ingredientMap.get(row.ingredientId);
     if (!ingredient) continue;
+    // (As much of it as the recipe says is eaten: see RawRow.nutritionFactor.)
     addNutrition(
       totals,
-      scaleIngredientNutrition(ingredient, row.quantity, row.unit, getIngredientConversions(ingredient, conversions)),
+      scaleNutrition(scaleIngredientNutrition(ingredient, row.quantity, row.unit, getIngredientConversions(ingredient, conversions)), row.nutritionFactor ?? 1),
     );
   }
 
@@ -365,16 +366,19 @@ export function computeConfirmNutrition(
     const ingredient = ingredientMap.get(req.ingredientId);
     if (!ingredient) continue;
     const ingredientConversions = getIngredientConversions(ingredient, conversions);
+    // (A whole piece's own factor, from the line that asked for it.)
+    const pieceFactor = rows.find((r) => r.matchMode === "wholePiece" && r.ingredientId === req.ingredientId)?.nutritionFactor ?? 1;
+    const counted = (n: NullableNutrition) => scaleNutrition(n, pieceFactor);
 
     let covered = 0;
     for (const instr of instructionsByIngredient.get(req.ingredientId) ?? []) {
       const item = pantryItemById.get(instr.pantryItemId);
       if (!item) continue;
-      addNutrition(totals, scaleIngredientNutrition(ingredient, instr.amount, item.quantityUnit, ingredientConversions));
+      addNutrition(totals, counted(scaleIngredientNutrition(ingredient, instr.amount, item.quantityUnit, ingredientConversions)));
       covered += 1;
     }
     for (const manual of manualByIngredient.get(req.ingredientId) ?? []) {
-      addNutrition(totals, scaleIngredientNutrition(ingredient, manual.weight, manual.unit, ingredientConversions));
+      addNutrition(totals, counted(scaleIngredientNutrition(ingredient, manual.weight, manual.unit, ingredientConversions)));
       covered += 1;
     }
     // Defensive only — the resolve-sources flow should always ask for
@@ -385,10 +389,7 @@ export function computeConfirmNutrition(
     const uncovered = Math.max(0, req.neededQuantity - covered);
     if (uncovered > 0) {
       const midpoint = ((req.pieceMinWeight ?? 0) + (req.pieceMaxWeight ?? 0)) / 2;
-      addNutrition(
-        totals,
-        scaleIngredientNutrition(ingredient, midpoint * uncovered, req.pieceWeightUnit || "g", ingredientConversions),
-      );
+      addNutrition(totals, counted(scaleIngredientNutrition(ingredient, midpoint * uncovered, req.pieceWeightUnit || "g", ingredientConversions)));
     }
   }
 
