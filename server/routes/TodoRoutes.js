@@ -462,6 +462,10 @@ router.get("/dashboard", async (req, res) => {
     const presented = await presentMany(tasks);
     const open = presented.filter((t) => !t.completed);
     const overdue = open.filter((t) => t.dueDate && t.dueDate < today);
+    // Due today or within the week after: what's coming up.
+    const weekOn = new Date(`${today}T12:00:00Z`);
+    weekOn.setUTCDate(weekOn.getUTCDate() + 7);
+    const upcoming = open.filter((t) => t.dueDate && t.dueDate >= today && t.dueDate <= weekOn.toISOString().slice(0, 10));
     return res.json({
       success: true,
       data: {
@@ -474,6 +478,8 @@ router.get("/dashboard", async (req, res) => {
           : 0,
         recent: open.slice(0, 5),
         overdueTasks: overdue.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 10),
+        dueSoon: upcoming.length,
+        upcomingTasks: upcoming.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 10),
       },
     });
   } catch (error) {

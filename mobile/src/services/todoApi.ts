@@ -116,6 +116,10 @@ export interface TodoDashboard {
   completion: number;
   recent: TodoTask[];
   overdueTasks: TodoTask[];
+  // Open tasks due today or within the next 7 days: how many, and the
+  // soonest of them. (Missing from an older server.)
+  dueSoon?: number;
+  upcomingTasks?: TodoTask[];
 }
 
 // A task or subtask switched on for the calendar.

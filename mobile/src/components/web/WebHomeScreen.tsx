@@ -102,6 +102,12 @@ export function WebHomeScreen() {
 
   const openMyDay = myDay.filter((t) => !t.completed);
   const overdue = dashboard?.overdueTasks ?? [];
+  // The Tasks card's list: what's late, then My Day, then what's due in the
+  // week ahead (soonest first) — each task once.
+  const shownTasks: { task: TodoTask; kind: "late" | "myday" | "soon" }[] = [];
+  for (const [kind, list] of [["late", overdue], ["myday", openMyDay], ["soon", dashboard?.upcomingTasks ?? []]] as const) {
+    for (const task of list) if (!shownTasks.some((s) => s.task._id === task._id)) shownTasks.push({ task, kind });
+  }
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
@@ -209,28 +215,25 @@ export function WebHomeScreen() {
             <Mini label="My Day" value={openMyDay.length} />
             <Mini label="Overdue" value={dashboard?.overdue ?? 0} tone={dashboard?.overdue ? WEB.red : undefined} />
             <Mini label="In progress" value={dashboard?.inProgress ?? 0} />
-            <Mini label="Done" value={dashboard?.completed ?? 0} />
+            <Mini label="Due this week" value={dashboard?.dueSoon ?? 0} />
           </View>
-          {overdue.length + openMyDay.length === 0 ? (
-            <Empty icon="checkmark-done-outline" text="Nothing overdue, nothing in My Day" />
+          {shownTasks.length === 0 ? (
+            <Empty icon="checkmark-done-outline" text="Nothing overdue, in My Day or due this week" />
           ) : (
             <View style={{ paddingBottom: 8 }}>
-              {[...overdue, ...openMyDay.filter((t) => !overdue.some((o) => o._id === t._id))].slice(0, 7).map((task) => {
-                const late = overdue.some((o) => o._id === task._id);
-                return (
-                  <Pressable
-                    key={task._id}
-                    onPress={() => router.push({ pathname: "/lists/task/[id]", params: { id: task._id } })}
-                    style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 7, backgroundColor: hovered ? "#F8FAFC" : "transparent" })}
-                  >
-                    <Ionicons name={late ? "alert-circle" : "sunny-outline"} size={16} color={late ? WEB.red : WEB.amber} />
-                    <Text numberOfLines={1} style={{ flex: 1, marginLeft: 10, fontSize: 14, color: WEB.text }}>
-                      {task.title}
-                    </Text>
-                    {!!task.dueDate && <Text style={{ fontSize: 12, color: late ? WEB.red : WEB.muted }}>Due {friendlyDate(task.dueDate)}</Text>}
-                  </Pressable>
-                );
-              })}
+              {shownTasks.slice(0, 7).map(({ task, kind }) => (
+                <Pressable
+                  key={task._id}
+                  onPress={() => router.push({ pathname: "/lists/task/[id]", params: { id: task._id } })}
+                  style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 7, backgroundColor: hovered ? "#F8FAFC" : "transparent" })}
+                >
+                  <Ionicons name={kind === "late" ? "alert-circle" : kind === "myday" ? "sunny-outline" : "calendar-outline"} size={16} color={kind === "late" ? WEB.red : kind === "myday" ? WEB.amber : WEB.muted} />
+                  <Text numberOfLines={1} style={{ flex: 1, marginLeft: 10, fontSize: 14, color: WEB.text }}>
+                    {task.title}
+                  </Text>
+                  {!!task.dueDate && <Text style={{ fontSize: 12, color: kind === "late" ? WEB.red : WEB.muted }}>Due {friendlyDate(task.dueDate)}</Text>}
+                </Pressable>
+              ))}
             </View>
           )}
         </Card>
