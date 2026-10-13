@@ -3,17 +3,17 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
-import { addDays, durationLabel, minutesLabel, MONTHS_FULL, MONTHS_SHORT, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
+import { addDays, MONTHS_FULL, MONTHS_SHORT, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
 import { entryName } from "@/src/components/calendar/mealFood";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { SidePicker } from "@/src/components/planner/SidePicker";
+import { KitchenTasks } from "@/src/components/planner/KitchenTasks";
+import { NeedsSummaryCard } from "@/src/components/planner/web/PrepShopping";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { noteSuggestions, recordSuggestion, settleSuggestions, type SuggestionAction } from "@/src/components/planner/suggestionRecord";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
-import { Button, Card, CardLink, Empty, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
-import { compactDate } from "@/src/components/web/fields";
-import { createGroceryItem, getGroceryItems } from "@/src/services/groceryListApi";
+import { Button, Card, CardLink, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
 import {
@@ -30,7 +30,6 @@ import { DEFAULT_SETTINGS, loadSettings, type AppSettings } from "@/src/services
 import { stopUsualMeal } from "@/src/services/usualMealApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
-import { needAmountLabel, type KitchenSession, type NeedSource } from "@/src/utils/planNeeds";
 import { suggestMeals, type Dish, type Macros, type Suggestion, type Suggestions } from "@/src/utils/recommend";
 
 // The planner in a desktop browser: the whole week at once. A column per
@@ -314,55 +313,6 @@ export function WebWeekPlanScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, suggestions, turn, waved]);
 
-  // The To buy list, put on the grocery list: what isn't on it is added,
-  // and what's on it for less is topped up to what the plan needs. Pressed
-  // again it only adds what's new, so it can be run whenever the plan
-  // changes. (Things already bought and ticked off are left to the pantry.)
-  const [sendingBuy, setSendingBuy] = useState(false);
-  async function buyListToGrocery() {
-    if (sendingBuy || !plan.buy.length) return;
-    try {
-      setSendingBuy(true);
-      const idOf = (ingredient: unknown) => (typeof ingredient === "string" ? ingredient : ((ingredient as { _id?: string } | null)?._id ?? ""));
-      const listed = (await getGroceryItems()).filter((item) => item.status === "toBuy");
-      let added = 0;
-      let topped = 0;
-      for (const need of plan.buy) {
-        const there = listed.find((item) => idOf(item.ingredient) === need.ingredientId && (item.unit || "") === (need.unit || ""));
-        const short = Math.round((need.amount - (there?.quantity ?? 0)) * 100) / 100;
-        if (there && short <= 0) continue;
-        // (Adding to something already listed adds to its amount.)
-        await createGroceryItem({ ingredient: need.ingredientId, name: need.name, quantity: there ? short : need.amount, unit: need.unit });
-        if (there) topped += 1;
-        else added += 1;
-      }
-      const same = plan.buy.length - added - topped;
-      Alert.alert(
-        added + topped ? "Grocery list updated" : "Already on your grocery list",
-        [added ? `${added} added` : "", topped ? `${topped} topped up` : "", same ? `${same} already there` : ""].filter(Boolean).join(" · "),
-      );
-    } catch (error) {
-      Alert.alert("Couldn't update the grocery list", error instanceof Error ? error.message : "Something went wrong.");
-    } finally {
-      setSendingBuy(false);
-    }
-  }
-
-  // How long a session's prep would take against how long it is: each
-  // recipe's prep and cook time, once a batch (rounded up). A guide only —
-  // things cook side by side, and not every recipe has its times set.
-  const prepLoad = (rows: typeof plan.prep) => {
-    let minutes = 0;
-    let untimed = 0;
-    for (const need of rows) {
-      const recipe = kitchen?.recipes.find((r) => r._id === need.recipeId);
-      const each = (recipe?.prepTimeMinutes ?? 0) + (recipe?.cookTimeMinutes ?? 0);
-      if (each > 0) minutes += each * Math.max(1, Math.ceil(need.batches - 0.01));
-      else untimed += 1;
-    }
-    return { minutes, untimed };
-  };
-
   // Taking a suggestion plans the main and its sides as ordinary meals.
   async function acceptSuggestion(date: string, slot: MealSlot, offer: Suggestion, rank: number) {
     try {
@@ -375,13 +325,6 @@ export function WebWeekPlanScreen() {
       Alert.alert("Couldn't add it", error instanceof Error ? error.message : "Something went wrong.");
     }
   }
-
-  const sessionGroups = <T extends { session: string | null }>(kind: KitchenSession["kind"], list: T[]) =>
-    [
-      ...plan.sessions.filter((s) => s.kind === kind).map((session) => ({ session: session as KitchenSession | null, rows: list.filter((n) => n.session === session.id) })),
-      // Needed before any session that could cover it.
-      { session: null as KitchenSession | null, rows: list.filter((n) => !n.session) },
-    ].filter((group) => group.session || group.rows.length);
 
   // The numbers card has two pages, swiped between: one day (shown first),
   // and the week.
@@ -671,123 +614,13 @@ export function WebWeekPlanScreen() {
             </View>
           </Card>
           {/* What the meals still to come need doing first (see planNeeds.ts). */}
-          {/* What the kitchen needs doing, today and tomorrow, and what's wrong with the plan. */}
-          {plan.ready && (plan.tasks.some((t) => t.date <= addDays(today, 1)) || plan.issues.length > 0) && (
-            <Card title="Kitchen tasks" subtitle="Today and tomorrow" padded={false}>
-              <View style={{ paddingBottom: 8 }}>
-                {plan.tasks
-                  .filter((t) => t.date <= addDays(today, 1))
-                  .map((task) => (
-                    <View key={task.id} style={{ flexDirection: "row", paddingHorizontal: 18, paddingVertical: 7 }}>
-                      <Ionicons
-                        name={task.kind === "shop" ? "cart-outline" : task.kind === "prep" ? "flame-outline" : task.kind === "thaw" ? "snow-outline" : task.kind === "ahead" ? "timer-outline" : "hourglass-outline"}
-                        size={16}
-                        color={task.late ? WEB.red : WEB.blue}
-                        style={{ marginTop: 2 }}
-                      />
-                      <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text numberOfLines={2} style={{ fontSize: 14, fontWeight: "600", color: WEB.text }}>
-                          {task.title}
-                        </Text>
-                        <Text numberOfLines={2} style={{ marginTop: 1, fontSize: 12, color: task.late ? WEB.red : WEB.muted }}>
-                          {task.date === today ? "Today" : "Tomorrow"}
-                          {task.minutes != null ? ` ${minutesLabel(((task.minutes % 1440) + 1440) % 1440)}` : task.kind === "thaw" && !task.late ? " evening" : ""} · {task.late ? "still frozen: thaw it sealed in cold water, about an hour · " : ""}
-                          {task.detail}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                {plan.issues.map((issue) => (
-                  <View key={issue.id} style={{ flexDirection: "row", paddingHorizontal: 18, paddingVertical: 7 }}>
-                    <Ionicons name="alert-circle-outline" size={16} color={issue.kind === "past-date" ? WEB.amber : WEB.red} style={{ marginTop: 2 }} />
-                    <View style={{ flex: 1, marginLeft: 10 }}>
-                      <Text numberOfLines={2} style={{ fontSize: 14, fontWeight: "600", color: WEB.text }}>
-                        {issue.title}
-                      </Text>
-                      <Text numberOfLines={2} style={{ marginTop: 1, fontSize: 12, color: WEB.muted }}>
-                        {issue.detail}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </Card>
-          )}
-          <Card title="To prep" subtitle="Made ahead for the meals you've planned" action={<CardLink label="Add session" onPress={() => setAdding("prep")} />} padded={false}>
-            {!plan.ready ? (
-              <Empty icon="flame-outline" text="" />
-            ) : plan.prep.length === 0 && !plan.sessions.some((s) => s.kind === "prep") ? (
-              <Empty icon="flame-outline" text="Nothing to prep for what's planned" />
-            ) : (
-              <View style={{ paddingBottom: 8 }}>
-                {sessionGroups("prep", plan.prep).map((group) => (
-                  <View key={group.session?.id ?? "none"}>
-                    <SessionHeading session={group.session} today={today} anySessions={plan.sessions.some((s) => s.kind === "prep")} missing="No prep session in time" load={group.rows.length ? prepLoad(group.rows) : undefined} />
-                    {group.rows.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 8, fontSize: 12, color: WEB.faint }}>Nothing falls to this one yet</Text>}
-                    {group.rows.map((need) => (
-                      <NeedRow
-                        key={need.ingredientId}
-                        title={need.recipeName}
-                        detail={`${needAmountLabel(need.amount, need.unit)} of ${need.name}${Math.abs(need.batches - 1) > 0.01 ? ` · ${Math.round(need.batches * 10) / 10} batches` : ""}`}
-                        by={need.neededBy}
-                        today={today}
-                        uses={need.for}
-                        onPress={() => router.push({ pathname: "/recipes/[id]", params: { id: need.recipeId } })}
-                      />
-                    ))}
-                  </View>
-                ))}
-              </View>
-            )}
+          {/* What the kitchen needs doing, and what's wrong with the plan: the
+              lists in full are on the Prep & shopping page. */}
+          <Card title="Kitchen tasks" subtitle="Today and tomorrow" action={<CardLink label="Overview" onPress={() => router.push("/kitchen")} />} padded={false}>
+            <KitchenTasks plan={plan} days={1} onChanged={reload} />
           </Card>
-          <Card
-            title="To buy"
-            subtitle="Short in the pantry for the plan and its prep"
-            action={
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-                {plan.buy.length > 0 && <CardLink label={sendingBuy ? "Adding…" : "To grocery list"} onPress={() => void buyListToGrocery()} />}
-                <CardLink label="Add trip" onPress={() => setAdding("shop")} />
-              </View>
-            }
-            padded={false}
-          >
-            {!plan.ready ? (
-              <Empty icon="cart-outline" text="" />
-            ) : plan.buy.length === 0 && !plan.sessions.some((s) => s.kind === "shop") ? (
-              <Empty icon="cart-outline" text="The pantry covers what's planned" />
-            ) : (
-              <View style={{ paddingBottom: 8 }}>
-                {sessionGroups("shop", plan.buy).map((group) => (
-                  <View key={group.session?.id ?? "none"}>
-                    <SessionHeading session={group.session} today={today} anySessions={plan.sessions.some((s) => s.kind === "shop")} missing="No shopping trip in time" />
-                    {group.rows.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 8, fontSize: 12, color: WEB.faint }}>Nothing to get on this one yet</Text>}
-                    {group.rows.map((need) => (
-                      <NeedRow
-                        key={`${need.ingredientId}-${need.unit}-${need.pieces}`}
-                        title={need.name}
-                        detail={needAmountLabel(need.amount, need.unit)}
-                        by={need.neededBy}
-                        today={today}
-                        uses={need.for}
-                      />
-                    ))}
-                  </View>
-                ))}
-                {/* Stock the plan is counting on that will be past its date by then. */}
-                {plan.checks.length > 0 && (
-                  <View>
-                    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, paddingHorizontal: 18, paddingVertical: 6, backgroundColor: "#FFFBEB" }}>
-                      <Ionicons name="help-circle-outline" size={13} color={WEB.amber} />
-                      <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: "700", color: WEB.amber }}>In the pantry, but check: past its date</Text>
-                    </View>
-                    {plan.checks.map((check) => (
-                      <NeedRow key={check.ingredientId} title={check.name} detail={`dated ${compactDate(check.expired)}`} by={check.neededBy} today={today} uses={check.for} />
-                    ))}
-                  </View>
-                )}
-              </View>
-            )}
-          </Card>
+          <NeedsSummaryCard side="prep" plan={plan} onOpen={() => router.push("/kitchen/needs")} onBook={() => setAdding("prep")} />
+          <NeedsSummaryCard side="buy" plan={plan} onOpen={() => router.push("/kitchen/needs")} onBook={() => setAdding("shop")} />
         </View>
       </View>
 
@@ -912,80 +745,6 @@ function SuggestionButton({ icon, label, onPress }: { icon: keyof typeof Ionicon
       style={({ hovered }: { hovered?: boolean }) => ({ width: 24, height: 22, alignItems: "center", justifyContent: "center", borderRadius: 6, backgroundColor: hovered ? "#DDD6FE" : "transparent" })}
     >
       <Ionicons name={icon} size={14} color="#6D28D9" />
-    </Pressable>
-  );
-}
-
-// A prep session or shopping trip, as a heading over what falls to it.
-function SessionHeading({
-  session,
-  today,
-  anySessions,
-  missing,
-  load,
-}: {
-  session: KitchenSession | null;
-  today: string;
-  anySessions: boolean;
-  missing: string;
-  // For a prep session: about how long what falls to it takes, and how many of its recipes have no times set.
-  load?: { minutes: number; untimed: number };
-}) {
-  // With no sessions at all there's nothing to group under.
-  if (!session && !anySessions) return null;
-  const d = session ? parseLocalDate(session.date) : null;
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, paddingHorizontal: 18, paddingVertical: 6, backgroundColor: session ? "#F8FAFC" : "#FEF2F2" }}>
-      <Ionicons name={session ? "calendar-outline" : "alert-circle-outline"} size={13} color={session ? WEB.muted : WEB.red} />
-      <Text numberOfLines={1} style={{ marginLeft: 6, fontSize: 12, fontWeight: "700", color: session ? WEB.body : WEB.red }}>
-        {session && d ? `${session.date === today ? "Today" : `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`} · ${minutesLabel(session.startMinutes)}–${minutesLabel(session.endMinutes)}` : missing}
-      </Text>
-      {!!load &&
-        (load.minutes > 0 || load.untimed > 0) &&
-        (() => {
-          const length = session ? session.endMinutes - session.startMinutes : null;
-          const over = length != null && load.minutes > length;
-          return (
-            <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, textAlign: "right", fontSize: 11, fontWeight: over ? "700" : "400", color: over ? WEB.red : WEB.muted }}>
-              {load.minutes > 0 ? `about ${durationLabel(load.minutes)}${over ? `, over its ${durationLabel(length!)}` : ""}` : ""}
-              {load.untimed > 0 ? `${load.minutes > 0 ? " · " : ""}${load.untimed} with no times set` : ""}
-            </Text>
-          );
-        })()}
-    </View>
-  );
-}
-
-// One thing to prep or buy: what, how much, by when, and for which meals.
-function NeedRow({ title, detail, by, today, uses, onPress, warning }: { title: string; detail: string; by: string; today: string; uses: NeedSource[]; onPress?: () => void; warning?: string }) {
-  const d = parseLocalDate(by);
-  const when = by === today ? "today" : `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()}`;
-  const meals = [...new Set(uses.map((u) => u.label))];
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={!onPress}
-      style={({ hovered }: { hovered?: boolean }) => ({ paddingHorizontal: 18, paddingVertical: 8, backgroundColor: hovered && onPress ? "#F8FAFC" : "transparent" })}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: "600", color: WEB.text }}>
-          {title}
-        </Text>
-        <Text style={{ marginLeft: 8, fontSize: 12, fontWeight: by === today ? "700" : "500", color: by === today ? WEB.red : WEB.muted }}>by {when}</Text>
-        {!!onPress && <Ionicons name="chevron-forward" size={13} color={WEB.faint} style={{ marginLeft: 4 }} />}
-      </View>
-      <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 12, color: WEB.muted }}>
-        {detail}
-      </Text>
-      <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 11, color: WEB.faint }}>
-        for {meals.slice(0, 2).join(", ")}
-        {meals.length > 2 ? ` +${meals.length - 2} more` : ""}
-      </Text>
-      {!!warning && (
-        <Text numberOfLines={2} style={{ marginTop: 2, fontSize: 11, lineHeight: 15, color: WEB.red }}>
-          <Ionicons name="alert-circle-outline" size={11} color={WEB.red} /> {warning}
-        </Text>
-      )}
     </Pressable>
   );
 }

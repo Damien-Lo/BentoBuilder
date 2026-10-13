@@ -44,6 +44,7 @@ import { convertUnits, getIngredientConversions, type CustomUnitConversion } fro
 import { countQualifyingPantryPieces, getIngredientStockInUnit } from "@/src/utils/ingredientStock";
 import { RateRecipeModal } from "@/src/components/recipes/RateRecipeModal";
 import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
+import { StartAhead } from "@/src/components/planner/StartAhead";
 import { DateTextInput, DurationExpiryInput, FieldLabel, FormInput, SearchableObjectDropdown } from "@/src/components/forms";
 import type { MealPlanEntry } from "@/src/services/mealPlanApi";
 import {
@@ -1096,6 +1097,9 @@ export default function RecipeDetailPage() {
             </View>
           </>
         )}
+
+        {/* Something to start before cooking */}
+        <StartAhead recipe={recipe} onSaved={(startAhead) => setRecipe((prev) => (prev ? { ...prev, startAhead } : prev))} />
 
         {/* Instructions */}
         {filledInstructions.length > 0 && (

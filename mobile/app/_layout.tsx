@@ -154,6 +154,8 @@ export default function RootLayout() {
         <Stack.Screen name="calendar/event/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="calendar/meal-times" options={{ headerShown: false }} />
         <Stack.Screen name="calendar/sessions" options={{ headerShown: false }} />
+        <Stack.Screen name="kitchen/index" options={{ headerShown: false }} />
+        <Stack.Screen name="kitchen/needs" options={{ headerShown: false }} />
         <Stack.Screen name="calendar/edit" options={{ headerShown: false, presentation: "modal" }} />
 
         {/* Grocery list — reached from the Pantry/Kitchen tabs, not its own tab */}

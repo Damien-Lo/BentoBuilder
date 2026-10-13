@@ -10,6 +10,8 @@ import { friendlyDate, longToday } from "@/src/components/todo/theme";
 import { getMealPlanRange, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import { DEFAULT_SETTINGS, loadSettings, type AppSettings } from "@/src/services/settingsService";
+import { KitchenTasks } from "@/src/components/planner/KitchenTasks";
+import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { getSmartTasks, getTodoDashboard, type TodoDashboard, type TodoTask } from "@/src/services/todoApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
@@ -100,6 +102,7 @@ export function WebHomeScreen() {
     })
     .sort((a, b) => (a.expiryDate ?? "").localeCompare(b.expiryDate ?? ""));
 
+  const kitchenPlan = usePlanNeeds();
   const openMyDay = myDay.filter((t) => !t.completed);
   const overdue = dashboard?.overdueTasks ?? [];
   // The Tasks card's list: what's late, then My Day, then what's due in the
@@ -245,6 +248,11 @@ export function WebHomeScreen() {
           <View style={{ paddingTop: 14 }}>
             <BarChart data={weekBars} goal={settings.dailyCalorieLimit} height={190} />
           </View>
+        </Card>
+
+        {/* Kitchen: what needs doing today and tomorrow */}
+        <Card title="Kitchen tasks" subtitle="Today and tomorrow" action={<CardLink label="Kitchen" onPress={() => router.navigate("/kitchen")} />} style={{ flex: 1, minWidth: 320 }} padded={false}>
+          <KitchenTasks plan={kitchenPlan} days={1} />
         </Card>
 
         {/* Pantry */}

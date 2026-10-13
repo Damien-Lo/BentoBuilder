@@ -209,6 +209,41 @@ router.get("/:id/move-suggestion", async (req, res) => {
   }
 });
 
+/**
+ * POST /api/pantry/:id/take-out  { storageLocation, expiryDate, amount?, unit? }
+ * Moves an entry to another location with a new expiry date — all of it,
+ * or, when `amount` (in the entry's own unit) is less than what's there,
+ * just that much: the rest stays where it was and what's taken becomes an
+ * entry of its own. What a thaw task does: 280 g out of an 840 g bag.
+ */
+router.post("/:id/take-out", async (req, res) => {
+  try {
+    const item = await PantryItem.findById(req.params.id).populate("storageLocation");
+    const to = await StorageLocation.findById(req.body.storageLocation);
+    if (!item || !to) return res.status(404).json({ success: false, message: "Pantry item or location not found" });
+    const amount = Number(req.body.amount);
+    const part = Number.isFinite(amount) && amount > 0 && req.body.unit === item.quantityUnit && amount < item.quantityAvailable - 1e-6;
+    const change = { at: new Date(), from: item.storageLocation?._id, to: to._id, kind: moveKind(item.storageLocation?.name, to.name), expiryBefore: item.expiryDate, expiryAfter: req.body.expiryDate || null };
+    let moved;
+    if (part) {
+      const { _id, createdAt, updatedAt, __v, ...copy } = item.toObject();
+      moved = await PantryItem.create({ ...copy, storageLocation: to._id, quantityAvailable: amount, expiryDate: req.body.expiryDate || null, moves: [...(copy.moves ?? []), change] });
+      item.quantityAvailable = Math.round((item.quantityAvailable - amount) * 1000) / 1000;
+      await item.save();
+    } else {
+      item.storageLocation = to._id;
+      item.expiryDate = req.body.expiryDate || null;
+      item.moves.push(change);
+      moved = await item.save();
+    }
+    await moved.populate(INGREDIENT_POPULATE);
+    await moved.populate("storageLocation");
+    return res.json({ success: true, data: moved });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 router.patch("/:id", async (req, res) => {
   try {
     // A change of state — moved to another storage location, or opened —

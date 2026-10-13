@@ -57,7 +57,9 @@ import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { DishQuantityStepper } from "@/src/components/planner/DishQuantityStepper";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
+import { KitchenTasks } from "@/src/components/planner/KitchenTasks";
 import { MealSuggestion, SuggestionsToggle, useSuggestionsToggle } from "@/src/components/planner/MealSuggestion";
+import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch";
 import { WebWeekPlanScreen } from "@/src/components/planner/web/WebWeekPlanScreen";
 import { useWideWeb } from "@/src/utils/useWideWeb";
@@ -176,6 +178,10 @@ function PhonePlannerScreen() {
   const [isLoading, setIsLoading] = useState(true);
   // The day `entries` was last loaded for (null after a failed load).
   const [entriesDate, setEntriesDate] = useState<string | null>(null);
+  // The kitchen's tasks (thaw this, there's a shopping trip today), worked
+  // out from the plan, the pantry and the calendar.
+  const kitchenPlan = usePlanNeeds();
+  const tomorrow = toDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1));
   // Whether the suggestion cards are on.
   const [showSuggestions, toggleSuggestions] = useSuggestionsToggle();
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
@@ -1880,6 +1886,14 @@ function PhonePlannerScreen() {
           {/* Suggestions for the empty meals, on or off. */}
           <SuggestionsToggle on={showSuggestions} onPress={toggleSuggestions} />
         </View>
+
+        {/* What the kitchen needs doing today and tomorrow (on today's page). */}
+        {selectedDate === today && kitchenPlan.ready && kitchenPlan.tasks.some((t) => t.date <= tomorrow) && (
+          <View className="mb-5 overflow-hidden rounded-3xl border border-slate-200 bg-white pt-3">
+            <Text className="px-[18px] pb-1 text-xs font-bold uppercase tracking-widest text-slate-400">Kitchen tasks</Text>
+            <KitchenTasks plan={kitchenPlan} days={1} onChanged={loadEntries} />
+          </View>
+        )}
 
         {isLoading ? (
           <View className="items-center py-16">
