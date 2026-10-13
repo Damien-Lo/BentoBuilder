@@ -51,6 +51,9 @@ export interface PantryItem {
   purchasePrice: number | null;
   store: string | StoreOption | null;
   notes: string;
+  // Each move from one storage location to another: a move gives the entry
+  // a new expiry date (see server/services/shelfLife.js).
+  moves?: { at: string; from?: string; to?: string; kind: string; expiryBefore: string | null; expiryAfter: string | null }[];
   isFinished: boolean;
   // Set when isFinished was flipped by an automatic meal-plan-confirm
   // deduction — null when finished some other way (or not finished).

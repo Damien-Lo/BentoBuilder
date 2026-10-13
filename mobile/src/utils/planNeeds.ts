@@ -24,6 +24,11 @@ import { convertUnits, getIngredientConversions, type CustomUnitConversion } fro
 //
 // The meals are taken in date order, each claiming stock before the next,
 // so two dinners that both want the last of something don't both count it.
+// What's in date on the meal's day is used first, soonest to expire first.
+// Stock that will be past its date by then still counts — a pantry's dates
+// are estimates, and often out of date themselves — but the meal is listed
+// under `checks`, to look at before relying on it. That goes for the freezer
+// too: a frozen entry's date is its freezer date, and it can pass.
 // (Unlike the planner's per-meal "add missing to grocery list", which
 // looks at one meal alone.)
 
@@ -77,6 +82,17 @@ export interface BuyNeed {
   session: string | null;
 }
 
+// Stock a meal is counting on that will be past its date by then.
+export interface StockCheck {
+  ingredientId: string;
+  name: string;
+  // The date on the oldest of it.
+  expired: string;
+  // The first day something needs it.
+  neededBy: string;
+  for: NeedSource[];
+}
+
 const idOf = (value: unknown): string =>
   typeof value === "string" ? value : typeof value === "object" && value !== null && "_id" in value ? String((value as { _id?: unknown })._id ?? "") : "";
 
@@ -95,7 +111,7 @@ export function computePlanNeeds(
   globalConversions: CustomUnitConversion[],
   // The sessions still to come; without any, everything is unscheduled.
   sessions: KitchenSession[] = [],
-): { prep: PrepNeed[]; buy: BuyNeed[] } {
+): { prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[] } {
   // The last session of a kind on or before `date`.
   const sessionBy = (kind: KitchenSession["kind"], date: string) =>
     sessions
@@ -105,8 +121,52 @@ export function computePlanNeeds(
   const recipeMap = new Map(recipes.map((r) => [r._id, r]));
   const ingredientMap = new Map(ingredients.map((i) => [i._id, i]));
   // What's left of each ingredient after the meals so far have claimed
-  // theirs: an amount in its own unit, or a count of usable pieces.
-  const left = new Map<string, number>();
+  // theirs, lot by lot (a pantry entry each, soonest to expire first): an
+  // amount in the ingredient's own unit, or one usable piece.
+  type Lot = { expires: string | null; amount: number };
+  const left = new Map<string, Lot[]>();
+  const checks = new Map<string, StockCheck>();
+  const idOfItem = (item: PantryItem) => (typeof item.ingredient === "string" ? item.ingredient : (item.ingredient?._id ?? ""));
+  // An ingredient's own pantry entries, and those of its branded variants.
+  const entriesOf = (ing: Ingredient) => {
+    const family = new Set([ing._id, ...(ing.isGeneric ? ingredients.filter((i) => idOf(i.genericParent) === ing._id).map((i) => i._id) : [])]);
+    return pantryItems.filter((item) => (item.quantityAvailable ?? 0) > 0 && family.has(idOfItem(item)));
+  };
+  const lots = (key: string, ing: Ingredient, measure: (item: PantryItem) => number) => {
+    if (!left.has(key)) {
+      left.set(
+        key,
+        entriesOf(ing)
+          .map((item) => ({ expires: item.expiryDate ? item.expiryDate.slice(0, 10) : null, amount: measure(item) }))
+          .filter((lot) => lot.amount > 0)
+          .sort((a, b) => (a.expires ?? "9").localeCompare(b.expires ?? "9")),
+      );
+    }
+    return left.get(key)!;
+  };
+  // Takes up to `wanted`: first from what's good on `due`, then from what
+  // will be past its date by then — noting the meal as one to check.
+  const claim = (from: Lot[], wanted: number, due: string, ing: Ingredient, source: NeedSource) => {
+    let got = 0;
+    const good = (lot: Lot) => !lot.expires || lot.expires >= due;
+    for (const pass of [true, false]) {
+      for (const lot of from) {
+        if (got >= wanted - 1e-9) return got;
+        if (good(lot) !== pass || lot.amount <= 0) continue;
+        const take = Math.min(lot.amount, wanted - got);
+        lot.amount -= take;
+        got += take;
+        if (!pass) {
+          const check = checks.get(ing._id) ?? { ingredientId: ing._id, name: ing.name, expired: lot.expires!, neededBy: due, for: [] };
+          checks.set(ing._id, check);
+          if (lot.expires! < check.expired) check.expired = lot.expires!;
+          if (due < check.neededBy) check.neededBy = due;
+          if (!check.for.some((f) => f.date === source.date && f.label === source.label)) check.for.push(source);
+        }
+      }
+    }
+    return got;
+  };
   const prep = new Map<string, PrepNeed>();
   const buy = new Map<string, BuyNeed>();
 
@@ -125,13 +185,9 @@ export function computePlanNeeds(
 
     if (row.matchMode === "wholePiece") {
       const key = `${ing._id}|pieces|${row.pieceMinWeight}|${row.pieceMaxWeight}|${row.pieceWeightUnit}`;
-      if (!left.has(key)) {
-        left.set(key, countQualifyingPantryPieces(ing, row.pieceMinWeight ?? 0, row.pieceMaxWeight ?? Infinity, row.pieceWeightUnit ?? "g", ingredients, pantryItems, globalConversions));
-      }
-      const have = left.get(key)!;
-      const used = Math.min(have, row.quantity);
-      left.set(key, have - used);
-      const short = row.quantity - used;
+      // (Each pantry entry is one piece, if it's the right size.)
+      const pieces = lots(key, ing, (item) => countQualifyingPantryPieces(ing, row.pieceMinWeight ?? 0, row.pieceMaxWeight ?? Infinity, row.pieceWeightUnit ?? "g", ingredients, [item], globalConversions));
+      const short = row.quantity - claim(pieces, row.quantity, due, ing, source);
       if (short > 0) {
         const trip = sessionBy("shop", due);
         const needKey = `${key}|${trip?.id}`;
@@ -148,11 +204,8 @@ export function computePlanNeeds(
     const unit = converted == null ? row.unit : native;
     const needed = converted ?? row.quantity;
     const key = `${ing._id}|${unit}`;
-    if (!left.has(key)) left.set(key, getIngredientStockInUnit(ing, unit, ingredients, pantryItems, globalConversions));
-    const have = left.get(key)!;
-    const used = Math.min(have, needed);
-    left.set(key, have - used);
-    const short = needed - used;
+    const stock = lots(key, ing, (item) => getIngredientStockInUnit(ing, unit, ingredients, [item], globalConversions));
+    const short = needed - claim(stock, needed, due, ing, source);
     if (short <= 1e-6) return;
 
     const recipe = recipeMap.get(idOf(ing.productionRecipe));
@@ -193,7 +246,7 @@ export function computePlanNeeds(
   }
 
   const soonest = <T extends { neededBy: string; name: string }>(list: T[]) => list.sort((a, b) => a.neededBy.localeCompare(b.neededBy) || a.name.localeCompare(b.name));
-  return { prep: soonest([...prep.values()]), buy: soonest([...buy.values()]) };
+  return { prep: soonest([...prep.values()]), buy: soonest([...buy.values()]), checks: soonest([...checks.values()]) };
 }
 
 // "1.5 tbsp", "2 fillets", "350 g": an amount short enough to read in a list.

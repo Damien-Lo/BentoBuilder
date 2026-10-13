@@ -109,6 +109,22 @@ export async function addIngredientToPantry(
   return result.data;
 }
 
+// The expiry date to offer when an entry is moved to another storage
+// location: what that ingredient has been given on that kind of move before
+// (`learned`), or a default. `kind` says what the move amounts to.
+export interface MoveSuggestion {
+  kind: "thawed" | "frozen" | "chilled" | "shelf";
+  days: number;
+  learned: boolean;
+  expiryDate: string;
+}
+
+export async function getMoveSuggestion(pantryItemId: string, toLocationId: string, today: string): Promise<MoveSuggestion> {
+  const response = await fetch(`${API_BASE_URL}/api/pantry/${pantryItemId}/move-suggestion?to=${toLocationId}&today=${today}`);
+  const result = await parseResponse<{ success: boolean; data: MoveSuggestion }>(response);
+  return result.data;
+}
+
 export async function updatePantryItem(
   pantryItemId: string,
   updates: Partial<CreatePantryItemInput>,

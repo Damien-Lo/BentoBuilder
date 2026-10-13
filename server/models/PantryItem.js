@@ -73,6 +73,23 @@ const pantryItemSchema = new mongoose.Schema(
       default: "",
     },
 
+    // Each time it's been moved from one storage location to another (out
+    // of the freezer to thaw, into it to keep): when, between where, and
+    // the expiry date before and after — a move gives it a new one. `kind`
+    // is what the move amounted to ("thawed", "frozen", "chilled",
+    // "shelf"; see services/shelfLife.js, which learns from these).
+    moves: [
+      {
+        _id: false,
+        at: { type: Date, required: true },
+        from: { type: mongoose.Schema.Types.ObjectId, ref: "StorageLocation" },
+        to: { type: mongoose.Schema.Types.ObjectId, ref: "StorageLocation" },
+        kind: { type: String, default: "" },
+        expiryBefore: { type: Date, default: null },
+        expiryAfter: { type: Date, default: null },
+      },
+    ],
+
     isFinished: {
       type: Boolean,
       default: false,

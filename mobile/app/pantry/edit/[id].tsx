@@ -21,7 +21,7 @@ import {
   getUnitSuggestions,
   type SelectOption,
 } from "@/src/services/optionsApi";
-import { deletePantryItem, getPantryItemById, updatePantryItem } from "@/src/services/pantryApi";
+import { deletePantryItem, getMoveSuggestion, getPantryItemById, updatePantryItem, type MoveSuggestion } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
 import {
   DatePickerField,
@@ -34,7 +34,7 @@ import {
 } from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
-import { toDateOnly } from "@/src/utils/date";
+import { formatDateDisplay, toDateOnly, todayDateInputString } from "@/src/utils/date";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
@@ -116,6 +116,32 @@ export default function EditPantryItemScreen() {
   const [saving, setSaving] = useState(false);
 
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  // Moved to a different place than it's saved in: the expiry date offered
+  // for there (a move gives it a new one), or null when it's back where it was.
+  const [move, setMove] = useState<MoveSuggestion | null>(null);
+
+  // Picking a location. Somewhere new is a move: the expiry date becomes
+  // the one for there — what this ingredient was given on that kind of move
+  // before, or a usual figure — still to be changed by hand before saving.
+  function pickLocation(loc: SelectOption) {
+    if (!item || !form) return;
+    update("storageLocationId", loc._id);
+    update("storageLocationName", loc.name);
+    setShowLocationPicker(false);
+    const original = itemToForm(item);
+    if (loc._id === original.storageLocationId) {
+      setMove(null);
+      update("expiryDate", original.expiryDate);
+      return;
+    }
+    getMoveSuggestion(item._id, loc._id, todayDateInputString()).then(
+      (suggestion) => {
+        setMove(suggestion);
+        update("expiryDate", suggestion.expiryDate);
+      },
+      () => setMove(null),
+    );
+  }
 
   // Scrolls whichever field was just focused/opened into view — see
   // useScrollFocusSection for why zIndex has to descend in on-screen order
@@ -405,11 +431,7 @@ export default function EditPantryItemScreen() {
                     <Pressable
                       key={loc._id}
                       className="border-b border-slate-100 px-4 py-4"
-                      onPress={() => {
-                        update("storageLocationId", loc._id);
-                        update("storageLocationName", loc.name);
-                        setShowLocationPicker(false);
-                      }}
+                      onPress={() => pickLocation(loc)}
                     >
                       <Text className="text-base text-slate-800">{loc.name}</Text>
                     </Pressable>
@@ -417,6 +439,18 @@ export default function EditPantryItemScreen() {
                 </View>
               )}
             </View>
+
+            {/* A move: what the new date is, and why. */}
+            {move && (
+              <View className="mb-3 mt-3 flex-row rounded-2xl bg-violet-50 px-3 py-2.5">
+                <Ionicons name={move.kind === "thawed" ? "water-outline" : move.kind === "frozen" ? "snow-outline" : "swap-horizontal"} size={17} color="#6D28D9" style={{ marginTop: 1 }} />
+                <Text className="ml-2 flex-1 text-[13px] leading-5 text-violet-900">
+                  {move.kind === "thawed" ? "Out of the freezer" : move.kind === "frozen" ? "Into the freezer" : `Moved to ${form.storageLocationName}`}: the expiry date is now{" "}
+                  <Text className="font-semibold">{formatDateDisplay(move.expiryDate)}</Text>, {move.days} day{move.days === 1 ? "" : "s"} from today (
+                  {move.learned ? "what you\u2019ve given it before" : "a usual figure"}). Change it below if that isn&apos;t right.
+                </Text>
+              </View>
+            )}
 
             <View className="flex-row gap-3" {...datesSection.wrapperProps}>
               <View className="flex-1">

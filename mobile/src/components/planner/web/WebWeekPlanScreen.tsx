@@ -12,6 +12,7 @@ import { noteSuggestions, recordSuggestion, settleSuggestions, type SuggestionAc
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
 import { Button, Card, CardLink, Empty, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
+import { compactDate } from "@/src/components/web/fields";
 import { createGroceryItem, getGroceryItems } from "@/src/services/groceryListApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
@@ -719,10 +720,29 @@ export function WebWeekPlanScreen() {
                     <SessionHeading session={group.session} today={today} anySessions={plan.sessions.some((s) => s.kind === "shop")} missing="No shopping trip in time" />
                     {group.rows.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 8, fontSize: 12, color: WEB.faint }}>Nothing to get on this one yet</Text>}
                     {group.rows.map((need) => (
-                      <NeedRow key={`${need.ingredientId}-${need.unit}-${need.pieces}`} title={need.name} detail={needAmountLabel(need.amount, need.unit)} by={need.neededBy} today={today} uses={need.for} />
+                      <NeedRow
+                        key={`${need.ingredientId}-${need.unit}-${need.pieces}`}
+                        title={need.name}
+                        detail={needAmountLabel(need.amount, need.unit)}
+                        by={need.neededBy}
+                        today={today}
+                        uses={need.for}
+                      />
                     ))}
                   </View>
                 ))}
+                {/* Stock the plan is counting on that will be past its date by then. */}
+                {plan.checks.length > 0 && (
+                  <View>
+                    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, paddingHorizontal: 18, paddingVertical: 6, backgroundColor: "#FFFBEB" }}>
+                      <Ionicons name="help-circle-outline" size={13} color={WEB.amber} />
+                      <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: "700", color: WEB.amber }}>In the pantry, but check: past its date</Text>
+                    </View>
+                    {plan.checks.map((check) => (
+                      <NeedRow key={check.ingredientId} title={check.name} detail={`dated ${compactDate(check.expired)}`} by={check.neededBy} today={today} uses={check.for} />
+                    ))}
+                  </View>
+                )}
               </View>
             )}
           </Card>
@@ -895,7 +915,7 @@ function SessionHeading({
 }
 
 // One thing to prep or buy: what, how much, by when, and for which meals.
-function NeedRow({ title, detail, by, today, uses, onPress }: { title: string; detail: string; by: string; today: string; uses: NeedSource[]; onPress?: () => void }) {
+function NeedRow({ title, detail, by, today, uses, onPress, warning }: { title: string; detail: string; by: string; today: string; uses: NeedSource[]; onPress?: () => void; warning?: string }) {
   const d = parseLocalDate(by);
   const when = by === today ? "today" : `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()}`;
   const meals = [...new Set(uses.map((u) => u.label))];
@@ -919,6 +939,11 @@ function NeedRow({ title, detail, by, today, uses, onPress }: { title: string; d
         for {meals.slice(0, 2).join(", ")}
         {meals.length > 2 ? ` +${meals.length - 2} more` : ""}
       </Text>
+      {!!warning && (
+        <Text numberOfLines={2} style={{ marginTop: 2, fontSize: 11, lineHeight: 15, color: WEB.red }}>
+          <Ionicons name="alert-circle-outline" size={11} color={WEB.red} /> {warning}
+        </Text>
+      )}
     </Pressable>
   );
 }

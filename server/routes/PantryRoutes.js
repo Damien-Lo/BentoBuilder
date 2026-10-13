@@ -2,6 +2,8 @@ import express from "express";
 import Ingredient from "../models/Ingredient.js";
 import PantryItem from "../models/PantryItem.js";
 import MealPlanEntry from "../models/MealPlanEntry.js";
+import StorageLocation from "../models/StorageLocation.js";
+import { moveKind, suggestShelfDays } from "../services/shelfLife.js";
 
 const router = express.Router();
 
@@ -174,11 +176,53 @@ router.post("/", async (req, res) => {
 /**
  * PATCH /api/pantry/:id
  */
+/**
+ * GET /api/pantry/:id/move-suggestion?to=<storageLocationId>&today=YYYY-MM-DD
+ * The expiry date to offer when this entry is moved there: from what the
+ * ingredient has been given on that kind of move before, or a default.
+ */
+router.get("/:id/move-suggestion", async (req, res) => {
+  try {
+    const item = await PantryItem.findById(req.params.id).populate("storageLocation");
+    const to = await StorageLocation.findById(req.query.to);
+    if (!item || !to) return res.status(404).json({ success: false, message: "Pantry item or location not found" });
+    const kind = moveKind(item.storageLocation?.name, to.name);
+    const { days, learned } = await suggestShelfDays(item.ingredient, kind);
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.today ?? "") ? new Date(`${req.query.today}T12:00:00Z`) : new Date();
+    from.setUTCDate(from.getUTCDate() + days);
+    return res.json({ success: true, data: { kind, days, learned, expiryDate: from.toISOString().slice(0, 10) } });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 router.patch("/:id", async (req, res) => {
   try {
+    // A change of storage location is a move: kept on the entry, with the
+    // expiry date it had and the one it's given now.
+    const { moves: _ignored, ...changes } = req.body;
+    const update = { ...changes };
+    if (changes.storageLocation) {
+      const current = await PantryItem.findById(req.params.id).populate("storageLocation");
+      if (current && String(current.storageLocation?._id) !== String(changes.storageLocation)) {
+        const to = await StorageLocation.findById(changes.storageLocation);
+        if (to) {
+          update.$push = {
+            moves: {
+              at: new Date(),
+              from: current.storageLocation?._id,
+              to: to._id,
+              kind: moveKind(current.storageLocation?.name, to.name),
+              expiryBefore: current.expiryDate,
+              expiryAfter: changes.expiryDate !== undefined ? changes.expiryDate || null : current.expiryDate,
+            },
+          };
+        }
+      }
+    }
     const pantryItem = await PantryItem.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      update,
       {
         new: true,
         runValidators: true,
