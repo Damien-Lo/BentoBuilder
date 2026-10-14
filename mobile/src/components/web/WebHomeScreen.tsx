@@ -57,10 +57,11 @@ export function WebHomeScreen() {
     }, []),
   );
 
+  const kitchenPlan = usePlanNeeds();
   const conversions = settings.unitConversions;
   const todayEntries = entries.filter((e) => e.date === today);
   const eaten = computeDayNutrition(todayEntries.filter((e) => e.status === "confirmed"), conversions);
-  const planned = computeDayNutrition(todayEntries.filter((e) => e.status === "planned"), conversions);
+  const planned = computeDayNutrition(kitchenPlan.sized(todayEntries.filter((e) => e.status === "planned")), conversions);
 
   const todayEvents = calendar.visibleEvents
     .filter((e) => today >= e.occurrenceDate && today <= e.occurrenceEndDate)
@@ -87,7 +88,7 @@ export function WebHomeScreen() {
       label: WEEKDAYS_SHORT[parseLocalDate(day).getDay()],
       sub: String(parseLocalDate(day).getDate()),
       value: computeDayNutrition(dayEntries.filter((e) => e.status === "confirmed"), conversions).calories ?? 0,
-      value2: computeDayNutrition(dayEntries.filter((e) => e.status === "planned"), conversions).calories ?? 0,
+      value2: computeDayNutrition(kitchenPlan.sized(dayEntries.filter((e) => e.status === "planned")), conversions).calories ?? 0,
       highlight: day === today,
     };
   });
@@ -102,7 +103,6 @@ export function WebHomeScreen() {
     })
     .sort((a, b) => (a.expiryDate ?? "").localeCompare(b.expiryDate ?? ""));
 
-  const kitchenPlan = usePlanNeeds();
   const openMyDay = myDay.filter((t) => !t.completed);
   const overdue = dashboard?.overdueTasks ?? [];
   // The Tasks card's list: what's late, then My Day, then what's due in the

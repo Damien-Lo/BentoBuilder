@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { KitchenSessionNeeds } from "@/src/components/planner/KitchenSessionNeeds";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -22,6 +22,7 @@ import { MealSuggestion, SuggestionsToggle, useSuggestionsToggle } from "@/src/c
 import { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch";
 import { RepeatDaysSheet } from "@/src/components/calendar/RepeatDaysSheet";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
+import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
 import {
   deleteCalendarEvent,
@@ -44,6 +45,7 @@ import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { makeUsualFromEntry, stopUsualMeal } from "@/src/services/usualMealApi";
 import type { PantryItem } from "@/src/types/pantry";
+import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 import { hexToRgba, parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
 // One event, as Outlook's event page shows it: the summary card (title,
@@ -57,7 +59,14 @@ export default function CalendarEventScreen() {
   const [loading, setLoading] = useState(true);
   // A meal event: that day's food for its meal from the planner
   // (undefined while loading, null when nothing's planned).
-  const [food, setFood] = useState<MealFood | null | undefined>(undefined);
+  // (undefined: loading; null: couldn't load. What's planned counts at the
+  // pantry piece it would get.)
+  const [loadedFood, setFood] = useState<{ entries: MealPlanEntry[]; conversions: CustomUnitConversion[]; day: string; slot: MealType } | null | undefined>(undefined);
+  const kitchenPlan = usePlanNeeds();
+  const food = useMemo<MealFood | null | undefined>(
+    () => (loadedFood ? (buildMealFood(kitchenPlan.sized(loadedFood.entries), loadedFood.conversions).get(mealKey(loadedFood.day, loadedFood.slot)) ?? null) : loadedFood),
+    [loadedFood, kitchenPlan],
+  );
   // The planner entries behind `food`, and what marking one as eaten works
   // from (what's in the pantry, and the recipes and ingredients it uses).
   const [slotEntries, setSlotEntries] = useState<MealPlanEntry[]>([]);
@@ -82,8 +91,7 @@ export default function CalendarEventScreen() {
       if (cancelled()) return;
       setSlotEntries(entries.filter((e) => e.slot === slot));
       setDayPlan({ day, entries });
-      const loaded = buildMealFood(entries, settings.unitConversions).get(mealKey(day, slot)) ?? null;
-      setFood(loaded);
+      setFood({ entries, conversions: settings.unitConversions, day, slot });
     } catch {
       if (!cancelled()) setFood(null);
     }

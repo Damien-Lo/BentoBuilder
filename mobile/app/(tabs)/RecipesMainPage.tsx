@@ -349,6 +349,8 @@ function PhoneRecipesMainPage() {
       .map(([cat, items]) => ({ key: cat, label: cat, items }));
   }, [filteredRecipes, sortMode, mealPrepRecipeIds]);
 
+  const allOpen = groupedRecipes.length > 0 && groupedRecipes.every((g) => expandedGroups.has(g.key));
+
   const closeSearch = () => {
     Keyboard.dismiss();
     setIsSearchActive(false);
@@ -868,9 +870,19 @@ function PhoneRecipesMainPage() {
                     <View className="h-2 w-2 rounded-full bg-slate-300" />
                     <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
                     <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
-                    <Text className="ml-3 text-xs font-medium text-slate-400">
+                    <Text className="ml-3 flex-1 text-xs font-medium text-slate-400">
                       Swipe right for meals
                     </Text>
+                    {/* Every group open, or every group shut. */}
+                    {groupedRecipes.length > 1 && (
+                      <Pressable
+                        className="flex-row items-center py-1 active:opacity-60"
+                        onPress={() => setExpandedGroups(allOpen ? new Set() : new Set(groupedRecipes.map((g) => g.key)))}
+                      >
+                        <Ionicons name={allOpen ? "chevron-collapse" : "chevron-expand"} size={14} color="#2563EB" />
+                        <Text className="ml-1 text-xs font-semibold text-blue-600">{allOpen ? "Collapse all" : "Expand all"}</Text>
+                      </Pressable>
+                    )}
                   </View>
                 </View>
               }

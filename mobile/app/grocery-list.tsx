@@ -930,29 +930,9 @@ export default function GroceryListScreen() {
           </Pressable>
         </View>
 
-        {/* Quantity + unit — optional, applies to the item about to be added */}
-        <View className="mx-5 mt-3 flex-row items-center gap-3" style={[addWidth, { zIndex: 5 }]}>
-          <TextInput
-            value={quantity}
-            onChangeText={setQuantity}
-            keyboardType="decimal-pad"
-            placeholder="Qty"
-            placeholderTextColor="#94A3B8"
-            className="h-12 w-20 rounded-2xl border border-slate-200 bg-white px-3 text-center text-base text-slate-900"
-          />
-          <View className="flex-1">
-            <CreatableStringDropdown
-              options={unitDropdownOptions}
-              selectedValue={unit}
-              placeholder="Unit (optional)"
-              onSelect={setUnit}
-            />
-          </View>
-        </View>
-
-        {/* Ingredient suggestions */}
+        {/* Ingredient suggestions, right under what's being typed */}
         {grocerySuggestions.length > 0 && (
-          <View className="mx-5 mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={addWidth}>
+          <View className="mx-5 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={addWidth}>
             {grocerySuggestions.map((ing, idx) => {
               const categoryName = getReferenceName(ing.category);
               return (
@@ -997,6 +977,26 @@ export default function GroceryListScreen() {
             )}
           </View>
         )}
+
+        {/* Quantity + unit — optional, applies to the item about to be added */}
+        <View className="mx-5 mt-3 flex-row items-center gap-3" style={[addWidth, { zIndex: 5 }]}>
+          <TextInput
+            value={quantity}
+            onChangeText={setQuantity}
+            keyboardType="decimal-pad"
+            placeholder="Qty"
+            placeholderTextColor="#94A3B8"
+            className="h-12 w-20 rounded-2xl border border-slate-200 bg-white px-3 text-center text-base text-slate-900"
+          />
+          <View className="flex-1">
+            <CreatableStringDropdown
+              options={unitDropdownOptions}
+              selectedValue={unit}
+              placeholder="Unit (optional)"
+              onSelect={setUnit}
+            />
+          </View>
+        </View>
 
         <ScrollView
           className="flex-1"

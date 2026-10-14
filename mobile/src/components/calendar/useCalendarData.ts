@@ -11,11 +11,13 @@ import {
   type EventCalendar,
   type EventOccurrence,
 } from "@/src/services/calendarApi";
-import { getMealPlanRange } from "@/src/services/mealPlanApi";
+import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
+import { getMealPlanRange, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { loadSettings } from "@/src/services/settingsService";
 import { getCalendarTasks, type CalendarTaskFeed } from "@/src/services/todoApi";
 import { getUsualMeals, usualAppliesOn, usualName, type UsualMeal } from "@/src/services/usualMealApi";
 import { todayStr } from "@/src/utils/mealPlan";
+import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 import { addDays } from "./calendarUtils";
 import { buildMealFood, mealKey, type MealFood } from "./mealFood";
@@ -37,7 +39,10 @@ export function useCalendarData(focusDate: string) {
   const [calendars, setCalendars] = useState<EventCalendar[]>([]);
   const [events, setEvents] = useState<EventOccurrence[]>([]);
   const [tasks, setTasks] = useState<CalendarTaskFeed>({ deadlines: [], blocks: [] });
-  const [mealFood, setMealFood] = useState<Map<string, MealFood>>(new Map());
+  const [mealPlan, setMealPlan] = useState<{ entries: MealPlanEntry[]; conversions: CustomUnitConversion[] }>({ entries: [], conversions: [] });
+  // (What's planned counts at the pantry piece it would get.)
+  const kitchenPlan = usePlanNeeds();
+  const mealFood = useMemo<Map<string, MealFood>>(() => buildMealFood(kitchenPlan.sized(mealPlan.entries), mealPlan.conversions), [mealPlan, kitchenPlan]);
   const [usualMeals, setUsualMeals] = useState<UsualMeal[]>([]);
   const [weekStartDay, setWeekStartDay] = useState(1);
   const [loaded, setLoaded] = useState(false);
@@ -60,7 +65,7 @@ export function useCalendarData(focusDate: string) {
         getMealPlanRange(addDays(center, -MEAL_WINDOW_DAYS), addDays(center, MEAL_WINDOW_DAYS)),
         loadSettings(),
       ])
-        .then(([entries, settings]) => setMealFood(buildMealFood(entries, settings.unitConversions)))
+        .then(([entries, settings]) => setMealPlan({ entries, conversions: settings.unitConversions }))
         .catch(() => {});
       getUsualMeals().then(setUsualMeals).catch(() => {});
     } catch {

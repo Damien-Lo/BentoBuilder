@@ -58,7 +58,7 @@ export function SettingsNumericInput({
         placeholderTextColor="#94A3B8"
         keyboardType="numeric"
         returnKeyType="done"
-        className="min-w-[72px] rounded-xl bg-slate-100 px-3 py-2 text-right text-base font-semibold text-slate-900"
+        className="w-24 rounded-xl bg-slate-100 px-3 py-2 text-right text-base font-semibold text-slate-900"
       />
       {unit && (
         <Text className="ml-1.5 text-sm text-slate-400">{unit}</Text>

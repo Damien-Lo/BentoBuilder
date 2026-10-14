@@ -8,7 +8,9 @@ import { KitchenIssues } from "@/src/components/planner/KitchenTasks";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { compactDate } from "@/src/components/web/fields";
-import { Button, Card, CardLink, Empty, PageTitle, WEB, WebPage } from "@/src/components/web/ui";
+import { KitchenPage } from "@/src/components/planner/KitchenPage";
+import { Button, Card, CardLink, Empty, WEB } from "@/src/components/web/ui";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { createGroceryItem, getGroceryItems, type GroceryItem } from "@/src/services/groceryListApi";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { parseLocalDate } from "@/src/utils/mealPlan";
@@ -25,6 +27,7 @@ export function WebPrepShoppingScreen() {
   const router = useRouter();
   const plan = usePlanNeeds();
   const { today } = plan;
+  const wide = useWideWeb();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   useFocusEffect(
     useCallback(() => {
@@ -95,15 +98,15 @@ export function WebPrepShoppingScreen() {
 
 
   return (
-    <WebPage maxWidth={1180}>
-      <PageTitle title="Prep & shopping" subtitle="Worked out from the meals you've planned, the pantry and your booked sessions. Nothing here is saved: change the plan and it changes." right={<Button label="Week plan" onPress={() => router.push("/planner")} />} />
+    <KitchenPage title="Prep & shopping" subtitle="Worked out from the meals you've planned, the pantry and your booked sessions. Nothing here is saved: change the plan and it changes." right={wide ? <Button label="Week plan" onPress={() => router.push("/planner")} /> : undefined}>
       {plan.issues.length > 0 && (
         <Card title="Needs attention" padded={false} style={{ marginBottom: 16 }}>
           <KitchenIssues issues={plan.issues} />
         </Card>
       )}
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 16 }}>
-        <View style={{ flex: 1 }}>
+      {/* (Side by side on a desktop; one under the other on a phone.) */}
+      <View style={wide ? { flexDirection: "row", alignItems: "flex-start", gap: 16 } : { gap: 16 }}>
+        <View style={wide ? { flex: 1 } : undefined}>
           <Card title="To prep" subtitle="Made ahead for the meals you've planned" action={<CardLink label="Add session" onPress={() => setAdding("prep")} />} padded={false}>
   {!plan.ready ? (
     <Empty icon="flame-outline" text="" />
@@ -132,7 +135,7 @@ export function WebPrepShoppingScreen() {
   )}
 </Card>
         </View>
-        <View style={{ flex: 1 }}>
+        <View style={wide ? { flex: 1 } : undefined}>
           <Card
   title="To buy"
   subtitle="Short in the pantry for the plan and its prep"
@@ -206,7 +209,7 @@ export function WebPrepShoppingScreen() {
           }}
         />
       )}
-    </WebPage>
+    </KitchenPage>
   );
 }
 

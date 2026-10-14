@@ -33,7 +33,10 @@ interface Loaded {
 // (see utils/planNeeds.ts). Loaded on coming to the screen and on `reload`;
 // nothing is stored — it's worked out from the plan, the pantry and the
 // Kitchen calendar as they stand.
-export function usePlanNeeds(): { ready: boolean; today: string; sessions: KitchenSession[]; prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[]; tasks: KitchenTask[]; issues: KitchenIssue[]; reload: () => void } {
+//
+// `sized` gives back plan entries with each meal still to come counted at
+// the pantry piece it would get (MealPlanEntry.sizedTo), for a day's totals.
+export function usePlanNeeds(): { ready: boolean; today: string; sessions: KitchenSession[]; prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[]; tasks: KitchenTask[]; issues: KitchenIssue[]; reload: () => void; sized: (entries: MealPlanEntry[]) => MealPlanEntry[] } {
   const today = todayStr();
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
@@ -46,7 +49,7 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
   useFocusEffect(reload);
 
   return useMemo(() => {
-    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], checks: [], tasks: [], issues: [], reload };
+    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], checks: [], tasks: [], issues: [], reload, sized: (entries: MealPlanEntry[]) => entries };
     const sessions = kitchenSessions(loaded.occurrences, today);
     // (Each meal with the piece it would get, so that's the one to thaw.)
     const sized = sizePlanned(loaded.entries, loaded.recipes, loaded.ingredients, loaded.pantry, loaded.conversions, today, loaded.dayGoal).entries;
@@ -59,6 +62,7 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
       sessions,
       today,
     );
-    return { ready: true, today, sessions, ...needs, reload };
+    const sizes = new Map(sized.filter((e) => e.sizedTo).map((e) => [e._id, e.sizedTo]));
+    return { ready: true, today, sessions, ...needs, reload, sized: (entries: MealPlanEntry[]) => entries.map((e) => (sizes.has(e._id) ? { ...e, sizedTo: sizes.get(e._id) } : e)) };
   }, [loaded, today, reload]);
 }

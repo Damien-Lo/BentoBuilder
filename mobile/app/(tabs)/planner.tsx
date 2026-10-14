@@ -433,16 +433,17 @@ function PhonePlannerScreen() {
     [entries, appSettings],
   );
   const plannedNutrition = useMemo(
-    () => computeDayNutrition(entries.filter(e => e.status === "planned"), appSettings?.unitConversions ?? []),
-    [entries, appSettings],
+    // (What's planned counts at the piece in the pantry it would get.)
+    () => computeDayNutrition(kitchenPlan.sized(entries.filter(e => e.status === "planned")), appSettings?.unitConversions ?? []),
+    [entries, appSettings, kitchenPlan],
   );
   const last7ConfirmedNutrition = useMemo(
     () => computeDayNutrition(weekEntries.flat().filter(e => e.status === "confirmed"), appSettings?.unitConversions ?? []),
     [weekEntries, appSettings],
   );
   const last7PlannedNutrition = useMemo(
-    () => computeDayNutrition(weekEntries.flat().filter(e => e.status === "planned"), appSettings?.unitConversions ?? []),
-    [weekEntries, appSettings],
+    () => computeDayNutrition(kitchenPlan.sized(weekEntries.flat().filter(e => e.status === "planned")), appSettings?.unitConversions ?? []),
+    [weekEntries, appSettings, kitchenPlan],
   );
   // Per-day average across the same rolling window, for the third
   // nutrition-card page - divides the 7-day totals down to a daily figure
@@ -1134,11 +1135,14 @@ function PhonePlannerScreen() {
       title = entry.recipe.name;
       subtitle = `Recipe · ${servings} ${servings === 1 ? "serving" : "servings"}`;
       // Same source as the day total — exact figure from what was really
-      // deducted once confirmed, the recipe's snapshot until then.
+      // deducted once confirmed; until then the recipe's snapshot, at the
+      // size of the pantry piece it would get.
       const confirmed = entry.status === "confirmed"
         ? computeConfirmedRecipeNutrition(entry, appSettings?.unitConversions ?? [])
         : null;
-      kcal = confirmed ? Math.round(confirmed.calories) : getRecipeKcal(entry.recipe, servings);
+      const piece = confirmed ? undefined : kitchenPlan.sized([entry])[0].sizedTo;
+      const asWritten = getRecipeKcal(entry.recipe, servings);
+      kcal = confirmed ? Math.round(confirmed.calories) : asWritten != null && piece ? Math.max(0, Math.round(asWritten + piece.shift.calories)) : asWritten;
     } else if (entry.ingredient) {
       const qty = entry.ingredientQuantity ?? 0;
       title = entry.ingredient.name;
@@ -1887,11 +1891,22 @@ function PhonePlannerScreen() {
           <SuggestionsToggle on={showSuggestions} onPress={toggleSuggestions} />
         </View>
 
-        {/* What the kitchen needs doing today and tomorrow (on today's page). */}
-        {selectedDate === today && kitchenPlan.ready && kitchenPlan.tasks.some((t) => t.date <= tomorrow) && (
+        {/* What the kitchen needs doing today and tomorrow (on today's page),
+            and the way to the rest: the Kitchen's overview, and from there
+            prep & shopping. */}
+        {selectedDate === today && kitchenPlan.ready && (
           <View className="mb-5 overflow-hidden rounded-3xl border border-slate-200 bg-white pt-3">
-            <Text className="px-[18px] pb-1 text-xs font-bold uppercase tracking-widest text-slate-400">Kitchen tasks</Text>
-            <KitchenTasks plan={kitchenPlan} days={1} onChanged={loadEntries} />
+            <Pressable onPress={() => router.push("/kitchen")} className="flex-row items-center px-[18px] pb-1 active:opacity-60" accessibilityLabel="Kitchen overview">
+              <Text className="flex-1 text-xs font-bold uppercase tracking-widest text-slate-400">Kitchen tasks</Text>
+              {kitchenPlan.issues.length > 0 && (
+                <Text className="mr-2 text-xs font-semibold text-red-600">
+                  {kitchenPlan.issues.length} to look at
+                </Text>
+              )}
+              <Text className="text-xs font-semibold text-blue-600">See all</Text>
+              <Ionicons name="chevron-forward" size={13} color="#2563EB" />
+            </Pressable>
+            {kitchenPlan.tasks.some((t) => t.date <= tomorrow) ? <KitchenTasks plan={kitchenPlan} days={1} onChanged={loadEntries} /> : <Text className="px-[18px] pb-3 pt-1 text-sm text-slate-500">Nothing to do today or tomorrow.</Text>}
           </View>
         )}
 

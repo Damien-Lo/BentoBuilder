@@ -113,9 +113,9 @@ export default function GoalsScreen() {
       className={`${layout.wide ? "" : "mt-3 "}flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3.5 active:bg-slate-50`}
       onPress={() => router.back()}
     >
-      <View className="flex-row items-center">
+      <View className="mr-2 flex-1 flex-row items-center">
         <Ionicons name="pie-chart-outline" size={18} color="#2563EB" />
-        <Text className="ml-3 text-base text-slate-700">
+        <Text className="ml-3 flex-1 text-base text-slate-700">
           Daily calorie & macro goals live on the Nutrition tab
         </Text>
       </View>

@@ -5,7 +5,8 @@ import { Pressable, Text, View } from "react-native";
 import { KitchenIssues, KitchenTasks } from "@/src/components/planner/KitchenTasks";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { compactDate } from "@/src/components/web/fields";
-import { Card, CardLink, PageTitle, WEB, WebPage } from "@/src/components/web/ui";
+import { KitchenPage } from "@/src/components/planner/KitchenPage";
+import { Card, CardLink, WEB } from "@/src/components/web/ui";
 import { minutesLabel } from "@/src/components/calendar/calendarUtils";
 
 // Kitchen → Overview: what the kitchen needs doing, what's wrong with the
@@ -18,8 +19,7 @@ export default function KitchenOverviewScreen() {
   const sessions = plan.sessions.slice(0, 6);
 
   return (
-    <WebPage maxWidth={1180}>
-      <PageTitle title="Kitchen" subtitle="What needs doing, from your meal plan, pantry and booked sessions" />
+    <KitchenPage title="Kitchen" subtitle="What needs doing, from your meal plan, pantry and booked sessions">
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 16 }}>
         <View style={{ flex: 3, minWidth: 320, gap: 16 }}>
           <Card title="Kitchen tasks" subtitle="The next seven days" padded={false}>
@@ -65,6 +65,6 @@ export default function KitchenOverviewScreen() {
           </Card>
         </View>
       </View>
-    </WebPage>
+    </KitchenPage>
   );
 }
