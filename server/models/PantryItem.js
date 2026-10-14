@@ -84,6 +84,8 @@ const pantryItemSchema = new mongoose.Schema(
       {
         _id: false,
         at: { type: Date, required: true },
+        // The day it was, where whoever did it is (YYYY-MM-DD), when known.
+        day: { type: String, default: "" },
         from: { type: mongoose.Schema.Types.ObjectId, ref: "StorageLocation" },
         to: { type: mongoose.Schema.Types.ObjectId, ref: "StorageLocation" },
         kind: { type: String, default: "" },

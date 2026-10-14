@@ -135,7 +135,7 @@ export async function getMoveSuggestion(pantryItemId: string, change: { to: stri
 // Moves an entry to another location with a new expiry date — or, given an
 // `amount` (in the entry's own unit) smaller than what's there, just that
 // much of it, which becomes an entry of its own. Returns what was moved.
-export async function takeOutPantryItem(pantryItemId: string, input: { storageLocation: string; expiryDate: string | null; amount?: number; unit?: string }): Promise<PantryItem> {
+export async function takeOutPantryItem(pantryItemId: string, input: { storageLocation: string; expiryDate: string | null; amount?: number; unit?: string; today?: string }): Promise<PantryItem> {
   const response = await fetch(`${API_BASE_URL}/api/pantry/${pantryItemId}/take-out`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   const result = await parseResponse<PantryItemResponse>(response);
   return result.data;
@@ -150,12 +150,18 @@ export async function updatePantryItem(
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(updates),
+    // (`today`: the day here, kept with a move or an opening.)
+    body: JSON.stringify({ ...updates, today: localDay() }),
   });
 
   const result = await parseResponse<PantryItemResponse>(response);
 
   return result.data;
+}
+
+function localDay(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export async function usePantryItem(

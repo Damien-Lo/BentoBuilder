@@ -161,7 +161,7 @@ export function WebWeekPlanScreen() {
 
   const ready = loadedWeek === week[0];
   // (What's planned counts at the piece in the pantry it would get.)
-  const sizedEntries = kitchen ? sizePlanned(entries, kitchen.recipes, kitchen.ingredients, kitchen.pantry, conversions, today).entries : entries;
+  const sizedEntries = kitchen ? sizePlanned(entries, kitchen.recipes, kitchen.ingredients, kitchen.pantry, conversions, today, settings.dailyCalorieLimit).entries : entries;
   const weekEntries = ready ? sizedEntries.filter((e) => e.date >= week[0] && e.date <= week[6]) : [];
   const eaten = computeDayNutrition(weekEntries.filter((e) => e.status === "confirmed"), conversions);
   const planned = computeDayNutrition(weekEntries.filter((e) => e.status === "planned"), conversions);

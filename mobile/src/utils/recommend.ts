@@ -91,6 +91,8 @@ export interface Suggestion extends Macros {
   beside?: boolean;
   // How many things it needs that aren't in the pantry (to buy or to prep).
   missing?: number;
+  // What it would use is still frozen, too late to thaw for the day.
+  frozen?: boolean;
 }
 
 // The offers by "date|slot", and a way to score what was planned in a slot
@@ -196,7 +198,7 @@ export function suggestMeals({
   const dayGoal = goals.calories;
   // The meals already planned take their pieces from the pantry first, and
   // count at those; `stock` is what's left for the suggestions.
-  const planned = sizePlanned(logged, recipes, ingredients, pantryItems, conversions, today);
+  const planned = sizePlanned(logged, recipes, ingredients, pantryItems, conversions, today, dayGoal);
   const entries = planned.entries;
   let stock = planned.stock;
 
@@ -237,9 +239,9 @@ export function suggestMeals({
   const size = pieceSizer(recipes, ingredients, conversions);
   // A dish at the size of the pieces it would get from `from`, and which.
   const MACROS = ["calories", "protein", "carbs", "fats"] as const;
-  const sized = (dish: Dish, from: PantryItem[]): { dish: Dish; claims: string[] } => {
+  const sized = (dish: Dish, from: PantryItem[], want?: { calories: number; date: string }): { dish: Dish; claims: string[] } => {
     if (!dish.recipe) return { dish, claims: [] };
-    const { shift, claims, piece } = size(dish.recipe, from);
+    const { shift, claims, piece } = size(dish.recipe, from, 1, want ? { ...want, base: dish.calories } : {});
     if (!claims.length) return { dish, claims };
     const out = { ...dish, piece };
     for (const m of MACROS) out[m] = Math.max(0, out[m] + shift[m]);
@@ -425,7 +427,9 @@ export function suggestMeals({
     if (rated != null && rated >= 7.5) reasons.push([rating * 0.7, `you rated it ${Math.round(rated * 10) / 10}`]);
 
     // What it would take to have it on that day, were it planned.
-    const needs = computePlanNeeds(planned, recipes, ingredients, pantry, conversions, sessions);
+    const needs = computePlanNeeds(planned, recipes, ingredients, pantry, conversions, sessions, today);
+    // (What it would use is in the freezer, with no time left to thaw it.)
+    const frozen = needs.tasks.some((t) => t.kind === "thaw" && t.late);
     const missing = needs.buy.length + needs.prep.length;
     const covered = [...needs.buy, ...needs.prep].every((n) => n.session);
     const onHand = missing === 0 ? 1 : clamp((covered ? 0.7 : 0.3) - (missing - 1) * 0.05, 0.05);
@@ -459,6 +463,7 @@ export function suggestMeals({
     const score = (Object.keys(SUGGESTION_WEIGHTS) as Factor[]).reduce((sum, f) => sum + SUGGESTION_WEIGHTS[f] * factors[f], 0);
     return {
       missing,
+      frozen,
       score,
       factors,
       reasons: reasons
@@ -564,7 +569,8 @@ export function suggestMeals({
         ...mealDishes.filter((d) => (hadFor.get(`${d.key}|${slot}`) ?? 0) > 0),
       ];
       for (const candidate of mains) {
-        const { dish: main, claims } = sized(candidate, stock);
+        // (A main is most of a plate; with sides planned already, the rest of it.)
+        const { dish: main, claims } = sized(candidate, stock, { calories: base ? room : room * 0.75, date });
         // A side or a bowl of rice isn't a meal on its own.
         if (main.calories < room * 0.3 || main.protein < (slot === "breakfast" ? 8 : 12)) continue;
         if (base?.dishes.some((d) => d.key === main.key)) continue;
@@ -585,6 +591,7 @@ export function suggestMeals({
           taken,
           stock,
         );
+        if (rated.frozen) continue;
         const had = base ? base.dishes.reduce((t, d) => t + (hadWith.get(main.key)?.get(d.key) ?? 0), 0) : 0;
         if (had) {
           rated.score += Math.min(1, had / 3) * 0.15;

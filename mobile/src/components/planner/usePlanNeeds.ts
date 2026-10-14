@@ -10,6 +10,7 @@ import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { loadSettings } from "@/src/services/settingsService";
 import type { PantryItem } from "@/src/types/pantry";
 import { todayStr } from "@/src/utils/mealPlan";
+import { sizePlanned } from "@/src/utils/pieceSizing";
 import { computePlanNeeds, kitchenSessions, type BuyNeed, type KitchenIssue, type KitchenSession, type KitchenTask, type PrepNeed, type StockCheck } from "@/src/utils/planNeeds";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
@@ -23,6 +24,7 @@ interface Loaded {
   ingredients: Ingredient[];
   pantry: PantryItem[];
   conversions: CustomUnitConversion[];
+  dayGoal: number | null;
   occurrences: EventOccurrence[];
 }
 
@@ -38,7 +40,7 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
   const reload = useCallback(() => {
     const to = addDays(today, NEEDS_HORIZON_DAYS);
     Promise.all([getMealPlanRange(today, to), getRecipes(), getIngredients(), getPantryItems(), loadSettings(), getEventOccurrences(today, to)])
-      .then(([entries, recipes, ingredients, pantry, settings, occurrences]) => setLoaded({ entries, recipes, ingredients, pantry, conversions: settings.unitConversions, occurrences }))
+      .then(([entries, recipes, ingredients, pantry, settings, occurrences]) => setLoaded({ entries, recipes, ingredients, pantry, conversions: settings.unitConversions, dayGoal: settings.dailyCalorieLimit, occurrences }))
       .catch(() => {});
   }, [today]);
   useFocusEffect(reload);
@@ -46,8 +48,10 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
   return useMemo(() => {
     if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], checks: [], tasks: [], issues: [], reload };
     const sessions = kitchenSessions(loaded.occurrences, today);
+    // (Each meal with the piece it would get, so that's the one to thaw.)
+    const sized = sizePlanned(loaded.entries, loaded.recipes, loaded.ingredients, loaded.pantry, loaded.conversions, today, loaded.dayGoal).entries;
     const needs = computePlanNeeds(
-      loaded.entries.filter((e) => e.status === "planned" && e.date >= today),
+      sized.filter((e) => e.status === "planned" && e.date >= today),
       loaded.recipes,
       loaded.ingredients,
       loaded.pantry,

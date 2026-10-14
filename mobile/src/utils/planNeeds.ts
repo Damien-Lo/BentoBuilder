@@ -47,6 +47,11 @@ export interface KitchenSession {
 export interface NeedSource {
   date: string;
   label: string;
+  // The planned meal itself.
+  entryId?: string;
+  // The pantry entries the meal would take first, where it has a choice
+  // (MealPlanEntry.sizedTo: the piece it's counted at).
+  prefer?: string[];
 }
 
 export interface PrepNeed {
@@ -116,6 +121,9 @@ export interface KitchenTask {
   ingredientId?: string;
   recipeId?: string;
   sessionId?: string;
+  // thaw: the other frozen entries of the same thing, should a different
+  // one have come out.
+  others?: { pantryItemId: string; label: string }[];
   // thaw / use: how much, and the day it's wanted or dated.
   amount?: number;
   unit?: string;
@@ -147,14 +155,18 @@ const shiftDay = (date: string, days: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-// Whether an ingredient is thawed before it's cooked: what's been answered
-// for it, else a guess — raw meat and fish are, the rest (dumplings,
-// noodles, bread, vegetables) go in frozen.
-export function thawsFirst(ingredient: Ingredient): { thaws: boolean; known: boolean } {
-  if (ingredient.cooksFromFrozen != null) return { thaws: !ingredient.cooksFromFrozen, known: true };
-  const category = typeof ingredient.category === "object" && ingredient.category ? (ingredient.category.name ?? "") : "";
-  return { thaws: /protein|meat|fish|seafood|poultry/i.test(category), known: false };
+// How many days before it's cooked an ingredient comes out of the freezer.
+// Never asked: the evening before, until what's been done says otherwise —
+// the middle of the last few times it was eaten out of the freezer (how
+// long it had thawed, or 0 if it hadn't; Ingredient.thawLeads, noted as
+// meals are eaten). 0 is "cooked from frozen", which can also be said
+// outright on the thaw task.
+export function thawLead(ingredient: Ingredient): number {
+  if (ingredient.cooksFromFrozen != null) return ingredient.cooksFromFrozen ? 0 : Math.max(1, middle(ingredient.thawLeads ?? []) ?? 1);
+  const leads = ingredient.thawLeads ?? [];
+  return leads.length >= 2 ? middle(leads)! : 1;
 }
+const middle = (days: number[]) => (days.length ? [...days].sort((a, b) => a - b)[Math.floor(days.length / 2)] : null);
 
 const idOf = (value: unknown): string =>
   typeof value === "string" ? value : typeof value === "object" && value !== null && "_id" in value ? String((value as { _id?: unknown })._id ?? "") : "";
@@ -194,6 +206,13 @@ export function computePlanNeeds(
   const inFreezer = (item: PantryItem) => /freez/i.test(typeof item.storageLocation === "object" && item.storageLocation ? (item.storageLocation.name ?? "") : "");
   const left = new Map<string, Lot[]>();
   const checks = new Map<string, StockCheck>();
+  // A pantry entry as told from the others of its kind: by the piece it
+  // was made from, or its own weight when it is one.
+  const entryName = (item: PantryItem, own: Ingredient) => {
+    const from = item.madeFrom?.[0];
+    if (from) return `the ${own.name} from ${Math.round(from.amount)} ${from.unit}`;
+    return own.pieceLabel ? `the ${Math.round(item.quantityAvailable ?? 0)} ${item.quantityUnit} ${own.name}` : own.name;
+  };
   const idOfItem = (item: PantryItem) => (typeof item.ingredient === "string" ? item.ingredient : (item.ingredient?._id ?? ""));
   // An ingredient's own pantry entries, and those of its branded variants.
   const entriesOf = (ing: Ingredient) => {
@@ -217,8 +236,10 @@ export function computePlanNeeds(
   const claim = (from: Lot[], wanted: number, due: string, ing: Ingredient, source: NeedSource, unit: string) => {
     let got = 0;
     const good = (lot: Lot) => !lot.expires || lot.expires >= due;
+    const first = (lot: Lot) => (source.prefer?.includes(lot.item._id) ? 0 : 1);
+    const order = source.prefer?.length ? [...from].sort((a, b) => first(a) - first(b)) : from;
     for (const pass of [true, false]) {
-      for (const lot of from) {
+      for (const lot of order) {
         if (got >= wanted - 1e-9) return got;
         if (good(lot) !== pass || lot.amount <= 0) continue;
         const take = Math.min(lot.amount, wanted - got);
@@ -316,7 +337,7 @@ export function computePlanNeeds(
 
   const inOrder = [...entries].sort((a, b) => a.date.localeCompare(b.date) || (SLOT_ORDER[a.slot] ?? 9) - (SLOT_ORDER[b.slot] ?? 9));
   for (const entry of inOrder) {
-    const source = { date: entry.date, label: entryLabel(entry) };
+    const source: NeedSource = { date: entry.date, label: entryLabel(entry), entryId: entry._id || undefined, prefer: entry.sizedTo?.claims };
     for (const row of gatherRows(entry, recipeMap)) require(row, source, entry.date, new Set());
   }
 
@@ -354,21 +375,25 @@ export function computePlanNeeds(
     }
   }
 
-  // Out of the freezer the evening before — unless it's cooked from frozen.
+  // Out of the freezer as long before as it usually is (the evening before,
+  // until that's known) — unless it's cooked from frozen.
   for (const out of thawing.values()) {
     const own = ingredientMap.get(idOfItem(out.item));
     if (!own) continue;
-    const { thaws, known } = thawsFirst(own);
-    if (!thaws) continue;
-    const late = out.by <= today;
+    const lead = thawLead(own);
+    if (!lead) continue;
+    const late = shiftDay(out.by, -lead) < today;
     tasks.push({
       id: `thaw:${out.item._id}`,
       kind: "thaw",
-      date: late ? today : shiftDay(out.by, -1),
-      title: `Take ${own.name} out of the freezer`,
+      date: late ? today : shiftDay(out.by, -lead),
+      title: `Take ${entryName(out.item, own)} out of the freezer`,
+      others: pantryItems
+        .filter((p) => p._id !== out.item._id && idOfItem(p) === own._id && (p.quantityAvailable ?? 0) > 0 && inFreezer(p) && !thawing.has(p._id))
+        .map((p) => ({ pantryItemId: p._id, label: p.madeFrom?.[0] ? `From ${Math.round(p.madeFrom[0].amount)} ${p.madeFrom[0].unit}` : `${Math.round(p.quantityAvailable ?? 0)} ${p.quantityUnit}` })),
       detail: `${needAmountLabel(out.amount, out.unit)} for ${out.for[0]?.label ?? "a meal"}`,
       late,
-      asks: !known,
+      asks: own.cooksFromFrozen == null,
       pantryItemId: out.item._id,
       ingredientId: own._id,
       amount: out.amount,
@@ -379,7 +404,7 @@ export function computePlanNeeds(
   }
   const lateThaws = tasks.filter((t) => t.kind === "thaw" && t.late);
   if (lateThaws.length) {
-    issues.push({ id: "thaw-late", kind: "thaw-late", about: "pantry", title: "Still frozen, and needed today", detail: lateThaws.map((t) => t.title.replace(/^Take | out of the freezer$/g, "")).join(", "), date: today, count: lateThaws.length });
+    issues.push({ id: "thaw-late", kind: "thaw-late", about: "pantry", title: "Still in the freezer, and should be out", detail: lateThaws.map((t) => t.title.replace(/^Take | out of the freezer$/g, "")).join(", "), date: today, count: lateThaws.length });
   }
 
   // What a recipe says to start early.

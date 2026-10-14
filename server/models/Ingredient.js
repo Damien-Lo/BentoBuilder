@@ -150,6 +150,15 @@ const ingredientSchema = new mongoose.Schema(
       default: null,
     },
 
+    // How long before it was eaten it came out of the freezer, in days, the
+    // last few times (0: it went from the freezer to the plate) — never
+    // asked, only noted as meals are eaten (see services/shelfLife.js).
+    // The kitchen's thaw task goes by the middle of these.
+    thawLeads: {
+      type: [Number],
+      default: [],
+    },
+
     // Where a new pantry entry for this ingredient usually goes — prefills
     // (doesn't force) the storage location when logging a purchase.
     defaultStorageLocation: {

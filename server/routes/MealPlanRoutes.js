@@ -5,6 +5,7 @@ import UsualMeal from "../models/UsualMeal.js";
 import { syncUsualMeals, todayFrom } from "../services/usualMeals.js";
 import { removeMealPlanEntryContributions } from "../services/groceryContributions.js";
 import SuggestionEvent from "../models/SuggestionEvent.js";
+import { noteThawLeads } from "../services/shelfLife.js";
 import {
   CORE_NUTRITION_FIELD_NAMES,
   EXTENDED_NUTRITION_FIELD_NAMES,
@@ -376,6 +377,8 @@ router.post("/:id/confirm", async (req, res) => {
     entry.confirmedNutrition = confirmedNutrition;
     entry.status = "confirmed";
     await entry.save();
+    // (What was eaten straight from the freezer, or how long it had thawed.)
+    await noteThawLeads(ledger.map((l) => l.pantryItem), entry.date).catch(() => {});
 
     const populated = await populateEntry(MealPlanEntry.findById(entry._id));
     return res.status(200).json({ success: true, data: populated });

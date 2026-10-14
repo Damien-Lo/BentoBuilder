@@ -104,6 +104,11 @@ const mealPlanEntrySchema = new mongoose.Schema(
     // the suggestion was a good one.
     suggested: { type: Boolean, default: false },
 
+    // While planned: the pantry entries taken out for this meal (the bag
+    // moved to the fridge for it) — the piece it will be, where there's a
+    // choice. Without any, the piece is worked out (mobile's pieceSizing.ts).
+    pieces: [{ type: mongoose.Schema.Types.ObjectId, ref: "PantryItem" }],
+
     notes:      { type: String, trim: true, default: "" },
     isArchived: { type: Boolean, default: false },
   },

@@ -4,7 +4,7 @@ import type { Recipe } from "@/src/services/recipeApi";
 import type { PantryItem } from "@/src/types/pantry";
 
 import { pieceWeightInRange } from "./ingredientStock";
-import { scaleIngredientNutrition } from "./mealPlan";
+import { scaleIngredientNutrition, scaleRecipeNutrition } from "./mealPlan";
 import { recipeLineToRow } from "./pantryDeduction";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
 
@@ -27,6 +27,30 @@ export interface PieceSize {
   // The piece, in a few words ("260 g chilean sea bass").
   piece?: string;
 }
+
+// Which piece a meal gets, of those that would do: the one that brings the
+// dish nearest the calories wanted of it, and the one that goes off sooner —
+// each to its weight here (hand-set, to be learned like the suggestions'
+// own). Over counts for more than under; a date counts for more the nearer
+// it is, inside `soonDays`. Nothing is forced: something about to go that
+// doesn't fit the day is left, to be used otherwise or thrown out.
+export const PIECE_CHOICE = { fit: 1, over: 1.5, expiry: 0.5, soonDays: 14 };
+// How a day's calories are shared between its meals, and how much of a
+// meal's share its main dish is taken to be.
+const SLOT_SHARE: Record<string, number> = { breakfast: 0.25, lunch: 0.35, dinner: 0.35, snack: 0.05 };
+const MAIN_SHARE = 0.75;
+
+// What's wanted of a dish, for choosing its piece: the calories to come
+// near (`base` being the dish as written), and the day it's for.
+export interface PieceWant {
+  calories?: number;
+  base?: number;
+  date?: string;
+  // The entries already taken out for it: those, whatever else there is.
+  pinned?: string[];
+}
+
+const daysUntil = (from: string, to: string) => Math.round((Date.parse(`${to.slice(0, 10)}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
 
 const idOf = (value: unknown): string => (typeof value === "string" ? value : typeof value === "object" && value !== null && "_id" in value ? String((value as { _id?: unknown })._id ?? "") : "");
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -54,21 +78,41 @@ export function pieceSizer(recipes: Recipe[], ingredients: Ingredient[], convers
     });
 
   // `servings` of a recipe at the size of the pieces it would get from `from`.
-  return (recipe: Recipe, from: PantryItem[], servings = 1): PieceSize => {
+  return (recipe: Recipe, from: PantryItem[], servings = 1, want: PieceWant = {}): PieceSize => {
     const used: PantryItem[] = [];
     const shift: MacroShift = { calories: 0, protein: 0, carbs: 0, fats: 0 };
+    // Of the entries that would do (soonest to expire first), the one to
+    // take — `adds` being what it would add to the dish's calories.
+    const choose = (candidates: PantryItem[], adds: (item: PantryItem) => number): PantryItem | undefined => {
+      const taken = candidates.find((item) => want.pinned?.includes(item._id));
+      if (taken) return taken;
+      if (candidates.length < 2 || !want.calories || want.base == null) return candidates[0];
+      const cost = (item: PantryItem) => {
+        const left = item.expiryDate && want.date ? daysUntil(want.date, item.expiryDate) : 365;
+        const off = (want.base! + shift.calories + adds(item) - want.calories!) / want.calories!;
+        return PIECE_CHOICE.fit * (off > 0 ? off * PIECE_CHOICE.over : -off) + PIECE_CHOICE.expiry * Math.max(0, Math.min(1, left / PIECE_CHOICE.soonDays));
+      };
+      return candidates.map((item) => ({ item, cost: cost(item) })).sort((a, b) => a.cost - b.cost)[0].item;
+    };
     let piece: string | undefined;
     const ratio = servings / (recipe.servings || 1);
     for (const line of pieceLines(recipe, ratio, from)) {
       const family = new Set([line.ingredient._id, ...ingredients.filter((i) => idOf(i.genericParent) === line.ingredient._id).map((i) => i._id)]);
       for (let n = 0; n < line.count; n++) {
-        const item = from.find((p) => !used.includes(p) && family.has(idOf(p.ingredient)) && pieceWeightInRange(p.quantityAvailable ?? 0, p.quantityUnit, line.min, line.max, line.unit, conversionsOf(line.ingredient)));
+        // The recipe as written assumes a piece in the middle of its range.
+        const assumed = scaleIngredientNutrition(line.ingredient, (line.min + line.max) / 2, line.unit, conversionsOf(line.ingredient));
+        const realOf = (p: PantryItem) => {
+          const its = ingredientById.get(idOf(p.ingredient)) ?? line.ingredient;
+          return scaleIngredientNutrition(its, p.quantityAvailable ?? 0, p.quantityUnit, conversionsOf(its));
+        };
+        const item = choose(
+          from.filter((p) => !used.includes(p) && family.has(idOf(p.ingredient)) && pieceWeightInRange(p.quantityAvailable ?? 0, p.quantityUnit, line.min, line.max, line.unit, conversionsOf(line.ingredient))),
+          (p) => ((realOf(p).calories ?? 0) - (assumed.calories ?? 0)) * line.factor,
+        );
         if (!item) continue;
         used.push(item);
-        // The recipe as written assumes a piece in the middle of its range.
         const own = ingredientById.get(idOf(item.ingredient)) ?? line.ingredient;
-        const real = scaleIngredientNutrition(own, item.quantityAvailable ?? 0, item.quantityUnit, conversionsOf(own));
-        const assumed = scaleIngredientNutrition(line.ingredient, (line.min + line.max) / 2, line.unit, conversionsOf(line.ingredient));
+        const real = realOf(item);
         for (const m of MACROS) shift[m] += ((real[m] ?? 0) - (assumed[m] ?? 0)) * line.factor;
         piece = `${round(item.quantityAvailable ?? 0)} ${item.quantityUnit} ${own.name.toLowerCase()}`;
       }
@@ -81,7 +125,10 @@ export function pieceSizer(recipes: Recipe[], ingredients: Ingredient[], convers
       const { quantity, unit } = recipeLineToRow(line, ratio);
       let left = quantity;
       while (left > 1e-6) {
-        const item = from.find((p) => !used.includes(p) && p.nutrition && idOf(p.ingredient) === ingredient._id);
+        const item = choose(
+          from.filter((p) => !used.includes(p) && p.nutrition && idOf(p.ingredient) === ingredient._id),
+          (p) => (((p.nutrition?.calories ?? 0) - (ingredient.nutrition?.calories ?? 0)) * left * (line.nutritionFactor ?? 1)) / (ingredient.defaultPortionAmount || 1),
+        );
         if (!item) break;
         used.push(item);
         const has = convertUnits(item.quantityAvailable ?? 0, item.quantityUnit, unit, conversionsOf(ingredient));
@@ -101,15 +148,22 @@ export function pieceSizer(recipes: Recipe[], ingredients: Ingredient[], convers
 
 // The plan with each meal still to be eaten counted at the piece it would
 // get, soonest first (see MealPlanEntry.sizedTo) — and what's left in stock
-// once those have taken theirs. The piece is the one soonest to expire: a
-// planned meal doesn't say which it'll be until it's eaten.
-export function sizePlanned(entries: MealPlanEntry[], recipes: Recipe[], ingredients: Ingredient[], pantryItems: PantryItem[], conversions: CustomUnitConversion[], today: string): { entries: MealPlanEntry[]; stock: PantryItem[] } {
+// once those have taken theirs. A planned meal doesn't say which piece
+// it'll be until it's eaten: it's what's been taken out of the freezer for
+// it (MealPlanEntry.pieces), else the one chosen as above, for what its
+// meal has room for out of `dayGoal`.
+export function sizePlanned(entries: MealPlanEntry[], recipes: Recipe[], ingredients: Ingredient[], pantryItems: PantryItem[], conversions: CustomUnitConversion[], today: string, dayGoal?: number | null): { entries: MealPlanEntry[]; stock: PantryItem[] } {
   const size = pieceSizer(recipes, ingredients, conversions);
   // What's in stock and not yet spoken for, soonest to expire first.
   let stock = pantryItems.filter((p) => (p.quantityAvailable ?? 0) > 0).sort((a, b) => (a.expiryDate ?? "9").localeCompare(b.expiryDate ?? "9"));
   const sizes = new Map<MealPlanEntry, PieceSize>();
-  for (const entry of entries.filter((e) => e.status !== "confirmed" && e.date >= today && e.recipe).sort((a, b) => a.date.localeCompare(b.date))) {
-    const sized = size(entry.recipe!, stock, entry.recipeServings ?? 1);
+  // (What's been taken out for a meal is that meal's, however far off it is.)
+  const held = (e: MealPlanEntry) => (e.pieces?.length ? 0 : 1);
+  for (const entry of entries.filter((e) => e.status !== "confirmed" && e.date >= today && e.recipe).sort((a, b) => held(a) - held(b) || a.date.localeCompare(b.date))) {
+    const base = scaleRecipeNutrition(entry.recipe!, entry.recipeServings ?? 1).calories ?? 0;
+    const beside = entries.filter((e) => e !== entry && e.date === entry.date && e.slot === entry.slot && e.recipe).reduce((sum, e) => sum + (scaleRecipeNutrition(e.recipe!, e.recipeServings ?? 1).calories ?? 0), 0);
+    const room = dayGoal ? dayGoal * (SLOT_SHARE[entry.slot] ?? 0.3) : 0;
+    const sized = size(entry.recipe!, stock, entry.recipeServings ?? 1, { calories: room ? Math.max(150, beside ? room - beside : room * MAIN_SHARE) : undefined, base, date: entry.date, pinned: entry.pieces });
     if (!sized.claims.length) continue;
     sizes.set(entry, sized);
     stock = stock.filter((p) => !sized.claims.includes(p._id));

@@ -61,8 +61,15 @@ async function spansFor(ingredientIds, kind, locationKinds) {
     .lean();
   const spans = [];
   for (const entry of entries) {
-    for (const move of [...(entry.moves ?? [])].reverse()) {
-      if (move.kind === kind && move.expiryAfter && move.at) spans.push(Math.round((new Date(move.expiryAfter) - new Date(move.at)) / DAY));
+    const moves = entry.moves ?? [];
+    for (const move of [...moves].reverse()) {
+      // (Moved again the same day: it was put back, and says nothing.)
+      const next = moves[moves.indexOf(move) + 1];
+      if (next && next.kind !== "opened" && next.day === move.day) continue;
+      // (Counted from the day it was where it was done — the server's clock
+      // is hours off that, which in the evening is a day; a move from
+      // before that day was kept isn't learned from.)
+      if (move.kind === kind && move.expiryAfter && move.day) spans.push(Math.round((new Date(move.expiryAfter) - new Date(`${move.day}T00:00:00Z`)) / DAY));
     }
     if (kind !== "thawed" && !(entry.moves ?? []).length && entry.purchaseDate && entry.expiryDate && locationKinds.get(String(entry.storageLocation)) === kind) {
       spans.push(Math.round((new Date(entry.expiryDate) - new Date(entry.purchaseDate)) / DAY));
@@ -86,4 +93,24 @@ export async function suggestShelfDays(ingredientId, kind, place = "shelf") {
     }
   }
   return spans.length ? { days: middle(spans), learned: true } : { days: defaultDays(kind, ingredient, place), learned: false };
+}
+
+// How far ahead of the meal things come out of the freezer, learned as
+// meals are eaten: for each pantry entry a meal on `date` (YYYY-MM-DD) took
+// from — the days since it was thawed, or 0 if it was still in the freezer.
+// Kept on the ingredient (Ingredient.thawLeads), the last few.
+export async function noteThawLeads(pantryItemIds, date) {
+  const items = await PantryItem.find({ _id: { $in: pantryItemIds } }).populate("storageLocation");
+  for (const item of items) {
+    let lead = null;
+    if (placeKind(item.storageLocation?.name) === "frozen") lead = 0;
+    else {
+      const thawed = [...(item.moves ?? [])].reverse().find((m) => m.kind === "thawed");
+      const day = thawed && (thawed.day || thawed.at?.toISOString().slice(0, 10));
+      if (day) lead = Math.round((new Date(`${date}T12:00:00Z`) - new Date(`${day}T12:00:00Z`)) / DAY);
+    }
+    // (A week is longer than anything thaws: that's something else.)
+    if (lead == null || lead < 0 || lead > 7) continue;
+    await Ingredient.updateOne({ _id: item.ingredient }, { $push: { thawLeads: { $each: [lead], $slice: -RECENT } } });
+  }
 }

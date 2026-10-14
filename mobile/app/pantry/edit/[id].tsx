@@ -430,7 +430,8 @@ export default function EditPantryItemScreen() {
 
           <FormCard icon="calendar-outline" title="Where & when" description="Where it's stored, and when it expires." zIndex={20}>
             <FieldLabel text="Storage location" />
-            <View className="relative">
+            {/* (Over the fields below it while its list is open.) */}
+            <View className="relative" style={{ zIndex: showLocationPicker ? 30 : 0 }}>
               <Pressable
                 className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
                 style={{ height: 56 }}

@@ -834,7 +834,8 @@ export default function AddPantryItemByIngredientScreen() {
               </Text>
             ) : null}
 
-            <View className="relative">
+            {/* (Over the fields below it while its list is open.) */}
+            <View className="relative" style={{ zIndex: showLocationOptions ? 30 : 0 }}>
               <Pressable
                 className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
                 style={{ height: 56 }}

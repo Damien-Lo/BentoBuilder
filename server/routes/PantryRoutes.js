@@ -210,7 +210,7 @@ router.get("/:id/move-suggestion", async (req, res) => {
 });
 
 /**
- * POST /api/pantry/:id/take-out  { storageLocation, expiryDate, amount?, unit? }
+ * POST /api/pantry/:id/take-out  { storageLocation, expiryDate, amount?, unit?, today? }
  * Moves an entry to another location with a new expiry date — all of it,
  * or, when `amount` (in the entry's own unit) is less than what's there,
  * just that much: the rest stays where it was and what's taken becomes an
@@ -223,7 +223,8 @@ router.post("/:id/take-out", async (req, res) => {
     if (!item || !to) return res.status(404).json({ success: false, message: "Pantry item or location not found" });
     const amount = Number(req.body.amount);
     const part = Number.isFinite(amount) && amount > 0 && req.body.unit === item.quantityUnit && amount < item.quantityAvailable - 1e-6;
-    const change = { at: new Date(), from: item.storageLocation?._id, to: to._id, kind: moveKind(item.storageLocation?.name, to.name), expiryBefore: item.expiryDate, expiryAfter: req.body.expiryDate || null };
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(req.body.today ?? "") ? req.body.today : "";
+    const change = { at: new Date(), day, from: item.storageLocation?._id, to: to._id, kind: moveKind(item.storageLocation?.name, to.name), expiryBefore: item.expiryDate, expiryAfter: req.body.expiryDate || null };
     let moved;
     if (part) {
       const { _id, createdAt, updatedAt, __v, ...copy } = item.toObject();
@@ -249,7 +250,8 @@ router.patch("/:id", async (req, res) => {
     // A change of state — moved to another storage location, or opened —
     // is kept on the entry, with the expiry date it had and the one it's
     // given now.
-    const { moves: _ignored, ...changes } = req.body;
+    const { moves: _ignored, today, ...changes } = req.body;
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(today ?? "") ? today : "";
     const update = { ...changes };
     if (changes.storageLocation || changes.openedDate) {
       const current = await PantryItem.findById(req.params.id).populate("storageLocation");
@@ -257,11 +259,11 @@ router.patch("/:id", async (req, res) => {
       const kept = [];
       if (current && changes.storageLocation && String(current.storageLocation?._id) !== String(changes.storageLocation)) {
         const to = await StorageLocation.findById(changes.storageLocation);
-        if (to) kept.push({ at: new Date(), from: current.storageLocation?._id, to: to._id, kind: moveKind(current.storageLocation?.name, to.name), expiryBefore: current.expiryDate, expiryAfter });
+        if (to) kept.push({ at: new Date(), day, from: current.storageLocation?._id, to: to._id, kind: moveKind(current.storageLocation?.name, to.name), expiryBefore: current.expiryDate, expiryAfter });
       }
       if (current && changes.openedDate && !current.openedDate) {
         const where = changes.storageLocation || current.storageLocation?._id;
-        kept.push({ at: new Date(), from: where, to: where, kind: "opened", expiryBefore: current.expiryDate, expiryAfter });
+        kept.push({ at: new Date(), day, from: where, to: where, kind: "opened", expiryBefore: current.expiryDate, expiryAfter });
       }
       if (kept.length) update.$push = { moves: { $each: kept } };
     }

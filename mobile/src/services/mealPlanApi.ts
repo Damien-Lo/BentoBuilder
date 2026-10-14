@@ -90,6 +90,8 @@ export interface MealPlanEntry {
   createdAt?: string;
   // An accepted suggestion, as against something picked by hand.
   suggested?: boolean;
+  // While planned: the pantry entries taken out for this meal (ids).
+  pieces?: string[];
   // Never stored: while planned, the pantry piece (or the bag made from one)
   // this would get, and what that adds to the recipe's figures as written
   // (see utils/pieceSizing.ts).
@@ -181,6 +183,12 @@ export async function updateMealPlanEntryStatus(id: string, status: MealPlanEntr
   });
   const result = await parseResponse<{ success: boolean; data: MealPlanEntry }>(res);
   return result.data;
+}
+
+// The pantry entries taken out for a planned meal: the piece it'll be.
+export async function setMealPlanEntryPieces(id: string, pieces: string[]): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pieces }) });
+  await parseResponse<{ success: boolean }>(res);
 }
 
 // Editing how much of an already-planned/confirmed ingredient, recipe, or

@@ -54,8 +54,11 @@ export interface Ingredient {
   // When true, this ingredient never shows as low/out of stock (e.g. tap
   // water) — stock tracking is skipped for it entirely.
   isAlwaysAvailable?: boolean;
-  // Cooked straight from the freezer, not thawed first. Null = not answered yet.
+  // Cooked straight from the freezer, not thawed first. Null = not said.
   cooksFromFrozen?: boolean | null;
+  // How many days before it was eaten it came out of the freezer, the last
+  // few times (see planNeeds.ts thawLead).
+  thawLeads?: number[];
 
   // Where a new pantry entry usually goes, and how long one usually lasts —
   // both prefill (don't force) the log-to-pantry form. Duration fields are
