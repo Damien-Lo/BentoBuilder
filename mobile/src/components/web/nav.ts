@@ -151,8 +151,13 @@ export function resolveWebRoute(pathname: string): { section: WebSection | null;
 // a phone-shaped page, shown as a column in the middle.
 const DESKTOP_PAGES = ["/", "/calendar", "/calendar/meal-times", "/calendar/sessions", "/kitchen", "/kitchen/needs", "/grocery-list", "/planner", "/RecipesMainPage", "/PantryMainPage", "/health", "/lists", "/lists/tasks", "/lists/checklists", "/lists/shopping", "/receipts"];
 
+// Pages for one thing (its id in the path) that have a desktop layout.
+const DESKTOP_PAGES_UNDER = ["/pantry/add_by_ingredient", "/pantry/edit/"];
+
 export function isDesktopPage(pathname: string, params: Record<string, unknown>): boolean {
   // The planner opened to add food is the phone's own add sheet.
   if (pathname === "/planner" && params.add) return false;
-  return DESKTOP_PAGES.includes(pathname);
+  // (A recipe's own page, not adding or editing one.)
+  if (/^\/recipes\/[^/]+$/.test(pathname) && pathname !== "/recipes/add") return true;
+  return DESKTOP_PAGES.includes(pathname) || DESKTOP_PAGES_UNDER.some((path) => pathname.startsWith(path));
 }

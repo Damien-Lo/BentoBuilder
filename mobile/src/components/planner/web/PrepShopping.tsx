@@ -9,10 +9,10 @@ import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { compactDate } from "@/src/components/web/fields";
 import { Button, Card, CardLink, Empty, PageTitle, WEB, WebPage } from "@/src/components/web/ui";
-import { createGroceryItem, getGroceryItems } from "@/src/services/groceryListApi";
+import { createGroceryItem, getGroceryItems, type GroceryItem } from "@/src/services/groceryListApi";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { parseLocalDate } from "@/src/utils/mealPlan";
-import { needAmountLabel, type KitchenSession, type NeedSource, type PrepNeed } from "@/src/utils/planNeeds";
+import { needAmountLabel, type BuyNeed, type KitchenSession, type NeedSource, type PrepNeed } from "@/src/utils/planNeeds";
 
 // What the plan needs made ahead and bought, in full: every item, the prep
 // session or shopping trip it falls to, what it's for, and what's wrong.
@@ -33,39 +33,43 @@ export function WebPrepShoppingScreen() {
   );
   const [adding, setAdding] = useState<"prep" | "shop" | null>(null);
 
-  // The To buy list, put on the grocery list: what isn't on it is added,
-  // and what's on it for less is topped up to what the plan needs. Pressed
-  // again it only adds what's new, so it can be run whenever the plan
-  // changes. (Things already bought and ticked off are left to the pantry.)
-  const [sendingBuy, setSendingBuy] = useState(false);
-  async function buyListToGrocery() {
-    if (sendingBuy || !plan.buy.length) return;
+  // The To buy list against the grocery list: what isn't on it can be added
+  // (one thing, or all of it), and what's on it for less topped up to what
+  // the plan needs. "Add all" only adds what's new, so it can be run
+  // whenever the plan changes. (Things already bought and ticked off are
+  // left to the pantry.)
+  const [listed, setListed] = useState<GroceryItem[]>([]);
+  const loadListed = useCallback(() => {
+    getGroceryItems()
+      .then((items) => setListed(items.filter((item) => item.status === "toBuy")))
+      .catch(() => {});
+  }, []);
+  useFocusEffect(loadListed);
+  const idOf = (ingredient: unknown) => (typeof ingredient === "string" ? ingredient : ((ingredient as { _id?: string } | null)?._id ?? ""));
+  // How much of a need is on the list already, and how much is still to add.
+  const onList = (need: BuyNeed) => {
+    const there = listed.find((item) => idOf(item.ingredient) === need.ingredientId && (item.unit || "") === (need.unit || ""));
+    return { there: there?.quantity ?? null, short: Math.round((need.amount - (there?.quantity ?? 0)) * 100) / 100 };
+  };
+  const [sending, setSending] = useState<string | null>(null);
+  const needKey = (need: BuyNeed) => `${need.ingredientId}-${need.unit}-${need.pieces}-${need.session}`;
+  async function addToGrocery(needs: BuyNeed[], key: string) {
+    if (sending) return;
     try {
-      setSendingBuy(true);
-      const idOf = (ingredient: unknown) => (typeof ingredient === "string" ? ingredient : ((ingredient as { _id?: string } | null)?._id ?? ""));
-      const listed = (await getGroceryItems()).filter((item) => item.status === "toBuy");
-      let added = 0;
-      let topped = 0;
-      for (const need of plan.buy) {
-        const there = listed.find((item) => idOf(item.ingredient) === need.ingredientId && (item.unit || "") === (need.unit || ""));
-        const short = Math.round((need.amount - (there?.quantity ?? 0)) * 100) / 100;
-        if (there && short <= 0) continue;
+      setSending(key);
+      for (const need of needs) {
+        const { there, short } = onList(need);
         // (Adding to something already listed adds to its amount.)
-        await createGroceryItem({ ingredient: need.ingredientId, name: need.name, quantity: there ? short : need.amount, unit: need.unit });
-        if (there) topped += 1;
-        else added += 1;
+        if (short > 0) await createGroceryItem({ ingredient: need.ingredientId, name: need.name, quantity: there != null ? short : need.amount, unit: need.unit });
       }
-      const same = plan.buy.length - added - topped;
-      Alert.alert(
-        added + topped ? "Grocery list updated" : "Already on your grocery list",
-        [added ? `${added} added` : "", topped ? `${topped} topped up` : "", same ? `${same} already there` : ""].filter(Boolean).join(" · "),
-      );
     } catch (error) {
       Alert.alert("Couldn't update the grocery list", error instanceof Error ? error.message : "Something went wrong.");
     } finally {
-      setSendingBuy(false);
+      setSending(null);
+      loadListed();
     }
   }
+  const toAdd = plan.buy.filter((need) => onList(need).short > 0);
 
   // How long a session's prep would take against how long it is: each
   // recipe's prep and cook time, once a batch (rounded up). A guide only —
@@ -134,7 +138,7 @@ export function WebPrepShoppingScreen() {
   subtitle="Short in the pantry for the plan and its prep"
   action={
     <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-      {plan.buy.length > 0 && <CardLink label={sendingBuy ? "Adding…" : "Add to grocery list"} onPress={() => void buyListToGrocery()} />}
+      {plan.buy.length > 0 && (toAdd.length > 0 ? <CardLink label={sending === "all" ? "Adding…" : "Add all to grocery list"} onPress={() => void addToGrocery(toAdd, "all")} /> : <Text style={{ fontSize: 12, color: WEB.green }}>All on your grocery list</Text>)}
       <CardLink label="Add trip" onPress={() => setAdding("shop")} />
     </View>
   }
@@ -158,6 +162,18 @@ export function WebPrepShoppingScreen() {
               by={need.neededBy}
               today={today}
               uses={need.for}
+              right={(() => {
+                const { there, short } = onList(need);
+                if (short <= 0) return <ListMark text="On your list" />;
+                return (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    {there != null && <ListMark text={`${needAmountLabel(there, need.unit)} on your list`} partial />}
+                    <Pressable onPress={() => void addToGrocery([need], needKey(need))} accessibilityLabel={`Add ${need.name} to grocery list`} style={({ hovered }: { hovered?: boolean }) => ({ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: hovered ? "#DBEAFE" : "#EFF6FF" })}>
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: WEB.blue }}>{sending === needKey(need) ? "Adding…" : there != null ? `Add ${needAmountLabel(short, need.unit)} more` : "Add"}</Text>
+                    </Pressable>
+                  </View>
+                );
+              })()}
             />
           ))}
         </View>
@@ -269,7 +285,17 @@ function SessionHeading({
 }
 
 // One thing to prep or buy: what, how much, by when, and for which meals.
-function NeedRow({ title, detail, by, today, uses, onPress, warning }: { title: string; detail: string; by: string; today: string; uses: NeedSource[]; onPress?: () => void; warning?: string }) {
+// Whether a thing to buy is on the grocery list (or only some of it).
+function ListMark({ text, partial }: { text: string; partial?: boolean }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <Ionicons name={partial ? "ellipse-outline" : "checkmark-circle"} size={13} color={partial ? WEB.muted : WEB.green} />
+      <Text style={{ marginLeft: 4, fontSize: 12, color: partial ? WEB.muted : WEB.green }}>{text}</Text>
+    </View>
+  );
+}
+
+function NeedRow({ title, detail, by, today, uses, onPress, warning, right }: { title: string; detail: string; by: string; today: string; uses: NeedSource[]; onPress?: () => void; warning?: string; right?: React.ReactNode }) {
   const d = parseLocalDate(by);
   const when = by === today ? "today" : `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()}`;
   const meals = [...new Set(uses.map((u) => u.label))];
@@ -286,9 +312,12 @@ function NeedRow({ title, detail, by, today, uses, onPress, warning }: { title: 
         <Text style={{ marginLeft: 8, fontSize: 12, fontWeight: by === today ? "700" : "500", color: by === today ? WEB.red : WEB.muted }}>by {when}</Text>
         {!!onPress && <Ionicons name="chevron-forward" size={13} color={WEB.faint} style={{ marginLeft: 4 }} />}
       </View>
-      <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 12, color: WEB.muted }}>
-        {detail}
-      </Text>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Text numberOfLines={1} style={{ flex: 1, marginTop: 1, fontSize: 12, color: WEB.muted }}>
+          {detail}
+        </Text>
+        {right}
+      </View>
       <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 11, color: WEB.faint }}>
         for {meals.slice(0, 2).join(", ")}
         {meals.length > 2 ? ` +${meals.length - 2} more` : ""}

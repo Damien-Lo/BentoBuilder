@@ -58,6 +58,7 @@ import {
   type IngredientRequirement,
 } from "@/src/utils/pantryDeduction";
 import { scaleIngredientNutrition } from "@/src/utils/mealPlan";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { referenceId, referenceName } from "@/src/utils/pantryDefaults";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
@@ -255,6 +256,7 @@ export default function RecipeDetailPage() {
   // made, each holding the pantry entry chosen for each of its slots ("" =
   // not chosen yet). A piece goes into one batch only.
   const wide = useWideWeb();
+  const layout = useWideForm();
   const [batchSlots, setBatchSlots] = useState<PieceSlot[]>([]);
   const [batches, setBatches] = useState<string[][]>([]);
   // The slot whose list of pieces is open, as "batch:slot".
@@ -746,36 +748,10 @@ export default function RecipeDetailPage() {
       ] as [string, number, string][]).filter(([, v]) => v > 0)
     : [];
 
-  return (
+  // The page in sections, set out at the bottom: one after another on a
+  // phone, in two columns in a desktop browser.
+  const headerSection = (
     <>
-    <SafeAreaView className="flex-1 bg-slate-50">
-      {/* Nav bar */}
-      <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-        <Pressable
-          className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-          onPress={() => router.back()}
-        >
-          <Ionicons name="chevron-back" size={26} color="#0F172A" />
-        </Pressable>
-
-        <Text className="ml-2 flex-1 text-xl font-bold text-slate-950" numberOfLines={1}>
-          {recipe.name}
-        </Text>
-
-        <Pressable
-          className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-          onPress={() =>
-            router.push({ pathname: "/recipes/edit/[id]", params: { id } })
-          }
-        >
-          <Ionicons name="create-outline" size={24} color="#2563EB" />
-        </Pressable>
-      </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 60, paddingTop: 20 }}
-      >
         {/* Header card */}
         <View className="rounded-2xl border border-slate-200 bg-white p-5">
           <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
@@ -857,7 +833,10 @@ export default function RecipeDetailPage() {
             </Text>
           ) : null}
         </View>
-
+    </>
+  );
+  const preparesSection = (
+    <>
         {/* Prepares an ingredient */}
         {producedIngredient && (
           <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
@@ -905,7 +884,10 @@ export default function RecipeDetailPage() {
             </Pressable>
           </View>
         )}
-
+    </>
+  );
+  const ratingSection = (
+    <>
         {/* Rating */}
         <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
           <View className="flex-row items-center justify-between">
@@ -986,7 +968,10 @@ export default function RecipeDetailPage() {
             </>
           )}
         </View>
-
+    </>
+  );
+  const ingredientsSection = (
+    <>
         {/* Ingredients */}
         {recipe.ingredientList.length > 0 && (
           <>
@@ -1176,7 +1161,10 @@ export default function RecipeDetailPage() {
             </View>
           </>
         )}
-
+    </>
+  );
+  const loggedSection = (
+    <>
         {/* This specific logged meal's real nutrition, when arriving from a
             confirmed planner entry — distinct from (and can differ from)
             the recipe's own generic snapshot below, which only reflects
@@ -1202,7 +1190,10 @@ export default function RecipeDetailPage() {
             </View>
           </>
         )}
-
+    </>
+  );
+  const nutritionSection = (
+    <>
         {/* Nutrition */}
         {nutritionRows.length > 0 && (
           <>
@@ -1230,10 +1221,16 @@ export default function RecipeDetailPage() {
             </View>
           </>
         )}
-
+    </>
+  );
+  const aheadSection = (
+    <>
         {/* Something to start before cooking */}
         <StartAhead recipe={recipe} onSaved={(startAhead) => setRecipe((prev) => (prev ? { ...prev, startAhead } : prev))} />
-
+    </>
+  );
+  const instructionsSection = (
+    <>
         {/* Instructions */}
         {filledInstructions.length > 0 && (
           <>
@@ -1254,7 +1251,10 @@ export default function RecipeDetailPage() {
             ))}
           </>
         )}
-
+    </>
+  );
+  const notesSection = (
+    <>
         {/* Notes */}
         {recipe.notes ? (
           <>
@@ -1266,6 +1266,68 @@ export default function RecipeDetailPage() {
             </View>
           </>
         ) : null}
+    </>
+  );
+
+  return (
+    <>
+    <SafeAreaView className="flex-1 bg-slate-50" style={layout.wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : undefined}>
+      {/* Nav bar */}
+      <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
+        <Pressable
+          className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
+          onPress={() => router.back()}
+        >
+          <Ionicons name="chevron-back" size={26} color="#0F172A" />
+        </Pressable>
+
+        <Text className="ml-2 flex-1 text-xl font-bold text-slate-950" numberOfLines={1}>
+          {recipe.name}
+        </Text>
+
+        <Pressable
+          className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
+          onPress={() =>
+            router.push({ pathname: "/recipes/edit/[id]", params: { id } })
+          }
+        >
+          <Ionicons name="create-outline" size={24} color="#2563EB" />
+        </Pressable>
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 60, paddingTop: 20 }}
+      >
+        {layout.wide ? (
+          <View style={layout.columns}>
+            <View style={{ flex: 1.7, minWidth: 0 }}>
+              {headerSection}
+              {ingredientsSection}
+              {instructionsSection}
+              {notesSection}
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              {preparesSection}
+              {ratingSection}
+              {loggedSection}
+              {nutritionSection}
+              {aheadSection}
+            </View>
+          </View>
+        ) : (
+          <>
+            {headerSection}
+            {preparesSection}
+            {ratingSection}
+            {ingredientsSection}
+            {loggedSection}
+            {nutritionSection}
+            {aheadSection}
+            {instructionsSection}
+            {notesSection}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
 

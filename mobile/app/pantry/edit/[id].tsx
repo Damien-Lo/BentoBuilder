@@ -11,6 +11,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -180,6 +182,7 @@ export default function EditPantryItemScreen() {
   // (only the fields that can show a dropdown need one; plain text fields
   // default to 0 and don't need to be listed here). Store is the only
   // dropdown-capable field on this page.
+  const layout = useWideForm();
   const scrollRef = useRef<ScrollView>(null);
   const scrollAnchorRef = useRef<View>(null);
   const quantitySection = useScrollFocusSection(scrollRef, scrollAnchorRef);
@@ -334,6 +337,7 @@ export default function EditPantryItemScreen() {
     <SafeAreaView className="flex-1 bg-slate-50">
       <KeyboardAvoidingView
         className="flex-1"
+        style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
@@ -402,6 +406,9 @@ export default function EditPantryItemScreen() {
             </Pressable>
           ) : null}
 
+          {/* (In a desktop browser: two columns.) */}
+          <View style={layout.columns}>
+          <View style={[layout.column, { zIndex: 2 }]}>
           <FormCard icon="cube-outline" title="Quantity" description="How much of this entry is left." zIndex={30}>
             <View className="mt-3" {...quantitySection.wrapperProps}>
               <QuantityServingInput
@@ -427,6 +434,8 @@ export default function EditPantryItemScreen() {
               />
             </View>
           </FormCard>
+          </View>
+          <View style={[layout.column, { zIndex: 1 }]}>
 
           <FormCard icon="calendar-outline" title="Where & when" description="Where it's stored, and when it expires." zIndex={20}>
             <FieldLabel text="Storage location" />
@@ -575,7 +584,10 @@ export default function EditPantryItemScreen() {
               />
             </View>
           </FormCard>
+          </View>
+          </View>
 
+          <View style={layout.actions}>
           <Pressable
             disabled={saving}
             onPress={() => void handleSave()}
@@ -591,6 +603,7 @@ export default function EditPantryItemScreen() {
           >
             <Text className="font-semibold text-red-600">Delete pantry entry</Text>
           </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

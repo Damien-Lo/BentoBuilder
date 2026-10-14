@@ -41,6 +41,7 @@ import {
 } from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
@@ -211,6 +212,7 @@ export default function AddPantryItemByIngredientScreen() {
   // (only the fields that can show a dropdown need one; plain text fields
   // default to 0 and don't need to be listed here). Store is the only
   // dropdown-capable field on this page.
+  const layout = useWideForm();
   const scrollRef = useRef<ScrollView>(null);
   const scrollAnchorRef = useRef<View>(null);
   const quantitySection = useScrollFocusSection(scrollRef, scrollAnchorRef);
@@ -594,6 +596,7 @@ export default function AddPantryItemByIngredientScreen() {
     <SafeAreaView className="flex-1 bg-slate-50">
       <KeyboardAvoidingView
         className="flex-1"
+        style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
@@ -744,6 +747,9 @@ export default function AddPantryItemByIngredientScreen() {
             />
 
             <View className="h-3" />
+            {/* (In a desktop browser: two columns.) */}
+            <View style={layout.columns}>
+            <View style={[layout.column, { zIndex: 2 }]}>
             <FormCard icon="cube-outline" title="Quantity" description="How much you're adding." zIndex={30}>
             <View className="mt-3" {...quantitySection.wrapperProps}>
 
@@ -820,6 +826,8 @@ export default function AddPantryItemByIngredientScreen() {
             </Pressable>
             </View>
             </FormCard>
+            </View>
+            <View style={[layout.column, { zIndex: 1 }]}>
 
             <FormCard icon="calendar-outline" title="Where & when" description="Where it's stored, and when it expires." zIndex={20}>
             <FieldLabel text="Storage location" />
@@ -1016,9 +1024,11 @@ export default function AddPantryItemByIngredientScreen() {
             />
             </View>
             </FormCard>
+            </View>
+            </View>
           </ScrollView>
 
-            <View className="pb-6 pt-4">
+            <View className="pb-6 pt-4" style={layout.actions}>
               <Pressable
                 disabled={saving}
                 className={`items-center justify-center rounded-2xl ${
