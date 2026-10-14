@@ -79,6 +79,7 @@ import {
 } from "@/src/services/groceryListApi";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { addDurationToDate, formatDateDisplay, todayDateInputString } from "@/src/utils/date";
 import {
   convertUnits,
@@ -617,6 +618,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [showMoreNutrients, setShowMoreNutrients] = useState(false);
   const [pickingExpiry, setPickingExpiry] = useState(false);
+  const layout = useWideForm();
 
   // Scrolls whichever field was just focused/opened into view within this
   // card's own ScrollView — nested inside the horizontal pager the way this
@@ -780,7 +782,8 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           paddingHorizontal: 14,
-          paddingBottom: COLLAPSED_LIST_HEIGHT + LIST_HANDLE_AREA_HEIGHT + 24,
+          // (In a desktop browser the item list sits beside the card, not over it.)
+          paddingBottom: layout.wide ? 24 : COLLAPSED_LIST_HEIGHT + LIST_HANDLE_AREA_HEIGHT + 24,
         }}
       >
         {/* Zero-size anchor at the very top of the scrollable content — see
@@ -1261,6 +1264,7 @@ export default function ReceiptReviewPage() {
   const router = useRouter();
   const { width: windowWidth, height: windowHeight } = usePaneDimensions();
   const pagerRef = useRef<FlatList<ReviewRow>>(null);
+  const layout = useWideForm();
 
   // The item-list panel's draggable height (see the gesture + JSX further
   // down) — declared here, unconditionally, alongside the other hooks and
@@ -2329,8 +2333,75 @@ export default function ReceiptReviewPage() {
       );
     });
 
+  // The list of every item on the receipt: in the draggable panel on a
+  // phone, in a column of its own beside the card in a desktop browser.
+  const itemList = (
+    <>
+      <View className="flex-row items-center justify-between px-4 pb-2">
+        <Text className="flex-1 text-sm text-slate-500" numberOfLines={1}>
+          <Text className="font-bold text-slate-900">
+            {rows.length} item{rows.length === 1 ? "" : "s"}
+          </Text>
+          {" · "}
+          {rows.filter((r) => r.checked && !r.submitted).length} selected
+          {rows.some((r) => r.submitted) ? ` · ${rows.filter((r) => r.submitted).length} added` : ""}
+          {incompleteCount > 0 ? ` · ${incompleteCount} incomplete` : ""}
+        </Text>
+        <Pressable
+          onPress={() => {
+            setRows((prev) =>
+              prev.map((r) => (r.submitted ? r : { ...r, checked: !allSelectableChecked })),
+            );
+          }}
+        >
+          <Text className="text-sm font-semibold text-blue-600">
+            {allSelectableChecked ? "Deselect all" : "Select all"}
+          </Text>
+        </Pressable>
+      </View>
+
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {rows.map((row, index) => (
+          <ReceiptRowSummary
+            key={row.key}
+            row={row}
+            categoryName={
+              row.matchedIngredientId
+                ? referenceName(ingredients.find((ing) => ing._id === row.matchedIngredientId)?.category)
+                : row.categoryName
+            }
+            isFocused={index === focusedIndex}
+            hasPendingGroceryItems={pendingGroceryItems.length > 0}
+            onPress={() => goToIndex(index)}
+            onToggleChecked={() => updateRow(row.key, { checked: !row.checked, error: undefined })}
+          />
+        ))}
+
+        <Pressable
+          className="mt-1 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3 active:bg-slate-100"
+          onPress={handleAddManualRow}
+        >
+          <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+          <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+            Add an item the receipt missed
+          </Text>
+        </Pressable>
+      </ScrollView>
+    </>
+  );
+
+  const focusedRow = rows[Math.min(focusedIndex, rows.length - 1)];
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView
+      className="flex-1 bg-slate-50"
+      style={layout.wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : undefined}
+      edges={["top", "left", "right"]}
+    >
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
           <Pressable
@@ -2403,12 +2474,46 @@ export default function ReceiptReviewPage() {
           </Pressable>
         </View>
 
-        <View className="flex-1">
+        {/* (In a desktop browser: the item list on the left, and the one
+            item being looked at on the right — no pager, no panel.) */}
+        <View className="flex-1" style={layout.wide ? { flexDirection: "row", gap: 16, padding: 16, paddingTop: 12 } : undefined}>
+        {layout.wide ? (
+          <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white pt-4" style={{ width: 440 }}>
+            {itemList}
+          </View>
+        ) : null}
         {rows.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
             <Text className="text-center text-slate-500">
               No items left on this receipt — add one below, or discard the receipt.
             </Text>
+          </View>
+        ) : layout.wide ? (
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View className="mb-2 flex-row items-center justify-between">
+              <Pressable
+                disabled={focusedIndex === 0}
+                accessibilityLabel="Previous item"
+                onPress={() => goToIndex(focusedIndex - 1)}
+                className="h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white active:bg-slate-100"
+                style={{ opacity: focusedIndex === 0 ? 0.35 : 1 }}
+              >
+                <Ionicons name="chevron-back" size={16} color="#334155" />
+              </Pressable>
+              <Text className="text-xs font-medium text-slate-500">
+                Item {focusedIndex + 1} of {rows.length}
+              </Text>
+              <Pressable
+                disabled={focusedIndex >= rows.length - 1}
+                accessibilityLabel="Next item"
+                onPress={() => goToIndex(focusedIndex + 1)}
+                className="h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white active:bg-slate-100"
+                style={{ opacity: focusedIndex >= rows.length - 1 ? 0.35 : 1 }}
+              >
+                <Ionicons name="chevron-forward" size={16} color="#334155" />
+              </Pressable>
+            </View>
+            {focusedRow ? <ReceiptRowDetail key={focusedRow.key} row={focusedRow} callbacks={rowCallbacks} /> : null}
           </View>
         ) : (
           <View className="flex-1 mt-3">
@@ -2475,6 +2580,7 @@ export default function ReceiptReviewPage() {
         </View>
       </KeyboardAvoidingView>
 
+      {layout.wide ? null : (
       <Animated.View
           style={listPanelStyle}
           className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl border border-slate-200 bg-white"
@@ -2485,61 +2591,9 @@ export default function ReceiptReviewPage() {
             </View>
           </GestureDetector>
 
-          <View className="flex-row items-center justify-between px-4 pb-2">
-            <Text className="flex-1 text-sm text-slate-500" numberOfLines={1}>
-              <Text className="font-bold text-slate-900">
-                {rows.length} item{rows.length === 1 ? "" : "s"}
-              </Text>
-              {" · "}
-              {rows.filter((r) => r.checked && !r.submitted).length} selected
-              {rows.some((r) => r.submitted) ? ` · ${rows.filter((r) => r.submitted).length} added` : ""}
-              {incompleteCount > 0 ? ` · ${incompleteCount} incomplete` : ""}
-            </Text>
-            <Pressable
-              onPress={() => {
-                setRows((prev) =>
-                  prev.map((r) => (r.submitted ? r : { ...r, checked: !allSelectableChecked })),
-                );
-              }}
-            >
-              <Text className="text-sm font-semibold text-blue-600">
-                {allSelectableChecked ? "Deselect all" : "Select all"}
-              </Text>
-            </Pressable>
-          </View>
-
-          <ScrollView
-            className="flex-1"
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
-            keyboardShouldPersistTaps="handled"
-          >
-            {rows.map((row, index) => (
-              <ReceiptRowSummary
-                key={row.key}
-                row={row}
-                categoryName={
-                  row.matchedIngredientId
-                    ? referenceName(ingredients.find((ing) => ing._id === row.matchedIngredientId)?.category)
-                    : row.categoryName
-                }
-                isFocused={index === focusedIndex}
-                hasPendingGroceryItems={pendingGroceryItems.length > 0}
-                onPress={() => goToIndex(index)}
-                onToggleChecked={() => updateRow(row.key, { checked: !row.checked, error: undefined })}
-              />
-            ))}
-
-            <Pressable
-              className="mt-1 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3 active:bg-slate-100"
-              onPress={handleAddManualRow}
-            >
-              <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
-              <Text className="ml-1.5 text-sm font-semibold text-blue-600">
-                Add an item the receipt missed
-              </Text>
-            </Pressable>
-          </ScrollView>
+          {itemList}
       </Animated.View>
+      )}
 
       <DatePickerModal
         visible={pickingPurchaseDate}

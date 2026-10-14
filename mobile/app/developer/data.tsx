@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, DevSettings, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { getDatabaseState, resetTestData, switchDatabase, type DatabaseId, type DatabaseState } from "@/src/services/databaseApi";
 
 // Developer → Data: which data the app is working on, the real kitchen or
@@ -22,6 +23,7 @@ export default function DeveloperDataScreen() {
   const [state, setState] = useState<DatabaseState | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [busy, setBusy] = useState<"switch" | "reset" | null>(null);
+  const layout = useWideForm();
 
   useEffect(() => {
     getDatabaseState().then(setState, () => setLoadError(true));
@@ -63,7 +65,7 @@ export default function DeveloperDataScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={layout.page}>
       <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-3">
         <Pressable className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100" onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={26} color="#0F172A" />
@@ -84,8 +86,10 @@ export default function DeveloperDataScreen() {
           <ActivityIndicator size="large" color="#D97706" />
         </View>
       ) : (
-        <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 24, paddingBottom: 60, maxWidth: 560, width: "100%", alignSelf: "center" }}>
+        <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 24, paddingBottom: 60, maxWidth: layout.wide ? undefined : 560, width: "100%", alignSelf: "center" }}>
           <Text className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">Working on</Text>
+          {/* In a desktop browser, the real and test data side by side. */}
+          <View style={layout.wide ? [layout.columns, { alignItems: "stretch" }] : undefined}>
           {state.databases.map((database) => {
             const on = database.id === state.current;
             const allowed = state.canSwitch || on;
@@ -96,7 +100,7 @@ export default function DeveloperDataScreen() {
                 disabled={!allowed || on}
                 accessibilityLabel={`Use the ${database.label.toLowerCase()}`}
                 className={`mb-3 flex-row items-center rounded-3xl border bg-white px-4 py-4 ${on ? "border-blue-500" : "border-slate-200 active:bg-slate-50"} ${allowed ? "" : "opacity-50"}`}
-                style={on ? { borderWidth: 2 } : undefined}
+                style={[layout.column, on ? { borderWidth: 2 } : undefined]}
               >
                 <View className={`h-11 w-11 items-center justify-center rounded-full ${database.id === "test" ? "bg-amber-100" : "bg-red-100"}`}>
                   <Ionicons name={database.id === "test" ? "flask-outline" : "home-outline"} size={22} color={database.id === "test" ? "#B45309" : "#B91C1C"} />
@@ -109,6 +113,7 @@ export default function DeveloperDataScreen() {
               </Pressable>
             );
           })}
+          </View>
 
           {state.canSwitch ? (
             <>
@@ -117,6 +122,8 @@ export default function DeveloperDataScreen() {
               </Text>
 
               <Text className="mb-2 mt-7 text-xs font-bold uppercase tracking-widest text-slate-400">Test data</Text>
+              <View style={layout.columns}>
+              <View style={layout.column}>
               <Pressable onPress={confirmReset} disabled={!!busy} className="flex-row items-center rounded-3xl border border-slate-200 bg-white px-4 py-4 active:bg-slate-50">
                 <Ionicons name="refresh" size={20} color="#B45309" />
                 <View className="ml-3 flex-1">
@@ -124,6 +131,9 @@ export default function DeveloperDataScreen() {
                   <Text className="mt-0.5 text-sm leading-5 text-slate-500">Your recipes, ingredients, saved meals and settings copied in fresh; pantry, meal plan, calendar and tasks emptied.</Text>
                 </View>
               </Pressable>
+              </View>
+              {layout.wide && <View style={layout.column} />}
+              </View>
             </>
           ) : (
             <Text className="mt-2 px-1 text-xs leading-5 text-slate-500">This is the deployed app: it only has the real data. The test data is on the development machine.</Text>

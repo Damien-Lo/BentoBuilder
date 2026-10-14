@@ -5,10 +5,12 @@ import { ActivityIndicator, Alert, FlatList, Pressable, Text, TextInput, View } 
 import { SafeAreaView } from "react-native-safe-area-context";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { deleteRestaurantMeal, getRestaurantMeals, type RestaurantMeal } from "@/src/services/restaurantMealApi";
 
 export default function RestaurantMealsListPage() {
   const router = useRouter();
+  const layout = useWideForm();
   const [restaurantMeals, setRestaurantMeals] = useState<RestaurantMeal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -53,7 +55,8 @@ export default function RestaurantMealsListPage() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={layout.wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : undefined}>
+      {/* (In a desktop browser the page's own bar is the only one.) */}
       <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
         <Pressable
           className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
@@ -71,7 +74,7 @@ export default function RestaurantMealsListPage() {
       </View>
 
       <View className="px-5 pt-4">
-        <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
+        <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4" style={layout.wide ? { maxWidth: 420 } : undefined}>
           <Ionicons name="search-outline" size={19} color="#64748B" />
           <TextInput
             value={search}
@@ -91,9 +94,13 @@ export default function RestaurantMealsListPage() {
         <FlatList
           data={filtered}
           keyExtractor={(r) => r._id}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 60 }}
+          // (In a desktop browser: a grid of cards, three to a row.)
+          key={layout.wide ? "grid" : "list"}
+          numColumns={layout.wide ? 3 : 1}
+          contentContainerStyle={{ paddingHorizontal: layout.wide ? 14 : 20, paddingTop: 16, paddingBottom: 60 }}
           keyboardShouldPersistTaps="handled"
           renderItem={({ item }) => (
+            <View style={layout.wide ? { width: "33.333%", paddingHorizontal: 6 } : undefined}>
             <ReanimatedSwipeable
               friction={2}
               rightThreshold={40}
@@ -122,6 +129,7 @@ export default function RestaurantMealsListPage() {
                 <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
               </Pressable>
             </ReanimatedSwipeable>
+            </View>
           )}
           ListEmptyComponent={
             <View className="items-center py-16">

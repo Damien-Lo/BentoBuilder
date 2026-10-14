@@ -28,6 +28,7 @@ import {
 } from "@/src/utils/nutritionForm";
 
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { createTag, getTags, type SelectOption } from "@/src/services/optionsApi";
 import {
   getRestaurantMealById,
@@ -182,6 +183,7 @@ export default function EditRestaurantMealPage() {
   const restaurantNameSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const tagsSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
   const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const layout = useWideForm();
 
   useEffect(() => {
     if (!id) return;
@@ -312,7 +314,7 @@ export default function EditRestaurantMealPage() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView className="flex-1" style={layout.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         {/* Nav bar */}
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
           <Pressable
@@ -342,6 +344,9 @@ export default function EditRestaurantMealPage() {
           showsVerticalScrollIndicator={false}
         >
           <View ref={scrollAnchorRef} collapsable={false} />
+          {/* (In a desktop browser: two columns.) */}
+          <View style={layout.columns}>
+          <View style={[layout.column, { zIndex: 2 }]}>
           <FormCard icon="storefront-outline" title="Restaurant" description="The place — log visits to it anytime from the planner." zIndex={60}>
 
           <View {...restaurantNameSection.wrapperProps}>
@@ -378,6 +383,8 @@ export default function EditRestaurantMealPage() {
           </View>
 
           </FormCard>
+          </View>
+          <View style={[layout.column, { zIndex: 1 }]}>
 
           {/* ── Dishes ── */}
           <FormCard icon="fast-food-outline" title="Menu (optional)" description="Dishes on this restaurant's menu. Nutrition is optional and can be a rough estimate." zIndex={50}>
@@ -403,7 +410,10 @@ export default function EditRestaurantMealPage() {
             <Text className="ml-2 font-semibold text-blue-700">Add dish</Text>
           </Pressable>
         </FormCard>
+          </View>
+          </View>
 
+          <View style={layout.actions}>
           <Pressable
             disabled={saving}
             onPress={() => void handleSave()}
@@ -411,6 +421,7 @@ export default function EditRestaurantMealPage() {
           >
             <Text className="text-base font-semibold text-white">{saving ? "Saving..." : "Save changes"}</Text>
           </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

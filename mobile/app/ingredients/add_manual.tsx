@@ -72,6 +72,7 @@ import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { todayDateInputString } from "@/src/utils/date";
 import { loadSettings } from "@/src/services/settingsService";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import {
   convertAmountForUnitChange,
   getIngredientConversions,
@@ -411,6 +412,7 @@ export default function AddManualPantryItemScreen() {
   // (only the fields that can show a dropdown need one, each higher than
   // every one after it; plain text fields default to 0 and don't need to be
   // listed here).
+  const layout = useWideForm();
   const scrollRef = useRef<ScrollView>(null);
   const scrollAnchorRef = useRef<View>(null);
   const nameSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 130);
@@ -1280,6 +1282,7 @@ export default function AddManualPantryItemScreen() {
     >
       <KeyboardAvoidingView
         className="flex-1"
+        style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
@@ -1348,6 +1351,9 @@ export default function AddManualPantryItemScreen() {
             />
           </View>
 
+          {/* (In a desktop browser: two columns.) */}
+          <View style={layout.columns}>
+          <View style={[layout.column, { zIndex: 2 }]}>
           <FormCard
             icon="pricetag-outline"
             title="Ingredient"
@@ -1555,6 +1561,8 @@ export default function AddManualPantryItemScreen() {
               </View>
             )}
           </FormCard>
+          </View>
+          <View style={[layout.column, { zIndex: 1 }]}>
 
           <FormCard
             icon="cube-outline"
@@ -1879,7 +1887,10 @@ export default function AddManualPantryItemScreen() {
               </>
             )}
           </FormCard>
+          </View>
+          </View>
 
+          <View style={layout.actions}>
           <Pressable
             disabled={saving}
             onPress={() => void handleSave()}
@@ -1891,6 +1902,7 @@ export default function AddManualPantryItemScreen() {
               {saving ? "Saving..." : isResolvingGroceryItem ? "Save & log purchase" : "Save ingredient"}
             </Text>
           </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 

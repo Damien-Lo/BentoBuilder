@@ -91,6 +91,7 @@ import { MoreNutrientsPanel } from "@/src/components/nutrition/MoreNutrientsPane
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { countReadNutrients, labelNutrition, labelServing } from "@/src/utils/nutritionLabel";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import {
   convertAmountForUnitChange,
   getIngredientConversions,
@@ -262,6 +263,7 @@ export default function IngredientDetailScreen() {
   // zIndex descends in on-screen top-to-bottom order among the dropdown-
   // capable fields only — see useScrollFocusSection for why plain
   // TextInput-style sections don't need one (they default to 0).
+  const layout = useWideForm();
   const scrollRef = useRef<ScrollView>(null);
   const scrollAnchorRef = useRef<View>(null);
 
@@ -1034,6 +1036,7 @@ export default function IngredientDetailScreen() {
     >
       <KeyboardAvoidingView
         className="flex-1"
+        style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
@@ -1095,6 +1098,11 @@ export default function IngredientDetailScreen() {
           removeClippedSubviews={false}
         >
           <View ref={scrollAnchorRef} collapsable={false} />
+          {/* (In a desktop browser the page is read in two columns: what the
+              ingredient is on the left, what's in the pantry on the right.
+              The edit form sets out its own two columns inside the first.) */}
+          <View style={isEditing ? undefined : layout.columns}>
+          <View style={isEditing ? undefined : [layout.column, { zIndex: 2 }]}>
           {isEditing ? (
             /* ── Edit form ── */
             <>
@@ -1113,6 +1121,8 @@ export default function IngredientDetailScreen() {
                 </View>
               )}
 
+              <View style={layout.columns}>
+              <View style={[layout.column, { zIndex: 2 }]}>
               <FormCard
                 icon="pricetag-outline"
                 title="Ingredient"
@@ -1283,6 +1293,8 @@ export default function IngredientDetailScreen() {
                   onChange={(v) => updateForm("alwaysAvailable", v)}
                 />
               </FormCard>
+              </View>
+              <View style={[layout.column, { zIndex: 1 }]}>
 
               <FormCard
                 icon="nutrition-outline"
@@ -1418,7 +1430,10 @@ export default function IngredientDetailScreen() {
                   </View>
                 )}
               </FormCard>
+              </View>
+              </View>
 
+              <View style={layout.actions}>
               <Pressable
                 disabled={saving}
                 onPress={() => void handleSave()}
@@ -1438,6 +1453,7 @@ export default function IngredientDetailScreen() {
               >
                 <Text className="font-semibold text-red-600">Delete ingredient</Text>
               </Pressable>
+              </View>
             </>
           ) : (
             /* ── Detail view ── */
@@ -1747,6 +1763,8 @@ export default function IngredientDetailScreen() {
               ) : null}
             </>
           )}
+          </View>
+          <View style={isEditing ? undefined : [layout.column, { zIndex: 1 }]}>
 
           {/* Generic ingredients are a matching umbrella — a recipe calling
               for this can be satisfied by any specific/branded variant too,
@@ -2189,6 +2207,8 @@ export default function IngredientDetailScreen() {
               </View>
             </>
           )}
+          </View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 

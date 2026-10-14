@@ -201,7 +201,7 @@ export default function RootLayout() {
 
         {/* Restaurant meals — logged eating-out visits */}
         <Stack.Screen
-          name="restaurant-meals"
+          name="restaurant-meals/index"
           options={{
             headerShown: false,
           }}
@@ -244,6 +244,8 @@ export default function RootLayout() {
         />
 
         <Stack.Screen name="developer/data" options={{ headerShown: false }} />
+        <Stack.Screen name="archive" options={{ headerShown: false }} />
+        <Stack.Screen name="manage-lists" options={{ headerShown: false }} />
 
         <Stack.Screen
           name="developer/suggestions"

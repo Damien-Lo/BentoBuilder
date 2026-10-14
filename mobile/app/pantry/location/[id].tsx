@@ -21,6 +21,7 @@ import { PantryItemCard } from "@/src/components/pantry/PantryItemCard";
 import { SplitPantryItemModal } from "@/src/components/pantry/SplitPantryItemModal";
 import type { PantryItem } from "@/src/types/pantry";
 import { daysUntil, formatDateDisplay } from "@/src/utils/date";
+import { useWideForm } from "@/src/components/forms/wideForm";
 
 function getIngredientName(item: PantryItem): string {
   const ing = item.ingredient as unknown;
@@ -68,6 +69,7 @@ export default function LocationDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [splittingItem, setSplittingItem] = useState<PantryItem | null>(null);
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
+  const layout = useWideForm();
 
   useFocusEffect(
     useCallback(() => {
@@ -164,7 +166,7 @@ export default function LocationDetailScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50">
+    <SafeAreaView className="flex-1 bg-slate-50" style={layout.page}>
       {/* Nav bar */}
       <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
         <Pressable
@@ -203,6 +205,10 @@ export default function LocationDetailScreen() {
         </View>
       ) : (
         <FlatList
+          // (In a desktop browser: a grid of cards, two across.)
+          key={layout.wide ? "grid" : "list"}
+          numColumns={layout.wide ? 2 : 1}
+          columnWrapperStyle={layout.wide ? { gap: 12, alignItems: "flex-start" } : undefined}
           data={items}
           keyExtractor={(item) => item._id}
           showsVerticalScrollIndicator={false}
@@ -238,13 +244,17 @@ export default function LocationDetailScreen() {
               </Pressable>
             </View>
           }
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
+            // (An odd one out at the end keeps to its own half of the grid.)
+            const alone = layout.wide && index === items.length - 1 && items.length % 2 === 1;
+
             const ingredientName = getIngredientName(item);
             const expiryStr = formatExpiryDate(item.expiryDate);
             const expired = isExpired(item.expiryDate);
             const expiringSoon = !expired && isExpiringSoon(item.expiryDate);
 
             return (
+              <View style={alone ? [layout.column, { maxWidth: "50%", paddingRight: 6 }] : layout.column}>
               <PantryItemCard
                 pantryItemId={item._id}
                 ingredientName={ingredientName}
@@ -294,6 +304,7 @@ export default function LocationDetailScreen() {
                 onAdd={() => void handleQuantityDelta(item, 1)}
                 onSplit={() => setSplittingItem(item)}
               />
+              </View>
             );
           }}
         />

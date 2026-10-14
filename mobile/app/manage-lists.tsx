@@ -39,6 +39,7 @@ import {
   getRecipeCategories,
   renameRecipeCategory,
 } from "@/src/services/recipeApi";
+import { useWideForm } from "@/src/components/forms/wideForm";
 
 type ListKind = "tags" | "ingredientCategories" | "recipeCategories" | "brands" | "stores";
 
@@ -117,6 +118,7 @@ export default function ManageListsScreen() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [createDraft, setCreateDraft] = useState("");
+  const layout = useWideForm();
 
   useEffect(() => {
     let cancelled = false;
@@ -150,6 +152,12 @@ export default function ManageListsScreen() {
     const filtered = query ? list.filter((i) => i.name.toLowerCase().includes(query)) : list;
     return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
   }, [itemsByKind, activeKind, searchText]);
+
+  // In a desktop browser the list reads down two columns; on a phone, one.
+  const half = Math.ceil(items.length / 2);
+  const itemColumns = layout.wide && items.length > 1 ? [items.slice(0, half), items.slice(half)] : [items];
+  // (And the rename / create boxes stay a dialog's width there.)
+  const dialogStyle = layout.wide ? { maxWidth: 440 } : undefined;
 
   function updateKindItems(kind: ListKind, updater: (current: ListItem[]) => ListItem[]) {
     setItemsByKind((prev) => ({ ...prev, [kind]: updater(prev[kind] ?? []) }));
@@ -217,7 +225,7 @@ export default function ManageListsScreen() {
 
   return (
     <>
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" style={layout.page} edges={["top", "left", "right"]}>
       <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
         <Pressable
           className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
@@ -233,6 +241,8 @@ export default function ManageListsScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}
         className="border-b border-slate-200 bg-white"
+        // (On the web a sideways scroller grows to fill the page unless told not to.)
+        style={{ flexGrow: 0 }}
       >
         {KIND_ORDER.map((kind) => {
           const isActive = kind === activeKind;
@@ -281,12 +291,15 @@ export default function ManageListsScreen() {
               </Text>
             </View>
           ) : (
+            <View style={layout.columns}>
+            {itemColumns.map((columnItems, columnIndex) => (
+            <View key={columnIndex} style={layout.column}>
             <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              {items.map((item, index) => (
+              {columnItems.map((item, index) => (
                 <View
                   key={item._id}
                   className={`flex-row items-center px-4 py-3.5 ${
-                    index < items.length - 1 ? "border-b border-slate-100" : ""
+                    index < columnItems.length - 1 ? "border-b border-slate-100" : ""
                   }`}
                 >
                   <Text className="flex-1 text-base text-slate-900" numberOfLines={1}>
@@ -318,6 +331,9 @@ export default function ManageListsScreen() {
                 </View>
               ))}
             </View>
+            </View>
+            ))}
+            </View>
           )}
         </ScrollView>
       )}
@@ -339,7 +355,7 @@ export default function ManageListsScreen() {
     <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={() => setRenameTarget(null)}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1 items-center justify-center bg-black/40 px-6">
         <Pressable className="absolute inset-0" onPress={() => setRenameTarget(null)} />
-        <View className="w-full rounded-3xl bg-white p-5">
+        <View className="w-full rounded-3xl bg-white p-5" style={dialogStyle}>
           <Text className="text-lg font-bold text-slate-950">Rename {config.singular}</Text>
           <TextInput
             value={renameDraft}
@@ -371,7 +387,7 @@ export default function ManageListsScreen() {
     <Modal visible={showCreate} transparent animationType="fade" onRequestClose={() => setShowCreate(false)}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1 items-center justify-center bg-black/40 px-6">
         <Pressable className="absolute inset-0" onPress={() => setShowCreate(false)} />
-        <View className="w-full rounded-3xl bg-white p-5">
+        <View className="w-full rounded-3xl bg-white p-5" style={dialogStyle}>
           <Text className="text-lg font-bold text-slate-950">New {config.singular}</Text>
           <TextInput
             value={createDraft}

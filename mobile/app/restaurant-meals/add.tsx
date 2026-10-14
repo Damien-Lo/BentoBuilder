@@ -25,6 +25,7 @@ import {
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { createTag, getTags, type SelectOption } from "@/src/services/optionsApi";
 import {
   createRestaurantMeal,
@@ -206,6 +207,7 @@ export default function AddRestaurantMealPage() {
   const restaurantNameSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const tagsSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
   const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const layout = useWideForm();
 
   useEffect(() => {
     let cancelled = false;
@@ -345,7 +347,7 @@ export default function AddRestaurantMealPage() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView className="flex-1" style={layout.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         {/* Nav bar */}
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
           <Pressable
@@ -377,6 +379,9 @@ export default function AddRestaurantMealPage() {
           showsVerticalScrollIndicator={false}
         >
           <View ref={scrollAnchorRef} collapsable={false} />
+          {/* (In a desktop browser: two columns.) */}
+          <View style={layout.columns}>
+          <View style={[layout.column, { zIndex: 2 }]}>
           <FormCard icon="storefront-outline" title="Restaurant" description="Add it once, then log visits to it anytime from the planner — no pantry items are used for this." zIndex={60}>
 
           <View {...restaurantNameSection.wrapperProps}>
@@ -413,6 +418,8 @@ export default function AddRestaurantMealPage() {
           </View>
 
           </FormCard>
+          </View>
+          <View style={[layout.column, { zIndex: 1 }]}>
 
           {/* ── Dishes ── */}
           <FormCard icon="fast-food-outline" title="Menu (optional)" description="Add dishes you know about now, or skip this and add them later — from here, the restaurant's own page, or right when logging a visit. Nutrition is optional and can be a rough estimate." zIndex={50}>
@@ -448,7 +455,10 @@ export default function AddRestaurantMealPage() {
             </Pressable>
           </View>
         </FormCard>
+          </View>
+          </View>
 
+          <View style={layout.actions}>
           <Pressable
             disabled={saving}
             onPress={() => void handleSave()}
@@ -456,6 +466,7 @@ export default function AddRestaurantMealPage() {
           >
             <Text className="text-base font-semibold text-white">{saving ? "Saving..." : (fromPlanner ? "Save & continue" : "Save restaurant")}</Text>
           </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { API_BASE_URL } from "@/src/config/api";
 import { getSuggestionEvents, type SuggestionEventRecord } from "@/src/services/mealPlanApi";
 
@@ -33,6 +34,7 @@ export default function DeveloperSuggestionsScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const layout = useWideForm();
   const [data, setData] = useState<{ total: number; counts: Record<string, number>; events: SuggestionEventRecord[] }>({ total: 0, counts: {}, events: [] });
 
   function load() {
@@ -47,7 +49,7 @@ export default function DeveloperSuggestionsScreen() {
   useEffect(load, []);
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={layout.page}>
       {/* Header */}
       <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-3">
         <Pressable className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100" onPress={() => router.back()}>
@@ -79,7 +81,7 @@ export default function DeveloperSuggestionsScreen() {
           <Text className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">By action</Text>
           <View className="mb-6 flex-row flex-wrap rounded-2xl border border-slate-200 bg-white px-2 py-2">
             {ACTIONS.map((action) => (
-              <View key={action} className="w-1/4 px-2 py-2">
+              <View key={action} className="w-1/4 px-2 py-2" style={layout.wide ? { width: `${100 / ACTIONS.length}%` } : undefined}>
                 <Text className="text-xl font-bold text-slate-900">{data.counts[action] ?? 0}</Text>
                 <Text className="text-xs text-slate-500">{action}</Text>
               </View>

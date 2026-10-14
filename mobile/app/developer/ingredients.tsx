@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { getIngredientIssues, type IngredientIssue, type IngredientIssueEntry } from "@/src/services/developerApi";
 
 const ISSUE_LABELS: Record<IngredientIssue, string> = {
@@ -29,6 +30,7 @@ export default function DeveloperIngredientsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [entries, setEntries] = useState<IngredientIssueEntry[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const layout = useWideForm();
 
   function load() {
     setIsLoading(true);
@@ -52,8 +54,11 @@ export default function DeveloperIngredientsScreen() {
     return byIssue;
   }, [entries]);
 
+  // In a desktop browser a group's rows are set out three across.
+  const perLine = layout.wide ? 3 : 1;
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={layout.page}>
       {/* Header */}
       <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-3">
         <Pressable
@@ -104,13 +109,17 @@ export default function DeveloperIngredientsScreen() {
                 {ISSUE_LABELS[issue]} · {rows.length}
               </Text>
               <Text className="mb-2 text-xs text-slate-400">{ISSUE_DESCRIPTIONS[issue]}</Text>
-              <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <View
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                style={layout.wide ? { flexDirection: "row", flexWrap: "wrap" } : undefined}
+              >
                 {rows.map((entry, i) => (
                   <Pressable
                     key={entry.id}
                     className={`flex-row items-center justify-between px-4 py-3.5 active:bg-slate-50 ${
-                      i < rows.length - 1 ? "border-b border-slate-100" : ""
+                      i < rows.length - 1 - ((rows.length - 1) % perLine) ? "border-b border-slate-100" : ""
                     }`}
+                    style={layout.wide ? { width: `${100 / perLine}%` } : undefined}
                     onPress={() => router.push({ pathname: "/ingredients/edit/[id]", params: { id: entry.id } })}
                   >
                     <View className="flex-1">

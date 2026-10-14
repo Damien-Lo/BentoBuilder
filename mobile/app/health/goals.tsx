@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DateTextInput, SettingsNumericInput, SettingsRow, SettingsSectionHeader } from "@/src/components/forms";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
 
@@ -22,6 +23,7 @@ export default function GoalsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const layout = useWideForm();
 
   // Scrolls whichever field was just focused into view — see
   // useScrollFocusSection. No dropdown-capable fields on this page, so
@@ -62,10 +64,70 @@ export default function GoalsScreen() {
     );
   }
 
+  // The page's two cards, side by side in a desktop browser.
+  const weightSection = (
+    <>
+      {/* ── Weight ── */}
+      <SettingsSectionHeader title="Weight" />
+      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <View {...startingWeightSection.wrapperProps}>
+          <SettingsRow label="Starting weight">
+            <SettingsNumericInput
+              value={settings.startingWeight}
+              onChange={v => patch({ startingWeight: v })}
+              placeholder="—"
+              unit="lbs"
+              onFocus={startingWeightSection.trigger}
+            />
+          </SettingsRow>
+        </View>
+        <View
+          className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3.5 last:border-b-0"
+          {...startingDateSection.wrapperProps}
+        >
+          <Text className="text-base text-slate-700">Starting date</Text>
+          <DateTextInput
+            value={settings.startingWeightDate ?? ""}
+            onChangeText={v => patch({ startingWeightDate: v || null })}
+            onFocus={startingDateSection.trigger}
+            className="min-w-[110px] rounded-xl bg-slate-100 px-3 py-2 text-right text-base font-semibold text-slate-900"
+          />
+        </View>
+        <View {...goalWeightSection.wrapperProps}>
+          <SettingsRow label="Goal weight">
+            <SettingsNumericInput
+              value={settings.goalWeight}
+              onChange={v => patch({ goalWeight: v })}
+              placeholder="—"
+              unit="lbs"
+              onFocus={goalWeightSection.trigger}
+            />
+          </SettingsRow>
+        </View>
+      </View>
+    </>
+  );
+
+  const nutritionLink = (
+    <Pressable
+      className={`${layout.wide ? "" : "mt-3 "}flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3.5 active:bg-slate-50`}
+      onPress={() => router.back()}
+    >
+      <View className="flex-row items-center">
+        <Ionicons name="pie-chart-outline" size={18} color="#2563EB" />
+        <Text className="ml-3 text-base text-slate-700">
+          Daily calorie & macro goals live on the Nutrition tab
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+    </Pressable>
+  );
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         className="flex-1"
+        style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
@@ -90,59 +152,23 @@ export default function GoalsScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View ref={scrollAnchorRef} collapsable={false} />
-          {/* ── Weight ── */}
-          <SettingsSectionHeader title="Weight" />
-          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <View {...startingWeightSection.wrapperProps}>
-              <SettingsRow label="Starting weight">
-                <SettingsNumericInput
-                  value={settings.startingWeight}
-                  onChange={v => patch({ startingWeight: v })}
-                  placeholder="—"
-                  unit="lbs"
-                  onFocus={startingWeightSection.trigger}
-                />
-              </SettingsRow>
+          {layout.wide ? (
+            <View style={layout.columns}>
+              <View style={layout.column}>{weightSection}</View>
+              <View style={layout.column}>
+                <SettingsSectionHeader title="Calories & macros" />
+                {nutritionLink}
+              </View>
             </View>
-            <View
-              className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3.5 last:border-b-0"
-              {...startingDateSection.wrapperProps}
-            >
-              <Text className="text-base text-slate-700">Starting date</Text>
-              <DateTextInput
-                value={settings.startingWeightDate ?? ""}
-                onChangeText={v => patch({ startingWeightDate: v || null })}
-                onFocus={startingDateSection.trigger}
-                className="min-w-[110px] rounded-xl bg-slate-100 px-3 py-2 text-right text-base font-semibold text-slate-900"
-              />
-            </View>
-            <View {...goalWeightSection.wrapperProps}>
-              <SettingsRow label="Goal weight">
-                <SettingsNumericInput
-                  value={settings.goalWeight}
-                  onChange={v => patch({ goalWeight: v })}
-                  placeholder="—"
-                  unit="lbs"
-                  onFocus={goalWeightSection.trigger}
-                />
-              </SettingsRow>
-            </View>
-          </View>
-
-          <Pressable
-            className="mt-3 flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3.5 active:bg-slate-50"
-            onPress={() => router.back()}
-          >
-            <View className="flex-row items-center">
-              <Ionicons name="pie-chart-outline" size={18} color="#2563EB" />
-              <Text className="ml-3 text-base text-slate-700">
-                Daily calorie & macro goals live on the Nutrition tab
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-          </Pressable>
+          ) : (
+            <>
+              {weightSection}
+              {nutritionLink}
+            </>
+          )}
 
           {/* Save button */}
+          <View style={layout.actions}>
           <Pressable
             onPress={() => void handleSave()}
             disabled={isSaving}
@@ -154,6 +180,7 @@ export default function GoalsScreen() {
               {isSaving ? "Saving…" : "Save goals"}
             </Text>
           </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

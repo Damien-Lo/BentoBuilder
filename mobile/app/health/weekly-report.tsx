@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
 import { getMealPlanForDate, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
@@ -29,6 +30,7 @@ export default function WeeklyReportScreen() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [weekEntries, setWeekEntries] = useState<MealPlanEntry[][]>([]);
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
+  const layout = useWideForm();
 
   const weekStartDay = settings?.weekStartDay ?? 1;
   const weekDates = useMemo(() => getWeekDates(todayStr(), weekStartDay), [weekStartDay]);
@@ -87,7 +89,7 @@ export default function WeeklyReportScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={layout.page}>
       {/* Header */}
       <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-3">
         <Pressable
@@ -122,6 +124,9 @@ export default function WeeklyReportScreen() {
           }}
         />
 
+        {/* In a desktop browser, the chart and the weight sit side by side. */}
+        <View style={layout.columns}>
+        <View style={layout.wide ? { flex: 1.6, minWidth: 0 } : undefined}>
         {/* ── Daily calories bar chart ── */}
         <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">
           Calories by day
@@ -163,6 +168,9 @@ export default function WeeklyReportScreen() {
           </View>
         </View>
 
+        </View>
+
+        <View style={layout.column}>
         {/* ── Weight this week ── */}
         <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">
           Weight
@@ -187,6 +195,8 @@ export default function WeeklyReportScreen() {
               "No weigh-ins logged this week"
             )}
           </Text>
+        </View>
+        </View>
         </View>
       </ScrollView>
     </SafeAreaView>

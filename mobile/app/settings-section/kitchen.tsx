@@ -25,6 +25,7 @@ import {
   SettingsSectionHeader as SectionHeader,
   UnitConversionsEditor,
 } from "@/src/components/forms";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { getIngredients } from "@/src/services/ingredientApi";
 import { getRecipes } from "@/src/services/recipeApi";
 import { DEFAULT_RATING_PROMPT_TIMING, updateRatingPrompt } from "@/src/utils/ratingPrompt";
@@ -75,6 +76,7 @@ export default function SettingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const layout = useWideForm();
 
   const [units, setUnits] = useState<string[]>([]);
   // Recipes/ingredients whose automatic rating prompt was turned off
@@ -151,6 +153,7 @@ export default function SettingsScreen() {
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         className="flex-1"
+        style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
@@ -167,6 +170,10 @@ export default function SettingsScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View ref={scrollAnchorRef} collapsable={false} />
+          {/* In a desktop browser the sections are in two columns, raised
+              so a unit dropdown opens over the Save button below them. */}
+          <View style={layout.wide ? [layout.columns, { zIndex: 1 }] : undefined}>
+          <View style={layout.column}>
           {/* ── Profile ── */}
           <SectionHeader title="Profile" />
           <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
@@ -279,6 +286,9 @@ export default function SettingsScreen() {
             )}
           </View>
 
+          </View>
+
+          <View style={layout.column}>
           {/* ── Unit conversions ── */}
           <SectionHeader title="Unit Conversions" />
           <Text className="mb-2 text-sm text-slate-500">
@@ -345,7 +355,11 @@ export default function SettingsScreen() {
             </View>
           </View>
 
+          </View>
+          </View>
+
           {/* Save button */}
+          <View style={layout.actions}>
           <Pressable
             onPress={() => void handleSave()}
             disabled={isSaving}
@@ -357,6 +371,7 @@ export default function SettingsScreen() {
               {isSaving ? "Saving…" : "Save settings"}
             </Text>
           </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

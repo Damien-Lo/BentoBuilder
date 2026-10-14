@@ -28,6 +28,7 @@ import {
 } from "@/src/components/forms";
 
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { getIngredients, updateIngredient, type Ingredient } from "@/src/services/ingredientApi";
 import { createTag, getTags, getUnitSuggestions, type SelectOption } from "@/src/services/optionsApi";
 import {
@@ -305,6 +306,7 @@ export default function EditRecipePage() {
   const pickerNutritionFactorSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const pickerPieceWeightSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const layout = useWideForm();
 
   // Load recipe + options in parallel
   useEffect(() => {
@@ -746,11 +748,58 @@ export default function EditRecipePage() {
     );
   }
 
+  // Instructions and notes
+  const stepsAndNotes = (
+    <>
+    {/* ── Instructions ── */}
+    <FormCard icon="list-outline" title="Instructions" description="Add step-by-step cooking instructions." zIndex={30}>
+    <View className="h-3" />
+
+    {steps.map((step, index) => (
+      <StepRow
+        key={index}
+        step={step}
+        index={index}
+        scrollRef={scrollRef}
+        scrollAnchorRef={scrollAnchorRef}
+        updateStep={updateStep}
+        removeStep={removeStep}
+      />
+    ))}
+
+    <Pressable
+      className="mb-4 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-4 active:bg-slate-100"
+      onPress={() => setSteps((prev) => [...prev, ""])}
+    >
+      <Ionicons name="add" size={20} color="#2563EB" />
+      <Text className="ml-2 font-semibold text-blue-700">Add step</Text>
+    </Pressable>
+
+    </FormCard>
+
+    {/* ── Notes ── */}
+    <FormCard icon="document-text-outline" title="Notes" description="Any tips, variations, or extra context." zIndex={20}>
+    <View className="h-3" />
+
+    <View {...notesSection.wrapperProps}>
+      <FormInput
+        value={notes}
+        placeholder="e.g. Best served fresh, substitute oat milk for dairy-free…"
+        multiline
+        onFocus={notesSection.trigger}
+        onChangeText={setNotes}
+      />
+    </View>
+    </FormCard>
+    </>
+  );
+
   return (
     <>
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         className="flex-1"
+        style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Nav bar */}
@@ -788,6 +837,9 @@ export default function EditRecipePage() {
         >
           <View ref={scrollAnchorRef} collapsable={false} />
           {/* ── Recipe Details ── */}
+          {/* (In a desktop browser: two columns.) */}
+          <View style={layout.columns}>
+          <View style={[layout.column, { zIndex: 2 }]}>
           <FormCard icon="book-outline" title="Recipe details" description="Give your recipe a name and tell us when it's eaten." zIndex={60}>
 
           <View {...nameSection.wrapperProps}>
@@ -1021,6 +1073,10 @@ export default function EditRecipePage() {
 
           </FormCard>
 
+          {/* (In a desktop browser the steps and notes go under the details, beside the ingredients.) */}
+          {layout.wide ? stepsAndNotes : null}
+          </View>
+          <View style={[layout.column, { zIndex: 1 }]}>
           {/* ── Ingredients ── */}
           <FormCard icon="basket-outline" title="Ingredients" description="Add ingredients and how many servings of each you use." zIndex={40}>
 
@@ -1334,47 +1390,11 @@ export default function EditRecipePage() {
 
           </FormCard>
 
-          {/* ── Instructions ── */}
-          <FormCard icon="list-outline" title="Instructions" description="Add step-by-step cooking instructions." zIndex={30}>
-          <View className="h-3" />
-
-          {steps.map((step, index) => (
-            <StepRow
-              key={index}
-              step={step}
-              index={index}
-              scrollRef={scrollRef}
-              scrollAnchorRef={scrollAnchorRef}
-              updateStep={updateStep}
-              removeStep={removeStep}
-            />
-          ))}
-
-          <Pressable
-            className="mb-4 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-4 active:bg-slate-100"
-            onPress={() => setSteps((prev) => [...prev, ""])}
-          >
-            <Ionicons name="add" size={20} color="#2563EB" />
-            <Text className="ml-2 font-semibold text-blue-700">Add step</Text>
-          </Pressable>
-
-          </FormCard>
-
-          {/* ── Notes ── */}
-          <FormCard icon="document-text-outline" title="Notes" description="Any tips, variations, or extra context." zIndex={20}>
-          <View className="h-3" />
-
-          <View {...notesSection.wrapperProps}>
-            <FormInput
-              value={notes}
-              placeholder="e.g. Best served fresh, substitute oat milk for dairy-free…"
-              multiline
-              onFocus={notesSection.trigger}
-              onChangeText={setNotes}
-            />
+          {layout.wide ? null : stepsAndNotes}
           </View>
-          </FormCard>
+          </View>
 
+          <View style={layout.actions}>
           <Pressable
             disabled={saving}
             onPress={() => void handleSave()}
@@ -1382,6 +1402,7 @@ export default function EditRecipePage() {
           >
             <Text className="text-base font-semibold text-white">{saving ? "Saving..." : "Save changes"}</Text>
           </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -18,6 +18,7 @@ import {
   courseNutrition,
   courseRecipe,
 } from "@/src/utils/mealPlan";
+import { useWideForm } from "@/src/components/forms/wideForm";
 
 const MEAL_TYPE_LABEL: Record<string, string> = {
   course: "Course-based",
@@ -27,6 +28,7 @@ const MEAL_TYPE_LABEL: Record<string, string> = {
 export default function MealDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const layout = useWideForm();
 
   const [meal, setMeal] = useState<Meal | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -94,8 +96,157 @@ export default function MealDetailScreen() {
 
   const courseCount = meal.courses?.length ?? 0;
 
+  // Header card
+  const headerSection = (
+    <>
+      <View className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
+        <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
+          <Ionicons name="restaurant-outline" size={26} color="#2563EB" />
+        </View>
+        <Text className="mt-4 text-2xl font-bold text-slate-900">{meal.name}</Text>
+        <View className="mt-3 flex-row flex-wrap gap-2">
+          <View className="rounded-full bg-blue-100 px-3 py-1">
+            <Text className="text-xs font-semibold text-blue-700">
+              {MEAL_TYPE_LABEL[meal.type] ?? meal.type}
+            </Text>
+          </View>
+          <View className="rounded-full bg-slate-100 px-3 py-1">
+            <Text className="text-xs font-semibold text-slate-600">
+              {courseCount} {courseCount === 1 ? "course" : "courses"}
+            </Text>
+          </View>
+          {(meal.tags ?? []).map(tag => (
+            <View key={tag._id} className="rounded-full bg-emerald-100 px-3 py-1">
+              <Text className="text-xs font-semibold text-emerald-700">
+                {tag.name}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </>
+  );
+
+  // Courses
+  const coursesSection = (
+    <>
+      {courseCount > 0 && (
+        <>
+          <Text className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
+            Courses
+          </Text>
+          <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            {meal.courses!.map((course, index) => {
+              const recipeId = courseRecipe(course)?._id ?? null;
+              const ingredientId = courseIngredient(course)?._id ?? null;
+              const calories = courseNutrition(course)?.calories;
+              const cal = calories != null ? Math.round(calories) : null;
+
+              return (
+                <Pressable
+                  key={course._id}
+                  className={`flex-row items-center px-4 py-3.5 ${
+                    index < meal.courses!.length - 1
+                      ? "border-b border-slate-100"
+                      : ""
+                  } ${recipeId || ingredientId ? "active:bg-slate-50" : ""}`}
+                  onPress={() => {
+                    if (recipeId)
+                      router.push({
+                        pathname: "/recipes/[id]",
+                        params: { id: recipeId },
+                      });
+                    else if (ingredientId)
+                      router.push({
+                        pathname: "/ingredients/edit/[id]",
+                        params: { id: ingredientId },
+                      });
+                  }}
+                >
+                  <View className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                    <Text className="text-xs font-bold text-blue-700">
+                      {index + 1}
+                    </Text>
+                  </View>
+
+                  <View className="ml-3 flex-1">
+                    <Text className="font-semibold text-slate-900">
+                      {courseName(course)}
+                    </Text>
+                    <Text className="mt-0.5 text-sm text-slate-500">
+                      {ingredientId ? "Ingredient · " : ""}
+                      {courseAmountLabel(course)}
+                    </Text>
+                  </View>
+
+                  {cal != null && (
+                    <Text className="mr-2 text-sm font-semibold text-slate-400">
+                      {cal} kcal
+                    </Text>
+                  )}
+                  {(recipeId || ingredientId) && (
+                    <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      )}
+    </>
+  );
+
+  // Nutrition
+  const nutritionSection = (
+    <>
+      <Text className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
+        Meal nutrition
+      </Text>
+      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        {(
+          [
+            ["Calories", totalNutrition.calories, "kcal"],
+            ["Protein",  totalNutrition.protein,  "g"],
+            ["Carbs",    totalNutrition.carbs,    "g"],
+            ["Fats",     totalNutrition.fats,     "g"],
+            ["Fiber",    totalNutrition.fiber,    "g"],
+            ["Sodium",   totalNutrition.sodium,   "mg"],
+          ] as [string, number, string][]
+        ).map(([label, value, unit], i, arr) => (
+          <View
+            key={label}
+            className={`flex-row items-center justify-between px-4 py-3 ${
+              i < arr.length - 1 ? "border-b border-slate-100" : ""
+            }`}
+          >
+            <Text className="text-base text-slate-600">{label}</Text>
+            <Text className="text-base font-semibold text-slate-900">
+              {Math.round(value * 10) / 10} {unit}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </>
+  );
+
+  // Notes
+  const notesSection = (
+    <>
+      {meal.notes ? (
+        <>
+          <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500">
+            Notes
+          </Text>
+          <View className="rounded-2xl border border-slate-200 bg-white p-5">
+            <Text className="text-base leading-6 text-slate-600">{meal.notes}</Text>
+          </View>
+        </>
+      ) : null}
+    </>
+  );
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50">
+    <SafeAreaView className="flex-1 bg-slate-50" style={layout.wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : undefined}>
       <Stack.Screen options={{ headerShown: false }} />
       {/* Nav bar */}
       <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
@@ -129,138 +280,25 @@ export default function MealDetailScreen() {
           paddingBottom: 60,
         }}
       >
-        {/* Header card */}
-        <View className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
-          <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
-            <Ionicons name="restaurant-outline" size={26} color="#2563EB" />
-          </View>
-          <Text className="mt-4 text-2xl font-bold text-slate-900">{meal.name}</Text>
-          <View className="mt-3 flex-row flex-wrap gap-2">
-            <View className="rounded-full bg-blue-100 px-3 py-1">
-              <Text className="text-xs font-semibold text-blue-700">
-                {MEAL_TYPE_LABEL[meal.type] ?? meal.type}
-              </Text>
+        {/* (In a desktop browser: the meal on the left, its nutrition beside it.) */}
+        {layout.wide ? (
+          <View style={layout.columns}>
+            <View style={{ flex: 1.5, minWidth: 0 }}>
+              {headerSection}
+              {coursesSection}
+              {/* (The notes' heading brings its own gap.) */}
+              <View style={{ marginTop: -24 }}>{notesSection}</View>
             </View>
-            <View className="rounded-full bg-slate-100 px-3 py-1">
-              <Text className="text-xs font-semibold text-slate-600">
-                {courseCount} {courseCount === 1 ? "course" : "courses"}
-              </Text>
-            </View>
-            {(meal.tags ?? []).map(tag => (
-              <View key={tag._id} className="rounded-full bg-emerald-100 px-3 py-1">
-                <Text className="text-xs font-semibold text-emerald-700">
-                  {tag.name}
-                </Text>
-              </View>
-            ))}
+            <View style={layout.column}>{nutritionSection}</View>
           </View>
-        </View>
-
-        {/* Courses */}
-        {courseCount > 0 && (
+        ) : (
           <>
-            <Text className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
-              Courses
-            </Text>
-            <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              {meal.courses!.map((course, index) => {
-                const recipeId = courseRecipe(course)?._id ?? null;
-                const ingredientId = courseIngredient(course)?._id ?? null;
-                const calories = courseNutrition(course)?.calories;
-                const cal = calories != null ? Math.round(calories) : null;
-
-                return (
-                  <Pressable
-                    key={course._id}
-                    className={`flex-row items-center px-4 py-3.5 ${
-                      index < meal.courses!.length - 1
-                        ? "border-b border-slate-100"
-                        : ""
-                    } ${recipeId || ingredientId ? "active:bg-slate-50" : ""}`}
-                    onPress={() => {
-                      if (recipeId)
-                        router.push({
-                          pathname: "/recipes/[id]",
-                          params: { id: recipeId },
-                        });
-                      else if (ingredientId)
-                        router.push({
-                          pathname: "/ingredients/edit/[id]",
-                          params: { id: ingredientId },
-                        });
-                    }}
-                  >
-                    <View className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                      <Text className="text-xs font-bold text-blue-700">
-                        {index + 1}
-                      </Text>
-                    </View>
-
-                    <View className="ml-3 flex-1">
-                      <Text className="font-semibold text-slate-900">
-                        {courseName(course)}
-                      </Text>
-                      <Text className="mt-0.5 text-sm text-slate-500">
-                        {ingredientId ? "Ingredient · " : ""}
-                        {courseAmountLabel(course)}
-                      </Text>
-                    </View>
-
-                    {cal != null && (
-                      <Text className="mr-2 text-sm font-semibold text-slate-400">
-                        {cal} kcal
-                      </Text>
-                    )}
-                    {(recipeId || ingredientId) && (
-                      <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
+            {headerSection}
+            {coursesSection}
+            {nutritionSection}
+            {notesSection}
           </>
         )}
-
-        {/* Nutrition */}
-        <Text className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
-          Meal nutrition
-        </Text>
-        <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          {(
-            [
-              ["Calories", totalNutrition.calories, "kcal"],
-              ["Protein",  totalNutrition.protein,  "g"],
-              ["Carbs",    totalNutrition.carbs,    "g"],
-              ["Fats",     totalNutrition.fats,     "g"],
-              ["Fiber",    totalNutrition.fiber,    "g"],
-              ["Sodium",   totalNutrition.sodium,   "mg"],
-            ] as [string, number, string][]
-          ).map(([label, value, unit], i, arr) => (
-            <View
-              key={label}
-              className={`flex-row items-center justify-between px-4 py-3 ${
-                i < arr.length - 1 ? "border-b border-slate-100" : ""
-              }`}
-            >
-              <Text className="text-base text-slate-600">{label}</Text>
-              <Text className="text-base font-semibold text-slate-900">
-                {Math.round(value * 10) / 10} {unit}
-              </Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Notes */}
-        {meal.notes ? (
-          <>
-            <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500">
-              Notes
-            </Text>
-            <View className="rounded-2xl border border-slate-200 bg-white p-5">
-              <Text className="text-base leading-6 text-slate-600">{meal.notes}</Text>
-            </View>
-          </>
-        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

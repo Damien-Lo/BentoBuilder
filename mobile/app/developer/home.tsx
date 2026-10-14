@@ -3,6 +3,8 @@ import { useRouter } from "expo-router";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useWideForm } from "@/src/components/forms/wideForm";
+
 interface ReportRow {
   id: string;
   label: string;
@@ -40,9 +42,10 @@ const REPORTS: ReportRow[] = [
 
 export default function DeveloperHomeScreen() {
   const router = useRouter();
+  const layout = useWideForm();
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={layout.page}>
       {/* Header */}
       <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-3">
         <Pressable
@@ -65,6 +68,26 @@ export default function DeveloperHomeScreen() {
         <Text className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">
           Reports
         </Text>
+        {layout.wide ? (
+          // In a desktop browser, a card for each report.
+          <View style={[layout.columns, { alignItems: "stretch" }]}>
+            {REPORTS.map((row) => (
+              <Pressable
+                key={row.id}
+                className="rounded-2xl border border-slate-200 bg-white p-5 active:bg-slate-50"
+                style={layout.column}
+                onPress={() => router.push(row.route as Parameters<typeof router.push>[0])}
+              >
+                <View className="flex-row items-center justify-between">
+                  <Ionicons name={row.icon} size={24} color="#D97706" />
+                  <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+                </View>
+                <Text className="mt-4 text-base font-semibold text-slate-700">{row.label}</Text>
+                <Text className="mt-1 text-sm text-slate-400">{row.description}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
         <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           {REPORTS.map((row, i) => (
             <Pressable
@@ -85,6 +108,7 @@ export default function DeveloperHomeScreen() {
             </Pressable>
           ))}
         </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

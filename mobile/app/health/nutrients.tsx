@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SettingsNumericInput } from "@/src/components/forms";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { getMealPlanForDate, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
@@ -66,6 +67,10 @@ const SECTIONS: { title: string | null; rows: Row[] }[] = [
 
 const ROWS: Row[] = SECTIONS.flatMap((section) => section.rows);
 
+// In a desktop browser the one long card is three, side by side: the label
+// block, the vitamins, and the minerals with what's left.
+const WIDE_CARDS = [SECTIONS.slice(0, 1), SECTIONS.slice(1, 2), SECTIONS.slice(2)];
+
 function shiftDate(dateStr: string, days: number): string {
   const d = parseLocalDate(dateStr);
   d.setDate(d.getDate() + days);
@@ -107,6 +112,7 @@ export default function NutrientsScreen() {
   // Goals being edited — null when not in edit mode.
   const [draft, setDraft] = useState<AppSettings | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const layout = useWideForm();
 
   const scrollRef = useRef<ScrollView>(null);
   const scrollAnchorRef = useRef<View>(null);
@@ -181,10 +187,68 @@ export default function NutrientsScreen() {
 
   const isEditing = draft != null;
 
+  // A card of goals to edit, and a card of the day's totals, for some of
+  // the sections (all of them on a phone).
+  const editCard = (sections: typeof SECTIONS) => (
+    <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      {sections.map(section => (
+        <View key={section.title ?? "label"}>
+          {section.title && <SectionHeading title={section.title} />}
+          {section.rows.map(({ field, indent }) => (
+            <GoalEditRow
+              key={field}
+              field={field}
+              indent={indent}
+              goal={draft ? getSetNutrientGoal(draft, field) : null}
+              onChange={goal => setDraft(prev => prev && withNutrientGoal(prev, field, goal))}
+              scrollRef={scrollRef}
+              anchorRef={scrollAnchorRef}
+            />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+
+  const totalsCard = (sections: typeof SECTIONS) => {
+    const lastRows = sections[sections.length - 1].rows;
+    const lastField = lastRows[lastRows.length - 1].field;
+    return (
+      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        {/* Column headers */}
+        <View className="flex-row items-center border-b border-slate-100 px-4 py-2.5">
+          <View className="flex-1" />
+          <Text className="w-16 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Total</Text>
+          <Text className="w-16 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Goal</Text>
+          <Text className="w-16 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Left</Text>
+        </View>
+
+        {sections.map(section => (
+          <View key={section.title ?? "label"}>
+            {section.title && <SectionHeading title={section.title} />}
+            {section.rows.map(({ field, indent }) => (
+              <NutrientRow
+                key={field}
+                field={field}
+                indent={indent}
+                total={totals[field] ?? null}
+                goal={getEffectiveNutrientGoal(settings, field)}
+                covered={coverage[field] ?? 0}
+                entryCount={confirmedEntries.length}
+                isLast={field === lastField}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         className="flex-1"
+        style={layout.wide ? { width: "100%", maxWidth: 1280, alignSelf: "center" } : undefined}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
@@ -223,28 +287,20 @@ export default function NutrientsScreen() {
 
           {isEditing ? (
             <>
-              <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                {SECTIONS.map(section => (
-                  <View key={section.title ?? "label"}>
-                    {section.title && <SectionHeading title={section.title} />}
-                    {section.rows.map(({ field, indent }) => (
-                      <GoalEditRow
-                        key={field}
-                        field={field}
-                        indent={indent}
-                        goal={getSetNutrientGoal(draft, field)}
-                        onChange={goal => setDraft(prev => prev && withNutrientGoal(prev, field, goal))}
-                        scrollRef={scrollRef}
-                        anchorRef={scrollAnchorRef}
-                      />
-                    ))}
-                  </View>
-                ))}
-              </View>
+              {layout.wide ? (
+                <View style={layout.columns}>
+                  {WIDE_CARDS.map((sections, i) => (
+                    <View key={i} style={layout.column}>{editCard(sections)}</View>
+                  ))}
+                </View>
+              ) : (
+                editCard(SECTIONS)
+              )}
               <Text className="mt-3 px-1 text-xs leading-5 text-slate-400">
                 Vitamins and minerals are set as a percentage of the standard Daily Value — leave
                 one blank to use 100%. Leave any other goal blank to not track against one.
               </Text>
+              <View style={layout.actions}>
               <Pressable
                 onPress={() => void handleSave()}
                 disabled={isSaving}
@@ -256,11 +312,15 @@ export default function NutrientsScreen() {
                   {isSaving ? "Saving…" : "Save goals"}
                 </Text>
               </Pressable>
+              </View>
             </>
           ) : (
             <>
               {/* Day picker */}
-              <View className="mb-3 flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-2 py-1.5">
+              <View
+                className="mb-3 flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-2 py-1.5"
+                style={layout.wide ? { width: 360 } : undefined}
+              >
                 <Pressable
                   className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
                   onPress={() => setDate(d => shiftDate(d, -1))}
@@ -279,33 +339,15 @@ export default function NutrientsScreen() {
                 </Pressable>
               </View>
 
-              <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                {/* Column headers */}
-                <View className="flex-row items-center border-b border-slate-100 px-4 py-2.5">
-                  <View className="flex-1" />
-                  <Text className="w-16 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Total</Text>
-                  <Text className="w-16 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Goal</Text>
-                  <Text className="w-16 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Left</Text>
+              {layout.wide ? (
+                <View style={layout.columns}>
+                  {WIDE_CARDS.map((sections, i) => (
+                    <View key={i} style={layout.column}>{totalsCard(sections)}</View>
+                  ))}
                 </View>
-
-                {SECTIONS.map(section => (
-                  <View key={section.title ?? "label"}>
-                    {section.title && <SectionHeading title={section.title} />}
-                    {section.rows.map(({ field, indent }) => (
-                      <NutrientRow
-                        key={field}
-                        field={field}
-                        indent={indent}
-                        total={totals[field] ?? null}
-                        goal={getEffectiveNutrientGoal(settings, field)}
-                        covered={coverage[field] ?? 0}
-                        entryCount={confirmedEntries.length}
-                        isLast={field === ROWS[ROWS.length - 1].field}
-                      />
-                    ))}
-                  </View>
-                ))}
-              </View>
+              ) : (
+                totalsCard(SECTIONS)
+              )}
 
               <Text className="mt-3 px-1 text-xs leading-5 text-slate-400">
                 Totals count only meals you&apos;ve logged as eaten

@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DateTextInput } from "@/src/components/forms";
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { deleteWeightEntry, getWeightEntries, logWeightEntry, type WeightEntry } from "@/src/services/weightEntryApi";
@@ -33,6 +34,7 @@ export default function WeightScreen() {
 
   const [weightText, setWeightText] = useState("");
   const [dateText, setDateText] = useState(todayDateInputString());
+  const layout = useWideForm();
 
   // Scrolls the log-a-weigh-in row into view on focus — see
   // useScrollFocusSection. Weight and date share one section since they
@@ -115,6 +117,7 @@ export default function WeightScreen() {
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         className="flex-1"
+        style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
@@ -178,6 +181,9 @@ export default function WeightScreen() {
             </View>
           )}
 
+          {/* In a desktop browser, logging and the history sit side by side. */}
+          <View style={layout.columns}>
+          <View style={layout.column}>
           {/* ── Log a weigh-in ── */}
           <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">
             Log a weigh-in
@@ -219,6 +225,9 @@ export default function WeightScreen() {
             </Pressable>
           </View>
 
+          </View>
+
+          <View style={layout.column}>
           {/* ── History ── */}
           <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">
             History
@@ -258,6 +267,8 @@ export default function WeightScreen() {
               ))}
             </View>
           )}
+          </View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

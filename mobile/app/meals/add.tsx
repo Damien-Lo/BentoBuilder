@@ -27,6 +27,7 @@ import {
 } from "@/src/components/meals/MealCoursesEditor";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
+import { useWideForm } from "@/src/components/forms/wideForm";
 
 const MEAL_TYPE_OPTIONS: { value: MealType; label: string; icon: string; available: boolean }[] = [
   { value: "course", label: "Course-based", icon: "list-outline", available: true },
@@ -60,6 +61,7 @@ export default function AddMealScreen() {
   const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const tagsSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
   const coursesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  const layout = useWideForm();
 
   useEffect(() => {
     let cancelled = false;
@@ -133,11 +135,40 @@ export default function AddMealScreen() {
     }
   }
 
+  // Nutrition summary
+  const nutritionCard = (
+    <FormCard icon="flame-outline" title="Nutrition" description="Totalled from each course's recipe or ingredient." zIndex={40}>
+      <View className="-mx-1 mt-3 flex-row flex-wrap">
+        {(
+          [
+            ["Calories", totalNutrition.calories, "kcal"],
+            ["Protein",  totalNutrition.protein,  "g"],
+            ["Carbs",    totalNutrition.carbs,    "g"],
+            ["Fats",     totalNutrition.fats,     "g"],
+            ["Fiber",    totalNutrition.fiber,    "g"],
+            ["Sodium",   totalNutrition.sodium,   "mg"],
+          ] as [string, number, string][]
+        ).map(([label, value, unit]) => (
+          <View key={label} className="mb-2 px-1" style={{ width: "33.333%" }}>
+            <View className="rounded-xl bg-slate-50 px-2.5 py-2">
+              <Text className="text-xs text-slate-500">{label}</Text>
+              <Text className="mt-0.5 text-base font-semibold text-slate-900">
+                {Math.round(value * 10) / 10}
+                <Text className="text-xs font-normal text-slate-400"> {unit}</Text>
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    </FormCard>
+  );
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
       <Stack.Screen options={{ headerShown: false }} />
       <KeyboardAvoidingView
         className="flex-1"
+        style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
@@ -169,6 +200,9 @@ export default function AddMealScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View ref={scrollAnchorRef} collapsable={false} />
+          {/* (In a desktop browser: two columns.) */}
+          <View style={layout.columns}>
+          <View style={[layout.column, { zIndex: 2 }]}>
           <FormCard icon="restaurant-outline" title="Meal details" description="Give your meal a name and pick what it's made of." zIndex={60}>
 
           {/* Meal type dropdown */}
@@ -268,6 +302,10 @@ export default function AddMealScreen() {
             />
           </View>
           </FormCard>
+          {/* (In a desktop browser the totals sit under the details, beside the courses.) */}
+          {layout.wide ? nutritionCard : null}
+          </View>
+          <View style={[layout.column, { zIndex: 1 }]}>
 
           {/* Courses */}
           <FormCard icon="list-outline" title="Courses" description={`${courses.length} ${courses.length === 1 ? "course" : "courses"} in this meal.`} zIndex={50}>
@@ -285,31 +323,11 @@ export default function AddMealScreen() {
           </FormCard>
 
           {/* Nutrition summary */}
-          <FormCard icon="flame-outline" title="Nutrition" description="Totalled from each course's recipe or ingredient." zIndex={40}>
-            <View className="-mx-1 mt-3 flex-row flex-wrap">
-              {(
-                [
-                  ["Calories", totalNutrition.calories, "kcal"],
-                  ["Protein",  totalNutrition.protein,  "g"],
-                  ["Carbs",    totalNutrition.carbs,    "g"],
-                  ["Fats",     totalNutrition.fats,     "g"],
-                  ["Fiber",    totalNutrition.fiber,    "g"],
-                  ["Sodium",   totalNutrition.sodium,   "mg"],
-                ] as [string, number, string][]
-              ).map(([label, value, unit]) => (
-                <View key={label} className="mb-2 px-1" style={{ width: "33.333%" }}>
-                  <View className="rounded-xl bg-slate-50 px-2.5 py-2">
-                    <Text className="text-xs text-slate-500">{label}</Text>
-                    <Text className="mt-0.5 text-base font-semibold text-slate-900">
-                      {Math.round(value * 10) / 10}
-                      <Text className="text-xs font-normal text-slate-400"> {unit}</Text>
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </FormCard>
+          {layout.wide ? null : nutritionCard}
+          </View>
+          </View>
 
+          <View style={layout.actions}>
           <Pressable
             disabled={saving}
             onPress={() => void handleSave()}
@@ -317,6 +335,7 @@ export default function AddMealScreen() {
           >
             <Text className="text-base font-semibold text-white">{saving ? "Saving..." : "Save meal"}</Text>
           </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 

@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useWideForm } from "@/src/components/forms/wideForm";
 import { TaskNumber } from "@/src/components/todo/TaskBits";
 import { shortDateFromIso } from "@/src/components/todo/theme";
 import {
@@ -19,6 +20,7 @@ import {
 export default function DeletedTasksScreen() {
   const router = useRouter();
   const [tasks, setTasks] = useState<DeletedTask[] | null>(null);
+  const layout = useWideForm();
 
   const load = useCallback(() => {
     getDeletedTasks()
@@ -59,7 +61,7 @@ export default function DeletedTasksScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={layout.page}>
       <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-2.5">
         <Pressable
           onPress={() => router.back()}
@@ -94,7 +96,13 @@ export default function DeletedTasksScreen() {
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
           {tasks.map((task) => (
-            <View key={task._id} className="mb-3 rounded-2xl border border-slate-200 bg-white p-4">
+            // In a desktop browser a task is one row, its buttons at the end.
+            <View
+              key={task._id}
+              className="mb-3 rounded-2xl border border-slate-200 bg-white p-4"
+              style={layout.wide ? { flexDirection: "row", alignItems: "center" } : undefined}
+            >
+              <View style={layout.column}>
               <View className="flex-row items-center gap-2">
                 <TaskNumber number={task.number} />
                 <Text className="flex-1 text-xs text-slate-500" numberOfLines={1}>
@@ -114,7 +122,8 @@ export default function DeletedTasksScreen() {
                   {task.daysLeft === 0 ? "last day" : `${task.daysLeft} day${task.daysLeft === 1 ? "" : "s"} left`}
                 </Text>
               </Text>
-              <View className="mt-3 flex-row gap-2">
+              </View>
+              <View className="mt-3 flex-row gap-2" style={layout.wide ? { marginTop: 0, marginLeft: 16, width: 200 } : undefined}>
                 <Pressable
                   onPress={() => restore(task)}
                   className="flex-1 flex-row items-center justify-center rounded-xl bg-blue-600 py-2.5 active:bg-blue-700"
