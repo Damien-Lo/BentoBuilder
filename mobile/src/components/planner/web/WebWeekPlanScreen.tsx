@@ -29,6 +29,7 @@ import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { DEFAULT_SETTINGS, loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { stopUsualMeal } from "@/src/services/usualMealApi";
 import type { PantryItem } from "@/src/types/pantry";
+import { sizePlanned } from "@/src/utils/pieceSizing";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
 import { suggestMeals, type Dish, type Macros, type Suggestion, type Suggestions } from "@/src/utils/recommend";
 
@@ -159,7 +160,9 @@ export function WebWeekPlanScreen() {
       : `${MONTHS_SHORT[a.getMonth()]} ${a.getDate()} – ${MONTHS_SHORT[b.getMonth()]} ${b.getDate()}, ${b.getFullYear()}`;
 
   const ready = loadedWeek === week[0];
-  const weekEntries = ready ? entries.filter((e) => e.date >= week[0] && e.date <= week[6]) : [];
+  // (What's planned counts at the piece in the pantry it would get.)
+  const sizedEntries = kitchen ? sizePlanned(entries, kitchen.recipes, kitchen.ingredients, kitchen.pantry, conversions, today).entries : entries;
+  const weekEntries = ready ? sizedEntries.filter((e) => e.date >= week[0] && e.date <= week[6]) : [];
   const eaten = computeDayNutrition(weekEntries.filter((e) => e.status === "confirmed"), conversions);
   const planned = computeDayNutrition(weekEntries.filter((e) => e.status === "planned"), conversions);
   const loggedDays = week.filter((d) => weekEntries.some((e) => e.date === d && e.status === "confirmed")).length;

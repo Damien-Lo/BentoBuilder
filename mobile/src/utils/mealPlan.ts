@@ -6,7 +6,7 @@ import type { Recipe } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
 import type { RestaurantMeal } from "@/src/services/restaurantMealApi";
 import type { PantryItem } from "@/src/types/pantry";
-import type { NullableNutrition, NutritionTotals } from "@/src/types/nutrition";
+import type { NullableNutrition, NutritionTotals, PartialNutrition } from "@/src/types/nutrition";
 import { countQualifyingPantryPieces, getIngredientStockInUnit } from "./ingredientStock";
 import {
   addNutrition,
@@ -339,6 +339,27 @@ export function computeConfirmNutrition(
     );
   }
 
+  // A pantry entry with nutrition of its own (a bag made from one particular
+  // steak) counts at that, not at its ingredient's usual figure: the
+  // difference, for the amount taken from it, on top of what the rows gave.
+  for (const instr of instructions) {
+    const item = pantryItemById.get(instr.pantryItemId);
+    const ingredient = item?.ingredient;
+    if (!item?.nutrition || !ingredient || typeof ingredient !== "object") continue;
+    const ingredientConversions = getIngredientConversions(ingredient, conversions);
+    const inPortionUnit = convertUnits(instr.amount, item.quantityUnit, ingredient.defaultPortionUnit ?? "", ingredientConversions);
+    if (inPortionUnit == null) continue;
+    const portions = inPortionUnit / (ingredient.defaultPortionAmount || 1);
+    const usual = scaleNutrition(ingredient.nutrition, portions);
+    const own = scaleNutrition(item.nutrition, portions);
+    const factor = rows.find((r) => r.matchMode !== "wholePiece" && r.ingredientId === ingredient._id)?.nutritionFactor ?? 1;
+    const difference: PartialNutrition = {};
+    for (const key of Object.keys(own) as (keyof typeof own)[]) {
+      if (own[key] != null && usual[key] != null) (difference as Record<string, number>)[key] = (own[key]! - usual[key]!) * factor;
+    }
+    addNutrition(totals, difference);
+  }
+
   const instructionsByIngredient = new Map<string, DeductionInstruction[]>();
   for (const instr of instructions) {
     const ingredientId = pantryItemById.get(instr.pantryItemId)?.ingredient._id;
@@ -404,6 +425,8 @@ export function computeDayNutrition(entries: MealPlanEntry[], conversions: Custo
         ? computeConfirmedRecipeNutrition(entry, conversions)
         : null;
       addNutrition(totals, confirmed ?? scaleRecipeNutrition(entry.recipe, entry.recipeServings ?? 1));
+      // Still planned, and sized to the piece in the pantry it would get.
+      if (!confirmed && entry.sizedTo) for (const m of ["calories", "protein", "carbs", "fats"] as const) totals[m] = Math.max(0, totals[m] + entry.sizedTo.shift[m]);
       continue;
     }
     if (entry.ingredient) {

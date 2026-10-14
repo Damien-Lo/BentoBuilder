@@ -90,6 +90,10 @@ export interface MealPlanEntry {
   createdAt?: string;
   // An accepted suggestion, as against something picked by hand.
   suggested?: boolean;
+  // Never stored: while planned, the pantry piece (or the bag made from one)
+  // this would get, and what that adds to the recipe's figures as written
+  // (see utils/pieceSizing.ts).
+  sizedTo?: { shift: { calories: number; protein: number; carbs: number; fats: number }; claims: string[]; piece?: string };
 }
 
 export interface CreateMealPlanEntryInput {

@@ -54,6 +54,11 @@ export interface PantryItem {
   // Each move from one storage location to another: a move gives the entry
   // a new expiry date (see server/services/shelfLife.js).
   moves?: { at: string; from?: string; to?: string; kind: string; expiryBefore: string | null; expiryAfter: string | null }[];
+  // Made from a particular piece (a bag from one steak): which, and this
+  // entry's own nutrition per the ingredient's portion — it then counts at
+  // that, not at its ingredient's usual figure.
+  madeFrom?: { ingredient: string; amount: number; unit: string }[];
+  nutrition?: Record<string, number | null> | null;
   isFinished: boolean;
   // Set when isFinished was flipped by an automatic meal-plan-confirm
   // deduction — null when finished some other way (or not finished).

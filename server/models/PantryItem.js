@@ -92,6 +92,21 @@ const pantryItemSchema = new mongoose.Schema(
       },
     ],
 
+    // For something made from a particular piece (a vacuum-sealed bag from
+    // one steak): the piece it was made from, and this entry's own
+    // nutrition — per the ingredient's portion, like the ingredient's own —
+    // so it counts at that steak's size, not the recipe's assumed one. Null
+    // for everything else, which counts as its ingredient says.
+    madeFrom: [
+      {
+        _id: false,
+        ingredient: { type: mongoose.Schema.Types.ObjectId, ref: "Ingredient" },
+        amount: { type: Number },
+        unit: { type: String, trim: true, default: "" },
+      },
+    ],
+    nutrition: { type: mongoose.Schema.Types.Mixed, default: null },
+
     isFinished: {
       type: Boolean,
       default: false,

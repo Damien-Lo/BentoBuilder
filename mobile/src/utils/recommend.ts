@@ -4,11 +4,10 @@ import type { MealPlanEntry, MealSlot } from "@/src/services/mealPlanApi";
 import type { Recipe } from "@/src/services/recipeApi";
 import type { PantryItem } from "@/src/types/pantry";
 
-import { pieceWeightInRange } from "./ingredientStock";
 import { computeDayNutrition, scaleIngredientNutrition, scaleRecipeNutrition } from "./mealPlan";
-import { recipeLineToRow } from "./pantryDeduction";
+import { pieceSizer, sizePlanned } from "./pieceSizing";
 import { computePlanNeeds, type KitchenSession } from "./planNeeds";
-import { getIngredientConversions, type CustomUnitConversion } from "./unitConversion";
+import type { CustomUnitConversion } from "./unitConversion";
 
 // What to eat next: suggestions for the empty slots in the plan.
 //
@@ -43,7 +42,9 @@ import { getIngredientConversions, type CustomUnitConversion } from "./unitConve
 //
 // A recipe that takes a whole piece — one fillet, one steak — is counted at
 // the size of the piece that's actually in the pantry, each piece going to
-// one meal only. With none there, it's counted as the recipe is written.
+// one meal only. So is one that uses a bag already made from such a piece,
+// which keeps that piece's figures. With neither there, it's counted as the
+// recipe is written.
 
 export interface Goals {
   calories: number | null;
@@ -153,7 +154,7 @@ const asEntry = (dish: Dish, date: string, slot: MealSlot) =>
 export function suggestMeals({
   slots,
   started = [],
-  entries,
+  entries: logged,
   recipes,
   meals,
   ingredients,
@@ -193,6 +194,11 @@ export function suggestMeals({
   });
   if (!goals.calories) return out;
   const dayGoal = goals.calories;
+  // The meals already planned take their pieces from the pantry first, and
+  // count at those; `stock` is what's left for the suggestions.
+  const planned = sizePlanned(logged, recipes, ingredients, pantryItems, conversions, today);
+  const entries = planned.entries;
+  let stock = planned.stock;
 
   // --- What there is to suggest ---
   const macros = (entry: MealPlanEntry): Macros => {
@@ -228,68 +234,16 @@ export function suggestMeals({
     .filter((d) => d.calories > 0);
 
   // --- The real pieces in the pantry ---
-  const ingredientById = new Map(ingredients.map((i) => [i._id, i]));
-  const recipeById = new Map(recipes.map((r) => [r._id, r]));
-  const conversionsOf = (ingredient: Ingredient) => getIngredientConversions(ingredient, conversions, ingredients);
-  // What's in stock and not yet spoken for, soonest to expire first.
-  let stock = pantryItems.filter((p) => (p.quantityAvailable ?? 0) > 0).sort((a, b) => (a.expiryDate ?? "9").localeCompare(b.expiryDate ?? "9"));
-
-  // The whole pieces a serving of a recipe takes — its own, and those of
-  // anything it uses that's made ahead from one (a marinated fillet in a
-  // bag) and hasn't been made yet.
-  type PieceLine = {
-    ingredient: Ingredient;
-    count: number;
-    min: number;
-    max: number;
-    unit: string;
-    factor: number;
-  };
-  const pieceLines = (recipe: Recipe, ratio = 1 / (recipe.servings || 1), nested = false): PieceLine[] =>
-    recipe.ingredientList.flatMap((line) => {
-      const ingredient = ingredientById.get(idOf(line.ingredient));
-      if (!ingredient) return [];
-      if (line.matchMode === "wholePiece") {
-        const count = recipeLineToRow(line, ratio).quantity;
-        return count > 0
-          ? [
-              {
-                ingredient,
-                count,
-                min: line.pieceMinWeight ?? 0,
-                max: line.pieceMaxWeight ?? Infinity,
-                unit: line.pieceWeightUnit ?? "g",
-                factor: line.nutritionFactor ?? 1,
-              },
-            ]
-          : [];
-      }
-      const made = recipeById.get(idOf(ingredient.productionRecipe));
-      if (nested || !made?.madeAhead || stock.some((p) => idOf(p.ingredient) === ingredient._id)) return [];
-      return pieceLines(made, (line.quantity * ratio) / (made.servings || 1), true);
-    });
-
+  const size = pieceSizer(recipes, ingredients, conversions);
   // A dish at the size of the pieces it would get from `from`, and which.
   const MACROS = ["calories", "protein", "carbs", "fats"] as const;
   const sized = (dish: Dish, from: PantryItem[]): { dish: Dish; claims: string[] } => {
     if (!dish.recipe) return { dish, claims: [] };
-    const used: PantryItem[] = [];
-    const out = { ...dish };
-    for (const line of pieceLines(dish.recipe)) {
-      const family = new Set([line.ingredient._id, ...ingredients.filter((i) => idOf(i.genericParent) === line.ingredient._id).map((i) => i._id)]);
-      for (let n = 0; n < line.count; n++) {
-        const item = from.find((p) => !used.includes(p) && family.has(idOf(p.ingredient)) && pieceWeightInRange(p.quantityAvailable ?? 0, p.quantityUnit, line.min, line.max, line.unit, conversionsOf(line.ingredient)));
-        if (!item) continue;
-        used.push(item);
-        // The recipe as written assumes a piece in the middle of its range.
-        const own = ingredientById.get(idOf(item.ingredient)) ?? line.ingredient;
-        const real = scaleIngredientNutrition(own, item.quantityAvailable ?? 0, item.quantityUnit, conversionsOf(own));
-        const assumed = scaleIngredientNutrition(line.ingredient, (line.min + line.max) / 2, line.unit, conversionsOf(line.ingredient));
-        for (const m of MACROS) out[m] = Math.max(0, out[m] + ((real[m] ?? 0) - (assumed[m] ?? 0)) * line.factor);
-        out.piece = `${Math.round((item.quantityAvailable ?? 0) * 100) / 100} ${item.quantityUnit} ${own.name.toLowerCase()}`;
-      }
-    }
-    return { dish: used.length ? out : dish, claims: used.map((p) => p._id) };
+    const { shift, claims, piece } = size(dish.recipe, from);
+    if (!claims.length) return { dish, claims };
+    const out = { ...dish, piece };
+    for (const m of MACROS) out[m] = Math.max(0, out[m] + shift[m]);
+    return { dish: out, claims };
   };
 
   // --- What the log says about habits ---
@@ -451,13 +405,6 @@ export function suggestMeals({
     return sides;
   };
 
-  // The meals already planned take their pieces first.
-  for (const entry of entries.filter((e) => e.status !== "confirmed" && e.date >= today).sort((a, b) => a.date.localeCompare(b.date))) {
-    const dish = recipeDishes.find((d) => d.key === dishKey(entry));
-    const claims = dish ? sized(dish, stock).claims : [];
-    if (claims.length) stock = stock.filter((p) => !claims.includes(p._id));
-  }
-
   // How a plate scores for a slot: each factor's 0–1, the weighted score,
   // and why. `planned` is the plate as plan entries; `before` is what was
   // had or planned when the slot came up.
@@ -524,12 +471,6 @@ export function suggestMeals({
   // Each open slot's room and what had been taken when it came up, kept so
   // that what's planned there instead can be scored the same way.
   const context = new Map<string, { room: number; before: number }>();
-
-  // The next shopping trip booked, if any.
-  const nextShop = sessions
-    .filter((x) => x.kind === "shop" && x.date >= today)
-    .map((x) => x.date)
-    .sort()[0];
 
   // What can be had as a snack: recipes marked for it, saved meals and
   // single things (a bar, a shake — one portion) you've had as one.
@@ -659,12 +600,7 @@ export function suggestMeals({
         });
       }
 
-      // Before the next shopping trip there's only what's in the pantry to
-      // cook from: where anything on offer needs nothing, only those are
-      // offered. (With no trip booked, nothing's ruled out — "needs N
-      // things" is then the prompt to book one.)
-      const onHand = nextShop && date < nextShop ? scored.filter((x) => x.missing === 0) : [];
-      shortlist.set(slot, (onHand.length ? onHand : scored).sort((x, y) => y.score - x.score).slice(0, 6));
+      shortlist.set(slot, scored.sort((x, y) => y.score - x.score).slice(0, 6));
     }
 
     // Of each meal's best few, the set that lands the day nearest its
@@ -690,11 +626,11 @@ export function suggestMeals({
         return;
       }
       const options = shortlist.get(open[index]) ?? [];
-      if (!options.length) pick(index + 1, picked);
-      for (const option of options) {
-        // (Not the same thing twice in a day, nor the same piece.)
-        if (!picked.some((p) => (p.main.key && p.main.key === option.main.key) || p.claims.some((c) => option.claims.includes(c)))) pick(index + 1, [...picked, option]);
-      }
+      // (Not the same thing twice in a day, nor the same piece.)
+      const free = options.filter((option) => !picked.some((p) => (p.main.key && p.main.key === option.main.key) || p.claims.some((c) => option.claims.includes(c))));
+      // (A meal with nothing left to choose from doesn't hold up the rest.)
+      if (!free.length) pick(index + 1, picked);
+      for (const option of free) pick(index + 1, [...picked, option]);
     };
     pick(0, []);
 
@@ -757,8 +693,11 @@ export function suggestMeals({
 
     for (const slot of open) {
       // (Sides for a planned main, all tuned away, are no offer at all.)
-      const options = (shortlist.get(slot) ?? []).filter((o) => !o.beside || o.sides.length);
-      const first = chosen.find((c) => options.includes(c));
+      const mine = shortlist.get(slot) ?? [];
+      const first = chosen.find((c) => mine.includes(c));
+      // (Nor what another meal that day has been given, or its piece.)
+      const elsewhere = chosen.filter((c) => c !== first && !c.beside);
+      const options = mine.filter((o) => (!o.beside || o.sides.length) && !elsewhere.some((c) => (c.main.key && c.main.key === o.main.key) || c.claims.some((id) => o.claims.includes(id))));
       out.set(`${date}|${slot}`, (first ? [first, ...options.filter((o) => o !== first)] : options).slice(0, count));
       if (first) {
         suggestedKcal.set(date, (suggestedKcal.get(date) ?? 0) + first.calories);

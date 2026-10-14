@@ -57,6 +57,8 @@ import {
   type DeductionInstruction,
   type IngredientRequirement,
 } from "@/src/utils/pantryDeduction";
+import { scaleIngredientNutrition } from "@/src/utils/mealPlan";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { referenceId, referenceName } from "@/src/utils/pantryDefaults";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
@@ -157,6 +159,30 @@ function NestedIngredientList({
   );
 }
 
+// A whole piece one run of a recipe needs picking: which ingredient, what
+// the recipe calls it ("steak"), the pantry entries that would do, and the
+// recipe line it's for.
+interface PieceSlot {
+  ingredientId: string;
+  name: string;
+  unit: string;
+  candidates: PantryItem[];
+  line?: Recipe["ingredientList"][number];
+}
+
+// A batch's pieces, chosen for it: for each slot the first that would do
+// and isn't spoken for (`taken`, or by an earlier slot here); "" where
+// there's none left.
+function fillBatch(slots: PieceSlot[], taken: string[]): string[] {
+  const used = new Set(taken);
+  return slots.map((slot) => {
+    const piece = slot.candidates.find((p) => !used.has(p._id));
+    if (!piece) return "";
+    used.add(piece._id);
+    return piece._id;
+  });
+}
+
 export default function RecipeDetailPage() {
   const {
     id,
@@ -224,6 +250,15 @@ export default function RecipeDetailPage() {
   const [batchStorageLocationName, setBatchStorageLocationName] = useState("");
   const [batchStorageLocationDraft, setBatchStorageLocationDraft] = useState("");
   const [batchExpiryDate, setBatchExpiryDate] = useState("");
+  // For a recipe that takes whole pieces (a steak into a bag): what each run
+  // of it needs picking — a slot for each piece — and the batches being
+  // made, each holding the pantry entry chosen for each of its slots ("" =
+  // not chosen yet). A piece goes into one batch only.
+  const wide = useWideWeb();
+  const [batchSlots, setBatchSlots] = useState<PieceSlot[]>([]);
+  const [batches, setBatches] = useState<string[][]>([]);
+  // The slot whose list of pieces is open, as "batch:slot".
+  const [openSlot, setOpenSlot] = useState<string | null>(null);
   const [storageLocations, setStorageLocations] = useState<SelectOption[]>([]);
 
   const isFirstLoad = useRef(true);
@@ -428,6 +463,32 @@ export default function RecipeDetailPage() {
       customUnitConversions,
     );
 
+    // Whole pieces: the batch card has a card for each one being made, each
+    // choosing its own pieces from the pantry — and what's made carries the
+    // size of the pieces that went into it. (Whatever else the recipe takes
+    // comes from the pantry in the usual order.)
+    const pieceRequirements = requirements.filter((r) => r.matchMode === "wholePiece");
+    const slots: PieceSlot[] = pieceRequirements.flatMap((requirement) => {
+      const candidates = requirement.groups
+        .flatMap((group) => group.qualifyingMembers ?? [])
+        .map((member) => pantryItems.find((p) => p._id === member.pantryItemId))
+        .filter((p): p is PantryItem => !!p)
+        .sort((a, b) => (a.expiryDate ?? "9").localeCompare(b.expiryDate ?? "9"));
+      const line = recipe.ingredientList.find((l) => (l.matchMode ?? "quantity") === "wholePiece" && referenceId(l.ingredient) === requirement.ingredientId);
+      return Array.from({ length: Math.max(1, Math.round(requirement.neededQuantity)) }, () => ({ ingredientId: requirement.ingredientId, name: requirement.ingredientName, unit: line?.unit || "piece", candidates, line }));
+    });
+    // (With too few pieces for even one, the usual way asks for the rest.)
+    const first = fillBatch(slots, []);
+    if (slots.length && first.every(Boolean)) {
+      setBatchSlots(slots);
+      setBatches([first]);
+      setOpenSlot(null);
+      openBatchCard(getDefaultDeductionInstructions(requirements.filter((r) => r.matchMode !== "wholePiece")));
+      return;
+    }
+    setBatchSlots([]);
+    setBatches([]);
+
     if (hasAmbiguity(requirements)) {
       setPendingRequirements(requirements);
       setAmbiguousRequirements(requirements.filter((r) => r.groups.length > 1 || !!r.askAmount));
@@ -467,8 +528,13 @@ export default function RecipeDetailPage() {
   async function handleConfirmBatch() {
     if (!recipe || !producedIngredient || cooking) return;
 
+    const byPiece = batchSlots.length > 0;
+    if (byPiece && batches.some((batch) => batch.some((id) => !id))) {
+      Alert.alert("Something's not chosen", "Pick a piece for each one, or remove the batch that's missing one.");
+      return;
+    }
     const parsedAmount = Number(batchAmount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    if (!byPiece && (!Number.isFinite(parsedAmount) || parsedAmount <= 0)) {
       Alert.alert("Enter an amount", "How much did this batch make?");
       return;
     }
@@ -494,6 +560,56 @@ export default function RecipeDetailPage() {
       // yield (recipe.servings worth) — scale them to whatever batch size
       // was actually entered, so doubling the batch doubles the deduction.
       const baseYield = (recipe.servings ?? 1) * (producedIngredient.defaultPortionAmount ?? 1);
+
+      if (byPiece) {
+        // A run of the recipe for each batch: the rest of what it takes,
+        // that many times over (as far as there is); each batch's pieces,
+        // whole; and one thing made per batch, counted at its pieces' size.
+        const runs = batches.length;
+        for (const instruction of pendingInstructions) {
+          const there = pantryItems.find((p) => p._id === instruction.pantryItemId)?.quantityAvailable ?? 0;
+          const amount = Math.min(there, round1(instruction.amount * runs));
+          if (amount > 0) await deductFromPantryItem(instruction.pantryItemId, amount);
+        }
+        const made = producedIngredient.nutrition as Record<string, number | null> | undefined;
+        for (const batch of batches) {
+          const pieces = batch.map((id, index) => ({ slot: batchSlots[index], piece: pantryItems.find((p) => p._id === id)! }));
+          // What the recipe's numbers assume is each piece in the middle of
+          // its range; these are the sizes they are.
+          const nutrition: Record<string, number | null> | undefined = made ? { ...made } : undefined;
+          for (const { slot, piece } of pieces) {
+            await deductFromPantryItem(piece._id, piece.quantityAvailable);
+            const lineIngredient = ingredientMap.get(slot.ingredientId);
+            if (!nutrition || !slot.line || !lineIngredient) continue;
+            const own = ingredientMap.get(referenceId(piece.ingredient)) ?? lineIngredient;
+            const real = scaleIngredientNutrition(own, piece.quantityAvailable, piece.quantityUnit, getIngredientConversions(own, customUnitConversions, allIngredients)) as Record<string, number | null>;
+            const assumed = scaleIngredientNutrition(lineIngredient, ((slot.line.pieceMinWeight ?? 0) + (slot.line.pieceMaxWeight ?? 0)) / 2, slot.line.pieceWeightUnit || "g", getIngredientConversions(lineIngredient, customUnitConversions, allIngredients)) as Record<string, number | null>;
+            const perServing = (slot.line.nutritionFactor ?? 1) / (recipe.servings || 1);
+            for (const key of Object.keys(nutrition)) {
+              if (nutrition[key] != null && real[key] != null && assumed[key] != null) nutrition[key] = Math.max(0, Math.round((nutrition[key]! + (real[key]! - assumed[key]!) * perServing) * 100) / 100);
+            }
+          }
+          await addIngredientToPantry({
+            ingredient: producedIngredient._id,
+            storageLocation: storageLocation._id,
+            quantityAvailable: baseYield,
+            quantityUnit: producedIngredient.defaultPortionUnit || "serving",
+            purchaseDate: todayDateInputString(),
+            expiryDate: batchExpiryDate || undefined,
+            notes: `Made from ${pieces.map(({ slot, piece }) => `a ${round1(piece.quantityAvailable)} ${piece.quantityUnit} ${slot.unit}`).join(" and ")}`,
+            madeFrom: pieces.map(({ piece }) => ({ ingredient: referenceId(piece.ingredient), amount: piece.quantityAvailable, unit: piece.quantityUnit })),
+            nutrition,
+          });
+        }
+        setShowBatchCard(false);
+        setPendingInstructions([]);
+        setBatchSlots([]);
+        setBatches([]);
+        await refreshPantry();
+        Alert.alert("Batch made", `${runs} ${producedIngredient.defaultPortionUnit || "serving"}${runs === 1 ? "" : "s"} of ${producedIngredient.name} added to your pantry.`);
+        return;
+      }
+
       const ratio = baseYield > 0 ? parsedAmount / baseYield : 1;
 
       for (const instruction of pendingInstructions) {
@@ -523,7 +639,24 @@ export default function RecipeDetailPage() {
   function handleCancelBatch() {
     setShowBatchCard(false);
     setPendingInstructions([]);
+    setBatchSlots([]);
+    setBatches([]);
   }
+
+  // (The same, a column each, for the desktop's grid.)
+  const otherColumns = (recipe?.ingredientList ?? [])
+    .filter((l) => (l.matchMode ?? "quantity") !== "wholePiece")
+    .map((l) => ({ name: ingredientMap.get(referenceId(l.ingredient))?.name ?? "", amount: `${Math.round(l.quantity * 100) / 100} ${l.unit}` }));
+  // What a run takes besides its whole pieces, to say on each batch's card.
+  const otherLines = (recipe?.ingredientList ?? [])
+    .filter((l) => (l.matchMode ?? "quantity") !== "wholePiece")
+    .map((l) => `${Math.round(l.quantity * 100) / 100} ${l.unit} ${ingredientMap.get(referenceId(l.ingredient))?.name ?? ""}`.trim());
+
+  // The pieces already chosen, across every batch.
+  const takenPieces = new Set(batches.flat().filter(Boolean));
+  // Whether there are pieces left to make another batch from.
+  const canAddBatch = batchSlots.length > 0 && fillBatch(batchSlots, [...takenPieces]).every(Boolean);
+  const madeUnit = producedIngredient?.defaultPortionUnit || "serving";
 
   async function handleAddScore(value: number) {
     if (!recipe) return;
@@ -1157,14 +1290,206 @@ export default function RecipeDetailPage() {
       >
         <Pressable className="absolute inset-0" onPress={handleCancelBatch} />
 
-        <View className="w-full rounded-3xl bg-white p-5">
+        <View className="w-full rounded-3xl bg-white p-5" style={wide ? { maxWidth: batchSlots.length ? 980 : 520 } : undefined}>
           <Text className="text-lg font-bold text-slate-950">Make a batch</Text>
           <Text className="mt-0.5 mb-5 text-sm text-slate-400">
             {producedIngredient?.name ?? "This ingredient"} will be added to your pantry.
           </Text>
 
-          <FieldLabel text="Amount made" required />
-          <View className="flex-row items-center">
+          {/* Whole pieces: a card for each one being made, choosing its own pieces. */}
+          {batchSlots.length > 0 && !wide && (
+            <View className="mb-4">
+              {batches.map((batch, batchIndex) => (
+                <View key={batchIndex} className="mb-2.5 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <View className="mb-1 flex-row items-center">
+                    <Text className="flex-1 text-sm font-bold text-slate-900">
+                      {madeUnit.charAt(0).toUpperCase() + madeUnit.slice(1)} {batchIndex + 1}
+                    </Text>
+                    {batches.length > 1 && (
+                      <Pressable hitSlop={8} onPress={() => setBatches((prev) => prev.filter((_, i) => i !== batchIndex))} accessibilityLabel={`Remove ${madeUnit} ${batchIndex + 1}`}>
+                        <Ionicons name="close-circle" size={20} color="#CBD5E1" />
+                      </Pressable>
+                    )}
+                  </View>
+                  {batchSlots.map((slot, slotIndex) => {
+                    const chosen = slot.candidates.find((p) => p._id === batch[slotIndex]);
+                    const key = `${batchIndex}:${slotIndex}`;
+                    // Its own choice, and whatever no other slot has taken.
+                    const options = slot.candidates.filter((p) => p._id === batch[slotIndex] || !takenPieces.has(p._id));
+                    return (
+                      <View key={slotIndex} className="mt-1.5">
+                        <Pressable
+                          onPress={() => setOpenSlot(openSlot === key ? null : key)}
+                          accessibilityLabel={`${slot.name} for ${madeUnit} ${batchIndex + 1}`}
+                          className={`flex-row items-center rounded-xl border bg-white px-3 py-2.5 ${openSlot === key ? "border-blue-500" : chosen ? "border-slate-200" : "border-amber-400"}`}
+                        >
+                          <Text numberOfLines={1} className="flex-1 text-sm text-slate-500">
+                            {slot.name}
+                          </Text>
+                          <Text className={`text-sm font-semibold ${chosen ? "text-slate-900" : "text-amber-600"}`}>{chosen ? `${round1(chosen.quantityAvailable)} ${chosen.quantityUnit}` : `Choose a ${slot.unit}`}</Text>
+                          <Ionicons name={openSlot === key ? "chevron-up" : "chevron-down"} size={16} color="#64748B" style={{ marginLeft: 6 }} />
+                        </Pressable>
+                        {openSlot === key && (
+                          <View className="mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                            {options.map((piece) => (
+                              <Pressable
+                                key={piece._id}
+                                onPress={() => {
+                                  setBatches((prev) => prev.map((b, i) => (i === batchIndex ? b.map((id, j) => (j === slotIndex ? piece._id : id)) : b)));
+                                  setOpenSlot(null);
+                                }}
+                                accessibilityLabel={`${round1(piece.quantityAvailable)} ${piece.quantityUnit} ${slot.unit}`}
+                                className="flex-row items-center border-b border-slate-100 px-3 py-2.5 active:bg-slate-50"
+                              >
+                                <Text className="flex-1 text-sm font-medium text-slate-900">
+                                  {round1(piece.quantityAvailable)} {piece.quantityUnit}
+                                </Text>
+                                {!!piece.expiryDate && <Text className="text-xs text-slate-500">dated {piece.expiryDate.slice(0, 10)}</Text>}
+                                {piece._id === batch[slotIndex] && <Ionicons name="checkmark" size={15} color="#2563EB" style={{ marginLeft: 6 }} />}
+                              </Pressable>
+                            ))}
+                            {options.length === 0 && <Text className="px-3 py-2.5 text-sm text-slate-500">None left: the others are in use above.</Text>}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                  {/* What every batch also takes. */}
+                  {otherLines.length > 0 && (
+                    <Text numberOfLines={2} className="mt-2 text-xs leading-4 text-slate-500">
+                      plus {otherLines.join(", ")}
+                    </Text>
+                  )}
+                </View>
+              ))}
+              <Pressable
+                onPress={() => setBatches((prev) => [...prev, fillBatch(batchSlots, prev.flat().filter(Boolean))])}
+                disabled={!canAddBatch}
+                className={`flex-row items-center self-start ${canAddBatch ? "active:opacity-60" : "opacity-40"}`}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+                <Text className="ml-1.5 text-sm font-semibold text-blue-600">{canAddBatch ? `Add another ${madeUnit}` : `No more to make another ${madeUnit} from`}</Text>
+              </Pressable>
+              <Text className="mt-1.5 text-xs leading-4 text-slate-500">
+                Makes {batches.length} {madeUnit}
+                {batches.length === 1 ? "" : "s"}, each its own pantry entry, counted at the size of what went into it.
+              </Text>
+            </View>
+          )}
+
+          {/* The same on a desktop: a grid, a row for each one being made and a
+              column for everything a run takes. What's to be decided — which
+              piece — is the part in orange until it's chosen; the rest is the
+              same in every row, and just says how much. */}
+          {batchSlots.length > 0 && wide && (
+            <View className="mb-4">
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View>
+                  <View className="flex-row items-end pb-1.5">
+                    <View style={{ width: 84 }} />
+                    {batchSlots.map((slot, i) => (
+                      <Text key={`s${i}`} numberOfLines={2} style={{ width: 170 }} className="px-1.5 text-xs font-bold text-amber-700">
+                        {slot.name} · choose
+                      </Text>
+                    ))}
+                    {otherColumns.map((column, i) => (
+                      <Text key={`o${i}`} numberOfLines={2} style={{ width: 104 }} className="px-1.5 text-xs font-semibold text-slate-400">
+                        {column.name}
+                      </Text>
+                    ))}
+                    <View style={{ width: 28 }} />
+                  </View>
+                  {batches.map((batch, batchIndex) => {
+                    const open = openSlot?.startsWith(`${batchIndex}:`) ? Number(openSlot.split(":")[1]) : null;
+                    return (
+                      <View key={batchIndex} className="border-t border-slate-100 py-1.5">
+                        <View className="flex-row items-center">
+                          <Text style={{ width: 84 }} className="text-sm font-bold text-slate-900">
+                            {madeUnit.charAt(0).toUpperCase() + madeUnit.slice(1)} {batchIndex + 1}
+                          </Text>
+                          {batchSlots.map((slot, slotIndex) => {
+                            const chosen = slot.candidates.find((p) => p._id === batch[slotIndex]);
+                            const key = `${batchIndex}:${slotIndex}`;
+                            return (
+                              <View key={slotIndex} style={{ width: 170 }} className="px-1.5">
+                                <Pressable
+                                  onPress={() => setOpenSlot(openSlot === key ? null : key)}
+                                  accessibilityLabel={`${slot.name} for ${madeUnit} ${batchIndex + 1}`}
+                                  className={`flex-row items-center rounded-xl border px-3 py-2 ${openSlot === key ? "border-blue-500 bg-white" : chosen ? "border-amber-300 bg-white" : "border-amber-500 bg-amber-50"}`}
+                                >
+                                  <Text numberOfLines={1} className={`flex-1 text-sm font-semibold ${chosen ? "text-slate-900" : "text-amber-700"}`}>
+                                    {chosen ? `${round1(chosen.quantityAvailable)} ${chosen.quantityUnit}` : `Choose a ${slot.unit}`}
+                                  </Text>
+                                  <Ionicons name={openSlot === key ? "chevron-up" : "chevron-down"} size={14} color={chosen ? "#64748B" : "#B45309"} />
+                                </Pressable>
+                              </View>
+                            );
+                          })}
+                          {otherColumns.map((column, i) => (
+                            <Text key={i} numberOfLines={1} style={{ width: 104 }} className="px-1.5 text-sm text-slate-400">
+                              {column.amount}
+                            </Text>
+                          ))}
+                          <View style={{ width: 28 }} className="items-end">
+                            {batches.length > 1 && (
+                              <Pressable hitSlop={8} onPress={() => setBatches((prev) => prev.filter((_, i) => i !== batchIndex))} accessibilityLabel={`Remove ${madeUnit} ${batchIndex + 1}`}>
+                                <Ionicons name="close-circle" size={20} color="#CBD5E1" />
+                              </Pressable>
+                            )}
+                          </View>
+                        </View>
+                        {/* The pieces to choose from, for the cell that's open in this row. */}
+                        {open != null && (
+                          <View className="mt-1.5 flex-row flex-wrap items-center gap-2 rounded-xl bg-slate-50 px-3 py-2" style={{ marginLeft: 84 }}>
+                            <Text className="text-xs font-semibold text-slate-500">{batchSlots[open].name}:</Text>
+                            {batchSlots[open].candidates
+                              .filter((p) => p._id === batch[open] || !takenPieces.has(p._id))
+                              .map((piece) => {
+                                const on = piece._id === batch[open];
+                                return (
+                                  <Pressable
+                                    key={piece._id}
+                                    onPress={() => {
+                                      setBatches((prev) => prev.map((b, i) => (i === batchIndex ? b.map((id, j) => (j === open ? piece._id : id)) : b)));
+                                      setOpenSlot(null);
+                                    }}
+                                    accessibilityLabel={`${round1(piece.quantityAvailable)} ${piece.quantityUnit} ${batchSlots[open].unit}`}
+                                    className={`rounded-lg border px-2.5 py-1.5 ${on ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white active:bg-slate-100"}`}
+                                  >
+                                    <Text className={`text-sm font-semibold ${on ? "text-blue-700" : "text-slate-900"}`}>
+                                      {round1(piece.quantityAvailable)} {piece.quantityUnit}
+                                      {piece.expiryDate ? <Text className="font-normal text-slate-400"> · {piece.expiryDate.slice(5, 10)}</Text> : null}
+                                    </Text>
+                                  </Pressable>
+                                );
+                              })}
+                            {batchSlots[open].candidates.every((p) => p._id !== batch[open] && takenPieces.has(p._id)) && <Text className="text-sm text-slate-500">None left: the others are in use.</Text>}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+              <View className="mt-2 flex-row items-center">
+                <Pressable
+                  onPress={() => setBatches((prev) => [...prev, fillBatch(batchSlots, prev.flat().filter(Boolean))])}
+                  disabled={!canAddBatch}
+                  className={`flex-row items-center ${canAddBatch ? "active:opacity-60" : "opacity-40"}`}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+                  <Text className="ml-1.5 text-sm font-semibold text-blue-600">{canAddBatch ? `Add another ${madeUnit}` : `No more to make another ${madeUnit} from`}</Text>
+                </Pressable>
+                <Text className="ml-4 flex-1 text-xs text-slate-500">
+                  Makes {batches.length} {madeUnit}
+                  {batches.length === 1 ? "" : "s"}, each its own pantry entry, counted at the size of what went into it.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {batchSlots.length === 0 && <FieldLabel text="Amount made" required />}
+          <View className="flex-row items-center" style={batchSlots.length > 0 ? { display: "none" } : undefined}>
             <FormInput
               value={batchAmount}
               onChangeText={setBatchAmount}
@@ -1178,7 +1503,8 @@ export default function RecipeDetailPage() {
             </Text>
           </View>
 
-          <View className="mt-4">
+          {/* (Above what follows, so its list of locations opens over it.) */}
+          <View className="mt-4" style={{ zIndex: 30 }}>
             <FieldLabel text="Storage location" required />
             <SearchableObjectDropdown<SelectOption>
               options={storageLocations}

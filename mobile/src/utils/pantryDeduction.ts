@@ -435,8 +435,13 @@ function buildRequirementsFromRows(
         const expiryKey = item.expiryDate ? new Date(item.expiryDate).toISOString().slice(0, 10) : "none";
         const locationKey = extractId(item.storageLocation) || "none";
         const purchaseKey = item.purchaseDate ? new Date(item.purchaseDate).toISOString().slice(0, 10) : "none";
-        groupKey = `${itemIngredientId}|${item.quantityUnit}|${expiryKey}|${locationKey}|${purchaseKey}`;
-        displayName = itemIngredient?.name ?? ing.name;
+        // Something made from a particular piece (a bag from one steak) is
+        // its own thing: two bags from different-sized steaks aren't
+        // interchangeable, and which one was used is worth asking.
+        const from = item.madeFrom?.[0];
+        const fromKey = from ? `|from:${from.amount}${from.unit}` : "";
+        groupKey = `${itemIngredientId}|${item.quantityUnit}|${expiryKey}|${locationKey}|${purchaseKey}${fromKey}`;
+        displayName = `${itemIngredient?.name ?? ing.name}${from ? ` — from ${from.amount} ${from.unit}` : ""}`;
       }
 
       let group = groupMap.get(groupKey);

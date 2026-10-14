@@ -95,6 +95,9 @@ export interface AddIngredientToPantryInput {
   purchasePrice?: number;
   store?: string | null;
   notes?: string;
+  // Made from a particular piece: see PantryItem.madeFrom / nutrition.
+  madeFrom?: { ingredient: string; amount: number; unit: string }[];
+  nutrition?: Record<string, number | null>;
 }
 
 export async function addIngredientToPantry(
