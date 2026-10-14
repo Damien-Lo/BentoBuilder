@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
+import { keepFocus } from "./keepFocus";
+
 // Inline mode lists at most this many matches; the rest are reached by
 // typing (the page itself does the scrolling, so an unbounded list of a
 // few hundred catalog items would bury everything below the field).
@@ -262,6 +264,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
 
       {open && !disabled && !inline && (
         <View
+          {...keepFocus}
           className="absolute left-0 right-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
           style={{
             top: bare ? 34 : compact ? 48 : 60,
@@ -281,7 +284,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
       )}
 
       {open && !disabled && inline && (
-        <View className="mt-1 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <View {...keepFocus} className="mt-1 overflow-hidden rounded-2xl border border-slate-200 bg-white">
           {renderOptions(filteredOptions.slice(0, inlineLimit))}
           {filteredOptions.length > inlineLimit && (
             <Text className="px-4 py-3 text-center text-xs text-slate-400">

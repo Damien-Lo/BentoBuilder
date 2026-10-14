@@ -4,6 +4,8 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import type { SelectOption } from "@/src/types/options";
 
+import { keepFocus } from "./keepFocus";
+
 interface CreatableMultiTagDropdownProps {
   options?: SelectOption[];
   selectedItems?: SelectOption[];
@@ -184,6 +186,7 @@ export function CreatableMultiTagDropdown({
       {/* Dropdown list */}
       {open && !disabled && (
         <View
+          {...keepFocus}
           className="absolute left-0 right-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
           style={{ top: selectedItems.length > 0 ? undefined : 60, maxHeight: 240, zIndex: 1001, elevation: 20 }}
         >

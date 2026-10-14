@@ -149,7 +149,7 @@ export function resolveWebRoute(pathname: string): { section: WebSection | null;
 
 // Pages laid out for the desktop, given the whole pane. Everything else is
 // a phone-shaped page, shown as a column in the middle.
-const DESKTOP_PAGES = ["/", "/calendar", "/calendar/meal-times", "/calendar/sessions", "/kitchen", "/kitchen/needs", "/planner", "/RecipesMainPage", "/PantryMainPage", "/health", "/lists", "/lists/tasks", "/lists/checklists", "/lists/shopping", "/receipts"];
+const DESKTOP_PAGES = ["/", "/calendar", "/calendar/meal-times", "/calendar/sessions", "/kitchen", "/kitchen/needs", "/grocery-list", "/planner", "/RecipesMainPage", "/PantryMainPage", "/health", "/lists", "/lists/tasks", "/lists/checklists", "/lists/shopping", "/receipts"];
 
 export function isDesktopPage(pathname: string, params: Record<string, unknown>): boolean {
   // The planner opened to add food is the phone's own add sheet.

@@ -12,6 +12,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -89,6 +91,11 @@ function getReferenceName(value: unknown): string {
 }
 
 export default function GroceryListScreen() {
+  // A desktop browser gets the same screen laid out wider: the three lists
+  // side by side under a page heading (see the styles just before the return).
+  const wide = useWideWeb();
+  const addWidth = wide ? { maxWidth: 640 } : undefined;
+  const column = wide ? { flex: 1, minWidth: 0 } : undefined;
   const router = useRouter();
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -125,9 +132,13 @@ export default function GroceryListScreen() {
   const [logLocationDraft, setLogLocationDraft] = useState("");
   const [logPurchaseDate, setLogPurchaseDate] = useState("");
   const [logExpiryDate, setLogExpiryDate] = useState("");
-  const [logQuantity, setLogQuantity] = useState("");
+  // What was bought, a line for each separate thing — a steak, a jar, a
+  // pack — with how much is in it; each line becomes its own pantry entry.
+  // Usually one line. For something bought as whole pieces (the ingredient
+  // has a pieceLabel) a line is a piece and its amount is its weight.
+  // `logUnit` is the unit every line is in.
+  const [logPieces, setLogPieces] = useState<string[]>([""]);
   const [logUnit, setLogUnit] = useState("");
-  const [logEntryCount, setLogEntryCount] = useState("1");
   const [logPrice, setLogPrice] = useState("");
   const [logStoreId, setLogStoreId] = useState("");
   const [logStoreName, setLogStoreName] = useState("");
@@ -431,9 +442,16 @@ export default function GroceryListScreen() {
     setLogPurchaseDate(todayDateInputString());
     setLogExpiryDate("");
     setLogExpiryTouched(false);
-    setLogQuantity(item.quantity != null ? String(item.quantity) : "");
-    setLogUnit(item.unit || targetIngredient?.defaultPortionUnit || "");
-    setLogEntryCount("1");
+    if (targetIngredient?.pieceLabel) {
+      // The list says how many ("2 steaks"), or how much of one ("340 g"):
+      // a line for each piece, to be given its weight.
+      const counted = !item.unit || item.unit.trim().toLowerCase() === targetIngredient.pieceLabel.toLowerCase();
+      setLogUnit((counted ? "" : item.unit) || targetIngredient.defaultPortionUnit || "g");
+      setLogPieces(counted ? Array.from({ length: Math.min(12, Math.max(1, Math.round(item.quantity ?? 1))) }, () => "") : [item.quantity != null ? String(item.quantity) : ""]);
+    } else {
+      setLogUnit(item.unit || targetIngredient?.defaultPortionUnit || "");
+      setLogPieces([item.quantity != null ? String(item.quantity) : ""]);
+    }
     setLogPrice("");
     setLogStoreId("");
     setLogStoreName("");
@@ -628,9 +646,12 @@ export default function GroceryListScreen() {
   async function handleCreatePantryEntry() {
     if (!loggingItem || !logTargetIngredientId) return;
 
-    const qty = Number(logQuantity);
-    if (!Number.isFinite(qty) || qty <= 0) {
-      Alert.alert("Invalid quantity", "Enter a quantity greater than 0.");
+    // An entry for each line, at that line's amount.
+    const pieceLabel = loggingFullIngredient?.pieceLabel;
+    const amounts = logPieces.map((w) => Number(w));
+    if (amounts.some((w) => !Number.isFinite(w) || w <= 0)) {
+      if (pieceLabel) Alert.alert(`Weight of each ${pieceLabel}`, `Enter how much each ${pieceLabel} weighs. If you only know the pack's total, split it evenly between them.`);
+      else Alert.alert("Invalid quantity", amounts.length > 1 ? "Enter an amount greater than 0 on every line, or remove the empty ones." : "Enter a quantity greater than 0.");
       return;
     }
     if (!logUnit.trim()) {
@@ -667,17 +688,18 @@ export default function GroceryListScreen() {
         setStores((prev) => [...prev, store]);
       }
 
-      const entryCount = Math.max(1, Math.round(Number(logEntryCount)) || 1);
+      // (One price for the lot is shared between the lines by amount.)
+      const total = amounts.reduce((sum, amount) => sum + amount, 0);
       let newPantryItem: PantryItem | undefined;
-      for (let i = 0; i < entryCount; i++) {
+      for (const amount of amounts) {
         newPantryItem = await addIngredientToPantry({
           ingredient: logTargetIngredientId,
           storageLocation: storageLocation._id,
-          quantityAvailable: qty,
+          quantityAvailable: amount,
           quantityUnit: logUnit.trim(),
           purchaseDate: logPurchaseDate || undefined,
           expiryDate: logExpiryDate || undefined,
-          purchasePrice: logPrice.trim() ? Number(logPrice) : undefined,
+          purchasePrice: logPrice.trim() ? (total > 0 ? Math.round(((Number(logPrice) * amount) / total) * 100) / 100 : Number(logPrice)) : undefined,
           store: store ? store._id : null,
           notes: logNotes.trim() || undefined,
         });
@@ -746,7 +768,8 @@ export default function GroceryListScreen() {
           >
             <View className={`h-6 w-6 items-center justify-center rounded-full border-2 ${circleClassName}`}>
               {isCompleted && <Ionicons name="checkmark" size={14} color="white" />}
-              {isPending && <Ionicons name="time-outline" size={13} color="white" />}
+              {/* Bought, and waiting to be put away. */}
+              {isPending && <Ionicons name="basket" size={13} color="white" />}
             </View>
             <View className="ml-4 flex-1">
               <Text
@@ -808,9 +831,36 @@ export default function GroceryListScreen() {
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        // In a desktop browser: a page's width, centred, under its own heading.
+        style={wide ? { width: "100%", maxWidth: 1180, alignSelf: "center", paddingHorizontal: 4 } : undefined}
       >
-        {/* Header */}
-        <View className="border-b border-slate-200 bg-white px-4 py-3">
+        {/* Heading (desktop): the title, and the list / shopping switch beside it */}
+        {wide && (
+          <View style={{ flexDirection: "row", alignItems: "flex-end", paddingHorizontal: 20, paddingTop: 24 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 26, fontWeight: "700", color: "#0F172A" }}>Grocery list</Text>
+              <Text style={{ marginTop: 2, fontSize: 14, color: "#64748B" }}>What to buy, what&apos;s bought and waiting to be put away, and what&apos;s done</Text>
+            </View>
+            {viewMode === "shopping" && (
+              <Pressable className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-blue-50 active:bg-blue-100" onPress={() => setReceiptScannerVisible(true)} accessibilityLabel="Scan a receipt">
+                <Ionicons name="camera-outline" size={19} color="#2563EB" />
+              </Pressable>
+            )}
+            <View style={{ width: 300 }}>
+              <SegmentedToggle<"list" | "shopping">
+                value={viewMode}
+                options={[
+                  { value: "list", label: "List" },
+                  { value: "shopping", label: "Shopping Mode" },
+                ]}
+                onChange={setViewMode}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Header (phone) */}
+        <View className="border-b border-slate-200 bg-white px-4 py-3" style={wide ? { display: "none" } : undefined}>
           <View className="flex-row items-center">
             <Pressable
               className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
@@ -841,7 +891,7 @@ export default function GroceryListScreen() {
         </View>
 
         {/* Add item row */}
-        <View className="mx-5 mt-5 flex-row items-center gap-3">
+        <View className="mx-5 mt-5 flex-row items-center gap-3" style={addWidth}>
           <View className="h-12 flex-1 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
             <TextInput
               value={nameInput}
@@ -881,7 +931,7 @@ export default function GroceryListScreen() {
         </View>
 
         {/* Quantity + unit — optional, applies to the item about to be added */}
-        <View className="mx-5 mt-3 flex-row items-center gap-3">
+        <View className="mx-5 mt-3 flex-row items-center gap-3" style={[addWidth, { zIndex: 5 }]}>
           <TextInput
             value={quantity}
             onChangeText={setQuantity}
@@ -902,7 +952,7 @@ export default function GroceryListScreen() {
 
         {/* Ingredient suggestions */}
         {grocerySuggestions.length > 0 && (
-          <View className="mx-5 mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <View className="mx-5 mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={addWidth}>
             {grocerySuggestions.map((ing, idx) => {
               const categoryName = getReferenceName(ing.category);
               return (
@@ -972,9 +1022,9 @@ export default function GroceryListScreen() {
                 </Text>
               </View>
             ) : (
-              <>
+              <View style={wide ? { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 20 } : undefined}>
                 {storeGroups.map((group) => (
-                  <View key={group.storeId || "unknown"} className="mb-5">
+                  <View key={group.storeId || "unknown"} className="mb-5" style={wide ? { width: 360 } : undefined}>
                     <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400">
                       {group.storeName}{" "}
                       <Text className="font-semibold text-slate-300">· {group.items.length}</Text>
@@ -982,12 +1032,12 @@ export default function GroceryListScreen() {
                     {group.items.map(renderGroceryRow)}
                   </View>
                 ))}
-              </>
+              </View>
             )
           ) : (
-            <>
+            <View style={wide ? { flexDirection: "row", alignItems: "flex-start", gap: 20 } : undefined}>
               {toBuyItems.length > 0 && (
-                <View className="mb-5">
+                <View className="mb-5" style={column}>
                   <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400">
                     To buy <Text className="font-semibold text-slate-300">· {toBuyItems.length}</Text>
                   </Text>
@@ -996,7 +1046,7 @@ export default function GroceryListScreen() {
               )}
 
               {pendingLogItems.length > 0 && (
-                <View className="mb-5">
+                <View className="mb-5" style={column}>
                   <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400">
                     Pending pantry log{" "}
                     <Text className="font-semibold text-slate-300">· {pendingLogItems.length}</Text>
@@ -1006,7 +1056,7 @@ export default function GroceryListScreen() {
               )}
 
               {completedItems.length > 0 && (
-                <View className="mb-5">
+                <View className="mb-5" style={column}>
                   <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400">
                     Completed <Text className="font-semibold text-slate-300">· {completedItems.length}</Text>
                   </Text>
@@ -1022,7 +1072,7 @@ export default function GroceryListScreen() {
                   </Pressable>
                 </View>
               )}
-            </>
+            </View>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1036,7 +1086,7 @@ export default function GroceryListScreen() {
           <View className="flex-1 items-center justify-center bg-black/40 px-6">
             <Pressable className="absolute inset-0" onPress={closeLogModal} />
 
-            <View className="w-full rounded-3xl bg-white p-5">
+            <View className="w-full rounded-3xl bg-white p-5" style={{ maxWidth: 560 }}>
               <Text className="text-lg font-bold text-slate-950">{logTargetIngredientName}</Text>
               <Text className="mt-0.5 mb-4 text-sm text-slate-400">
                 {logTargetIngredientName === loggingItem?.name
@@ -1119,84 +1169,78 @@ export default function GroceryListScreen() {
                 />
               </View>
 
-              <View className="mt-3 flex-row items-center gap-3">
-                <TextInput
-                  value={logQuantity}
-                  onChangeText={setLogQuantity}
-                  keyboardType="decimal-pad"
-                  placeholder="Qty"
-                  placeholderTextColor="#94A3B8"
-                  className="h-12 w-20 rounded-2xl border border-slate-200 bg-white px-3 text-center text-base text-slate-900"
-                />
-                <View className="flex-1">
-                  {loggingFullIngredient?.defaultPortionUnit ? (
-                    <UnitFamilyDropdown
-                      unit={logUnit || loggingFullIngredient.defaultPortionUnit}
-                      options={logUnitOptions}
-                      onSelect={(unit) => {
-                        const converted = convertAmountForUnitChange(
-                          Number(logQuantity),
-                          logUnit,
-                          unit,
-                          getIngredientConversions(loggingFullIngredient, customUnitConversions),
-                        );
-                        if (converted != null) setLogQuantity(String(converted));
-                        setLogUnit(unit);
-                      }}
-                    />
-                  ) : (
-                    <CreatableStringDropdown
-                      options={logUnitOptions}
-                      selectedValue={logUnit}
-                      placeholder="Unit"
-                      onSelect={(unit) => {
-                        const converted = convertAmountForUnitChange(
-                          Number(logQuantity),
-                          logUnit,
-                          unit,
-                          getIngredientConversions(loggingFullIngredient, customUnitConversions),
-                        );
-                        if (converted != null) setLogQuantity(String(converted));
-                        setLogUnit(unit);
-                      }}
-                    />
-                  )}
-                </View>
-              </View>
-
-              <View className="mt-3">
-                <Text className="mb-1.5 text-xs font-semibold text-slate-500">Number of entries</Text>
-                <View className="flex-row items-center">
-                  <Pressable
-                    onPress={() =>
-                      setLogEntryCount((current) => String(Math.max(1, (Number(current) || 1) - 1)))
-                    }
-                    className="h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white active:bg-slate-50"
-                  >
-                    <Ionicons name="remove" size={18} color="#475569" />
-                  </Pressable>
-                  <TextInput
-                    value={logEntryCount}
-                    onChangeText={setLogEntryCount}
-                    keyboardType="number-pad"
-                    className="mx-2 h-11 w-16 rounded-2xl border border-slate-200 bg-white text-center text-base text-slate-900"
-                  />
-                  <Pressable
-                    onPress={() =>
-                      setLogEntryCount((current) => String((Number(current) || 1) + 1))
-                    }
-                    className="h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white active:bg-slate-50"
-                  >
-                    <Ionicons name="add" size={18} color="#475569" />
-                  </Pressable>
-                </View>
-                {Math.max(1, Math.round(Number(logEntryCount)) || 1) > 1 && (
-                  <Text className="mt-1.5 text-xs text-slate-400">
-                    Creates {Math.max(1, Math.round(Number(logEntryCount)) || 1)} separate pantry
-                    entries of {logQuantity || "0"} {logUnit} each.
-                  </Text>
-                )}
-              </View>
+              {/* How much goes into the pantry: a line for each separate thing
+                  bought, usually one. Whole pieces get a line each, by weight. */}
+              {(() => {
+                const piece = loggingFullIngredient?.pieceLabel;
+                const noun = piece ?? "pack";
+                const several = logPieces.length > 1;
+                const changeUnit = (unit: string) => {
+                  // (The amounts follow the unit: 1 lb becomes 454 g.)
+                  setLogPieces((prev) =>
+                    prev.map((amount) => {
+                      const converted = Number(amount) > 0 ? convertAmountForUnitChange(Number(amount), logUnit, unit, getIngredientConversions(loggingFullIngredient, customUnitConversions)) : null;
+                      return converted != null ? String(converted) : amount;
+                    }),
+                  );
+                  setLogUnit(unit);
+                };
+                return (
+                  <View className="mt-3" style={{ zIndex: 5 }}>
+                    <View className="mb-1.5 flex-row items-center" style={{ zIndex: 6 }}>
+                      <Text className="flex-1 text-xs font-semibold text-slate-500">{piece ? `Each ${piece} you bought, by weight` : several ? "Each pack you bought" : "Amount you bought"}</Text>
+                      {/* The unit every line is in. */}
+                      <View style={{ width: loggingFullIngredient?.defaultPortionUnit ? 96 : 150 }}>
+                        {loggingFullIngredient?.defaultPortionUnit ? (
+                          <UnitFamilyDropdown unit={logUnit || loggingFullIngredient.defaultPortionUnit} options={logUnitOptions} onSelect={changeUnit} />
+                        ) : (
+                          <CreatableStringDropdown options={logUnitOptions} selectedValue={logUnit} placeholder="Unit" onSelect={changeUnit} />
+                        )}
+                      </View>
+                    </View>
+                    {logPieces.map((amount, index) => (
+                      <View key={index} className="mb-2 flex-row items-center">
+                        {(piece || several) && (
+                          <View className="mr-2 rounded-full bg-slate-100 px-2.5 py-2">
+                            <Text className="text-xs font-semibold text-slate-500">
+                              {noun} {index + 1}
+                            </Text>
+                          </View>
+                        )}
+                        <TextInput
+                          value={amount}
+                          onChangeText={(value) => setLogPieces((prev) => prev.map((w, i) => (i === index ? value.replace(/[^0-9.]/g, "") : w)))}
+                          keyboardType="decimal-pad"
+                          placeholder={piece ? "Weight" : "Amount"}
+                          placeholderTextColor="#94A3B8"
+                          accessibilityLabel={piece ? `Weight of ${piece} ${index + 1}` : several ? `Amount in pack ${index + 1}` : "Amount you bought"}
+                          className="h-12 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900"
+                        />
+                        <Text numberOfLines={1} className="ml-2 w-12 text-sm text-slate-500">
+                          {logUnit}
+                        </Text>
+                        {several && (
+                          <Pressable hitSlop={8} onPress={() => setLogPieces((prev) => prev.filter((_, i) => i !== index))} accessibilityLabel={`Remove ${noun} ${index + 1}`}>
+                            <Ionicons name="close-circle" size={22} color="#CBD5E1" />
+                          </Pressable>
+                        )}
+                      </View>
+                    ))}
+                    {/* (A new line starts at the last one's amount: quick, when they're the same.) */}
+                    <Pressable className="mt-0.5 flex-row items-center self-start active:opacity-60" onPress={() => setLogPieces((prev) => [...prev, prev[prev.length - 1] ?? ""])}>
+                      <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+                      <Text className="ml-1.5 text-sm font-semibold text-blue-600">Add another {noun}</Text>
+                    </Pressable>
+                    {(piece || several) && (
+                      <Text className="mt-1.5 text-xs leading-4 text-slate-400">
+                        {logPieces.length} {noun}
+                        {logPieces.length === 1 ? "" : "s"}
+                        {logPieces.every((w) => Number(w) > 0) ? ` · ${Math.round(logPieces.reduce((sum, w) => sum + Number(w), 0) * 100) / 100} ${logUnit} in all` : ""}. {piece ? "Each becomes its own pantry entry, so a recipe can use one whole and count it at its real size." : "Each becomes its own pantry entry, with its own date and opened state."}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })()}
 
               {logShowMoreDetails || logStoreId || logStoreDraft.trim() || logPrice.trim() ? (
                 <>
@@ -1292,7 +1336,7 @@ export default function GroceryListScreen() {
           <View className="flex-1 items-center justify-center bg-black/40 px-6">
             <Pressable className="absolute inset-0" onPress={closeLinkModal} />
 
-            <View className="max-h-[80%] w-full rounded-3xl bg-white p-5">
+            <View className="max-h-[80%] w-full rounded-3xl bg-white p-5" style={{ maxWidth: 560 }}>
               <Text className="text-lg font-bold text-slate-950">Link ingredient</Text>
               <Text className="mt-0.5 mb-4 text-sm text-slate-400">
                 Match &quot;{linkingItem?.name}&quot; to a catalog ingredient so it can be logged to
@@ -1373,7 +1417,7 @@ export default function GroceryListScreen() {
             onPress={() => setResolvingGenericItem(null)}
           />
 
-          <View className="w-full rounded-3xl bg-white p-5">
+          <View className="w-full rounded-3xl bg-white p-5" style={{ maxWidth: 560 }}>
             <Text className="text-lg font-bold text-slate-950">
               {resolvingGenericItem?.item.name}
             </Text>

@@ -134,7 +134,7 @@ export function WebPrepShoppingScreen() {
   subtitle="Short in the pantry for the plan and its prep"
   action={
     <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-      {plan.buy.length > 0 && <CardLink label={sendingBuy ? "Adding…" : "To grocery list"} onPress={() => void buyListToGrocery()} />}
+      {plan.buy.length > 0 && <CardLink label={sendingBuy ? "Adding…" : "Add to grocery list"} onPress={() => void buyListToGrocery()} />}
       <CardLink label="Add trip" onPress={() => setAdding("shop")} />
     </View>
   }
