@@ -22,6 +22,7 @@ import receiptRoutes from "./routes/ReceiptRoutes.js";
 import weightEntryRoutes from "./routes/WeightEntryRoutes.js";
 import todoRoutes from "./routes/TodoRoutes.js";
 import calendarRoutes from "./routes/CalendarRoutes.js";
+import { chosenDatabase, connectDatabase, DATABASES } from "./config/database.js";
 import developerRoutes from "./routes/DeveloperRoutes.js";
 
 
@@ -86,14 +87,12 @@ app.use((req, res) => {
 
 async function startServer() {
   try {
-    if (!process.env.MONGODB_URI) {
-      throw new Error("MONGODB_URI is missing from server/.env");
-    }
-
-    await mongoose.connect(process.env.MONGODB_URI);
+    // The real data — or, on a developer's machine, whichever of the real
+    // and test data was last chosen (config/database.js).
+    const which = await connectDatabase(chosenDatabase());
 
     console.log("Connected to MongoDB Atlas");
-    console.log(`Database: ${mongoose.connection.name}`);
+    console.log(`Database: ${mongoose.connection.name} (${DATABASES[which].label.toLowerCase()})`);
 
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`BentoBuilder server running on port ${PORT}`);

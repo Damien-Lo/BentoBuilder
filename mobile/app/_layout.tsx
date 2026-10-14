@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ServerGate } from "@/src/components/ServerGate";
 import { WebAlertHost } from "@/src/components/web/WebAlert";
+import { DataBadge } from "@/src/components/DataBadge";
 import { WebShell } from "@/src/components/web/WebShell";
 
 export const unstable_settings = {
@@ -242,6 +243,8 @@ export default function RootLayout() {
           }}
         />
 
+        <Stack.Screen name="developer/data" options={{ headerShown: false }} />
+
         <Stack.Screen
           name="developer/suggestions"
           options={{
@@ -250,6 +253,8 @@ export default function RootLayout() {
         />
       </Stack>
       </WebShell>
+      {/* Which data is on show, where there's a choice. */}
+      <DataBadge />
       </ServerGate>
 
       <WebAlertHost />

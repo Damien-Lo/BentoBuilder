@@ -16,6 +16,13 @@ interface ReportRow {
 // more checks are built out (recipes, planner entries, etc.).
 const REPORTS: ReportRow[] = [
   {
+    id: "data",
+    label: "Data: Real or Test",
+    description: "Which data the app is working on, and switching",
+    icon: "flask-outline",
+    route: "/developer/data",
+  },
+  {
     id: "ingredients",
     label: "Ingredients Missing Data",
     description: "No barcode, broken generic-ingredient links",
