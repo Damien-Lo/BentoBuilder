@@ -245,6 +245,7 @@ export default function RootLayout() {
 
         <Stack.Screen name="developer/data" options={{ headerShown: false }} />
         <Stack.Screen name="archive" options={{ headerShown: false }} />
+        <Stack.Screen name="menu" options={{ headerShown: false }} />
         <Stack.Screen name="manage-lists" options={{ headerShown: false }} />
 
         <Stack.Screen

@@ -49,7 +49,7 @@ export const WEB_SECTIONS: WebSection[] = [
     also: ["/archive"],
     tabs: [
       { label: "Overview", path: "/kitchen", exact: true, also: ["/overview"] },
-      { label: "Week plan", path: "/planner" },
+      { label: "Week plan", path: "/planner", also: ["/menu"] },
       { label: "Prep & shopping", path: "/kitchen/needs" },
       { label: "Recipes & meals", path: "/RecipesMainPage", also: ["/recipes", "/meals", "/restaurant-meals"] },
       { label: "Pantry", path: "/PantryMainPage", also: ["/pantry", "/ingredients"] },

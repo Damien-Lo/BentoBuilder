@@ -66,6 +66,7 @@ import { RecipeThumb } from "@/src/components/recipes/RecipeThumb";
 import { pieceGroups, usePlanNeeds, withPiece, type PieceChoice } from "@/src/components/planner/usePlanNeeds";
 import { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch";
 import { WebWeekPlanScreen } from "@/src/components/planner/web/WebWeekPlanScreen";
+import { menuLeft, menuName } from "@/src/services/menuApi";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { NutritionSummaryCard, type NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
 import { NutritionDetailOverlay, type NutritionDetailPage } from "@/src/components/planner/NutritionDetailOverlay";
@@ -190,6 +191,8 @@ function PhonePlannerScreen() {
   // The kitchen's tasks (thaw this, there's a shopping trip today), worked
   // out from the plan, the pantry and the calendar.
   const kitchenPlan = usePlanNeeds();
+  // On the menu, with servings still to put on a day.
+  const menuToPlace = kitchenPlan.menu.filter((m) => m.state === "menu" && menuLeft(m) > 0 && (m.recipe || m.meal));
   // Whether the suggestion cards are on.
   const [showSuggestions, toggleSuggestions] = useSuggestionsToggle();
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
@@ -245,7 +248,7 @@ function PhonePlannerScreen() {
       )}
     </Pressable>
   );
-  const [pendingPieces, setPendingPieces] = useState<{ recipe: Recipe; servings: number; options: PieceChoice[]; picked: string[] } | null>(null);
+  const [pendingPieces, setPendingPieces] = useState<{ recipe: Recipe; servings: number; options: PieceChoice[]; picked: string[]; menuItem?: string } | null>(null);
   const [pendingQuantity, setPendingQuantity] = useState("1");
   const [pendingUnit, setPendingUnit] = useState("");
 
@@ -685,11 +688,13 @@ function PhonePlannerScreen() {
     return entry;
   }
 
-  async function handleAddEntry(meal: Meal) {
+  // (`menuItem`: put on the day from the menu — see services/menuApi.ts.)
+  async function handleAddEntry(meal: Meal, menuItem?: string) {
     if (saving) return;
     try {
       setSaving(true);
-      await createEntry({ date: selectedDate, slot: addSlot, status: addStatus, meal: meal._id });
+      await createEntry({ date: selectedDate, slot: addSlot, status: addStatus, meal: meal._id, ...(menuItem ? { menuItem } : {}) });
+      if (menuItem) kitchenPlan.reload();
       setShowAdd(false);
     } catch (err) {
       Alert.alert("Error", err instanceof Error ? err.message : "Could not add meal.");
@@ -716,13 +721,13 @@ function PhonePlannerScreen() {
   // steak), planned ahead: which one is asked first — what the meal comes
   // to with each, or the planner's choice. (`pieces` is the answer; eaten
   // now, the piece is asked for as it's logged.)
-  async function handleAddRecipeEntry(recipe: Recipe, servings: number, pieces?: string[]) {
+  async function handleAddRecipeEntry(recipe: Recipe, servings: number, pieces?: string[], menuItem?: string) {
     if (saving) return;
     if (!pieces && addStatus === "planned") {
       const options = kitchenPlan.pieceChoices({ _id: "", date: selectedDate, slot: addSlot, status: "planned", recipe, recipeServings: servings });
       if (pieceGroups(options).some((g) => g.choices.length > 1)) {
         setOpenPieces([]);
-        setPendingPieces({ recipe, servings, options, picked: [] });
+        setPendingPieces({ recipe, servings, options, picked: [], menuItem });
         return;
       }
     }
@@ -735,6 +740,7 @@ function PhonePlannerScreen() {
         recipe: recipe._id,
         recipeServings: servings,
         ...(pieces?.length ? { pieces } : {}),
+        ...(menuItem ? { menuItem } : {}),
       });
       setPendingPieces(null);
       kitchenPlan.reload();
@@ -2013,6 +2019,17 @@ function PhonePlannerScreen() {
             </Pressable>
           )}
           <Text className="flex-1 text-lg font-bold text-slate-900">{selectedMonthLabel}</Text>
+          {/* The menu: what you'd like soon, not yet on a day. */}
+          <Pressable
+            onPress={() => router.push("/menu")}
+            accessibilityLabel="Menu"
+            className="mr-2 flex-row items-center rounded-xl bg-violet-50 px-3 py-1.5 active:bg-violet-100"
+          >
+            <Ionicons name="restaurant-outline" size={13} color="#7C3AED" />
+            <Text className="ml-1 text-xs font-bold text-violet-700">
+              Menu{menuToPlace.length ? ` · ${menuToPlace.length}` : ""}
+            </Text>
+          </Pressable>
           {!isToday && (
             <Pressable
               onPress={jumpToToday}
@@ -2259,7 +2276,7 @@ function PhonePlannerScreen() {
                 // With one piece to choose, a tap is the choice; with more,
                 // each is picked, then added together.
                 const pick = (c: PieceChoice) => {
-                  if (!many) return void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, [c.pantryItemId]);
+                  if (!many) return void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, [c.pantryItemId], pendingPieces.menuItem);
                   const next = withPiece(pendingPieces.picked, pendingPieces.options, { ...c, chosen: pendingPieces.picked.includes(c.pantryItemId) });
                   setPendingPieces({ ...pendingPieces, picked: next });
                 };
@@ -2310,7 +2327,7 @@ function PhonePlannerScreen() {
                     {many && (
                       <Pressable
                         disabled={saving}
-                        onPress={() => void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, pendingPieces.picked)}
+                        onPress={() => void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, pendingPieces.picked, pendingPieces.menuItem)}
                         className={`mt-2 items-center rounded-2xl py-3.5 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
                       >
                         <Text className="font-semibold text-white">{saving ? "Adding…" : "Add to plan"}</Text>
@@ -2318,7 +2335,7 @@ function PhonePlannerScreen() {
                     )}
                     <Pressable
                       disabled={saving}
-                      onPress={() => void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, [])}
+                      onPress={() => void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, [], pendingPieces.menuItem)}
                       className="mt-2 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 py-3.5 active:bg-slate-50"
                     >
                       <Ionicons name="sparkles-outline" size={16} color="#7C3AED" />
@@ -2816,6 +2833,36 @@ function PhonePlannerScreen() {
                   )}
                 </View>
               </View>
+
+              {/* What's on the menu, to put on this day (not while searching). */}
+              {menuToPlace.length > 0 && !(addMode === "meal" ? mealSearch : addMode === "recipe" ? recipeSearch : addMode === "ingredient" ? ingredientSearch : restaurantSearch) && (
+                <View className="border-b border-slate-100 bg-white pb-3">
+                  <Text className="mb-2 px-4 text-xs font-bold uppercase tracking-wide text-violet-600">From your menu</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }} keyboardShouldPersistTaps="handled">
+                    {menuToPlace.map((item) => {
+                      const kcal = item.recipe ? getRecipeKcal(item.recipe, 1) : item.meal ? getMealKcal(item.meal) : null;
+                      return (
+                        <Pressable
+                          key={item._id}
+                          disabled={saving}
+                          onPress={() => void (item.recipe ? handleAddRecipeEntry(item.recipe, 1, undefined, item._id) : handleAddEntry(item.meal!, item._id))}
+                          className="max-w-[220px] flex-row items-center rounded-2xl border border-violet-200 bg-violet-50 px-3 py-2 active:bg-violet-100"
+                        >
+                          <View className="flex-shrink">
+                            <Text numberOfLines={1} className="text-sm font-semibold text-slate-900">
+                              {menuName(item)}
+                            </Text>
+                            <Text className="text-xs text-violet-700">
+                              {menuLeft(item)} left{kcal != null ? ` · ${Math.round(kcal)} kcal` : ""}
+                            </Text>
+                          </View>
+                          <Ionicons name="add-circle-outline" size={20} color="#7C3AED" style={{ marginLeft: 8 }} />
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
 
               {/* List */}
               {addMode === "meal" && (
