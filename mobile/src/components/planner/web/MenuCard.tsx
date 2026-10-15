@@ -2,9 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 
+import { DragSource } from "@/src/components/web/dragDrop";
 import { Card, CardLink, WEB } from "@/src/components/web/ui";
 import type { Meal } from "@/src/services/mealApi";
-import { addToMenu, menuLeft, menuName, removeFromMenu, updateMenuItem, type MenuItem } from "@/src/services/menuApi";
+import { addToMenu, menuName, removeFromMenu, updateMenuItem, type MenuItem } from "@/src/services/menuApi";
 import type { Recipe } from "@/src/services/recipeApi";
 import { getMealKcal } from "@/src/utils/mealPlan";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
@@ -25,6 +26,7 @@ export function MenuCard({
   onChanged,
   compact = false,
   onOpen,
+  onDrag,
   style,
 }: {
   menu: MenuItem[];
@@ -39,6 +41,9 @@ export function MenuCard({
   // someday, taking off) is in the full card, opened over the page.
   compact?: boolean;
   onOpen?: () => void;
+  // Beside the week, an item can be dragged onto a meal: when one is
+  // picked up (and null when it's let go).
+  onDrag?: (item: MenuItem | null) => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const [adding, setAdding] = useState(false);
@@ -47,7 +52,6 @@ export function MenuCard({
   const on = menu.filter((m) => m.state === "menu");
   const someday = menu.filter((m) => m.state === "someday");
   const kcalOf = (item: MenuItem) => (item.recipe ? (item.recipe.nutrition?.calories ?? null) : item.meal ? getMealKcal(item.meal, conversions) : null);
-  const left = on.reduce((n, m) => n + menuLeft(m), 0);
 
   const fail = (error: unknown) => Alert.alert("Couldn't change the menu", error instanceof Error ? error.message : "Something went wrong.");
   const run = (job: Promise<unknown>) => void job.then(onChanged, fail);
@@ -65,7 +69,7 @@ export function MenuCard({
   return (
     <Card
       title="Menu"
-      subtitle={on.length ? `${on.length} on the menu · ${left} serving${left === 1 ? "" : "s"} to place` : "What you'd like to have soon"}
+      subtitle={on.length ? `${on.length} on the menu${onDrag ? " · drag one onto a meal" : ""}` : "What you'd like to have soon"}
       action={compact ? <CardLink label={on.length ? "Open" : "Add"} onPress={() => onOpen?.()} /> : <CardLink label={adding ? "Done" : "Add"} onPress={() => (setAdding((a) => !a), setQuery(""))} />}
       padded={false}
       style={style}
@@ -100,18 +104,37 @@ export function MenuCard({
         const active = placing === item._id;
         const kcal = kcalOf(item);
         return (
-          <View key={item._id} style={{ paddingHorizontal: 18, paddingVertical: 8, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: active ? "#F5F3FF" : "transparent" }}>
+          <DragSource
+            key={item._id}
+            payload={onDrag ? item : null}
+            onStart={() => onDrag?.(item)}
+            onEnd={() => onDrag?.(null)}
+            style={
+              onDrag
+                ? // (Beside the week: each its own card, to pick up and drag.)
+                  ({ marginHorizontal: 12, marginTop: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderRadius: 10, borderColor: active ? "#C4B5FD" : WEB.border, backgroundColor: active ? "#F5F3FF" : WEB.card, cursor: "grab" } as object)
+                : { paddingHorizontal: 18, paddingVertical: 8, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: active ? "#F5F3FF" : "transparent" }
+            }
+          >
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "600", color: WEB.text }}>
                 {menuName(item)}
               </Text>
-              <Pressable onPress={() => onPlace(active ? null : item)} style={({ hovered }: Hover) => ({ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7, backgroundColor: active ? "#7C3AED" : hovered ? "#EDE9FE" : "#F5F3FF" })}>
-                <Text style={{ fontSize: 11, fontWeight: "700", color: active ? "#FFFFFF" : "#7C3AED" }}>{active ? "Cancel" : "Place"}</Text>
-              </Pressable>
+              {/* (Beside the week it's dragged onto a meal: tagged, like on the
+                  grocery list. Opened, it's placed with a click.) */}
+              {onDrag && !active ? (
+                <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, backgroundColor: "#EDE9FE" }}>
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: "#6D28D9" }}>Menu</Text>
+                </View>
+              ) : (
+                <Pressable onPress={() => onPlace(active ? null : item)} style={({ hovered }: Hover) => ({ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7, backgroundColor: active ? "#7C3AED" : hovered ? "#EDE9FE" : "#F5F3FF" })}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: active ? "#FFFFFF" : "#7C3AED" }}>{active ? "Cancel" : "Place"}</Text>
+                </Pressable>
+              )}
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
               <Text style={{ flex: 1, fontSize: 11, color: WEB.muted }}>
-                {menuLeft(item)} of {item.servings} serving{item.servings === 1 ? "" : "s"} to place{kcal != null ? ` · ${Math.round(kcal)} kcal each` : ""}
+                {item.servings} serving{item.servings === 1 ? "" : "s"}{kcal != null ? ` · ${Math.round(kcal)} kcal each` : ""}
               </Text>
               {!compact && (
                 <>
@@ -125,7 +148,7 @@ export function MenuCard({
               )}
             </View>
             {active && <Text style={{ marginTop: 4, fontSize: 11, color: "#7C3AED" }}>Pick a meal on the week: &quot;Place here&quot;.</Text>}
-          </View>
+          </DragSource>
         );
       })}
 

@@ -2853,7 +2853,7 @@ function PhonePlannerScreen() {
                               {menuName(item)}
                             </Text>
                             <Text className="text-xs text-violet-700">
-                              {menuLeft(item)} left{kcal != null ? ` · ${Math.round(kcal)} kcal` : ""}
+                              {kcal != null ? `${Math.round(kcal)} kcal a serving` : "On your menu"}
                             </Text>
                           </View>
                           <Ionicons name="add-circle-outline" size={20} color="#7C3AED" style={{ marginLeft: 8 }} />

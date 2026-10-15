@@ -4,9 +4,8 @@ import type { Recipe } from "@/src/services/recipeApi";
 
 // The menu: recipes (or saved meals) you'd like to have soon, not yet on a
 // day (see server/models/MenuItem.js). One "on the menu" is shopped for —
-// the servings of it not yet put on a day (`servings` − `placed`); one
-// "someday" is kept for later. It goes back to "someday" by itself once its
-// servings are all on days.
+// its `servings`; one "someday" is kept for later. Once it's put on a day
+// it goes back to "someday" by itself.
 export interface MenuItem {
   _id: string;
   recipe?: Recipe | null;

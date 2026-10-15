@@ -36,8 +36,8 @@ import type { CustomUnitConversion } from "./unitConversion";
 //   use up     whether it uses something that's about to expire.
 //
 // What's on your menu (see services/menuApi.ts) — chosen to have soon — is
-// put ahead of that: a main on it gets MENU_BONUS, for as many of its
-// servings as aren't on a day yet, and taking it counts towards them.
+// put ahead of that: a main on it gets MENU_BONUS, once in the week (taking
+// it puts it on a day, which takes it off the menu).
 //
 // The day is then balanced as a whole. A meal's room is its share of what
 // the day has left after everything eaten and planned — the share you
@@ -743,7 +743,7 @@ export function suggestMeals({
         suggestedKcal.set(date, (suggestedKcal.get(date) ?? 0) + first.calories);
         if (!first.beside) taken.push({ date, key: first.main.key });
         const wanted = !first.beside && onMenu.get(first.main.key);
-        if (wanted) wanted.left -= 1;
+        if (wanted) wanted.left = 0;
         stock = stock.filter((p) => !first.claims.includes(p._id));
         for (const side of first.sides) sideCount.set(side.key, (sideCount.get(side.key) ?? 0) + 1);
       }

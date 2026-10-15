@@ -41,7 +41,14 @@ const withPlaced = async (items) => {
 router.get("/", async (req, res) => {
   try {
     const items = await populate(MenuItem.find({ isArchived: false }).sort({ state: 1, createdAt: -1 }));
-    return res.json({ success: true, data: await withPlaced(items) });
+    const shaped = await withPlaced(items);
+    // (Anything put on a day before that took it off the menu by itself.)
+    const settled = shaped.filter((i) => i.state === "menu" && i.placed > 0);
+    if (settled.length) {
+      await MenuItem.updateMany({ _id: { $in: settled.map((i) => i._id) } }, { state: "someday" });
+      for (const i of settled) i.state = "someday";
+    }
+    return res.json({ success: true, data: shaped });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });
   }
@@ -105,13 +112,13 @@ router.delete("/:id", async (req, res) => {
 
 export default router;
 
-// After a plan entry is placed from the menu: once all of the item's
-// servings are on days, it goes back to "someday" for next time.
+// After a plan entry is placed from the menu: it's on a day now, so it's
+// off the menu — back to "someday", to bring back next time.
 export async function settleMenuItem(menuItemId) {
   const item = await MenuItem.findById(menuItemId);
   if (!item || item.state !== "menu") return;
   const placed = (await placedServings([item])).get(String(item._id)) ?? 0;
-  if (placed >= (item.servings || 1) - 1e-9) {
+  if (placed > 0) {
     item.state = "someday";
     await item.save();
   }

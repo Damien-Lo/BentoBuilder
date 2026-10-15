@@ -5,7 +5,7 @@ import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-nativ
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { getMeals, type Meal } from "@/src/services/mealApi";
-import { addToMenu, getMenu, menuLeft, menuName, removeFromMenu, updateMenuItem, type MenuItem } from "@/src/services/menuApi";
+import { addToMenu, getMenu, menuName, removeFromMenu, updateMenuItem, type MenuItem } from "@/src/services/menuApi";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { getMealKcal, getRecipeKcal } from "@/src/utils/mealPlan";
 
@@ -36,7 +36,6 @@ export default function MenuScreen() {
 
   const on = (menu ?? []).filter((m) => m.state === "menu");
   const someday = (menu ?? []).filter((m) => m.state === "someday");
-  const left = on.reduce((n, m) => n + menuLeft(m), 0);
   const kcalOf = (item: MenuItem) => (item.recipe ? getRecipeKcal(item.recipe, 1) : item.meal ? getMealKcal(item.meal) : null);
 
   // Recipes and saved meals by name, not already on the menu.
@@ -58,7 +57,7 @@ export default function MenuScreen() {
           </Pressable>
           <View className="ml-2 flex-1">
             <Text className="text-xl font-bold text-slate-950">Menu</Text>
-            <Text className="text-xs text-slate-500">{on.length ? `${on.length} on the menu · ${left} serving${left === 1 ? "" : "s"} to place` : "What you'd like to have soon"}</Text>
+            <Text className="text-xs text-slate-500">{on.length ? `${on.length} on the menu` : "What you'd like to have soon"}</Text>
           </View>
         </View>
         <View className="mt-3 h-11 flex-row items-center rounded-2xl bg-slate-100 px-4">
@@ -111,7 +110,7 @@ export default function MenuScreen() {
                   </View>
                   <View className="mt-1 flex-row items-center">
                     <Text className="flex-1 text-xs text-slate-500">
-                      {menuLeft(item)} of {item.servings} serving{item.servings === 1 ? "" : "s"} to place{kcal != null ? ` · ${Math.round(kcal)} kcal each` : ""}
+                      {item.servings} serving{item.servings === 1 ? "" : "s"}{kcal != null ? ` · ${Math.round(kcal)} kcal each` : ""}
                     </Text>
                     <Pressable onPress={() => run(updateMenuItem(item._id, { state: "someday" }))} hitSlop={8} className="rounded-lg bg-slate-100 px-2.5 py-1 active:bg-slate-200">
                       <Text className="text-xs font-semibold text-slate-600">Someday</Text>
@@ -123,7 +122,7 @@ export default function MenuScreen() {
           </View>
         )}
 
-        {on.length > 0 && <Text className="mt-3 px-1 text-xs text-slate-400">To put one on a day, tap Add on a meal in the planner: the menu&apos;s at the top.</Text>}
+        {on.length > 0 && <Text className="mt-3 px-1 text-xs text-slate-400">To put one on a day, tap Add on a meal in the planner: the menu&apos;s at the top. Once it&apos;s on a day, it moves to Someday.</Text>}
 
         {someday.length > 0 && (
           <View className="mt-5">

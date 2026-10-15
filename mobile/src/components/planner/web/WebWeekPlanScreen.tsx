@@ -8,6 +8,7 @@ import { entryName } from "@/src/components/calendar/mealFood";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { SidePicker } from "@/src/components/planner/SidePicker";
 import { MenuCard, MenuOverlay } from "@/src/components/planner/web/MenuCard";
+import { DropTarget } from "@/src/components/web/dragDrop";
 import { getWebScale } from "@/src/components/web/scale";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { pieceGroups, withPiece, type PieceChoice } from "@/src/components/planner/usePlanNeeds";
@@ -83,6 +84,9 @@ export function WebWeekPlanScreen() {
   // The menu (see MenuCard), and the item of it being put on a day.
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [placing, setPlacing] = useState<MenuItem | null>(null);
+  // A menu item being dragged onto the week, and the meal it's over.
+  const [dragging, setDragging] = useState<MenuItem | null>(null);
+  const [dropOver, setDropOver] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuChanged = () => {
     getMenu().then(setMenu).catch(() => {});
@@ -119,9 +123,8 @@ export function WebWeekPlanScreen() {
     loadHistory();
   };
 
-  // A serving of the menu item being placed, on this day's meal.
-  function placeHere(date: string, slot: MealSlot) {
-    const item = placing;
+  // A serving of a menu item (the one being placed), on this day's meal.
+  function placeHere(date: string, slot: MealSlot, item = placing) {
     if (!item) return;
     setPlacing(null);
     createMealPlanEntry({ date, slot, status: "planned", menuItem: item._id, ...(item.recipe ? { recipe: item.recipe._id, recipeServings: 1 } : { meal: item.meal!._id }) }).then(reload, fail);
@@ -478,9 +481,11 @@ export function WebWeekPlanScreen() {
               {week.map((day) => {
                 const inCell = weekEntries.filter((e) => e.date === day && e.slot === slot.id);
                 return (
-                  <View
+                  <DropTarget
                     key={day}
-                    style={{ flex: 1, minHeight: 118, padding: 6, borderLeftWidth: 1, borderLeftColor: WEB.border, backgroundColor: day === today ? "#F8FBFF" : WEB.card }}
+                    onDrop={(item) => placeHere(day, slot.id, item as MenuItem)}
+                    onHover={(over) => setDropOver((at) => (over ? `${day}|${slot.id}` : at === `${day}|${slot.id}` ? null : at))}
+                    style={{ flex: 1, minHeight: 118, padding: 6, borderLeftWidth: 1, borderLeftColor: WEB.border, backgroundColor: dropOver === `${day}|${slot.id}` ? "#EDE9FE" : day === today ? "#F8FBFF" : WEB.card }}
                   >
                     {inCell.map((entry) => {
                       const isEaten = entry.status === "confirmed";
@@ -601,17 +606,17 @@ export function WebWeekPlanScreen() {
                         justifyContent: "center",
                         height: 26,
                         borderRadius: 8,
-                        backgroundColor: placing ? (hovered ? "#DDD6FE" : "#F5F3FF") : hovered ? WEB.blueSoft : "transparent",
+                        backgroundColor: placing || dragging ? (hovered ? "#DDD6FE" : "#F5F3FF") : hovered ? WEB.blueSoft : "transparent",
                       })}
                     >
                       {({ hovered }: Hover) => (
                         <>
-                          <Ionicons name="add" size={14} color={placing ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1"} />
-                          <Text style={{ marginLeft: 2, fontSize: 11, fontWeight: "600", color: placing ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1" }}>{placing ? "Place here" : "Add"}</Text>
+                          <Ionicons name="add" size={14} color={placing || dragging ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1"} />
+                          <Text style={{ marginLeft: 2, fontSize: 11, fontWeight: "600", color: placing || dragging ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1" }}>{placing || dragging ? "Place here" : "Add"}</Text>
                         </>
                       )}
                     </Pressable>
-                  </View>
+                  </DropTarget>
                 );
               })}
             </View>
@@ -682,6 +687,7 @@ export function WebWeekPlanScreen() {
             conversions={conversions}
             placing={placing?._id ?? null}
             onPlace={setPlacing}
+            onDrag={(item) => (setDragging(item), setDropOver(null))}
             onChanged={menuChanged}
           />
           </View>
