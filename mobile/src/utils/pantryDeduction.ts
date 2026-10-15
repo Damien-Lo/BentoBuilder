@@ -789,3 +789,27 @@ export function applyAmountOverrides(
 
   return { requirements: nextRequirements, rows: nextRows };
 }
+
+// A meal with pieces of its own (the bag thawed for it, the steaks kept for
+// it — see MealPlanEntry.pieces and pieceSizing.ts) takes those first: each
+// requirement's groups, and their members, with those entries at the front.
+// `settled`: the requirements those entries cover in full, which needn't be
+// asked about however many other choices the pantry has.
+export function preferPieces(requirements: IngredientRequirement[], pantryItemIds: string[]): { requirements: IngredientRequirement[]; settled: Set<string> } {
+  const settled = new Set<string>();
+  if (!pantryItemIds.length) return { requirements, settled };
+  const mine = (m: PantryGroupMember) => pantryItemIds.includes(m.pantryItemId);
+  const first = <T extends PantryGroupMember>(list: T[]) => [...list.filter(mine), ...list.filter((m) => !mine(m))];
+  const ordered = requirements.map((req) => {
+    const groups = req.groups
+      .map((g) => ({ ...g, members: first(g.members), ...(g.qualifyingMembers ? { qualifyingMembers: first(g.qualifyingMembers) } : {}) }))
+      .sort((a, b) => Number(b.members.some(mine)) - Number(a.members.some(mine)));
+    const covered =
+      req.matchMode === "wholePiece"
+        ? groups.reduce((n, g) => n + (g.qualifyingMembers ?? []).filter(mine).length, 0) >= req.neededQuantity
+        : groups.some((g) => g.members.length > 0 && g.members.every(mine) && g.totalAvailable >= req.neededQuantity - 1e-9);
+    if (covered && !req.askAmount) settled.add(req.ingredientId);
+    return { ...req, groups };
+  });
+  return { requirements: ordered, settled };
+}

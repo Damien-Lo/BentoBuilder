@@ -15,7 +15,7 @@ import {
   getDefaultDeductionInstructions,
   getExpandedRows,
   getResolvedDeductionInstructions,
-  hasAmbiguity,
+  preferPieces,
   requirementNeedsResolution,
   type AmountOverride,
   type DeductionInstruction,
@@ -42,6 +42,7 @@ export function useEntryConfirm({
   ready,
   onStart,
   onConfirmed,
+  sized,
 }: {
   allRecipes: Recipe[];
   allIngredients: Ingredient[];
@@ -53,6 +54,9 @@ export function useEntryConfirm({
   onStart?: (entry: MealPlanEntry) => void;
   // The entry as the server now has it, confirmed.
   onConfirmed: (updated: MealPlanEntry) => void;
+  // Planned meals with the pantry pieces they're counted at (usePlanNeeds'
+  // `sized`): what's eaten is taken from those.
+  sized?: (entries: MealPlanEntry[]) => MealPlanEntry[];
 }): {
   // `rateFirst`: ask for a rating (when one is due) before confirming.
   confirm: (entry: MealPlanEntry, rateFirst?: boolean) => void;
@@ -189,15 +193,19 @@ export function useEntryConfirm({
       return;
     }
     const conversions = settings?.unitConversions ?? [];
-    const requirements = buildIngredientRequirements(
-      entry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions,
+    // The meal's own pieces first (kept for it, or the planner's pick it's
+    // been counted at), and no question about what they cover.
+    const own = entry.status === "planned" ? ((sized ? sized([entry])[0] : entry).sizedTo?.claims ?? entry.pieces ?? []) : [];
+    const { requirements, settled } = preferPieces(
+      buildIngredientRequirements(entry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions),
+      own,
     );
 
-    if (hasAmbiguity(requirements)) {
+    if (requirements.some((r) => requirementNeedsResolution(r) && !settled.has(r.ingredientId))) {
       onStart?.(entry);
       setPendingConfirmEntry(entry);
       setPendingRequirements(requirements);
-      setAmbiguousRequirements(requirements.filter(requirementNeedsResolution));
+      setAmbiguousRequirements(requirements.filter((r) => requirementNeedsResolution(r) && !settled.has(r.ingredientId)));
       setPendingRateFirst(rateFirst);
       setShowResolveModal(true);
       return;

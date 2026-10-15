@@ -98,9 +98,12 @@ export async function suggestShelfDays(ingredientId, kind, place = "shelf") {
 // How far ahead of the meal things come out of the freezer, learned as
 // meals are eaten: for each pantry entry a meal on `date` (YYYY-MM-DD) took
 // from — the days since it was thawed, or 0 if it was still in the freezer.
-// Kept on the ingredient (Ingredient.thawLeads), the last few.
+// Kept on the ingredient (Ingredient.thawLeads), the last few. Gives back
+// the ingredients it noted for, so that un-logging the meal can take them
+// back off (see forgetThawLeads).
 export async function noteThawLeads(pantryItemIds, date) {
   const items = await PantryItem.find({ _id: { $in: pantryItemIds } }).populate("storageLocation");
+  const noted = [];
   for (const item of items) {
     let lead = null;
     if (placeKind(item.storageLocation?.name) === "frozen") lead = 0;
@@ -112,5 +115,13 @@ export async function noteThawLeads(pantryItemIds, date) {
     // (A week is longer than anything thaws: that's something else.)
     if (lead == null || lead < 0 || lead > 7) continue;
     await Ingredient.updateOne({ _id: item.ingredient }, { $push: { thawLeads: { $each: [lead], $slice: -RECENT } } });
+    noted.push(item.ingredient);
   }
+  return noted;
+}
+
+// Takes back what noteThawLeads noted for a meal that's no longer eaten:
+// the newest figure on each of those ingredients.
+export async function forgetThawLeads(ingredientIds) {
+  for (const id of ingredientIds ?? []) await Ingredient.updateOne({ _id: id }, { $pop: { thawLeads: 1 } });
 }

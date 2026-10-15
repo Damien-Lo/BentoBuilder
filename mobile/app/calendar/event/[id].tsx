@@ -107,6 +107,7 @@ export default function CalendarEventScreen() {
     pantryItems: kitchen?.pantry ?? [],
     settings: kitchen?.settings ?? null,
     ready: !!kitchen,
+    sized: kitchenPlan.sized,
     onConfirmed: (updated) => {
       if (event?.mealSlot) void loadFood(updated.date, event.mealSlot);
       // What it used has left the pantry.

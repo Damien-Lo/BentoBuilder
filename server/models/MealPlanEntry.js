@@ -109,6 +109,10 @@ const mealPlanEntrySchema = new mongoose.Schema(
     // choice. Without any, the piece is worked out (mobile's pieceSizing.ts).
     pieces: [{ type: mongoose.Schema.Types.ObjectId, ref: "PantryItem" }],
 
+    // The ingredients logging it noted a thaw figure for (see
+    // services/shelfLife.js noteThawLeads), taken back if it's un-logged.
+    thawNoted: [{ type: mongoose.Schema.Types.ObjectId, ref: "Ingredient" }],
+
     notes:      { type: String, trim: true, default: "" },
     isArchived: { type: Boolean, default: false },
   },

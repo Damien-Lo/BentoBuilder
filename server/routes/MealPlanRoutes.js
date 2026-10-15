@@ -5,7 +5,7 @@ import UsualMeal from "../models/UsualMeal.js";
 import { syncUsualMeals, todayFrom } from "../services/usualMeals.js";
 import { removeMealPlanEntryContributions } from "../services/groceryContributions.js";
 import SuggestionEvent from "../models/SuggestionEvent.js";
-import { noteThawLeads } from "../services/shelfLife.js";
+import { forgetThawLeads, noteThawLeads } from "../services/shelfLife.js";
 import {
   CORE_NUTRITION_FIELD_NAMES,
   EXTENDED_NUTRITION_FIELD_NAMES,
@@ -59,6 +59,8 @@ async function reverseStockDeductions(entry) {
     await pantryItem.save();
   }
   entry.stockDeductions = [];
+  await forgetThawLeads(entry.thawNoted).catch(() => {});
+  entry.thawNoted = [];
 }
 
 function populateEntry(query) {
@@ -376,9 +378,10 @@ router.post("/:id/confirm", async (req, res) => {
     entry.manualPieceEntries = manualLedger;
     entry.confirmedNutrition = confirmedNutrition;
     entry.status = "confirmed";
+    // (What was eaten straight from the freezer, or how long it had thawed —
+    // kept on the entry, so un-logging it takes it back.)
+    entry.thawNoted = await noteThawLeads(ledger.map((l) => l.pantryItem), entry.date).catch(() => []);
     await entry.save();
-    // (What was eaten straight from the freezer, or how long it had thawed.)
-    await noteThawLeads(ledger.map((l) => l.pantryItem), entry.date).catch(() => {});
 
     const populated = await populateEntry(MealPlanEntry.findById(entry._id));
     return res.status(200).json({ success: true, data: populated });

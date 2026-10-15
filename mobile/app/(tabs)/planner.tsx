@@ -336,6 +336,7 @@ function PhonePlannerScreen() {
     settings: appSettings,
     ready: kitchenReady && !!appSettings,
     onStart: entry => swipeableRefs.get(entry._id)?.current?.close(),
+    sized: kitchenPlan.sized,
     onConfirmed: updated => {
       setEntries(prev => prev.map(e => (e._id === updated._id ? updated : e)));
       if (returnAfterConfirm.current === updated._id) {

@@ -115,6 +115,8 @@ export function WebWeekPlanScreen() {
     pantryItems: kitchen?.pantry ?? [],
     settings: settingsLoaded ? settings : null,
     ready: !!kitchen && settingsLoaded,
+    // (`plan` is set up further down; this is only called once it is.)
+    sized: (entries) => plan.sized(entries),
     onConfirmed: reload,
   });
 
