@@ -167,10 +167,10 @@ const DESKTOP_PAGES_UNDER = [
   "/settings-section/",
   "/developer/",
   "/lists/deleted",
+  "/lists/task/",
+  "/calendar/event/",
 ];
 
 export function isDesktopPage(pathname: string, params: Record<string, unknown>): boolean {
-  // The planner opened to add food is the phone's own add sheet.
-  if (pathname === "/planner" && params.add) return false;
   return DESKTOP_PAGES.includes(pathname) || DESKTOP_PAGES_UNDER.some((path) => pathname.startsWith(path));
 }

@@ -12,6 +12,8 @@ import {
   Text,
   TextInput,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -42,6 +44,7 @@ import {
   getLastEntriesBeforeDate,
   getLastUsedMap,
   getMealPlanForDate,
+  setMealPlanEntryPieces,
   unconfirmMealPlanEntry,
   updateMealPlanEntryQuantity,
   type CreateMealPlanEntryInput,
@@ -52,6 +55,7 @@ import {
   type MealSlot,
   type RestaurantDishSelection,
 } from "@/src/services/mealPlanApi";
+import { shortDateLabel } from "@/src/components/calendar/calendarUtils";
 import { sortAlphabetically, sortByLastUsed } from "@/src/utils/lastUsedSort";
 import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
@@ -131,6 +135,11 @@ export default function PlannerScreen() {
 
 function PhonePlannerScreen() {
   const router = useRouter();
+  // The add sheet in a desktop browser (it opens from the week plan there).
+  const wideAdd = useWideWeb();
+  const addGrid = wideAdd ? { numColumns: 3, columnWrapperStyle: { gap: 12 } } : {};
+  // (Each card a third of its row, the last row's too.)
+  const addCell: StyleProp<ViewStyle> = wideAdd ? { flexBasis: 0, flexGrow: 1, maxWidth: "32.6%", minWidth: 0 } : undefined;
   const dates = useMemo(buildDates, []);
   const today = todayStr();
 
@@ -1540,6 +1549,18 @@ function PhonePlannerScreen() {
     );
   }
 
+  // Keeps a pantry piece for a planned meal (or, with none, lets it be
+  // chosen again).
+  async function choosePiece(entry: MealPlanEntry, pieces: string[]) {
+    try {
+      await setMealPlanEntryPieces(entry._id, pieces);
+      setEditEntry({ ...entry, pieces });
+      kitchenPlan.reload();
+    } catch (error) {
+      Alert.alert("Couldn't change that", error instanceof Error ? error.message : "Something went wrong.");
+    }
+  }
+
   // ── Edit-entry overlay: how much of this ingredient/recipe was eaten,
   // for this one meal-plan entry specifically ── same bottom-sheet pattern
   // as renderInfoOverlay above.
@@ -1566,6 +1587,13 @@ function PhonePlannerScreen() {
             getIngredientConversions(editEntry.ingredient!, appSettings?.unitConversions ?? []),
           )
         : scaleRecipeNutrition(editEntry.recipe!, q);
+    // (Still planned: at the size of the pantry piece it's counted at, for
+    // the servings shown.)
+    const piece = n && !isIngredient && editEntry.status === "planned" ? kitchenPlan.sized([editEntry])[0].sizedTo : undefined;
+    if (n && piece) {
+      const per = q / (editEntry.recipeServings || 1);
+      for (const m of ["calories", "protein", "carbs", "fats"] as const) if (n[m] != null) n[m] = Math.max(0, n[m]! + piece.shift[m] * per);
+    }
 
     // A confirmed recipe entry's real nutrition (from the actual
     // ingredients/weights used — see computeConfirmNutrition) can differ
@@ -1734,6 +1762,41 @@ function PhonePlannerScreen() {
               </>
             ) : (
               <>
+                {/* Still to come, and made with one of several pieces (a bag
+                    from a particular steak): which. */}
+                {(() => {
+                  const choices = kitchenPlan.pieceChoices(editEntry);
+                  if (choices.length < 2) return null;
+                  const pinned = choices.some((c) => c.chosen);
+                  return (
+                    <>
+                      <Text className="mb-1.5 text-sm font-semibold text-slate-700">Which one</Text>
+                      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                        {choices.map((c, i) => (
+                          <Pressable
+                            key={c.pantryItemId}
+                            onPress={() => void choosePiece(editEntry, c.chosen ? [] : [c.pantryItemId])}
+                            className={`flex-row items-center px-4 py-3 active:bg-slate-50 ${i > 0 ? "border-t border-slate-100" : ""}`}
+                          >
+                            <Ionicons name={c.current ? "radio-button-on" : "radio-button-off"} size={20} color={c.current ? "#2563EB" : "#94A3B8"} />
+                            <View className="ml-3 flex-1">
+                              <Text className="text-base text-slate-900">{c.label}</Text>
+                              {!!c.elsewhere && (
+                                <Text className="text-xs text-slate-400">
+                                  going to {shortDateLabel(c.elsewhere.date)} {c.elsewhere.slot}
+                                </Text>
+                              )}
+                            </View>
+                            <Text className="text-sm font-semibold text-slate-500">{c.calories} kcal</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                      <Text className="mb-6 mt-1.5 text-xs text-slate-400">
+                        {pinned ? "Kept for this meal. Tap it again to let the planner choose." : "Chosen for you: the best fit for the day, then the soonest to go. Tap one to keep it for this meal."}
+                      </Text>
+                    </>
+                  );
+                })()}
                 <Text className="mb-1.5 text-sm font-semibold text-slate-700">
                   {isIngredient ? "Quantity eaten" : "Servings eaten"}
                 </Text>
@@ -2053,6 +2116,8 @@ function PhonePlannerScreen() {
           crash entirely by never leaving this already-mounted screen. */}
       {showAdd && (
         <SafeAreaView className="absolute inset-0 bg-slate-50" edges={["top", "left", "right"]}>
+          {/* (In a desktop browser: a page's width, and the lists as grids.) */}
+          <View style={wideAdd ? { flex: 1, width: "100%", maxWidth: 1180, alignSelf: "center" } : { flex: 1 }}>
           {/* Header */}
           <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
             {pendingIngredient || pendingRestaurantMeal ? (
@@ -2091,7 +2156,7 @@ function PhonePlannerScreen() {
             /* ── Ingredient quantity-entry step ── */
             <ScrollView
               className="flex-1"
-              contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+              contentContainerStyle={{ padding: 16, paddingBottom: 40, ...(wideAdd ? { width: "100%", maxWidth: 640, alignSelf: "center" } : {}) }}
               keyboardShouldPersistTaps="handled"
             >
               <View className="mb-5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4">
@@ -2175,7 +2240,7 @@ function PhonePlannerScreen() {
                whole menu. Starts empty; nothing pre-checked. */
             <ScrollView
               className="flex-1"
-              contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+              contentContainerStyle={{ padding: 16, paddingBottom: 40, ...(wideAdd ? { width: "100%", maxWidth: 640, alignSelf: "center" } : {}) }}
               keyboardShouldPersistTaps="handled"
             >
               <View className="mb-5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4">
@@ -2575,6 +2640,8 @@ function PhonePlannerScreen() {
               {/* List */}
               {addMode === "meal" && (
                 <FlatList
+                  key={wideAdd ? "grid" : "list"}
+                  {...addGrid}
                   data={filteredMeals}
                   keyExtractor={m => m._id}
                   keyboardShouldPersistTaps="handled"
@@ -2585,6 +2652,7 @@ function PhonePlannerScreen() {
                     return (
                       <Pressable
                         className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+                        style={addCell}
                         disabled={saving}
                         onPress={() => void handleAddEntry(meal)}
                       >
@@ -2626,6 +2694,8 @@ function PhonePlannerScreen() {
 
               {addMode === "recipe" && (
                 <FlatList
+                  key={wideAdd ? "grid" : "list"}
+                  {...addGrid}
                   data={filteredRecipes}
                   keyExtractor={r => r._id}
                   keyboardShouldPersistTaps="handled"
@@ -2636,7 +2706,7 @@ function PhonePlannerScreen() {
                     const slotCfg = SLOT_MAP[addSlot];
                     const isPrep = producingRecipeIds.has(recipe._id);
                     return (
-                      <View className="mb-2 rounded-2xl border border-slate-200 bg-white p-4">
+                      <View className="mb-2 rounded-2xl border border-slate-200 bg-white p-4" style={addCell}>
                         <Pressable
                           className="flex-row items-center active:opacity-70"
                           disabled={saving}
@@ -2713,6 +2783,8 @@ function PhonePlannerScreen() {
 
               {addMode === "ingredient" && (
                 <FlatList
+                  key={wideAdd ? "grid" : "list"}
+                  {...addGrid}
                   data={filteredIngredients}
                   keyExtractor={i => i._id}
                   keyboardShouldPersistTaps="handled"
@@ -2724,6 +2796,7 @@ function PhonePlannerScreen() {
                     return (
                       <Pressable
                         className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+                        style={addCell}
                         disabled={saving}
                         onPress={() => openIngredientQuantityStep(ingredient)}
                       >
@@ -2764,6 +2837,8 @@ function PhonePlannerScreen() {
 
               {addMode === "restaurant" && (
                 <FlatList
+                  key={wideAdd ? "grid" : "list"}
+                  {...addGrid}
                   data={filteredRestaurantMeals}
                   keyExtractor={r => r._id}
                   keyboardShouldPersistTaps="handled"
@@ -2795,6 +2870,7 @@ function PhonePlannerScreen() {
                     return (
                       <Pressable
                         className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+                        style={addCell}
                         disabled={saving}
                         onPress={() => {
                           setSelectedDishQuantities(new Map());
@@ -2838,6 +2914,7 @@ function PhonePlannerScreen() {
               )}
             </>
           )}
+          </View>
         </SafeAreaView>
       )}
 

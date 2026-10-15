@@ -23,6 +23,7 @@ import { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch"
 import { RepeatDaysSheet } from "@/src/components/calendar/RepeatDaysSheet";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { showActions } from "@/src/components/todo/theme";
 import {
   deleteCalendarEvent,
@@ -63,6 +64,7 @@ export default function CalendarEventScreen() {
   // pantry piece it would get.)
   const [loadedFood, setFood] = useState<{ entries: MealPlanEntry[]; conversions: CustomUnitConversion[]; day: string; slot: MealType } | null | undefined>(undefined);
   const kitchenPlan = usePlanNeeds();
+  const wide = useWideWeb();
   const food = useMemo<MealFood | null | undefined>(
     () => (loadedFood ? (buildMealFood(kitchenPlan.sized(loadedFood.entries), loadedFood.conversions).get(mealKey(loadedFood.day, loadedFood.slot)) ?? null) : loadedFood),
     [loadedFood, kitchenPlan],
@@ -299,83 +301,9 @@ export default function CalendarEventScreen() {
     ]);
   }
 
-  return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
-      <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-2.5">
-        <Pressable onPress={() => router.back()} className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100">
-          <Ionicons name="chevron-back" size={26} color="#0F172A" />
-        </Pressable>
-        <View className="ml-1 flex-1 items-center">
-          <Text className="text-base font-bold text-slate-950" numberOfLines={1}>
-            {calendar?.name ?? "Calendar"}
-          </Text>
-        </View>
-        <Pressable
-          onPress={startEdit}
-          accessibilityLabel="Edit event"
-          className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
-        >
-          <Ionicons name="create-outline" size={23} color="#2563EB" />
-        </Pressable>
-      </View>
-
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-        {/* Summary */}
-        <View className="mb-3 flex-row rounded-3xl border border-slate-200 bg-white p-4">
-          <View className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: hexToRgba(color, 0.15) }}>
-            <View className="h-4 w-4 rounded-full" style={{ backgroundColor: color }} />
-          </View>
-          <View className="ml-3 flex-1">
-            <Text className="text-xl font-bold text-slate-950">{event.title}</Text>
-            <Text className="mt-1.5 text-base text-slate-700">{longDateLabel(occurrence)}</Text>
-            {event.allDay ? (
-              <Text className="mt-0.5 text-base text-slate-500">
-                {span === 0 ? "All day" : `All day, until ${shortDateLabel(occurrenceEnd)}`}
-              </Text>
-            ) : (
-              <Text className="mt-0.5 text-base text-slate-500">
-                {minutesLabel(event.startMinutes)} → {minutesLabel(event.endMinutes)}
-                {span > 0 ? ` ${shortDateLabel(occurrenceEnd)}` : ""} ({durationLabel(duration)})
-              </Text>
-            )}
-            {event.seriesId && !event.repeat && (
-              <View className="mt-1.5 flex-row items-center">
-                <Ionicons name="git-branch-outline" size={15} color="#64748B" />
-                <Text className="ml-1.5 flex-1 text-sm text-slate-500">Changed from its repeating series</Text>
-              </View>
-            )}
-            {event.repeat && (
-              <View className="mt-1.5 flex-row items-center">
-                <Ionicons name="repeat" size={15} color="#64748B" />
-                <Text className="ml-1.5 flex-1 text-sm text-slate-500">{repeatLabel(event.repeat, event.date)}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Details */}
-        <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white">
-          {!!event.location && (
-            <Detail icon="location-outline">
-              <Text className="text-base text-slate-900">{event.location}</Text>
-            </Detail>
-          )}
-          {!!event.description && (
-            <Detail icon="reorder-three-outline">
-              <Text className="text-base leading-6 text-slate-700">{event.description}</Text>
-            </Detail>
-          )}
-          <Detail icon="notifications-outline">
-            <Text className="text-base text-slate-900">{remindLabel(event.remindMinutes)}</Text>
-          </Detail>
-          <Detail icon="calendar-outline" last>
-            <View className="flex-row items-center">
-              <View className="mr-2 h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-              <Text className="text-base text-slate-900">{calendar?.name ?? "Calendar"}</Text>
-            </View>
-          </Detail>
-        </View>
-
+  // What the event is for: a meal's food, or a session's prep and shopping.
+  const purpose = (
+    <>
         {/* A prep session or shopping trip: what it's for, from the plan. */}
         {!!event.kitchenKind && (
           <View className="mb-3">
@@ -453,7 +381,90 @@ export default function CalendarEventScreen() {
             </View>
           </View>
         )}
+    </>
+  );
 
+  return (
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : undefined}>
+      <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-2.5">
+        <Pressable onPress={() => router.back()} className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100">
+          <Ionicons name="chevron-back" size={26} color="#0F172A" />
+        </Pressable>
+        <View className="ml-1 flex-1 items-center">
+          <Text className="text-base font-bold text-slate-950" numberOfLines={1}>
+            {calendar?.name ?? "Calendar"}
+          </Text>
+        </View>
+        <Pressable
+          onPress={startEdit}
+          accessibilityLabel="Edit event"
+          className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
+        >
+          <Ionicons name="create-outline" size={23} color="#2563EB" />
+        </Pressable>
+      </View>
+
+      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+        {/* (In a desktop browser: what the event is on the left, what it's
+            for — the food, or the session's prep and shopping — on the right.) */}
+        <View style={wide ? { flexDirection: "row", alignItems: "flex-start", gap: 16 } : undefined}>
+          <View style={wide ? { flex: 2, minWidth: 0 } : undefined}>
+        {/* Summary */}
+        <View className="mb-3 flex-row rounded-3xl border border-slate-200 bg-white p-4">
+          <View className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: hexToRgba(color, 0.15) }}>
+            <View className="h-4 w-4 rounded-full" style={{ backgroundColor: color }} />
+          </View>
+          <View className="ml-3 flex-1">
+            <Text className="text-xl font-bold text-slate-950">{event.title}</Text>
+            <Text className="mt-1.5 text-base text-slate-700">{longDateLabel(occurrence)}</Text>
+            {event.allDay ? (
+              <Text className="mt-0.5 text-base text-slate-500">
+                {span === 0 ? "All day" : `All day, until ${shortDateLabel(occurrenceEnd)}`}
+              </Text>
+            ) : (
+              <Text className="mt-0.5 text-base text-slate-500">
+                {minutesLabel(event.startMinutes)} → {minutesLabel(event.endMinutes)}
+                {span > 0 ? ` ${shortDateLabel(occurrenceEnd)}` : ""} ({durationLabel(duration)})
+              </Text>
+            )}
+            {event.seriesId && !event.repeat && (
+              <View className="mt-1.5 flex-row items-center">
+                <Ionicons name="git-branch-outline" size={15} color="#64748B" />
+                <Text className="ml-1.5 flex-1 text-sm text-slate-500">Changed from its repeating series</Text>
+              </View>
+            )}
+            {event.repeat && (
+              <View className="mt-1.5 flex-row items-center">
+                <Ionicons name="repeat" size={15} color="#64748B" />
+                <Text className="ml-1.5 flex-1 text-sm text-slate-500">{repeatLabel(event.repeat, event.date)}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Details */}
+        <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+          {!!event.location && (
+            <Detail icon="location-outline">
+              <Text className="text-base text-slate-900">{event.location}</Text>
+            </Detail>
+          )}
+          {!!event.description && (
+            <Detail icon="reorder-three-outline">
+              <Text className="text-base leading-6 text-slate-700">{event.description}</Text>
+            </Detail>
+          )}
+          <Detail icon="notifications-outline">
+            <Text className="text-base text-slate-900">{remindLabel(event.remindMinutes)}</Text>
+          </Detail>
+          <Detail icon="calendar-outline" last>
+            <View className="flex-row items-center">
+              <View className="mr-2 h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+              <Text className="text-base text-slate-900">{calendar?.name ?? "Calendar"}</Text>
+            </View>
+          </Detail>
+        </View>
+          {!wide && purpose}
         {regularMeal && (
           <Pressable
             onPress={() => router.push("/calendar/meal-times")}
@@ -473,6 +484,9 @@ export default function CalendarEventScreen() {
         >
           <Text className="font-semibold text-red-600">{regularMeal ? "Skip this day" : "Delete event"}</Text>
         </Pressable>
+          </View>
+          {wide && <View style={{ flex: 3, minWidth: 0 }}>{purpose}</View>}
+        </View>
       </ScrollView>
 
       {confirmEntry.modals}

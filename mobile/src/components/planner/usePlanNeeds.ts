@@ -10,9 +10,21 @@ import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { loadSettings } from "@/src/services/settingsService";
 import type { PantryItem } from "@/src/types/pantry";
 import { todayStr } from "@/src/utils/mealPlan";
-import { sizePlanned } from "@/src/utils/pieceSizing";
+import { pieceOptions, sizePlanned } from "@/src/utils/pieceSizing";
 import { computePlanNeeds, kitchenSessions, type BuyNeed, type KitchenIssue, type KitchenSession, type KitchenTask, type PrepNeed, type StockCheck } from "@/src/utils/planNeeds";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
+
+// A piece (or bag made from one) a planned meal could be made with: what
+// the meal would come to, whether it's been chosen for it, whether it's the
+// one it's counted at now, and the other meal it's going to otherwise.
+export interface PieceChoice {
+  pantryItemId: string;
+  label: string;
+  calories: number;
+  chosen: boolean;
+  current: boolean;
+  elsewhere?: MealPlanEntry;
+}
 
 // How far ahead the plan is read: far enough to see what a session covers
 // up to the one after it.
@@ -36,7 +48,7 @@ interface Loaded {
 //
 // `sized` gives back plan entries with each meal still to come counted at
 // the pantry piece it would get (MealPlanEntry.sizedTo), for a day's totals.
-export function usePlanNeeds(): { ready: boolean; today: string; sessions: KitchenSession[]; prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[]; tasks: KitchenTask[]; issues: KitchenIssue[]; reload: () => void; sized: (entries: MealPlanEntry[]) => MealPlanEntry[] } {
+export function usePlanNeeds(): { ready: boolean; today: string; sessions: KitchenSession[]; prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[]; tasks: KitchenTask[]; issues: KitchenIssue[]; reload: () => void; sized: (entries: MealPlanEntry[]) => MealPlanEntry[]; upcoming: MealPlanEntry[]; pieceChoices: (entry: MealPlanEntry) => PieceChoice[] } {
   const today = todayStr();
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
@@ -49,7 +61,7 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
   useFocusEffect(reload);
 
   return useMemo(() => {
-    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], checks: [], tasks: [], issues: [], reload, sized: (entries: MealPlanEntry[]) => entries };
+    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], checks: [], tasks: [], issues: [], reload, sized: (entries: MealPlanEntry[]) => entries, upcoming: [], pieceChoices: () => [] };
     const sessions = kitchenSessions(loaded.occurrences, today);
     // (Each meal with the piece it would get, so that's the one to thaw.)
     const sized = sizePlanned(loaded.entries, loaded.recipes, loaded.ingredients, loaded.pantry, loaded.conversions, today, loaded.dayGoal).entries;
@@ -63,6 +75,18 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
       today,
     );
     const sizes = new Map(sized.filter((e) => e.sizedTo).map((e) => [e._id, e.sizedTo]));
-    return { ready: true, today, sessions, ...needs, reload, sized: (entries: MealPlanEntry[]) => entries.map((e) => (sizes.has(e._id) ? { ...e, sizedTo: sizes.get(e._id) } : e)) };
+    // (`upcoming`: every meal still to come in the next few weeks.)
+    const upcoming = loaded.entries.filter((e) => e.status === "planned" && e.date >= today);
+    // A planned meal's pieces to choose from (MealPlanEntry.pieces), and
+    // which other meal, if any, each is going to as things stand.
+    const going = new Map(sized.flatMap((e) => (e.sizedTo?.claims ?? []).map((id) => [id, e] as const)));
+    const pieceChoices = (entry: MealPlanEntry): PieceChoice[] =>
+      entry.recipe && entry.status === "planned"
+        ? pieceOptions(entry.recipe, loaded.pantry, loaded.recipes, loaded.ingredients, loaded.conversions, entry.recipeServings ?? 1).map((option) => {
+            const other = going.get(option.pantryItemId);
+            return { ...option, chosen: !!entry.pieces?.includes(option.pantryItemId), current: other?._id === entry._id, elsewhere: other && other._id !== entry._id ? other : undefined };
+          })
+        : [];
+    return { ready: true, today, sessions, ...needs, reload, upcoming, pieceChoices, sized: (entries: MealPlanEntry[]) => entries.map((e) => (sizes.has(e._id) ? { ...e, sizedTo: sizes.get(e._id) } : e)) };
   }, [loaded, today, reload]);
 }

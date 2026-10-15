@@ -126,6 +126,12 @@ export default function RestaurantMealsListPage() {
                     {item.dishes.map((d) => d.name).join(", ") || "No dishes yet"}
                   </Text>
                 </View>
+                {/* (No swiping with a mouse: archiving is a button here.) */}
+                {layout.wide && (
+                  <Pressable onPress={() => handleDelete(item)} accessibilityLabel={`Archive ${item.restaurantName}`} hitSlop={8} className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100">
+                    <Ionicons name="archive-outline" size={17} color="#94A3B8" />
+                  </Pressable>
+                )}
                 <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
               </Pressable>
             </ReanimatedSwipeable>

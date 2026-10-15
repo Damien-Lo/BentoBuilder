@@ -4,6 +4,7 @@ import { Modal, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TaskDetail } from "@/src/components/todo/TaskDetail";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // A task's page. Its subtasks don't open as pages of their own: they float
 // as a card over this one (and a sub-subtask as a second, smaller card), so it's always clear how deep you are and what you came from.
@@ -12,6 +13,7 @@ import { TaskDetail } from "@/src/components/todo/TaskDetail";
 export default function TodoTaskScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const wide = useWideWeb();
   const { id, open } = useLocalSearchParams<{ id: string; open?: string }>();
   // The sheet levels showing, outermost first (subtask, then sub-subtask).
   const [stack, setStack] = useState<string[]>(open ? [open] : []);
@@ -31,6 +33,8 @@ export default function TodoTaskScreen() {
 
   return (
     <>
+      {/* (In a desktop browser: a page of a comfortable reading width.) */}
+      <View style={wide ? { flex: 1, width: "100%", maxWidth: 900, alignSelf: "center" } : { flex: 1 }}>
       <TaskDetail
         id={id}
         mode="page"
@@ -40,6 +44,7 @@ export default function TodoTaskScreen() {
         onOpenParent={(parentId) => router.replace({ pathname: "/lists/task/[id]", params: { id: parentId } })}
         onExit={() => router.back()}
       />
+      </View>
 
       <Modal visible={stack.length > 0} transparent animationType="fade" onRequestClose={pop}>
         {/* One floating card over the dimmed task, whatever the depth — its
@@ -55,7 +60,7 @@ export default function TodoTaskScreen() {
           <Pressable className="absolute inset-0" onPress={closeAll} accessibilityLabel="Close" />
           <View
             className="flex-1 overflow-hidden rounded-3xl bg-slate-50"
-            style={{ shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 20, shadowOffset: { width: 0, height: 8 } }}
+            style={{ ...(wide ? { width: "100%", maxWidth: 760, alignSelf: "center" } : {}), shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 20, shadowOffset: { width: 0, height: 8 } }}
           >
             {top && (
               <TaskDetail

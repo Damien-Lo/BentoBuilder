@@ -157,6 +157,7 @@ export function suggestMeals({
   slots,
   started = [],
   entries: logged,
+  later = [],
   recipes,
   meals,
   ingredients,
@@ -175,6 +176,9 @@ export function suggestMeals({
   started?: { date: string; slot: MealSlot }[];
   // What's been eaten (as far back as there is) and everything planned.
   entries: MealPlanEntry[];
+  // Meals planned after the days being filled. They count for nothing
+  // here but the pantry pieces they'll take, which aren't offered.
+  later?: MealPlanEntry[];
   recipes: Recipe[];
   meals: Meal[];
   ingredients: Ingredient[];
@@ -198,8 +202,9 @@ export function suggestMeals({
   const dayGoal = goals.calories;
   // The meals already planned take their pieces from the pantry first, and
   // count at those; `stock` is what's left for the suggestions.
-  const planned = sizePlanned(logged, recipes, ingredients, pantryItems, conversions, today, dayGoal);
-  const entries = planned.entries;
+  const planned = sizePlanned([...logged, ...later], recipes, ingredients, pantryItems, conversions, today, dayGoal);
+  const laterIds = new Set(later.map((e) => e._id));
+  const entries = planned.entries.filter((e) => !laterIds.has(e._id));
   let stock = planned.stock;
 
   // --- What there is to suggest ---

@@ -1,9 +1,10 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { AppState, Platform, Pressable, Text } from "react-native";
+import { AppState, Pressable, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { getDatabaseState, type DatabaseState } from "@/src/services/databaseApi";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // A small marker, over everything, saying which data is on show — where
 // there's a choice (a developer's machine: see services/databaseApi.ts).
@@ -12,6 +13,7 @@ import { getDatabaseState, type DatabaseState } from "@/src/services/databaseApi
 export function DataBadge() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const wide = useWideWeb();
   const [state, setState] = useState<DatabaseState | null>(null);
 
   useEffect(() => {
@@ -28,8 +30,10 @@ export function DataBadge() {
     <Pressable
       onPress={() => router.push("/developer/data")}
       accessibilityLabel={`${test ? "Test" : "Real"} data: switch`}
-      // (Top right in a browser, clear of the section's tabs; top centre on a phone.)
-      style={{ position: "absolute", top: insets.top + (Platform.OS === "web" ? 14 : 4), ...(Platform.OS === "web" ? { right: 16 } : { alignSelf: "center" as const }), zIndex: 1000, flexDirection: "row", alignItems: "center", height: 22, paddingHorizontal: 10, borderRadius: 11, backgroundColor: test ? "#F59E0B" : "#DC2626", opacity: 0.95 }}
+      // (Top right in a desktop browser, clear of the section's tabs; top
+      // centre at a phone's width, clear of the buttons pages keep at the
+      // top right.)
+      style={{ position: "absolute", top: insets.top + (wide ? 14 : 4), ...(wide ? { right: 16 } : { alignSelf: "center" as const }), zIndex: 1000, flexDirection: "row", alignItems: "center", height: 22, paddingHorizontal: 10, borderRadius: 11, backgroundColor: test ? "#F59E0B" : "#DC2626", opacity: 0.95 }}
     >
       <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.3, color: "#FFFFFF" }}>{test ? "TEST DATA" : "REAL DATA"}</Text>
     </Pressable>

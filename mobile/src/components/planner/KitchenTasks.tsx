@@ -27,6 +27,7 @@ const ICONS: Record<KitchenTask["kind"], keyof typeof Ionicons.glyphMap> = {
   shop: "cart-outline",
   prep: "flame-outline",
   thaw: "snow-outline",
+  freeze: "snow",
   ahead: "timer-outline",
   use: "hourglass-outline",
 };
@@ -175,6 +176,7 @@ export function KitchenTasks({
                     ))}
                   </View>
                 )}
+                {task.kind === "freeze" && <Action label={busy === task.id ? "Moving…" : "Froze it"} primary onPress={() => void move(task, place(/freez/i), false)} />}
                 {task.kind === "use" && (
                   <>
                     <Action label={busy === task.id ? "Moving…" : "Froze it"} primary onPress={() => void move(task, place(/freez/i), false)} />

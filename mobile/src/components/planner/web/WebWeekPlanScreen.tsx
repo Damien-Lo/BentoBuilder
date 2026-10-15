@@ -13,6 +13,7 @@ import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { noteSuggestions, recordSuggestion, settleSuggestions, type SuggestionAction } from "@/src/components/planner/suggestionRecord";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
+import { compactDate } from "@/src/components/web/fields";
 import { Button, Card, CardLink, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
@@ -20,6 +21,7 @@ import {
   createMealPlanEntry,
   deleteMealPlanEntry,
   getMealPlanRange,
+  setMealPlanEntryPieces,
   unconfirmMealPlanEntry,
   type MealPlanEntry,
   type MealSlot,
@@ -29,7 +31,6 @@ import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { DEFAULT_SETTINGS, loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { stopUsualMeal } from "@/src/services/usualMealApi";
 import type { PantryItem } from "@/src/types/pantry";
-import { sizePlanned } from "@/src/utils/pieceSizing";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
 import { suggestMeals, type Dish, type Macros, type Suggestion, type Suggestions } from "@/src/utils/recommend";
 
@@ -143,6 +144,16 @@ export function WebWeekPlanScreen() {
     showActions(entryName(entry), [
       { label: entry.status === "confirmed" ? "Mark as not eaten" : "Mark as eaten", onPress: () => toggleEaten(entry) },
       { label: "Open", onPress: () => openItem(entry) },
+      // Still to come, and made with one of several pieces: which.
+      ...plan.pieceChoices(entry).length > 1
+        ? plan.pieceChoices(entry).map((c) => ({
+            label: `${c.current ? "✓ " : ""}${c.label} · ${c.calories} kcal${c.elsewhere ? ` (going to ${compactDate(c.elsewhere.date)} ${c.elsewhere.slot})` : ""}`,
+            onPress: () => void setMealPlanEntryPieces(entry._id, c.chosen ? [] : [c.pantryItemId]).then(() => {
+              plan.reload();
+              reload();
+            }, fail),
+          }))
+        : [],
       ...(usualId
         ? [
             { label: "Remove just this day", destructive: true, onPress: () => void deleteMealPlanEntry(entry._id).then(reload, fail) },
@@ -161,7 +172,11 @@ export function WebWeekPlanScreen() {
 
   const ready = loadedWeek === week[0];
   // (What's planned counts at the piece in the pantry it would get.)
-  const sizedEntries = kitchen ? sizePlanned(entries, kitchen.recipes, kitchen.ingredients, kitchen.pantry, conversions, today, settings.dailyCalorieLimit).entries : entries;
+  // What the coming weeks' planned meals need prepping and buying, each
+  // thing under the prep session or shopping trip it falls to.
+  const plan = usePlanNeeds();
+  // (Sized against everything planned from today, not just this week's.)
+  const sizedEntries = plan.sized(entries);
   const weekEntries = ready ? sizedEntries.filter((e) => e.date >= week[0] && e.date <= week[6]) : [];
   const eaten = computeDayNutrition(weekEntries.filter((e) => e.status === "confirmed"), conversions);
   const planned = computeDayNutrition(weekEntries.filter((e) => e.status === "planned"), conversions);
@@ -219,9 +234,6 @@ export function WebWeekPlanScreen() {
   const [picking, setPicking] = useState<{ date: string; slot: MealSlot; offer: Suggestion; rank: number; from: Dish | null } | null>(null);
   const [sidesPassed, setSidesPassed] = useState<Record<string, string[]>>({});
 
-  // What the coming weeks' planned meals need prepping and buying, each
-  // thing under the prep session or shopping trip it falls to.
-  const plan = usePlanNeeds();
   const [adding, setAdding] = useState<"prep" | "shop" | null>(null);
   const suggestions = useMemo(() => {
     if (!suggesting || !kitchen || !ready || !plan.ready) return Object.assign(new Map<string, Suggestion[]>(), { rate: () => null, sidesFor: () => [], find: () => [], aim: () => null }) as Suggestions;
@@ -237,6 +249,7 @@ export function WebWeekPlanScreen() {
       started,
       // (History runs up to yesterday; the week adds today onwards.)
       entries: [...history, ...weekEntries.filter((e) => e.date >= today)],
+      later: plan.upcoming.filter((e) => e.date > week[6]),
       recipes: kitchen.recipes,
       meals: kitchen.meals,
       ingredients: kitchen.ingredients,
@@ -248,7 +261,7 @@ export function WebWeekPlanScreen() {
       today,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suggesting, kitchen, ready, plan.ready, plan.sessions, entries, history, week[0], today, settings]);
+  }, [suggesting, kitchen, ready, plan.ready, plan.sessions, plan.upcoming, entries, history, week[0], today, settings]);
 
   // The suggestion showing in a slot (if any), and where it stands among
   // that slot's offers.

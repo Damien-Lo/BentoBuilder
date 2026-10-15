@@ -75,6 +75,8 @@ export function useSuggestionWatch(date: string, dayEntries: MealPlanEntry[] | n
     // calories), so this is what keeps the two showing the same thing.
     const week = weekOf(date, settings.weekStartDay);
     const entries = [...loaded.around.filter((e) => e.date !== date && (e.date < today || week.includes(e.date))), ...dayEntries];
+    // (Meals planned past the week keep the pieces they'll take.)
+    const later = loaded.around.filter((e) => e.status === "planned" && e.date > week[week.length - 1]);
     const days = week.filter((d) => d >= today);
     const there = (day: string, slot: MealSlot) => entries.filter((e) => e.date === day && e.slot === slot);
     return suggestMeals({
@@ -82,6 +84,7 @@ export function useSuggestionWatch(date: string, dayEntries: MealPlanEntry[] | n
       // Meals with something planned but nothing eaten can still be added to.
       started: days.flatMap((day) => meals.filter((slot) => there(day, slot).length > 0 && there(day, slot).every((e) => e.status !== "confirmed")).map((slot) => ({ date: day, slot }))),
       entries,
+      later,
       recipes: loaded.recipes,
       meals: loaded.meals,
       ingredients: loaded.ingredients,

@@ -105,7 +105,7 @@ export interface StockCheck {
 // entry is moved to the fridge, the item is bought), after which it's gone.
 export interface KitchenTask {
   id: string;
-  kind: "shop" | "prep" | "thaw" | "ahead" | "use";
+  kind: "shop" | "prep" | "thaw" | "freeze" | "ahead" | "use";
   // The day to do it, and the time of day where it has one.
   date: string;
   minutes?: number;
@@ -149,6 +149,13 @@ export interface KitchenIssue {
 // When a meal is, for working back from, where nothing more exact is known.
 const SLOT_MINUTES: Record<string, number> = { breakfast: 7 * 60 + 30, lunch: 12 * 60, dinner: 19 * 60, snack: 15 * 60 + 30 };
 
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// "Thu 15 Oct".
+const dayLabel = (date: string) => {
+  const d = new Date(`${date}T12:00:00`);
+  return `${DAY_NAMES[d.getDay()]} ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
+};
 const shiftDay = (date: string, days: number) => {
   const d = new Date(`${date}T12:00:00`);
   d.setDate(d.getDate() + days);
@@ -203,6 +210,8 @@ export function computePlanNeeds(
   type Lot = { expires: string | null; amount: number; item: PantryItem };
   // Frozen entries the plan draws on: how much, in what, and for when.
   const thawing = new Map<string, { item: PantryItem; amount: number; unit: string; by: string; for: NeedSource[] }>();
+  // Fresh entries the plan draws on that will be past their date by then.
+  const freezing = new Map<string, { item: PantryItem; by: string; for: NeedSource[] }>();
   const inFreezer = (item: PantryItem) => /freez/i.test(typeof item.storageLocation === "object" && item.storageLocation ? (item.storageLocation.name ?? "") : "");
   const left = new Map<string, Lot[]>();
   const checks = new Map<string, StockCheck>();
@@ -249,6 +258,14 @@ export function computePlanNeeds(
           const out = thawing.get(lot.item._id) ?? { item: lot.item, amount: 0, unit, by: due, for: [] };
           thawing.set(lot.item._id, out);
           out.amount += take;
+          if (due < out.by) out.by = due;
+          if (!out.for.some((f) => f.date === source.date && f.label === source.label)) out.for.push(source);
+        }
+        // Still good now, but not by the day it's wanted: into the freezer
+        // with it while it is (then it's thawed for the day like the rest).
+        if (!pass && today && !inFreezer(lot.item) && lot.expires! >= today) {
+          const out = freezing.get(lot.item._id) ?? { item: lot.item, by: due, for: [] };
+          freezing.set(lot.item._id, out);
           if (due < out.by) out.by = due;
           if (!out.for.some((f) => f.date === source.date && f.label === source.label)) out.for.push(source);
         }
@@ -425,6 +442,25 @@ export function computePlanNeeds(
     });
   }
 
+  // Wanted after its date: freeze it before then.
+  for (const out of freezing.values()) {
+    const own = ingredientMap.get(idOfItem(out.item));
+    if (!own) continue;
+    const expires = out.item.expiryDate!.slice(0, 10);
+    tasks.push({
+      id: `freeze:${out.item._id}`,
+      kind: "freeze",
+      // (The day before it goes, or today if that's already here.)
+      date: expires > today ? shiftDay(expires, -1) : today,
+      title: `Freeze ${entryName(out.item, own)}`,
+      detail: `good until ${expires === today ? "today" : dayLabel(expires)}, and it's for ${out.for[0]?.label ?? "a meal"} on ${dayLabel(out.by)}`,
+      pantryItemId: out.item._id,
+      ingredientId: own._id,
+      by: out.by,
+      for: out.for,
+    });
+  }
+
   // About to go, with nothing planned that uses it up: use it or freeze it.
   // (Only what's been thawed, or bought in the last three weeks — an old
   // entry's date says more about the pantry's upkeep than about the food.)
@@ -446,7 +482,10 @@ export function computePlanNeeds(
   if (noTrip.length) issues.push({ id: "no-trip", kind: "no-trip", about: "buy", title: `${noTrip.length} thing${noTrip.length === 1 ? "" : "s"} needed before any shopping trip`, detail: names(noTrip), date: noTrip[0].neededBy, count: noTrip.length });
   const noPrep = needs.prep.filter((n) => !n.session);
   if (noPrep.length) issues.push({ id: "no-prep", kind: "no-prep", about: "prep", title: `${noPrep.length} thing${noPrep.length === 1 ? "" : "s"} to make with no prep session in time`, detail: names(noPrep.map((n) => ({ name: n.recipeName }))), date: noPrep[0].neededBy, count: noPrep.length });
-  if (needs.checks.length) issues.push({ id: "past-date", kind: "past-date", about: "pantry", title: `${needs.checks.length} thing${needs.checks.length === 1 ? "" : "s"} in the pantry past ${needs.checks.length === 1 ? "its" : "their"} date`, detail: names(needs.checks), date: needs.checks[0].neededBy, count: needs.checks.length });
+  // (What can still be frozen in time is a task, not something wrong.)
+  const toFreeze = new Set([...freezing.values()].map((out) => idOfItem(out.item)));
+  const pastDate = needs.checks.filter((check) => !toFreeze.has(check.ingredientId));
+  if (pastDate.length) issues.push({ id: "past-date", kind: "past-date", about: "pantry", title: `${pastDate.length} thing${pastDate.length === 1 ? "" : "s"} in the pantry past ${pastDate.length === 1 ? "its" : "their"} date`, detail: names(pastDate), date: pastDate[0].neededBy, count: pastDate.length });
 
   tasks.sort((a, b) => a.date.localeCompare(b.date) || (a.minutes ?? 0) - (b.minutes ?? 0));
   issues.sort((a, b) => a.date.localeCompare(b.date));
