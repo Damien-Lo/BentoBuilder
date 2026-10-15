@@ -920,25 +920,24 @@ export default function RecipeDetailPage() {
             </Text>
           ) : null}
 
-          {/* Where it's from: a link opens it. */}
-          {recipe.source ? (
-            (() => {
-              const link = sourceLink(recipe.source);
-              return (
-                <Pressable
-                  disabled={!link}
-                  onPress={() => link && void Linking.openURL(link.url)}
-                  className="mt-3 flex-row items-center self-start active:opacity-60"
-                  accessibilityLabel={link ? `Open ${link.label}` : undefined}
-                >
-                  <Ionicons name={link ? "link-outline" : "bookmark-outline"} size={15} color={link ? "#2563EB" : "#64748B"} />
-                  <Text className={`ml-1.5 text-sm ${link ? "font-semibold text-blue-600" : "text-slate-500"}`} numberOfLines={1}>
-                    {link ? link.label : recipe.source}
-                  </Text>
-                </Pressable>
-              );
-            })()
-          ) : null}
+          {/* Where it's from: a link opens the page; anything else, a search for it. */}
+          {(() => {
+            const link = sourceLink(recipe.source);
+            if (!link) return null;
+            return (
+              <Pressable
+                onPress={() => void Linking.openURL(link.url)}
+                className="mt-3 flex-row items-center self-start active:opacity-60"
+                accessibilityLabel={link.search ? `Search for ${link.label}` : `Open ${link.label}`}
+              >
+                <Ionicons name={link.search ? "search-outline" : "link-outline"} size={15} color="#2563EB" />
+                <Text className="ml-1.5 text-sm font-semibold text-blue-600" numberOfLines={1}>
+                  {link.label}
+                </Text>
+                <Ionicons name="open-outline" size={13} color="#2563EB" style={{ marginLeft: 4 }} />
+              </Pressable>
+            );
+          })()}
         </View>
     </>
   );

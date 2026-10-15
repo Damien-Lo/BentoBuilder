@@ -344,12 +344,14 @@ export async function deleteRecipeScore(
   return result.data;
 }
 
-// A recipe's source as a link, when it is one: the address to open, and the
-// site's name to show for it ("madewithlau.com").
-export function sourceLink(source: string | undefined): { url: string; label: string } | null {
+// A recipe's source as something to open: a link to the page itself, shown
+// as the site's name ("madewithlau.com"); anything else (a book, a person)
+// as a web search for it.
+export function sourceLink(source: string | undefined): { url: string; label: string; search?: boolean } | null {
   const text = (source ?? "").trim();
+  if (!text) return null;
   const url = /^https?:\/\//i.test(text) ? text : /^www\.|^[a-z0-9-]+\.[a-z]{2,}(\/|$)/i.test(text) ? `https://${text}` : null;
-  if (!url) return null;
+  if (!url) return { url: `https://www.google.com/search?q=${encodeURIComponent(text)}`, label: text, search: true };
   try {
     return { url, label: new URL(url).hostname.replace(/^www\./, "") };
   } catch {
