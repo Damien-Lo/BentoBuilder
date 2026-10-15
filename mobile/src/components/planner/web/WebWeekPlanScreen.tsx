@@ -8,7 +8,7 @@ import { entryName } from "@/src/components/calendar/mealFood";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { SidePicker } from "@/src/components/planner/SidePicker";
 import { MenuCard, MenuOverlay } from "@/src/components/planner/web/MenuCard";
-import { DropTarget } from "@/src/components/web/dragDrop";
+import { DragSource, DropTarget } from "@/src/components/web/dragDrop";
 import { getWebScale } from "@/src/components/web/scale";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { pieceGroups, withPiece, type PieceChoice } from "@/src/components/planner/usePlanNeeds";
@@ -19,11 +19,12 @@ import { compactDate } from "@/src/components/web/fields";
 import { Button, Card, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
-import { getMenu, menuName, type MenuItem } from "@/src/services/menuApi";
+import { addToMenu, getMenu, menuName, type MenuItem } from "@/src/services/menuApi";
 import {
   createMealPlanEntry,
   deleteMealPlanEntry,
   getMealPlanRange,
+  moveMealPlanEntry,
   setMealPlanEntryPieces,
   unconfirmMealPlanEntry,
   type MealPlanEntry,
@@ -44,6 +45,8 @@ import { suggestMeals, type Dish, type Macros, type Suggestion, type Suggestions
 // week out.
 
 type Hover = { hovered?: boolean };
+// What's dragged on the week: a menu item, or a planned meal.
+type Carried = { menu: MenuItem } | { entry: MealPlanEntry };
 
 const LABEL_WIDTH = 104;
 const SUMMARY_WIDTH = 300;
@@ -84,8 +87,9 @@ export function WebWeekPlanScreen() {
   // The menu (see MenuCard), and the item of it being put on a day.
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [placing, setPlacing] = useState<MenuItem | null>(null);
-  // A menu item being dragged onto the week, and the meal it's over.
-  const [dragging, setDragging] = useState<MenuItem | null>(null);
+  // What's being dragged — a menu item onto the week, or a planned meal to
+  // another day or meal (or back onto the menu) — and the meal it's over.
+  const [carrying, setCarrying] = useState<Carried | null>(null);
   const [dropOver, setDropOver] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuChanged = () => {
@@ -122,6 +126,26 @@ export function WebWeekPlanScreen() {
     plan.reload();
     loadHistory();
   };
+
+  // Something dropped on a day's meal: a menu item is placed there, a
+  // planned meal moved there.
+  function dropOn(date: string, slot: MealSlot, carried: Carried) {
+    if ("menu" in carried) return placeHere(date, slot, carried.menu);
+    const { entry } = carried;
+    if (entry.date === date && entry.slot === slot) return;
+    moveMealPlanEntry(entry._id, date, slot).then(reload, fail);
+  }
+
+  // A planned meal dropped on the menu: off its day, and back on the menu
+  // to place again later.
+  function sideline(entry: MealPlanEntry) {
+    const recipe = entry.recipe ? (typeof entry.recipe === "string" ? entry.recipe : entry.recipe._id) : null;
+    const meal = entry.meal ? (typeof entry.meal === "string" ? entry.meal : entry.meal._id) : null;
+    if (!recipe && !meal) return;
+    addToMenu(recipe ? { recipe } : { meal: meal! })
+      .then(() => deleteMealPlanEntry(entry._id))
+      .then(reload, fail);
+  }
 
   // A serving of a menu item (the one being placed), on this day's meal.
   function placeHere(date: string, slot: MealSlot, item = placing) {
@@ -480,18 +504,22 @@ export function WebWeekPlanScreen() {
               </View>
               {week.map((day) => {
                 const inCell = weekEntries.filter((e) => e.date === day && e.slot === slot.id);
+                // (Something to place or move: only on days still to come.)
+                const target = (placing || carrying) && day >= today ? (carrying && "entry" in carrying ? "Move here" : "Place here") : null;
                 return (
                   <DropTarget
                     key={day}
-                    onDrop={(item) => placeHere(day, slot.id, item as MenuItem)}
+                    accepts={() => day >= today}
+                    onDrop={(carried) => dropOn(day, slot.id, carried as Carried)}
                     onHover={(over) => setDropOver((at) => (over ? `${day}|${slot.id}` : at === `${day}|${slot.id}` ? null : at))}
                     style={{ flex: 1, minHeight: 118, padding: 6, borderLeftWidth: 1, borderLeftColor: WEB.border, backgroundColor: dropOver === `${day}|${slot.id}` ? "#EDE9FE" : day === today ? "#F8FBFF" : WEB.card }}
                   >
                     {inCell.map((entry) => {
                       const isEaten = entry.status === "confirmed";
                       return (
+                        // (Still to come: dragged to another day or meal, or onto the menu.)
+                        <DragSource key={entry._id} payload={isEaten ? null : { entry }} onStart={() => setCarrying({ entry })} onEnd={() => (setCarrying(null), setDropOver(null))} style={isEaten ? undefined : ({ cursor: "grab" } as object)}>
                         <Pressable
-                          key={entry._id}
                           onPress={() => entryMenu(entry)}
                           style={({ hovered }: Hover) => ({
                             flexDirection: "row",
@@ -519,6 +547,7 @@ export function WebWeekPlanScreen() {
                             <Text style={{ marginTop: 1, fontSize: 11, color: WEB.muted }}>{Math.round(kcalOf([entry]))} kcal</Text>
                           </View>
                         </Pressable>
+                        </DragSource>
                       );
                     })}
                     {/* Nothing planned: a suggestion, to take or leave. */}
@@ -598,21 +627,21 @@ export function WebWeekPlanScreen() {
                     })()}
                     {/* (While a menu item's being placed: "Place here".) */}
                     <Pressable
-                      onPress={() => (placing ? placeHere(day, slot.id) : addFood(day, slot.id))}
-                      accessibilityLabel={placing ? `Place ${menuName(placing)} here` : `Add ${slot.label.toLowerCase()}`}
+                      onPress={() => (placing && target ? placeHere(day, slot.id) : addFood(day, slot.id))}
+                      accessibilityLabel={placing && target ? `Place ${menuName(placing)} here` : `Add ${slot.label.toLowerCase()}`}
                       style={({ hovered }: Hover) => ({
                         flexDirection: "row",
                         alignItems: "center",
                         justifyContent: "center",
                         height: 26,
                         borderRadius: 8,
-                        backgroundColor: placing || dragging ? (hovered ? "#DDD6FE" : "#F5F3FF") : hovered ? WEB.blueSoft : "transparent",
+                        backgroundColor: target ? (hovered ? "#DDD6FE" : "#F5F3FF") : hovered ? WEB.blueSoft : "transparent",
                       })}
                     >
                       {({ hovered }: Hover) => (
                         <>
-                          <Ionicons name="add" size={14} color={placing || dragging ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1"} />
-                          <Text style={{ marginLeft: 2, fontSize: 11, fontWeight: "600", color: placing || dragging ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1" }}>{placing || dragging ? "Place here" : "Add"}</Text>
+                          <Ionicons name="add" size={14} color={target ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1"} />
+                          <Text style={{ marginLeft: 2, fontSize: 11, fontWeight: "600", color: target ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1" }}>{target ?? "Add"}</Text>
                         </>
                       )}
                     </Pressable>
@@ -676,7 +705,12 @@ export function WebWeekPlanScreen() {
               and buy are on the Overview and Prep & shopping. */}
           {/* (Fills what's beside the week without making it taller: a long
               menu scrolls inside.) */}
-          <View style={{ flex: 1, minHeight: 220 }}>
+          <DropTarget
+            style={{ flex: 1, minHeight: 220 }}
+            accepts={(carried) => "entry" in (carried as Carried) && !!((carried as { entry: MealPlanEntry }).entry.recipe || (carried as { entry: MealPlanEntry }).entry.meal)}
+            onDrop={(carried) => sideline((carried as { entry: MealPlanEntry }).entry)}
+            onHover={(over) => setDropOver(over ? "menu" : null)}
+          >
           <MenuCard
             compact
             style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
@@ -687,10 +721,20 @@ export function WebWeekPlanScreen() {
             conversions={conversions}
             placing={placing?._id ?? null}
             onPlace={setPlacing}
-            onDrag={(item) => (setDragging(item), setDropOver(null))}
+            onDrag={(item) => (setCarrying(item ? { menu: item } : null), setDropOver(null))}
             onChanged={menuChanged}
           />
-          </View>
+          {/* (A planned meal picked up: it can go back on the menu.) */}
+          {carrying && "entry" in carrying && (carrying.entry.recipe || carrying.entry.meal) && (
+            <View
+              pointerEvents="none"
+              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", padding: 24, borderRadius: 16, borderWidth: 2, borderStyle: "dashed", borderColor: "#A78BFA", backgroundColor: dropOver === "menu" ? "rgba(237,233,254,0.92)" : "rgba(245,243,255,0.8)" }}
+            >
+              <Ionicons name="restaurant-outline" size={22} color="#7C3AED" />
+              <Text style={{ marginTop: 6, textAlign: "center", fontSize: 13, fontWeight: "700", color: "#6D28D9" }}>Drop here to take it off the day and put it back on the menu</Text>
+            </View>
+          )}
+          </DropTarget>
         </View>
       </View>
 

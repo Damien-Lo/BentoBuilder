@@ -106,7 +106,7 @@ export function MenuCard({
         return (
           <DragSource
             key={item._id}
-            payload={onDrag ? item : null}
+            payload={onDrag ? { menu: item } : null}
             onStart={() => onDrag?.(item)}
             onEnd={() => onDrag?.(null)}
             style={

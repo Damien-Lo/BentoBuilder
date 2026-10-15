@@ -194,6 +194,13 @@ export async function updateMealPlanEntryStatus(id: string, status: MealPlanEntr
   return result.data;
 }
 
+// A planned meal to another day or meal (see the server's /move).
+export async function moveMealPlanEntry(id: string, date: string, slot: MealSlot): Promise<MealPlanEntry> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}/move`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, slot }) });
+  const result = await parseResponse<{ success: boolean; data: MealPlanEntry }>(res);
+  return result.data;
+}
+
 // The pantry entries taken out for a planned meal: the piece it'll be.
 export async function setMealPlanEntryPieces(id: string, pieces: string[]): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pieces }) });

@@ -43,12 +43,12 @@ export function DragSource({ payload, onStart, onEnd, ...props }: ComponentProps
   return <View ref={ref} {...props} />;
 }
 
-// Somewhere a DragSource's payload can be dropped; `onHover` says when one
-// is held over it.
-export function DropTarget({ onDrop, onHover, ...props }: ComponentProps<typeof View> & { onDrop: (payload: unknown) => void; onHover?: (over: boolean) => void }) {
+// Somewhere a DragSource's payload can be dropped (if it `accepts` it);
+// `onHover` says when one is held over it.
+export function DropTarget({ onDrop, onHover, accepts, ...props }: ComponentProps<typeof View> & { onDrop: (payload: unknown) => void; onHover?: (over: boolean) => void; accepts?: (payload: unknown) => boolean }) {
   const ref = useRef<View>(null);
-  const latest = useRef({ onDrop, onHover });
-  latest.current = { onDrop, onHover };
+  const latest = useRef({ onDrop, onHover, accepts });
+  latest.current = { onDrop, onHover, accepts };
   useEffect(() => {
     const node = domOf(ref.current);
     if (!node?.addEventListener) return;
@@ -58,8 +58,9 @@ export function DropTarget({ onDrop, onHover, ...props }: ComponentProps<typeof 
       over = next;
       latest.current.onHover?.(next);
     };
+    const takes = () => carried != null && (!latest.current.accepts || latest.current.accepts(carried));
     const enter = (e: DragEvent) => {
-      if (carried == null) return;
+      if (!takes()) return;
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
       hover(true);
@@ -68,7 +69,7 @@ export function DropTarget({ onDrop, onHover, ...props }: ComponentProps<typeof 
       if (!node.contains(e.relatedTarget as Node | null)) hover(false);
     };
     const drop = (e: DragEvent) => {
-      if (carried == null) return;
+      if (!takes()) return;
       e.preventDefault();
       hover(false);
       latest.current.onDrop(carried);

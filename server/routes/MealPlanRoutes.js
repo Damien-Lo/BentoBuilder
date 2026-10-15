@@ -313,6 +313,33 @@ router.patch("/:id", async (req, res) => {
 });
 
 /**
+ * POST /api/meal-plan/:id/move  { date, slot }
+ * A planned meal to another day or meal (dragged on the week plan). One a
+ * usual meal filled in becomes a one-off there, and the usual is skipped on
+ * the day it left — otherwise it would fill that day in again.
+ */
+router.post("/:id/move", async (req, res) => {
+  try {
+    const { date, slot } = req.body;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "") || !slot) return res.status(400).json({ success: false, message: "A date and a meal are needed" });
+    const entry = await MealPlanEntry.findById(req.params.id);
+    if (!entry || entry.isArchived) return res.status(404).json({ success: false, message: "Entry not found" });
+    if (entry.status !== "planned") return res.status(400).json({ success: false, message: "Only a planned meal can be moved" });
+    if (entry.usual && entry.date !== date) {
+      await UsualMeal.updateOne({ _id: entry.usual }, { $addToSet: { skippedDates: entry.date } });
+      entry.usual = null;
+    }
+    entry.date = date;
+    entry.slot = slot;
+    await entry.save();
+    const populated = await populateEntry(MealPlanEntry.findById(entry._id));
+    return res.status(200).json({ success: true, data: populated });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * POST /api/meal-plan/:id/confirm
  * Body: {
  *   deductions: [{ pantryItem: "<id>", amount: Number }, ...],
