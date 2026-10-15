@@ -278,9 +278,10 @@ export function WebWeekPlanScreen() {
       sessions: plan.sessions,
       weekStartDay: settings.weekStartDay,
       today,
+      menu,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suggesting, kitchen, ready, plan.ready, plan.sessions, plan.upcoming, entries, history, week[0], today, settings]);
+  }, [suggesting, kitchen, ready, plan.ready, plan.sessions, plan.upcoming, entries, history, week[0], today, settings, menu]);
 
   // The suggestion showing in a slot (if any), and where it stands among
   // that slot's offers.
@@ -352,7 +353,7 @@ export function WebWeekPlanScreen() {
   async function acceptSuggestion(date: string, slot: MealSlot, offer: Suggestion, rank: number) {
     try {
       for (const dish of offer.beside ? offer.sides : [offer.main, ...offer.sides]) {
-        await createMealPlanEntry({ date, slot, status: "planned", suggested: true, ...(dish.recipe ? { recipe: dish.recipe._id, recipeServings: 1 } : dish.ingredient ? { ingredient: dish.ingredient._id, ingredientQuantity: dish.ingredient.defaultPortionAmount || 1, ingredientUnit: dish.ingredient.defaultPortionUnit ?? "" } : { meal: dish.meal!._id }) });
+        await createMealPlanEntry({ date, slot, status: "planned", suggested: true, ...(dish === offer.main && offer.menuItem ? { menuItem: offer.menuItem } : {}), ...(dish.recipe ? { recipe: dish.recipe._id, recipeServings: 1 } : dish.ingredient ? { ingredient: dish.ingredient._id, ingredientQuantity: dish.ingredient.defaultPortionAmount || 1, ingredientUnit: dish.ingredient.defaultPortionUnit ?? "" } : { meal: dish.meal!._id }) });
       }
       record("accepted", date, slot, offer, rank);
       reload();

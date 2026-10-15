@@ -1,6 +1,7 @@
 import type { Ingredient } from "@/src/services/ingredientApi";
 import type { Meal } from "@/src/services/mealApi";
 import type { MealPlanEntry, MealSlot } from "@/src/services/mealPlanApi";
+import { menuLeft, type MenuItem } from "@/src/services/menuApi";
 import type { Recipe } from "@/src/services/recipeApi";
 import type { PantryItem } from "@/src/types/pantry";
 
@@ -33,6 +34,10 @@ import type { CustomUnitConversion } from "./unitConversion";
 //              session are booked in time for what it needs;
 //   habit      how often you've had it for that meal before;
 //   use up     whether it uses something that's about to expire.
+//
+// What's on your menu (see services/menuApi.ts) — chosen to have soon — is
+// put ahead of that: a main on it gets MENU_BONUS, for as many of its
+// servings as aren't on a day yet, and taking it counts towards them.
 //
 // The day is then balanced as a whole. A meal's room is its share of what
 // the day has left after everything eaten and planned — the share you
@@ -93,6 +98,8 @@ export interface Suggestion extends Macros {
   missing?: number;
   // What it would use is still frozen, too late to thaw for the day.
   frozen?: boolean;
+  // The main is on the menu: this item (taking it places a serving).
+  menuItem?: string;
 }
 
 // The offers by "date|slot", and a way to score what was planned in a slot
@@ -134,6 +141,10 @@ export const SUGGESTION_WEIGHTS: Record<Factor, number> = {
   useUp: 0.1,
 };
 
+// What being on the menu adds to a main's score: enough to put it first
+// among mains that fit about as well.
+const MENU_BONUS = 0.25;
+
 const idOf = (value: unknown): string => (typeof value === "string" ? value : typeof value === "object" && value !== null && "_id" in value ? String((value as { _id?: unknown })._id ?? "") : "");
 const clamp = (n: number, low = 0, high = 1) => Math.max(low, Math.min(high, n));
 const daysApart = (a: string, b: string) => Math.abs(Math.round((Date.parse(`${a}T12:00:00`) - Date.parse(`${b}T12:00:00`)) / 86_400_000));
@@ -168,6 +179,7 @@ export function suggestMeals({
   today,
   weekStartDay = 1,
   count = 4,
+  menu = [],
 }: {
   // The empty slots to fill, in any order.
   slots: { date: string; slot: MealSlot }[];
@@ -191,6 +203,8 @@ export function suggestMeals({
   weekStartDay?: number;
   // How many to offer per slot.
   count?: number;
+  // The menu, as it stands.
+  menu?: MenuItem[];
 }): Suggestions {
   const out: Suggestions = Object.assign(new Map<string, Suggestion[]>(), {
     rate: () => null,
@@ -292,6 +306,14 @@ export function suggestMeals({
   // What's had or planned already; each day's picks join it, so the week
   // isn't filled with one dish.
   const taken: { date: string; key: string }[] = entries.map((e) => ({ date: e.date, key: dishKey(e) })).filter((t) => t.key);
+
+  // The menu's mains with servings not yet on a day, by dish; each day's
+  // picks use them up.
+  const onMenu = new Map(
+    menu
+      .filter((item) => item.state === "menu" && menuLeft(item) > 0 && (item.recipe || item.meal))
+      .map((item) => [item.recipe ? `r:${item.recipe._id}` : `m:${item.meal!._id}`, { id: item._id, left: menuLeft(item) }]),
+  );
 
   // How you share a day between its meals: each meal's part of the day's
   // calories, averaged over the days you logged fully. With too few such
@@ -602,12 +624,18 @@ export function suggestMeals({
           rated.score += Math.min(1, had / 3) * 0.15;
           rated.reasons.unshift(`you've had it with ${base!.dishes.find((d) => hadWith.get(main.key)?.get(d.key))!.name}`);
         }
+        const wanted = onMenu.get(main.key);
+        if (wanted && wanted.left > 0) {
+          rated.score += MENU_BONUS;
+          rated.reasons.unshift("on your menu");
+        }
         scored.push({
           main,
           sides,
           ...total,
           ...rated,
           claims,
+          ...(wanted && wanted.left > 0 ? { menuItem: wanted.id } : {}),
           ...(base ? { base: base.calories } : {}),
         });
       }
@@ -714,6 +742,8 @@ export function suggestMeals({
       if (first) {
         suggestedKcal.set(date, (suggestedKcal.get(date) ?? 0) + first.calories);
         if (!first.beside) taken.push({ date, key: first.main.key });
+        const wanted = !first.beside && onMenu.get(first.main.key);
+        if (wanted) wanted.left -= 1;
         stock = stock.filter((p) => !first.claims.includes(p._id));
         for (const side of first.sides) sideCount.set(side.key, (sideCount.get(side.key) ?? 0) + 1);
       }

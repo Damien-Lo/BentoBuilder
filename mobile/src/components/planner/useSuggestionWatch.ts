@@ -8,6 +8,7 @@ import { getEventOccurrences, type EventOccurrence } from "@/src/services/calend
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
 import { createMealPlanEntry, getMealPlanRange, type MealPlanEntry, type MealSlot } from "@/src/services/mealPlanApi";
+import { getMenu, type MenuItem } from "@/src/services/menuApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
@@ -24,6 +25,7 @@ interface Loaded {
   pantry: PantryItem[];
   settings: AppSettings;
   occurrences: EventOccurrence[];
+  menu: MenuItem[];
 }
 
 // The suggestions for the day on show on the phone planner. They're always
@@ -59,8 +61,8 @@ export function useSuggestionWatch(date: string, dayEntries: MealPlanEntry[] | n
 
   useFocusEffect(
     useCallback(() => {
-      Promise.all([getMealPlanRange(addDays(today, -180), addDays(today, 21)), getRecipes(), getMeals(), getIngredients(), getPantryItems(), loadSettings(), getEventOccurrences(today, addDays(today, 21))])
-        .then(([around, recipes, meals, ingredients, pantry, settings, occurrences]) => setLoaded({ around, recipes, meals, ingredients, pantry, settings, occurrences }))
+      Promise.all([getMealPlanRange(addDays(today, -180), addDays(today, 21)), getRecipes(), getMeals(), getIngredients(), getPantryItems(), loadSettings(), getEventOccurrences(today, addDays(today, 21)), getMenu().catch(() => [] as MenuItem[])])
+        .then(([around, recipes, meals, ingredients, pantry, settings, occurrences, menu]) => setLoaded({ around, recipes, meals, ingredients, pantry, settings, occurrences, menu }))
         .catch(() => {});
     }, [today]),
   );
@@ -94,6 +96,7 @@ export function useSuggestionWatch(date: string, dayEntries: MealPlanEntry[] | n
       sessions: kitchenSessions(loaded.occurrences, today),
       weekStartDay: settings.weekStartDay,
       today,
+      menu: loaded.menu,
     });
   }, [loaded, dayEntries, date, today]);
 
@@ -178,6 +181,7 @@ export function useSuggestionWatch(date: string, dayEntries: MealPlanEntry[] | n
             slot,
             status: "planned",
             suggested: true,
+            ...(dish === up.offer.main && up.offer.menuItem ? { menuItem: up.offer.menuItem } : {}),
             ...(dish.recipe ? { recipe: dish.recipe._id, recipeServings: 1 } : dish.ingredient ? { ingredient: dish.ingredient._id, ingredientQuantity: dish.ingredient.defaultPortionAmount || 1, ingredientUnit: dish.ingredient.defaultPortionUnit ?? "" } : { meal: dish.meal!._id }),
           }),
         );
