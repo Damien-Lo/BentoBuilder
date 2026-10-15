@@ -31,7 +31,7 @@ import {
   type RestaurantMeal,
 } from "@/src/services/restaurantMealApi";
 import { upsertMealPlanEntryContribution } from "@/src/services/groceryListApi";
-import { FormInput, PriceInput } from "@/src/components/forms";
+import { CreatableStringDropdown, FormInput, PriceInput } from "@/src/components/forms";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { takePendingNewRestaurant } from "@/src/utils/pendingNewRestaurantStore";
 import type { SelectOption } from "@/src/services/optionsApi";
@@ -89,7 +89,7 @@ import {
 } from "@/src/utils/mealPlan";
 import { divideNutritionTotals } from "@/src/utils/nutrition";
 import { buildIngredientRequirements } from "@/src/utils/pantryDeduction";
-import { getIngredientConversions } from "@/src/utils/unitConversion";
+import { getIngredientConversions, getRelatedUnits } from "@/src/utils/unitConversion";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -1124,6 +1124,14 @@ function PhonePlannerScreen() {
     }
   }
 
+  // The units an ingredient can be measured in: its own, those it converts
+  // to (grams ↔ ounces…), and any it has a conversion for (a cup of it).
+  const unitChoices = (ingredient: Ingredient) => {
+    const own = ingredient.defaultPortionUnit ?? "";
+    const related = getRelatedUnits(own, getIngredientConversions(ingredient, appSettings?.unitConversions ?? []));
+    return related.length ? related : own ? [own] : [];
+  };
+
   // ── Render entry card ──
   function renderEntry(entry: MealPlanEntry) {
     let title: string;
@@ -1739,13 +1747,9 @@ function PhonePlannerScreen() {
                       placeholderTextColor="#94A3B8"
                       className="h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                     />
-                    <TextInput
-                      value={editUnit}
-                      onChangeText={setEditUnit}
-                      placeholder="unit (g, cup, …)"
-                      placeholderTextColor="#94A3B8"
-                      className="h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
-                    />
+                    <View className="flex-1">
+                      <CreatableStringDropdown options={unitChoices(editEntry.ingredient!)} selectedValue={editUnit} placeholder="unit" onSelect={setEditUnit} height={56} />
+                    </View>
                   </View>
                 ) : (
                   <TextInput
@@ -2113,13 +2117,9 @@ function PhonePlannerScreen() {
                   placeholderTextColor="#94A3B8"
                   className="h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
                 />
-                <TextInput
-                  value={pendingUnit}
-                  onChangeText={setPendingUnit}
-                  placeholder="unit (g, cup, …)"
-                  placeholderTextColor="#94A3B8"
-                  className="h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
-                />
+                <View className="flex-1">
+                  <CreatableStringDropdown options={unitChoices(pendingIngredient)} selectedValue={pendingUnit} placeholder="unit" onSelect={setPendingUnit} height={56} />
+                </View>
               </View>
 
               {/* Live nutrition preview */}

@@ -51,6 +51,9 @@ export function CreatableStringDropdown({
 
   const [query, setQuery] = useState(safeSelectedValue);
   const [open, setOpen] = useState(false);
+  // Whether anything's been typed since it opened: until then every option
+  // shows, not just those that match what's already chosen.
+  const [typed, setTyped] = useState(false);
 
   const [dropdownPosition, setDropdownPosition] =
     useState<DropdownPosition>({
@@ -76,14 +79,14 @@ export function CreatableStringDropdown({
   // permanently short-circuited the filter (same bug already found and
   // removed in SearchableObjectDropdown).
   const filteredOptions = useMemo(() => {
-    if (!normalizedQuery) {
+    if (!normalizedQuery || !typed) {
       return safeOptions;
     }
 
     return safeOptions.filter((option) =>
       option.trim().toLowerCase().includes(normalizedQuery),
     );
-  }, [normalizedQuery, safeOptions]);
+  }, [normalizedQuery, safeOptions, typed]);
 
   function openDropdown() {
     if (disabled) {
@@ -99,6 +102,7 @@ export function CreatableStringDropdown({
         });
 
         setQuery(safeSelectedValue);
+        setTyped(false);
         setOpen(true);
 
         setTimeout(() => {
@@ -111,6 +115,7 @@ export function CreatableStringDropdown({
   // Typing commits the value immediately — there's no separate "create" step
   // for a plain string like a unit; whatever's typed just becomes the value.
   function handleTextChange(value: string) {
+    setTyped(true);
     setQuery(value);
     onSelect(value);
   }
@@ -199,6 +204,9 @@ export function CreatableStringDropdown({
                 autoCapitalize="none"
                 autoCorrect={false}
                 className="h-[52px] flex-1 px-3 text-base text-slate-950"
+                // (On the web a text box is wider than this unless told it
+                // may shrink, and focusing it then scrolls the list sideways.)
+                style={{ minWidth: 0 }}
                 onChangeText={handleTextChange}
                 onSubmitEditing={closeDropdown}
               />
