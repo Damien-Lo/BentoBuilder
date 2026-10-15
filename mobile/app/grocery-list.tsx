@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { useFocusEffect, useRouter } from "expo-router";
+import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { Ionicons } from "@expo/vector-icons";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
@@ -48,6 +49,7 @@ import {
   createGroceryItem,
   deleteGroceryItem,
   getGroceryItems,
+  groceryItemTags,
   updateGroceryItem,
   type GroceryItem,
   type GroceryItemIngredientRef,
@@ -89,6 +91,13 @@ function getReferenceName(value: unknown): string {
   }
   return "";
 }
+
+// The tags saying where an item on the list came from.
+const TAG_STYLE: Record<"Plan" | "Menu" | "Added", { bg: string; text: string }> = {
+  Plan: { bg: "bg-blue-100", text: "text-blue-700" },
+  Menu: { bg: "bg-violet-100", text: "text-violet-700" },
+  Added: { bg: "bg-slate-100", text: "text-slate-500" },
+};
 
 export default function GroceryListScreen() {
   // A desktop browser gets the same screen laid out wider: the three lists
@@ -225,6 +234,14 @@ export default function GroceryListScreen() {
       };
     }, []),
   );
+
+  // What the plan needs for the next trip is kept on the list (see
+  // usePlanNeeds): when that's just changed it, the list is loaded again.
+  const kitchenPlan = usePlanNeeds();
+  useEffect(() => {
+    if (!kitchenPlan.listSynced) return;
+    getGroceryItems().then(setGroceryItems).catch(() => {});
+  }, [kitchenPlan.listSynced]);
 
   const grocerySuggestions = useMemo(() => {
     const q = nameInput.trim().toLowerCase();
@@ -772,13 +789,22 @@ export default function GroceryListScreen() {
               {isPending && <Ionicons name="basket" size={13} color="white" />}
             </View>
             <View className="ml-4 flex-1">
-              <Text
-                className={`text-base ${
-                  isCompleted ? "text-slate-400 line-through" : "font-medium text-slate-900"
-                }`}
-              >
-                {item.name}
-              </Text>
+              <View className="flex-row flex-wrap items-center">
+                <Text
+                  className={`mr-1.5 text-base ${
+                    isCompleted ? "text-slate-400 line-through" : "font-medium text-slate-900"
+                  }`}
+                >
+                  {item.name}
+                </Text>
+                {/* Where it came from: the plan, the menu, or added by hand. */}
+                {!isCompleted &&
+                  groceryItemTags(item).map((tag) => (
+                    <View key={tag} className={`mr-1 rounded-full px-1.5 py-px ${TAG_STYLE[tag].bg}`}>
+                      <Text className={`text-[10px] font-bold ${TAG_STYLE[tag].text}`}>{tag}</Text>
+                    </View>
+                  ))}
+              </View>
               {isPending ? (
                 <Text className="mt-0.5 text-xs text-amber-600">
                   {isLinkedToIngredient(item) ? "Tap to log to pantry" : "Tap for more info"}

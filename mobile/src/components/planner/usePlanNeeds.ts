@@ -1,8 +1,9 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { addDays } from "@/src/components/calendar/calendarUtils";
 import { getEventOccurrences, type EventOccurrence } from "@/src/services/calendarApi";
+import { syncGroceryList } from "@/src/services/groceryListApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMealPlanRange, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { getPantryItems } from "@/src/services/pantryApi";
@@ -69,7 +70,7 @@ interface Loaded {
 //
 // `sized` gives back plan entries with each meal still to come counted at
 // the pantry piece it would get (MealPlanEntry.sizedTo), for a day's totals.
-export function usePlanNeeds(): { ready: boolean; today: string; sessions: KitchenSession[]; prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[]; tasks: KitchenTask[]; issues: KitchenIssue[]; reload: () => void; sized: (entries: MealPlanEntry[]) => MealPlanEntry[]; upcoming: MealPlanEntry[]; pieceChoices: (entry: MealPlanEntry) => PieceChoice[] } {
+export function usePlanNeeds(): { ready: boolean; today: string; sessions: KitchenSession[]; prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[]; tasks: KitchenTask[]; issues: KitchenIssue[]; reload: () => void; sized: (entries: MealPlanEntry[]) => MealPlanEntry[]; upcoming: MealPlanEntry[]; pieceChoices: (entry: MealPlanEntry) => PieceChoice[]; onList: (need: BuyNeed) => boolean; listSynced: number } {
   const today = todayStr();
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
@@ -81,8 +82,12 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
   }, [today]);
   useFocusEffect(reload);
 
-  return useMemo(() => {
-    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], checks: [], tasks: [], issues: [], reload, sized: (entries: MealPlanEntry[]) => entries, upcoming: [], pieceChoices: () => [] };
+  // (Bumped when the grocery list has just been brought in step, so a
+  // screen showing it can load it again.)
+  const [listSynced, setListSynced] = useState(0);
+
+  const result = useMemo(() => {
+    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], checks: [], tasks: [], issues: [], reload, sized: (entries: MealPlanEntry[]) => entries, upcoming: [], pieceChoices: () => [], onList: () => false, listSynced };
     const sessions = kitchenSessions(loaded.occurrences, today);
     // (Each meal with the piece it would get, so that's the one to thaw.)
     const sized = sizePlanned(loaded.entries, loaded.recipes, loaded.ingredients, loaded.pantry, loaded.conversions, today, loaded.dayGoal).entries;
@@ -108,6 +113,37 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
             return { ...option, chosen: !!entry.pieces?.includes(option.pantryItemId), current: other?._id === entry._id, elsewhere: other && other._id !== entry._id ? other : undefined };
           })
         : [];
-    return { ready: true, today, sessions, ...needs, reload, upcoming, pieceChoices, sized: (entries: MealPlanEntry[]) => entries.map((e) => (sizes.has(e._id) ? { ...e, sizedTo: sizes.get(e._id) } : e)) };
-  }, [loaded, today, reload]);
+    // What goes on the grocery list: what's needed by the next shopping
+    // trip (or before any trip at all) — with no trip booked, the next week.
+    const nextTrip = sessions.find((s) => s.kind === "shop");
+    const onList = (need: BuyNeed) => (nextTrip ? !need.session || need.session === nextTrip.id : need.neededBy <= addDays(today, 7));
+    return { ready: true, today, sessions, ...needs, reload, upcoming, pieceChoices, onList, listSynced, sized: (entries: MealPlanEntry[]) => entries.map((e) => (sizes.has(e._id) ? { ...e, sizedTo: sizes.get(e._id) } : e)) };
+  }, [loaded, today, reload, listSynced]);
+
+  // The grocery list kept in step with the plan: whenever what's needed for
+  // the next trip changes, it's sent (once, however many screens work it out).
+  useEffect(() => {
+    if (!result.ready) return;
+    const totals = new Map<string, { ingredient: string; name: string; amount: number; unit: string }>();
+    for (const need of result.buy.filter(result.onList)) {
+      const key = `${need.ingredientId}|${need.unit}`;
+      const at = totals.get(key);
+      if (at) at.amount += need.amount;
+      else totals.set(key, { ingredient: need.ingredientId, name: need.name, amount: need.amount, unit: need.unit });
+    }
+    const needs = [...totals.values()].map((n) => ({ ...n, amount: Math.round(n.amount * 1000) / 1000 }));
+    const signature = JSON.stringify(needs);
+    if (signature === lastListSync) return;
+    lastListSync = signature;
+    syncGroceryList("plan", needs)
+      .then((changed) => changed > 0 && setListSynced((n) => n + 1))
+      .catch(() => {
+        lastListSync = null;
+      });
+  }, [result]);
+
+  return result;
 }
+
+// What was last sent to the grocery list (see usePlanNeeds).
+let lastListSync: string | null = null;

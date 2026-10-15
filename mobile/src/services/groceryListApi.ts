@@ -16,7 +16,7 @@ export type GroceryItemStatus = "toBuy" | "pendingLog" | "completed";
 // meal-plan entry's shortfall, or the user's own manual add. The item's
 // quantity is server-maintained as the sum of these.
 export interface GroceryItemContribution {
-  source: "mealPlanEntry" | "manual";
+  source: "mealPlanEntry" | "plan" | "menu" | "manual";
   mealPlanEntry?: string | null;
   amount: number;
 }
@@ -40,6 +40,20 @@ export interface CreateGroceryItemInput {
   name: string;
   quantity?: number | null;
   unit?: string;
+  // Where it's from: the plan's or the menu's To buy; by hand if not said.
+  source?: "plan" | "menu";
+}
+
+// Where an item on the list came from, as its tags show it: the plan (its
+// To buy, or a meal's "add missing"), the menu, or added by hand. An item
+// from before this was kept counts as added by hand.
+export function groceryItemTags(item: GroceryItem): ("Plan" | "Menu" | "Added")[] {
+  const sources = new Set((item.requestedBy ?? []).map((c) => c.source));
+  const tags: ("Plan" | "Menu" | "Added")[] = [];
+  if (sources.has("plan") || sources.has("mealPlanEntry")) tags.push("Plan");
+  if (sources.has("menu")) tags.push("Menu");
+  if (sources.has("manual") || !sources.size) tags.push("Added");
+  return tags;
 }
 
 export type UpdateGroceryItemInput = Partial<
@@ -98,6 +112,15 @@ export async function createGroceryItem(
   });
   const result = await parseResponse<GroceryItemResponse>(response);
   return result.data;
+}
+
+// Sets what the plan (or the menu) has on the list to what it needs for the
+// next shopping trip: added, changed or taken off; what was added by hand,
+// and anything bought, are left alone. How many items changed.
+export async function syncGroceryList(source: "plan" | "menu", needs: { ingredient: string; name: string; amount: number; unit: string }[]): Promise<number> {
+  const response = await fetch(`${API_BASE_URL}/api/grocery-list/sync`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source, needs }) });
+  const result = await parseResponse<{ success: boolean; data: { changed: number } }>(response);
+  return result.data.changed;
 }
 
 export interface UpsertMealPlanContributionInput {

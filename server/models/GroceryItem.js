@@ -12,7 +12,10 @@ const requestedBySchema = new mongoose.Schema(
   {
     source: {
       type: String,
-      enum: ["mealPlanEntry", "manual"],
+      // mealPlanEntry: one planned meal's shortfall (a recipe page's "add
+      // missing"); plan: the plan's To buy list (Prep & shopping); menu: the
+      // week's menu; manual: added by hand.
+      enum: ["mealPlanEntry", "plan", "menu", "manual"],
       required: true,
     },
     // Only set when source === "mealPlanEntry" — which planner entry this

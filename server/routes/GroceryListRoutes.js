@@ -1,6 +1,6 @@
 import express from "express";
 import GroceryItem from "../models/GroceryItem.js";
-import { upsertManualContribution, upsertMealPlanEntryContribution } from "../services/groceryContributions.js";
+import { syncListContributions, upsertManualContribution, upsertMealPlanEntryContribution } from "../services/groceryContributions.js";
 
 const router = express.Router();
 
@@ -62,6 +62,8 @@ router.post("/", async (req, res) => {
           ? null
           : Number(req.body.quantity),
       unit: req.body.unit?.trim() ?? "",
+      // (Where it's from: the plan's or the menu's To buy, else by hand.)
+      source: ["plan", "menu"].includes(req.body.source) ? req.body.source : "manual",
     });
 
     await item.populate(INGREDIENT_POPULATE);
@@ -77,6 +79,24 @@ router.post("/", async (req, res) => {
       success: false,
       message: error.message,
     });
+  }
+});
+
+/**
+ * PUT /api/grocery-list/sync  { source: "plan" | "menu", needs: [{ ingredient, name, amount, unit }] }
+ * Sets what the plan (or the menu) has on the list to what it needs for the
+ * next shopping trip — see syncListContributions.
+ */
+router.put("/sync", async (req, res) => {
+  try {
+    const source = req.body.source;
+    if (!["plan", "menu"].includes(source)) return res.status(400).json({ success: false, message: "source must be plan or menu" });
+    const needs = Array.isArray(req.body.needs) ? req.body.needs : [];
+    const changed = await syncListContributions(source, needs);
+    return res.json({ success: true, data: { changed } });
+  } catch (error) {
+    console.error("Sync grocery list error:", error);
+    return res.status(400).json({ success: false, message: error.message });
   }
 });
 
