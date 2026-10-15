@@ -39,6 +39,16 @@ const SECTIONS: Section[] = [
     route: "/planner",
   },
   {
+    id: "health",
+    name: "Health",
+    description: "Nutrition, weight & goals",
+    icon: "pie-chart-outline",
+    iconColor: "#DB2777",
+    iconBg: "#FDF2F8",
+    active: true,
+    route: "/health",
+  },
+  {
     id: "lists",
     name: "Tasks",
     description: "Lists, projects, checklists & shopping",

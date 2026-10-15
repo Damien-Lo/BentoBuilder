@@ -48,7 +48,7 @@ export const WEB_SECTIONS: WebSection[] = [
     path: "/kitchen",
     also: ["/archive"],
     tabs: [
-      { label: "Overview", path: "/kitchen", exact: true },
+      { label: "Overview", path: "/kitchen", exact: true, also: ["/overview"] },
       { label: "Week plan", path: "/planner" },
       { label: "Prep & shopping", path: "/kitchen/needs" },
       { label: "Recipes & meals", path: "/RecipesMainPage", also: ["/recipes", "/meals", "/restaurant-meals"] },

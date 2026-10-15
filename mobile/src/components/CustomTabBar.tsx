@@ -6,6 +6,7 @@ import {
   Animated,
   Modal,
   Pressable,
+  StyleSheet,
   Text,
   useWindowDimensions,
   View,
@@ -61,7 +62,9 @@ export function CustomTabBar({
 }: CustomTabBarProps) {
   // The desktop layout's sidebar does this job.
   const wideWeb = useWideWeb();
-  const visible     = state.routes;
+  // (A screen given `href: null` is in the group but not on the bar —
+  // expo-router passes that on as a hidden item style.)
+  const visible     = state.routes.filter((route) => StyleSheet.flatten(descriptors[route.key].options.tabBarItemStyle)?.display !== "none");
   const leftRoutes  = visible.slice(0, 2);
   const rightRoutes = visible.slice(2);
   if (wideWeb) return null;

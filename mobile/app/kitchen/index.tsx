@@ -12,14 +12,16 @@ import { minutesLabel } from "@/src/components/calendar/calendarUtils";
 // Kitchen → Overview: what the kitchen needs doing, what's wrong with the
 // plan, and what's booked — the Kitchen's assistant, in one place. All of it
 // is worked out from the meal plan, the pantry and the Kitchen calendar.
-export default function KitchenOverviewScreen() {
+//
+// The phone's Kitchen tabs open on it (`inTabs`: no way back, it's a tab).
+export function KitchenOverview({ inTabs = false }: { inTabs?: boolean }) {
   const router = useRouter();
   const plan = usePlanNeeds();
   const { today } = plan;
   const sessions = plan.sessions.slice(0, 6);
 
   return (
-    <KitchenPage title="Kitchen" subtitle="What needs doing, from your meal plan, pantry and booked sessions">
+    <KitchenPage title="Kitchen" subtitle="What needs doing, from your meal plan, pantry and booked sessions" back={!inTabs}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 16 }}>
         <View style={{ flex: 3, minWidth: 320, gap: 16 }}>
           <Card title="Kitchen tasks" subtitle="The next seven days" padded={false}>
@@ -67,4 +69,8 @@ export default function KitchenOverviewScreen() {
       </View>
     </KitchenPage>
   );
+}
+
+export default function KitchenOverviewScreen() {
+  return <KitchenOverview />;
 }

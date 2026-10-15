@@ -61,7 +61,6 @@ import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { DishQuantityStepper } from "@/src/components/planner/DishQuantityStepper";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
-import { KitchenTasks } from "@/src/components/planner/KitchenTasks";
 import { MealSuggestion, SuggestionsToggle, useSuggestionsToggle } from "@/src/components/planner/MealSuggestion";
 import { RecipeThumb } from "@/src/components/recipes/RecipeThumb";
 import { pieceGroups, usePlanNeeds, withPiece, type PieceChoice } from "@/src/components/planner/usePlanNeeds";
@@ -191,7 +190,6 @@ function PhonePlannerScreen() {
   // The kitchen's tasks (thaw this, there's a shopping trip today), worked
   // out from the plan, the pantry and the calendar.
   const kitchenPlan = usePlanNeeds();
-  const tomorrow = toDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1));
   // Whether the suggestion cards are on.
   const [showSuggestions, toggleSuggestions] = useSuggestionsToggle();
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
@@ -491,8 +489,8 @@ function PhonePlannerScreen() {
     [last7PlannedNutrition, last7Dates.length],
   );
 
-  // The three nutrition cards (day / last 7 days / 7-day daily average) —
-  // shared by the swipeable cards and the tap-to-expand overlay.
+  // The three nutrition cards (the day / its 7-day daily average / the 7-day
+  // total) — shared by the swipeable cards and the tap-to-expand overlay.
   const nutritionPages = useMemo<NutritionDetailPage[]>(() => {
     const dailyLimits = (scale: number): NutritionLimits => {
       const s = (value: number | null | undefined) => (value != null ? value * scale : null);
@@ -508,20 +506,20 @@ function PhonePlannerScreen() {
     return [
       { title: "Daily nutrition", confirmed: confirmedNutrition, planned: plannedNutrition, limits: dailyLimits(1), goalScale: 1 },
       {
-        title: "Last 7 days",
-        subtitle: weekRangeLabel(last7Dates),
-        confirmed: last7ConfirmedNutrition,
-        planned: last7PlannedNutrition,
-        limits: dailyLimits(7),
-        goalScale: 7,
-      },
-      {
         title: "Daily average",
         subtitle: "Last 7 days",
         confirmed: avgConfirmedNutrition,
         planned: avgPlannedNutrition,
         limits: dailyLimits(1),
         goalScale: 1,
+      },
+      {
+        title: "Last 7 days",
+        subtitle: weekRangeLabel(last7Dates),
+        confirmed: last7ConfirmedNutrition,
+        planned: last7PlannedNutrition,
+        limits: dailyLimits(7),
+        goalScale: 7,
       },
     ];
   }, [
@@ -2062,40 +2060,13 @@ function PhonePlannerScreen() {
           <SuggestionsToggle on={showSuggestions} onPress={toggleSuggestions} />
         </View>
 
-        {/* What the kitchen needs doing today and tomorrow (on today's page),
-            and the way to the rest: the Kitchen's overview, and from there
-            prep & shopping. */}
-        {selectedDate === today && kitchenPlan.ready && (
-          <View className="mb-5 overflow-hidden rounded-3xl border border-slate-200 bg-white pt-3">
-            <Pressable onPress={() => router.push("/kitchen")} className="flex-row items-center px-[18px] pb-1 active:opacity-60" accessibilityLabel="Kitchen overview">
-              <Text className="flex-1 text-xs font-bold uppercase tracking-widest text-slate-400">Kitchen tasks</Text>
-              {kitchenPlan.issues.length > 0 && (
-                <Text className="mr-2 text-xs font-semibold text-red-600">
-                  {kitchenPlan.issues.length} to look at
-                </Text>
-              )}
-              <Text className="text-xs font-semibold text-blue-600">See all</Text>
-              <Ionicons name="chevron-forward" size={13} color="#2563EB" />
-            </Pressable>
-            {kitchenPlan.tasks.some((t) => t.date <= tomorrow) ? (
-              // (Kept short on the planner: the rest scrolls inside the card,
-              // or "See all" has them in full.)
-              <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled showsVerticalScrollIndicator>
-                <KitchenTasks plan={kitchenPlan} days={1} onChanged={loadEntries} />
-              </ScrollView>
-            ) : (
-              <Text className="px-[18px] pb-3 pt-1 text-sm text-slate-500">Nothing to do today or tomorrow.</Text>
-            )}
-          </View>
-        )}
-
         {isLoading ? (
           <View className="items-center py-16">
             <ActivityIndicator size="large" color="#2563EB" />
           </View>
         ) : (
           <>
-            {/* Daily / last-7-days / daily-average nutrition — swipe to switch */}
+            {/* Daily / daily-average / last-7-days nutrition — swipe to switch */}
             <View className="mb-5">
               <ScrollView
                 ref={nutritionPagerRef}

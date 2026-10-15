@@ -14,6 +14,15 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
+        name="overview"
+        options={{
+          title: "Overview",
+          tabBarIcon: ({ color }) => (
+            <Ionicons size={26} name="grid-outline" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="planner"
         options={{
           title: "Planner",
@@ -25,7 +34,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="RecipesMainPage"
         options={{
-          title: "Kitchen",
+          title: "Recipes",
           tabBarIcon: ({ color }) => (
             <Ionicons size={26} name="restaurant-outline" color={color} />
           ),
@@ -42,7 +51,9 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="health"
+        // (Not one of the Kitchen's tabs: it's the Health section's, from Home.)
         options={{
+          href: null,
           title: "Nutrition",
           tabBarIcon: ({ color }) => (
             <Ionicons size={26} name="pie-chart-outline" color={color} />
