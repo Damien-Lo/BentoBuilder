@@ -2076,7 +2076,15 @@ function PhonePlannerScreen() {
               <Text className="text-xs font-semibold text-blue-600">See all</Text>
               <Ionicons name="chevron-forward" size={13} color="#2563EB" />
             </Pressable>
-            {kitchenPlan.tasks.some((t) => t.date <= tomorrow) ? <KitchenTasks plan={kitchenPlan} days={1} onChanged={loadEntries} /> : <Text className="px-[18px] pb-3 pt-1 text-sm text-slate-500">Nothing to do today or tomorrow.</Text>}
+            {kitchenPlan.tasks.some((t) => t.date <= tomorrow) ? (
+              // (Kept short on the planner: the rest scrolls inside the card,
+              // or "See all" has them in full.)
+              <ScrollView style={{ maxHeight: 240 }} nestedScrollEnabled showsVerticalScrollIndicator>
+                <KitchenTasks plan={kitchenPlan} days={1} onChanged={loadEntries} />
+              </ScrollView>
+            ) : (
+              <Text className="px-[18px] pb-3 pt-1 text-sm text-slate-500">Nothing to do today or tomorrow.</Text>
+            )}
           </View>
         )}
 
