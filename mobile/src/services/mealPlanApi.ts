@@ -118,6 +118,8 @@ export interface CreateMealPlanEntryInput {
   notes?: string;
   // An accepted suggestion (see utils/recommend.ts).
   suggested?: boolean;
+  // The pantry pieces kept for it (MealPlanEntry.pieces).
+  pieces?: string[];
 }
 
 async function parseResponse<T>(res: Response): Promise<T> {

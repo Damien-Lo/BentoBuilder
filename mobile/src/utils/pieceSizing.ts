@@ -171,16 +171,18 @@ export function sizePlanned(entries: MealPlanEntry[], recipes: Recipe[], ingredi
   return { entries: entries.map((e) => (sizes.has(e) ? { ...e, sizedTo: sizes.get(e) } : e.sizedTo ? { ...e, sizedTo: undefined } : e)), stock };
 }
 
-// The pieces a recipe could be made with, for choosing one for a planned
-// meal: those in stock that would do (a bag made from a particular piece,
-// or a whole piece in its weight range), each with what the dish would then
-// come to. One choice per meal — the first such line of the recipe.
-export function pieceOptions(recipe: Recipe, stock: PantryItem[], recipes: Recipe[], ingredients: Ingredient[], conversions: CustomUnitConversion[], servings = 1): { pantryItemId: string; label: string; calories: number }[] {
+// The pieces a recipe could be made with, for choosing them for a planned
+// meal: for each of its lines that takes one (a bag made from a particular
+// piece, or a whole piece in its weight range), those in stock that would
+// do — `group` being that line's ingredient — each with what the dish would
+// come to with it (the rest as the planner would have them).
+export function pieceOptions(recipe: Recipe, stock: PantryItem[], recipes: Recipe[], ingredients: Ingredient[], conversions: CustomUnitConversion[], servings = 1): { pantryItemId: string; label: string; calories: number; group: string }[] {
   const ingredientById = new Map(ingredients.map((i) => [i._id, i]));
   const conversionsOf = (ingredient: Ingredient) => getIngredientConversions(ingredient, conversions, ingredients);
   const size = pieceSizer(recipes, ingredients, conversions);
   const base = scaleRecipeNutrition(recipe, servings).calories ?? 0;
   const inStock = stock.filter((p) => (p.quantityAvailable ?? 0) > 0);
+  const options: { pantryItemId: string; label: string; calories: number; group: string }[] = [];
   for (const line of recipe.ingredientList) {
     const ingredient = ingredientById.get(idOf(line.ingredient));
     if (!ingredient) continue;
@@ -190,14 +192,14 @@ export function pieceOptions(recipe: Recipe, stock: PantryItem[], recipes: Recip
         ? inStock.filter((p) => family.has(idOf(p.ingredient)) && pieceWeightInRange(p.quantityAvailable ?? 0, p.quantityUnit, line.pieceMinWeight ?? 0, line.pieceMaxWeight ?? Infinity, line.pieceWeightUnit ?? "g", conversionsOf(ingredient)))
         : inStock.filter((p) => p.nutrition && idOf(p.ingredient) === ingredient._id);
     if (!candidates.length) continue;
-    return candidates
+    options.push(...candidates
       .map((p) => {
         const from = p.madeFrom?.[0];
         const label = from ? `${(ingredientById.get(from.ingredient)?.name ?? ingredient.name)} from ${round(from.amount)} ${from.unit}` : `${round(p.quantityAvailable ?? 0)} ${p.quantityUnit} ${(ingredientById.get(idOf(p.ingredient)) ?? ingredient).name}`;
         const sized = size(recipe, inStock, servings, { pinned: [p._id] });
-        return { pantryItemId: p._id, label, calories: Math.max(0, Math.round(base + sized.shift.calories)) };
+        return { pantryItemId: p._id, label, calories: Math.max(0, Math.round(base + sized.shift.calories)), group: ingredient.name };
       })
-      .sort((a, b) => a.calories - b.calories);
+      .sort((a, b) => a.calories - b.calories));
   }
-  return [];
+  return options;
 }

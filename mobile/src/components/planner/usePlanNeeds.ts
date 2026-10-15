@@ -21,9 +21,30 @@ export interface PieceChoice {
   pantryItemId: string;
   label: string;
   calories: number;
+  // Which of the recipe's pieces it's a choice for (its ingredient).
+  group: string;
   chosen: boolean;
   current: boolean;
   elsewhere?: MealPlanEntry;
+}
+
+// A meal's kept pieces with `choice` made for its group (or, if it was the
+// one kept, given back to the planner): the others' choices stay.
+export function withPiece(kept: string[] | undefined, choices: PieceChoice[], choice: PieceChoice): string[] {
+  const group = new Set(choices.filter((c) => c.group === choice.group).map((c) => c.pantryItemId));
+  const rest = (kept ?? []).filter((id) => !group.has(id));
+  return choice.chosen ? rest : [...rest, choice.pantryItemId];
+}
+
+// The choices grouped by what they're for, in the recipe's order.
+export function pieceGroups(choices: PieceChoice[]): { group: string; choices: PieceChoice[] }[] {
+  const groups: { group: string; choices: PieceChoice[] }[] = [];
+  for (const c of choices) {
+    const at = groups.find((g) => g.group === c.group);
+    if (at) at.choices.push(c);
+    else groups.push({ group: c.group, choices: [c] });
+  }
+  return groups;
 }
 
 // How far ahead the plan is read: far enough to see what a session covers

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 
 import { addDays, MONTHS_FULL, MONTHS_SHORT, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
 import { entryName } from "@/src/components/calendar/mealFood";
@@ -10,6 +10,7 @@ import { SidePicker } from "@/src/components/planner/SidePicker";
 import { KitchenTasks } from "@/src/components/planner/KitchenTasks";
 import { NeedsSummaryCard } from "@/src/components/planner/web/PrepShopping";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
+import { pieceGroups, withPiece, type PieceChoice } from "@/src/components/planner/usePlanNeeds";
 import { noteSuggestions, recordSuggestion, settleSuggestions, type SuggestionAction } from "@/src/components/planner/suggestionRecord";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
@@ -144,16 +145,12 @@ export function WebWeekPlanScreen() {
     showActions(entryName(entry), [
       { label: entry.status === "confirmed" ? "Mark as not eaten" : "Mark as eaten", onPress: () => toggleEaten(entry) },
       { label: "Open", onPress: () => openItem(entry) },
-      // Still to come, and made with one of several pieces: which.
-      ...plan.pieceChoices(entry).length > 1
-        ? plan.pieceChoices(entry).map((c) => ({
-            label: `${c.current ? "✓ " : ""}${c.label} · ${c.calories} kcal${c.elsewhere ? ` (going to ${compactDate(c.elsewhere.date)} ${c.elsewhere.slot})` : ""}`,
-            onPress: () => void setMealPlanEntryPieces(entry._id, c.chosen ? [] : [c.pantryItemId]).then(() => {
-              plan.reload();
-              reload();
-            }, fail),
-          }))
-        : [],
+      // Still to come, and made with one of several pieces: which, on a
+      // card of its own (there can be many).
+      ...(() => {
+        const groups = pieceGroups(plan.pieceChoices(entry));
+        return groups.some((g) => g.choices.length > 1) ? [{ label: groups.length > 1 ? "Change which ones…" : "Change which one…", onPress: () => setChoosing(entry) }] : [];
+      })(),
       ...(usualId
         ? [
             { label: "Remove just this day", destructive: true, onPress: () => void deleteMealPlanEntry(entry._id).then(reload, fail) },
@@ -235,6 +232,8 @@ export function WebWeekPlanScreen() {
   const [sidesPassed, setSidesPassed] = useState<Record<string, string[]>>({});
 
   const [adding, setAdding] = useState<"prep" | "shop" | null>(null);
+  // The planned meal whose piece is being chosen.
+  const [choosing, setChoosing] = useState<MealPlanEntry | null>(null);
   const suggestions = useMemo(() => {
     if (!suggesting || !kitchen || !ready || !plan.ready) return Object.assign(new Map<string, Suggestion[]>(), { rate: () => null, sidesFor: () => [], find: () => [], aim: () => null }) as Suggestions;
     const empty = week
@@ -653,6 +652,21 @@ export function WebWeekPlanScreen() {
           onClose={() => setPicking(null)}
         />
       )}
+      {choosing && (
+        <PieceChooser
+          title={entryName(choosing)}
+          choices={plan.pieceChoices(choosing)}
+          kept={choosing.pieces ?? []}
+          onChoose={(pieces) => {
+            setChoosing(null);
+            void setMealPlanEntryPieces(choosing._id, pieces).then(() => {
+              plan.reload();
+              reload();
+            }, fail);
+          }}
+          onClose={() => setChoosing(null)}
+        />
+      )}
       {adding && (
         <SessionBooker
           kind={adding}
@@ -771,5 +785,117 @@ function Legend({ color, border, dashed, label }: { color: string; border: strin
       <View style={{ width: 16, height: 12, borderRadius: 4, backgroundColor: color, borderWidth: 1, borderColor: border, borderStyle: dashed ? "dashed" : "solid" }} />
       <Text style={{ marginLeft: 6, fontSize: 11, color: WEB.muted }}>{label}</Text>
     </View>
+  );
+}
+
+// Which pieces a planned meal is made with (a bag from one particular
+// steak; a fillet and a steak for a surf and turf): for each, the ones there
+// are, with what the meal comes to, the one it's counted at marked; or the
+// planner's choice. With one to choose, a click is the choice; with more,
+// they're saved together.
+function PieceChooser({ title, choices, kept, onChoose, onClose }: { title: string; choices: PieceChoice[]; kept: string[]; onChoose: (pieces: string[]) => void; onClose: () => void }) {
+  const groups = pieceGroups(choices);
+  const [picked, setPicked] = useState<string[]>(kept);
+  // Which pieces' options are showing (all of them when there's one).
+  const [open, setOpen] = useState<string[]>([]);
+  const pick = (c: PieceChoice) => {
+    const next = withPiece(picked, choices, { ...c, chosen: picked.includes(c.pantryItemId) });
+    if (groups.length === 1) onChoose(next);
+    else setPicked(next);
+  };
+  // (Marked: what's been picked. What the planner's using, while it's the
+  // planner's to choose, is labelled instead.)
+  const shown = (c: PieceChoice) => picked.includes(c.pantryItemId);
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable onPress={onClose} style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(15,23,42,0.45)", padding: 24 }}>
+        <Pressable onPress={() => {}} style={{ width: "100%", maxWidth: 460, maxHeight: "80%", borderRadius: 18, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, overflow: "hidden" }}>
+          <View style={{ paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10 }}>
+            <Text style={{ fontSize: 17, fontWeight: "700", color: WEB.text }}>{groups.length > 1 ? "Which ones" : "Which one"}</Text>
+            <Text numberOfLines={1} style={{ marginTop: 2, fontSize: 13, color: WEB.muted }}>
+              {title}
+            </Text>
+          </View>
+          <ScrollView style={{ flexGrow: 0 }}>
+            {groups.map((g) => {
+              const expanded = groups.length === 1 || open.includes(g.group);
+              const now = g.choices.find((c) => shown(c)) ?? g.choices.find((c) => c.current);
+              const chosen = g.choices.some((c) => picked.includes(c.pantryItemId));
+              return (
+              <View key={g.group}>
+                {/* Each piece folds to what it's set to; "Not chosen" while the planner's choosing it. */}
+                {groups.length > 1 && (
+                  <Pressable
+                    onPress={() => setOpen((prev) => (prev.includes(g.group) ? prev.filter((x) => x !== g.group) : [...prev, g.group]))}
+                    style={({ hovered }: { hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 11, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: hovered ? WEB.page : "transparent" })}
+                  >
+                    <Ionicons name={expanded ? "chevron-down" : "chevron-forward"} size={14} color={WEB.muted} />
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase", color: WEB.muted }}>{g.group}</Text>
+                      {!expanded && !!now && <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 13, color: WEB.text }}>{now.label}</Text>}
+                    </View>
+                    {!chosen && (
+                      <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: "#FEF3C7" }}>
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#B45309" }}>Not chosen</Text>
+                      </View>
+                    )}
+                  </Pressable>
+                )}
+                {expanded && g.choices.map((c) => (
+                  <Pressable
+                    key={c.pantryItemId}
+                    onPress={() => pick(c)}
+                    style={({ hovered }: { hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 11, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: hovered ? WEB.page : "transparent" })}
+                  >
+                    <Ionicons name={shown(c) ? "radio-button-on" : "radio-button-off"} size={18} color={shown(c) ? WEB.blue : WEB.faint} />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={{ fontSize: 14, color: WEB.text }}>
+                        {c.label}
+                        {!chosen && c.current && <Text style={{ fontSize: 12, color: "#7C3AED" }}>  · planner's pick</Text>}
+                      </Text>
+                      {!!c.elsewhere && <Text style={{ fontSize: 12, color: WEB.faint }}>going to {compactDate(c.elsewhere.date)} {c.elsewhere.slot}</Text>}
+                    </View>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: WEB.muted }}>{c.calories} kcal</Text>
+                  </Pressable>
+                ))}
+                {/* Or none of them in particular: the planner's to choose. */}
+                {expanded && (
+                  <Pressable
+                    onPress={() => {
+                      const rest = picked.filter((id) => !g.choices.some((c) => c.pantryItemId === id));
+                      if (groups.length === 1) onChoose(rest);
+                      else setPicked(rest);
+                    }}
+                    style={({ hovered }: { hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 11, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: hovered ? WEB.page : "transparent" })}
+                  >
+                    <Ionicons name={chosen ? "radio-button-off" : "radio-button-on"} size={18} color={chosen ? WEB.faint : "#7C3AED"} />
+                    <Text style={{ flex: 1, marginLeft: 10, fontSize: 14, color: "#7C3AED" }}>Let the planner choose</Text>
+                  </Pressable>
+                )}
+              </View>
+              );
+            })}
+          </ScrollView>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: WEB.border }}>
+            {groups.length > 1 ? (
+              <Pressable onPress={() => onChoose([])}>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: "#7C3AED" }}>Let the planner choose all</Text>
+              </Pressable>
+            ) : (
+              <Text style={{ fontSize: 12, color: WEB.faint }}>The planner picks the best fit for the day.</Text>
+            )}
+            <View style={{ flex: 1 }} />
+            <Pressable onPress={onClose} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: WEB.border }}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: WEB.body }}>Cancel</Text>
+            </Pressable>
+            {groups.length > 1 && (
+              <Pressable onPress={() => onChoose(picked)} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, backgroundColor: WEB.blue }}>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: "#FFFFFF" }}>Save</Text>
+              </Pressable>
+            )}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
