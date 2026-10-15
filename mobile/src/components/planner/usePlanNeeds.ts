@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDays } from "@/src/components/calendar/calendarUtils";
 import { getEventOccurrences, type EventOccurrence } from "@/src/services/calendarApi";
 import { syncGroceryList } from "@/src/services/groceryListApi";
+import { getMenu, menuLeft, menuName, type MenuItem } from "@/src/services/menuApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMealPlanRange, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { getPantryItems } from "@/src/services/pantryApi";
@@ -60,6 +61,7 @@ interface Loaded {
   conversions: CustomUnitConversion[];
   dayGoal: number | null;
   occurrences: EventOccurrence[];
+  menu: MenuItem[];
 }
 
 // What the planned meals of the next few weeks need prepping and buying,
@@ -76,8 +78,8 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
 
   const reload = useCallback(() => {
     const to = addDays(today, NEEDS_HORIZON_DAYS);
-    Promise.all([getMealPlanRange(today, to), getRecipes(), getIngredients(), getPantryItems(), loadSettings(), getEventOccurrences(today, to)])
-      .then(([entries, recipes, ingredients, pantry, settings, occurrences]) => setLoaded({ entries, recipes, ingredients, pantry, conversions: settings.unitConversions, dayGoal: settings.dailyCalorieLimit, occurrences }))
+    Promise.all([getMealPlanRange(today, to), getRecipes(), getIngredients(), getPantryItems(), loadSettings(), getEventOccurrences(today, to), getMenu().catch(() => [] as MenuItem[])])
+      .then(([entries, recipes, ingredients, pantry, settings, occurrences, menu]) => setLoaded({ entries, recipes, ingredients, pantry, conversions: settings.unitConversions, dayGoal: settings.dailyCalorieLimit, occurrences, menu }))
       .catch(() => {});
   }, [today]);
   useFocusEffect(reload);
@@ -87,19 +89,33 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
   const [listSynced, setListSynced] = useState(0);
 
   const result = useMemo(() => {
-    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], checks: [], tasks: [], issues: [], reload, sized: (entries: MealPlanEntry[]) => entries, upcoming: [], pieceChoices: () => [], onList: () => false, listSynced };
+    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], planBuy: [] as BuyNeed[], checks: [], tasks: [], issues: [], reload, sized: (entries: MealPlanEntry[]) => entries, upcoming: [], pieceChoices: () => [], onList: () => false, listSynced };
     const sessions = kitchenSessions(loaded.occurrences, today);
     // (Each meal with the piece it would get, so that's the one to thaw.)
     const sized = sizePlanned(loaded.entries, loaded.recipes, loaded.ingredients, loaded.pantry, loaded.conversions, today, loaded.dayGoal).entries;
-    const needs = computePlanNeeds(
-      sized.filter((e) => e.status === "planned" && e.date >= today),
-      loaded.recipes,
-      loaded.ingredients,
-      loaded.pantry,
-      loaded.conversions,
-      sessions,
-      today,
-    );
+    const planned = sized.filter((e) => e.status === "planned" && e.date >= today);
+    const planOnly = computePlanNeeds(planned, loaded.recipes, loaded.ingredients, loaded.pantry, loaded.conversions, sessions, today);
+    // The menu's servings not yet on a day count as if planned for the day
+    // after the next trip (a week on, with none booked): bought on that
+    // trip, after what's on days has had its share of the pantry. (Only
+    // the prep and shopping: no tasks for them, they've no day yet.)
+    const nextTrip = sessions.find((s) => s.kind === "shop");
+    const menuDay = nextTrip ? addDays(nextTrip.date, 1) : addDays(today, 7);
+    const fromMenu = loaded.menu
+      .filter((item) => item.state === "menu" && menuLeft(item) > 0 && (item.recipe || item.meal))
+      .map(
+        (item) =>
+          ({
+            _id: `menu:${item._id}`,
+            date: menuDay,
+            slot: "dinner",
+            status: "planned",
+            label: menuName(item),
+            ...(item.recipe ? { recipe: item.recipe, recipeServings: menuLeft(item) } : { meal: item.meal }),
+          }) as MealPlanEntry,
+      );
+    const withMenu = fromMenu.length ? computePlanNeeds([...planned, ...fromMenu], loaded.recipes, loaded.ingredients, loaded.pantry, loaded.conversions, sessions) : planOnly;
+    const needs = { prep: withMenu.prep, buy: withMenu.buy, checks: withMenu.checks, tasks: planOnly.tasks, issues: planOnly.issues };
     const sizes = new Map(sized.filter((e) => e.sizedTo).map((e) => [e._id, e.sizedTo]));
     // (`upcoming`: every meal still to come in the next few weeks.)
     const upcoming = loaded.entries.filter((e) => e.status === "planned" && e.date >= today);
@@ -115,28 +131,36 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
         : [];
     // What goes on the grocery list: what's needed by the next shopping
     // trip (or before any trip at all) — with no trip booked, the next week.
-    const nextTrip = sessions.find((s) => s.kind === "shop");
     const onList = (need: BuyNeed) => (nextTrip ? !need.session || need.session === nextTrip.id : need.neededBy <= addDays(today, 7));
-    return { ready: true, today, sessions, ...needs, reload, upcoming, pieceChoices, onList, listSynced, sized: (entries: MealPlanEntry[]) => entries.map((e) => (sizes.has(e._id) ? { ...e, sizedTo: sizes.get(e._id) } : e)) };
+    return { ready: true, today, sessions, ...needs, planBuy: planOnly.buy, reload, upcoming, pieceChoices, onList, listSynced, sized: (entries: MealPlanEntry[]) => entries.map((e) => (sizes.has(e._id) ? { ...e, sizedTo: sizes.get(e._id) } : e)) };
   }, [loaded, today, reload, listSynced]);
 
   // The grocery list kept in step with the plan: whenever what's needed for
   // the next trip changes, it's sent (once, however many screens work it out).
   useEffect(() => {
     if (!result.ready) return;
-    const totals = new Map<string, { ingredient: string; name: string; amount: number; unit: string }>();
-    for (const need of result.buy.filter(result.onList)) {
-      const key = `${need.ingredientId}|${need.unit}`;
-      const at = totals.get(key);
-      if (at) at.amount += need.amount;
-      else totals.set(key, { ingredient: need.ingredientId, name: need.name, amount: need.amount, unit: need.unit });
-    }
-    const needs = [...totals.values()].map((n) => ({ ...n, amount: Math.round(n.amount * 1000) / 1000 }));
-    const signature = JSON.stringify(needs);
+    type Line = { ingredient: string; name: string; amount: number; unit: string };
+    const sum = (list: BuyNeed[]) => {
+      const totals = new Map<string, Line>();
+      for (const need of list.filter(result.onList)) {
+        const key = `${need.ingredientId}|${need.unit}`;
+        const at = totals.get(key);
+        if (at) at.amount += need.amount;
+        else totals.set(key, { ingredient: need.ingredientId, name: need.name, amount: need.amount, unit: need.unit });
+      }
+      return totals;
+    };
+    // What the days need is the plan's; what the menu adds on top, the menu's.
+    const plan = sum(result.planBuy);
+    const all = sum(result.buy);
+    const tidy = (lines: Line[]) => lines.map((n) => ({ ...n, amount: Math.round(n.amount * 1000) / 1000 })).filter((n) => n.amount > 0);
+    const planNeeds = tidy([...plan.values()]);
+    const menuNeeds = tidy([...all.entries()].map(([key, line]) => ({ ...line, amount: line.amount - (plan.get(key)?.amount ?? 0) })));
+    const signature = JSON.stringify([planNeeds, menuNeeds]);
     if (signature === lastListSync) return;
     lastListSync = signature;
-    syncGroceryList("plan", needs)
-      .then((changed) => changed > 0 && setListSynced((n) => n + 1))
+    Promise.all([syncGroceryList("plan", planNeeds), syncGroceryList("menu", menuNeeds)])
+      .then(([a, b]) => a + b > 0 && setListSynced((n) => n + 1))
       .catch(() => {
         lastListSync = null;
       });

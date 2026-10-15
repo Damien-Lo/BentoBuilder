@@ -113,6 +113,10 @@ const mealPlanEntrySchema = new mongoose.Schema(
     // services/shelfLife.js noteThawLeads), taken back if it's un-logged.
     thawNoted: [{ type: mongoose.Schema.Types.ObjectId, ref: "Ingredient" }],
 
+    // Put on this day from the menu (see MenuItem): its servings count
+    // towards that item's batch.
+    menuItem: { type: mongoose.Schema.Types.ObjectId, ref: "MenuItem", default: null },
+
     notes:      { type: String, trim: true, default: "" },
     isArchived: { type: Boolean, default: false },
   },

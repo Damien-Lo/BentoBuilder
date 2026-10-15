@@ -92,6 +92,11 @@ export interface MealPlanEntry {
   suggested?: boolean;
   // While planned: the pantry entries taken out for this meal (ids).
   pieces?: string[];
+  // Put on this day from the menu (a menu item's id).
+  menuItem?: string | null;
+  // Never stored: what to call it in a list, in place of its recipe's or
+  // meal's name (the menu's servings, counted as if planned).
+  label?: string;
   // Never stored: while planned, the pantry piece (or the bag made from one)
   // this would get, and what that adds to the recipe's figures as written
   // (see utils/pieceSizing.ts).
@@ -120,6 +125,8 @@ export interface CreateMealPlanEntryInput {
   suggested?: boolean;
   // The pantry pieces kept for it (MealPlanEntry.pieces).
   pieces?: string[];
+  // Placed from the menu: its servings count towards that item.
+  menuItem?: string;
 }
 
 async function parseResponse<T>(res: Response): Promise<T> {

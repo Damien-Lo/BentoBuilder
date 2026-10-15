@@ -1,23 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 import { addDays, MONTHS_FULL, MONTHS_SHORT, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
 import { entryName } from "@/src/components/calendar/mealFood";
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { SidePicker } from "@/src/components/planner/SidePicker";
-import { KitchenTasks } from "@/src/components/planner/KitchenTasks";
-import { NeedsSummaryCard } from "@/src/components/planner/web/PrepShopping";
+import { MenuCard, MenuOverlay } from "@/src/components/planner/web/MenuCard";
+import { getWebScale } from "@/src/components/web/scale";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { pieceGroups, withPiece, type PieceChoice } from "@/src/components/planner/usePlanNeeds";
 import { noteSuggestions, recordSuggestion, settleSuggestions, type SuggestionAction } from "@/src/components/planner/suggestionRecord";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
 import { compactDate } from "@/src/components/web/fields";
-import { Button, Card, CardLink, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
+import { Button, Card, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
+import { getMenu, menuName, type MenuItem } from "@/src/services/menuApi";
 import {
   createMealPlanEntry,
   deleteMealPlanEntry,
@@ -77,7 +78,16 @@ export function WebWeekPlanScreen() {
     Promise.all([getRecipes(), getIngredients(), getPantryItems(), getMeals()])
       .then(([recipes, ingredients, pantry, meals]) => setKitchen({ recipes, ingredients, pantry, meals }))
       .catch(() => {});
+    getMenu().then(setMenu).catch(() => {});
   }, []);
+  // The menu (see MenuCard), and the item of it being put on a day.
+  const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [placing, setPlacing] = useState<MenuItem | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuChanged = () => {
+    getMenu().then(setMenu).catch(() => {});
+    plan.reload();
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -108,6 +118,14 @@ export function WebWeekPlanScreen() {
     plan.reload();
     loadHistory();
   };
+
+  // A serving of the menu item being placed, on this day's meal.
+  function placeHere(date: string, slot: MealSlot) {
+    const item = placing;
+    if (!item) return;
+    setPlacing(null);
+    createMealPlanEntry({ date, slot, status: "planned", menuItem: item._id, ...(item.recipe ? { recipe: item.recipe._id, recipeServings: 1 } : { meal: item.meal!._id }) }).then(reload, fail);
+  }
 
   const confirm = useEntryConfirm({
     allRecipes: kitchen?.recipes ?? [],
@@ -363,6 +381,22 @@ export function WebWeekPlanScreen() {
     return `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
   };
 
+  // The week as tall as the window has room for, down to the bottom of the
+  // screen: its rows share the height (and grow past it only for a full
+  // meal), the menu beside it filling the same.
+  const weekRow = useRef<View>(null);
+  const { height: windowHeight } = useWindowDimensions();
+  const [fitHeight, setFitHeight] = useState(0);
+  const fitToWindow = useCallback(() => {
+    const node = weekRow.current as unknown as HTMLElement | null;
+    if (!node?.getBoundingClientRect || typeof window === "undefined") return;
+    // (On screen, the layout is scaled: see web/scale.ts.)
+    const scale = getWebScale();
+    const top = node.getBoundingClientRect().top;
+    setFitHeight(Math.max(0, Math.floor((window.innerHeight - top) / scale) - 24));
+  }, []);
+  useEffect(fitToWindow, [fitToWindow, windowHeight]);
+
   return (
     <WebPage maxWidth={1760}>
       {/* Toolbar */}
@@ -375,7 +409,8 @@ export function WebWeekPlanScreen() {
         <Button label="Grocery list" icon="cart-outline" onPress={() => router.navigate("/grocery-list")} />
       </View>
 
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 16 }}>
+      {/* (The side column as tall as the week, its menu filling what's left.) */}
+      <View ref={weekRow} onLayout={fitToWindow} style={{ flexDirection: "row", alignItems: "stretch", gap: 16, minHeight: fitHeight }}>
         {/* The week */}
         <View style={{ flex: 1, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, borderRadius: 16, overflow: "hidden" }}>
           {/* Days */}
@@ -434,7 +469,7 @@ export function WebWeekPlanScreen() {
 
           {/* A row per meal */}
           {SLOTS.map((slot, row) => (
-            <View key={slot.id} style={{ flexDirection: "row", borderBottomWidth: row < SLOTS.length - 1 ? 1 : 0, borderBottomColor: WEB.border }}>
+            <View key={slot.id} style={{ flexDirection: "row", flexGrow: 1, borderBottomWidth: row < SLOTS.length - 1 ? 1 : 0, borderBottomColor: WEB.border }}>
               <View style={{ width: LABEL_WIDTH, padding: 12 }}>
                 <Ionicons name={slot.icon} size={18} color={slot.iconColor} />
                 <Text style={{ marginTop: 4, fontSize: 13, fontWeight: "700", color: WEB.body }}>{slot.label}</Text>
@@ -555,22 +590,23 @@ export function WebWeekPlanScreen() {
                         </View>
                       );
                     })()}
+                    {/* (While a menu item's being placed: "Place here".) */}
                     <Pressable
-                      onPress={() => addFood(day, slot.id)}
-                      accessibilityLabel={`Add ${slot.label.toLowerCase()}`}
+                      onPress={() => (placing ? placeHere(day, slot.id) : addFood(day, slot.id))}
+                      accessibilityLabel={placing ? `Place ${menuName(placing)} here` : `Add ${slot.label.toLowerCase()}`}
                       style={({ hovered }: Hover) => ({
                         flexDirection: "row",
                         alignItems: "center",
                         justifyContent: "center",
                         height: 26,
                         borderRadius: 8,
-                        backgroundColor: hovered ? WEB.blueSoft : "transparent",
+                        backgroundColor: placing ? (hovered ? "#DDD6FE" : "#F5F3FF") : hovered ? WEB.blueSoft : "transparent",
                       })}
                     >
                       {({ hovered }: Hover) => (
                         <>
-                          <Ionicons name="add" size={14} color={hovered ? WEB.blue : "#CBD5E1"} />
-                          <Text style={{ marginLeft: 2, fontSize: 11, fontWeight: "600", color: hovered ? WEB.blue : "#CBD5E1" }}>Add</Text>
+                          <Ionicons name="add" size={14} color={placing ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1"} />
+                          <Text style={{ marginLeft: 2, fontSize: 11, fontWeight: "600", color: placing ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1" }}>{placing ? "Place here" : "Add"}</Text>
                         </>
                       )}
                     </Pressable>
@@ -582,7 +618,7 @@ export function WebWeekPlanScreen() {
         </View>
 
         {/* The week in numbers */}
-        <View style={{ width: SUMMARY_WIDTH, gap: 16 }}>
+        <View style={{ width: SUMMARY_WIDTH, gap: 16, alignSelf: "stretch" }}>
           <Card padded={false}>
             <ScrollView
               ref={pager}
@@ -630,17 +666,39 @@ export function WebWeekPlanScreen() {
               ))}
             </View>
           </Card>
-          {/* What the meals still to come need doing first (see planNeeds.ts). */}
-          {/* What the kitchen needs doing, and what's wrong with the plan: the
-              lists in full are on the Prep & shopping page. */}
-          <Card title="Kitchen tasks" subtitle="Today and tomorrow" action={<CardLink label="Overview" onPress={() => router.push("/kitchen")} />} padded={false}>
-            <KitchenTasks plan={plan} days={1} onChanged={reload} />
-          </Card>
-          <NeedsSummaryCard side="prep" plan={plan} onOpen={() => router.push("/kitchen/needs")} onBook={() => setAdding("prep")} />
-          <NeedsSummaryCard side="buy" plan={plan} onOpen={() => router.push("/kitchen/needs")} onBook={() => setAdding("shop")} />
+          {/* The menu, to place from; the kitchen's tasks and what's to prep
+              and buy are on the Overview and Prep & shopping. */}
+          {/* (Fills what's beside the week without making it taller: a long
+              menu scrolls inside.) */}
+          <View style={{ flex: 1, minHeight: 220 }}>
+          <MenuCard
+            compact
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+            onOpen={() => setMenuOpen(true)}
+            menu={menu}
+            recipes={kitchen?.recipes ?? []}
+            meals={kitchen?.meals ?? []}
+            conversions={conversions}
+            placing={placing?._id ?? null}
+            onPlace={setPlacing}
+            onChanged={menuChanged}
+          />
+          </View>
         </View>
       </View>
 
+      {menuOpen && (
+        <MenuOverlay
+          menu={menu}
+          recipes={kitchen?.recipes ?? []}
+          meals={kitchen?.meals ?? []}
+          conversions={conversions}
+          placing={placing?._id ?? null}
+          onPlace={setPlacing}
+          onChanged={menuChanged}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
       {confirm.modals}
       {picking && (
         <SidePicker

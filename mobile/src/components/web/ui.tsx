@@ -85,7 +85,8 @@ export function Card({
           {action}
         </View>
       )}
-      <View style={padded ? { paddingHorizontal: 18, paddingBottom: 18, paddingTop: title || action ? 0 : 18 } : undefined}>{children}</View>
+      {/* (Shrinks in a card held to a height, so what's in it can scroll.) */}
+      <View style={[{ flexShrink: 1, minHeight: 0 }, padded ? { paddingHorizontal: 18, paddingBottom: 18, paddingTop: title || action ? 0 : 18 } : undefined]}>{children}</View>
     </View>
   );
 }

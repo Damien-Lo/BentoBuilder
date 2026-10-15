@@ -181,7 +181,7 @@ const idOf = (value: unknown): string =>
 const SLOT_ORDER: Record<string, number> = { breakfast: 0, lunch: 1, dinner: 2, snack: 3 };
 
 function entryLabel(entry: MealPlanEntry): string {
-  return entry.meal?.name ?? entry.recipe?.name ?? entry.ingredient?.name ?? "A meal";
+  return entry.label ?? entry.meal?.name ?? entry.recipe?.name ?? entry.ingredient?.name ?? "A meal";
 }
 
 export function computePlanNeeds(

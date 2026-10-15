@@ -54,16 +54,17 @@ export function WebPrepShoppingScreen() {
   // needs. (Something two meals need shows under both, at the amount for both.)
   const [openMeals, setOpenMeals] = useState<string[]>([]);
   const mealsOf = (rows: BuyNeed[]) => {
-    const meals: { date: string; label: string; needs: BuyNeed[] }[] = [];
+    const meals: { date: string; label: string; menu: boolean; needs: BuyNeed[] }[] = [];
     for (const need of rows) {
       for (const f of need.for) {
         const at = meals.find((m) => m.date === f.date && m.label === f.label);
         if (at) {
           if (!at.needs.includes(need)) at.needs.push(need);
-        } else meals.push({ date: f.date, label: f.label, needs: [need] });
+        } else meals.push({ date: f.date, label: f.label, menu: !!f.entryId?.startsWith("menu:"), needs: [need] });
       }
     }
-    return meals.sort((a, b) => a.date.localeCompare(b.date));
+    // (What's on days first, then what's on the menu.)
+    return meals.sort((a, b) => Number(a.menu) - Number(b.menu) || a.date.localeCompare(b.date));
   };
 
   const sessionGroups = <T extends { session: string | null }>(kind: KitchenSession["kind"], list: T[]) =>
@@ -150,7 +151,7 @@ export function WebPrepShoppingScreen() {
                       {meal.label}
                     </Text>
                     <Text style={{ marginTop: 1, fontSize: 12, color: WEB.muted }}>
-                      {dayLabel(meal.date, today)} · {meal.needs.length} thing{meal.needs.length === 1 ? "" : "s"} to buy
+                      {meal.menu ? "On the menu" : dayLabel(meal.date, today)} · {meal.needs.length} thing{meal.needs.length === 1 ? "" : "s"} to buy
                     </Text>
                   </View>
                   {/* (What the next trip needs is on the grocery list by itself; the rest waits.) */}

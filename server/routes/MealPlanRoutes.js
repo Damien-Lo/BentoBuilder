@@ -6,6 +6,7 @@ import { syncUsualMeals, todayFrom } from "../services/usualMeals.js";
 import { removeMealPlanEntryContributions } from "../services/groceryContributions.js";
 import SuggestionEvent from "../models/SuggestionEvent.js";
 import { forgetThawLeads, noteThawLeads } from "../services/shelfLife.js";
+import { settleMenuItem } from "./MenuRoutes.js";
 import {
   CORE_NUTRITION_FIELD_NAMES,
   EXTENDED_NUTRITION_FIELD_NAMES,
@@ -280,6 +281,7 @@ router.post("/suggestion-events", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const entry = await MealPlanEntry.create(req.body);
+    if (entry.menuItem) await settleMenuItem(entry.menuItem).catch(() => {});
     const populated = await populateEntry(MealPlanEntry.findById(entry._id));
     return res.status(201).json({ success: true, data: populated });
   } catch (error) {
