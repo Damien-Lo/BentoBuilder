@@ -63,6 +63,7 @@ import { DishQuantityStepper } from "@/src/components/planner/DishQuantitySteppe
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { KitchenTasks } from "@/src/components/planner/KitchenTasks";
 import { MealSuggestion, SuggestionsToggle, useSuggestionsToggle } from "@/src/components/planner/MealSuggestion";
+import { RecipeThumb } from "@/src/components/recipes/RecipeThumb";
 import { pieceGroups, usePlanNeeds, withPiece, type PieceChoice } from "@/src/components/planner/usePlanNeeds";
 import { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch";
 import { WebWeekPlanScreen } from "@/src/components/planner/web/WebWeekPlanScreen";
@@ -2920,9 +2921,15 @@ function PhonePlannerScreen() {
                           disabled={saving}
                           onPress={() => void handleAddRecipeEntry(recipe, addServings)}
                         >
-                          <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
-                            <Ionicons name="book-outline" size={18} color={slotCfg.iconColor} />
-                          </View>
+                          <RecipeThumb
+                            imageUrl={recipe.imageUrl}
+                            size={44}
+                            fallback={
+                              <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
+                                <Ionicons name="book-outline" size={18} color={slotCfg.iconColor} />
+                              </View>
+                            }
+                          />
                           <View className="ml-3 flex-1">
                             <View className="flex-row items-center">
                               <Text className="font-semibold text-slate-900">{recipe.name}</Text>

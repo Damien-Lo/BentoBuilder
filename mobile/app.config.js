@@ -58,6 +58,13 @@ module.exports = {
         },
       ],
       "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          photosPermission: "BentoBuilder uses your photos to add pictures to your recipes.",
+          cameraPermission: "BentoBuilder uses the camera to take pictures of your recipes and scan labels and receipts.",
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true,

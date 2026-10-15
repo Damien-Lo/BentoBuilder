@@ -13,7 +13,7 @@ import { TEST_DB_NAME } from "../config/database.js";
 // this list doesn't know about is left out too — the safe side to err on.
 //
 // The real database is only ever read here.
-export const COPIED = ["brands", "eventcalendars", "ingredientcategories", "ingredients", "meals", "mealtags", "recipecategories", "recipes", "restaurantmeals", "storagelocations", "stores", "tags", "userprofiles"];
+export const COPIED = ["brands", "eventcalendars", "ingredientcategories", "ingredients", "meals", "mealtags", "photos", "recipecategories", "recipes", "restaurantmeals", "storagelocations", "stores", "tags", "userprofiles"];
 
 export async function resetTestDatabase() {
   const uri = process.env.MONGODB_URI;

@@ -29,6 +29,7 @@ import {
 
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { useWideForm } from "@/src/components/forms/wideForm";
+import { applyPhotoChange, RecipePhotoField, type PhotoChange } from "@/src/components/recipes/RecipePhotoField";
 import { getIngredients, updateIngredient, type Ingredient } from "@/src/services/ingredientApi";
 import { createTag, getTags, getUnitSuggestions, type SelectOption } from "@/src/services/optionsApi";
 import {
@@ -229,6 +230,9 @@ export default function EditRecipePage() {
   const [prepTimeMinutes, setPrepTimeMinutes] = useState("");
   const [cookTimeMinutes, setCookTimeMinutes] = useState("");
   const [notes, setNotes] = useState("");
+  const [source, setSource] = useState("");
+  const [currentPhoto, setCurrentPhoto] = useState("");
+  const [photoChange, setPhotoChange] = useState<PhotoChange>({ kind: "keep" });
   const [ingredientRows, setIngredientRows] = useState<IngredientRow[]>([]);
   // Set while the picker card below is editing an already-added row in
   // place, rather than staging a brand-new one.
@@ -337,6 +341,8 @@ export default function EditRecipePage() {
         setPrepTimeMinutes(recipe.prepTimeMinutes != null ? String(recipe.prepTimeMinutes) : "");
         setCookTimeMinutes(recipe.cookTimeMinutes != null ? String(recipe.cookTimeMinutes) : "");
         setNotes(recipe.notes ?? "");
+        setSource(recipe.source ?? "");
+        setCurrentPhoto(recipe.imageUrl ?? "");
         setSteps(recipe.instructions.length > 0 ? recipe.instructions : []);
 
         if (recipe.recipeCategory && typeof recipe.recipeCategory !== "string") {
@@ -681,6 +687,7 @@ export default function EditRecipePage() {
         prepTimeMinutes: prepTimeMinutes.trim() ? Number(prepTimeMinutes) : null,
         cookTimeMinutes: cookTimeMinutes.trim() ? Number(cookTimeMinutes) : null,
         notes: notes.trim() || undefined,
+        source: source.trim(),
         ingredientList: ingredientRows.map((row) => ({
           ingredient: row.ingredientId,
           quantity: Number(row.quantity),
@@ -696,6 +703,12 @@ export default function EditRecipePage() {
         nutrition: hasNutritionData ? perServingNutrition : undefined,
         isConfirmed,
       });
+
+      try {
+        await applyPhotoChange(id, photoChange);
+      } catch (error) {
+        Alert.alert("The recipe's saved, but not its photo", error instanceof Error ? error.message : "Try again from the recipe's page.");
+      }
 
       const nextProduceIngredientId = producesIngredient ? produceIngredientId : "";
 
@@ -790,6 +803,15 @@ export default function EditRecipePage() {
         onChangeText={setNotes}
       />
     </View>
+    <View className="mt-4" />
+    <FieldLabel text="Source" />
+    <FormInput
+      value={source}
+      placeholder="A link to where it's from, or a book or person"
+      autoCapitalize="none"
+      autoCorrect={false}
+      onChangeText={setSource}
+    />
     </FormCard>
     </>
   );
@@ -841,6 +863,7 @@ export default function EditRecipePage() {
           <View style={layout.columns}>
           <View style={[layout.column, { zIndex: 2 }]}>
           <FormCard icon="book-outline" title="Recipe details" description="Give your recipe a name and tell us when it's eaten." zIndex={60}>
+          <RecipePhotoField current={currentPhoto} change={photoChange} onChange={setPhotoChange} />
 
           <View {...nameSection.wrapperProps}>
             <FieldLabel text="Recipe name" required />

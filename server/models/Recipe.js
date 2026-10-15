@@ -145,6 +145,13 @@ const recipeSchema = new mongoose.Schema(
       default: "",
     },
 
+    // Where it came from: a link to the page it's from, or a book, a person.
+    source: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
     // Made in advance and kept (a marinated fillet, a stock) rather than
     // cooked at the meal (rice). Only recipes that produce an ingredient
     // can be; these are what a prep session is for.

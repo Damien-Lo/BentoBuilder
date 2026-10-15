@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import {
@@ -20,10 +22,15 @@ import {
   deleteRecipeScore,
   getRecipeById,
   getRecipes,
+  removeRecipePhoto,
+  setRecipePhoto,
+  sourceLink,
   type PopulatedIngredient,
   type Recipe,
   updateRecipe,
 } from "@/src/services/recipeApi";
+import { pastedImage, pastePhoto, pickPhoto, photoUri, preparePhoto, type PreparedPhoto } from "@/src/utils/photos";
+import { showActions } from "@/src/components/todo/theme";
 import {
   addIngredientToPantry,
   getPantryItems,
@@ -220,6 +227,27 @@ export default function RecipeDetailPage() {
     : null;
 
   const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  // (In a browser, ⌘V anywhere on the page — outside a text field — is a paste of the photo.)
+  const savePhotoRef = useRef<(get: () => Promise<PreparedPhoto | null>) => Promise<void>>(async () => {});
+  // (Only while this screen's the one showing: in a browser the screens
+  // underneath stay on the page, and would take the paste too.)
+  useFocusEffect(
+    useCallback(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      const uri = pastedImage(event);
+      if (!uri) return;
+      event.preventDefault();
+      void savePhotoRef.current(() => preparePhoto(uri));
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+    }, []),
+  );
+
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
   const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
@@ -750,13 +778,72 @@ export default function RecipeDetailPage() {
 
   // The page in sections, set out at the bottom: one after another on a
   // phone, in two columns in a desktop browser.
+  // A photo for the recipe: taken, pasted, picked, or taken away.
+  async function savePhoto(get: () => Promise<PreparedPhoto | null>, nothing?: string) {
+    if (!recipe) return;
+    try {
+      const photo = await get();
+      if (!photo) {
+        if (nothing) Alert.alert(nothing);
+        return;
+      }
+      setPhotoBusy(true);
+      const imageUrl = await setRecipePhoto(recipe._id, photo);
+      setRecipe((prev) => (prev ? { ...prev, imageUrl } : prev));
+    } catch (error) {
+      Alert.alert("Couldn't add the photo", error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+  savePhotoRef.current = savePhoto;
+
+  function handlePhoto() {
+    if (!recipe || photoBusy) return;
+    showActions(recipe.imageUrl ? "Change photo" : "Add a photo", [
+      { label: "Take a photo", onPress: () => void savePhoto(() => pickPhoto("camera")) },
+      { label: Platform.OS === "web" ? "Paste a copied image (or ⌘V on the page)" : "Paste photo", onPress: () => void savePhoto(pastePhoto, "There's no image copied. Copy a photo first, then paste it here.") },
+      { label: Platform.OS === "web" ? "Choose a file" : "Choose from library", onPress: () => void savePhoto(() => pickPhoto("library")) },
+      ...(recipe.imageUrl
+        ? [
+            {
+              label: "Remove photo",
+              destructive: true,
+              onPress: () =>
+                void removeRecipePhoto(recipe._id).then(
+                  () => setRecipe((prev) => (prev ? { ...prev, imageUrl: "" } : prev)),
+                  (error) => Alert.alert("Couldn't remove the photo", error instanceof Error ? error.message : "Something went wrong."),
+                ),
+            },
+          ]
+        : []),
+    ]);
+  }
+
   const headerSection = (
     <>
         {/* Header card */}
         <View className="rounded-2xl border border-slate-200 bg-white p-5">
-          <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
-            <Ionicons name="book-outline" size={26} color="#2563EB" />
-          </View>
+          {/* Its photo, if it has one; adding, changing or removing it from the corner. */}
+          {photoUri(recipe.imageUrl) ? (
+            <View>
+              <Image source={{ uri: photoUri(recipe.imageUrl)! }} style={{ width: "100%", aspectRatio: layout.wide ? 16 / 9 : 4 / 3, borderRadius: 16, backgroundColor: "#E2E8F0" }} contentFit="cover" transition={150} />
+              <Pressable onPress={handlePhoto} disabled={photoBusy} accessibilityLabel="Change photo" className="absolute bottom-3 right-3 flex-row items-center rounded-full bg-black/55 px-3 py-1.5 active:opacity-70">
+                <Ionicons name="camera-outline" size={15} color="#FFFFFF" />
+                <Text className="ml-1.5 text-xs font-semibold text-white">{photoBusy ? "Saving…" : "Change"}</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View className="flex-row items-start justify-between">
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
+                <Ionicons name="book-outline" size={26} color="#2563EB" />
+              </View>
+              <Pressable onPress={handlePhoto} disabled={photoBusy} accessibilityLabel="Add photo" className="flex-row items-center rounded-full bg-slate-100 px-3 py-1.5 active:bg-slate-200">
+                <Ionicons name="camera-outline" size={15} color="#475569" />
+                <Text className="ml-1.5 text-xs font-semibold text-slate-600">{photoBusy ? "Saving…" : "Add photo"}</Text>
+              </Pressable>
+            </View>
+          )}
 
           <Text className="mt-4 text-2xl font-bold text-slate-900">{recipe.name}</Text>
 
@@ -831,6 +918,26 @@ export default function RecipeDetailPage() {
             <Text className="mt-4 text-base leading-6 text-slate-600">
               {recipe.description}
             </Text>
+          ) : null}
+
+          {/* Where it's from: a link opens it. */}
+          {recipe.source ? (
+            (() => {
+              const link = sourceLink(recipe.source);
+              return (
+                <Pressable
+                  disabled={!link}
+                  onPress={() => link && void Linking.openURL(link.url)}
+                  className="mt-3 flex-row items-center self-start active:opacity-60"
+                  accessibilityLabel={link ? `Open ${link.label}` : undefined}
+                >
+                  <Ionicons name={link ? "link-outline" : "bookmark-outline"} size={15} color={link ? "#2563EB" : "#64748B"} />
+                  <Text className={`ml-1.5 text-sm ${link ? "font-semibold text-blue-600" : "text-slate-500"}`} numberOfLines={1}>
+                    {link ? link.label : recipe.source}
+                  </Text>
+                </Pressable>
+              );
+            })()
           ) : null}
         </View>
     </>

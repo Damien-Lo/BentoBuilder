@@ -2,6 +2,8 @@ import express from "express";
 import { ratingPromptHandler } from "../services/ratingPrompt.js";
 import Recipe from "../models/Recipe.js";
 import Ingredient from "../models/Ingredient.js";
+import Photo from "../models/Photo.js";
+import { photoIdFrom, photoUrl } from "./PhotoRoutes.js";
 import { wouldCreateCycle } from "../services/productionCycle.js";
 import { calcNutrition, nutritionChanged, syncProducedIngredientNutrition } from "../services/recipeNutrition.js";
 
@@ -88,6 +90,42 @@ router.get("/:id", async (req, res) => {
  * POST /api/recipes/:id/rating-prompt  { action: "skip" | "disable" | "enable" }
  * Records a skipped auto rating prompt, or turns the prompt off/on.
  */
+/**
+ * POST /api/recipes/:id/photo  { imageBase64, mediaType?, width?, height? }
+ * Gives the recipe a photo (shrunk on the device first), in place of any it
+ * had. DELETE takes it away.
+ */
+router.post("/:id/photo", async (req, res) => {
+  try {
+    const recipe = await Recipe.findById(req.params.id);
+    if (!recipe) return res.status(404).json({ success: false, message: "Recipe not found" });
+    const data = Buffer.from(String(req.body.imageBase64 ?? ""), "base64");
+    if (!data.length) return res.status(400).json({ success: false, message: "No image was sent" });
+    const photo = await Photo.create({ data, contentType: req.body.mediaType || "image/jpeg", width: Number(req.body.width) || null, height: Number(req.body.height) || null, of: { kind: "recipe", id: recipe._id } });
+    const before = photoIdFrom(recipe.imageUrl);
+    recipe.imageUrl = photoUrl(photo._id);
+    await recipe.save();
+    if (before) await Photo.deleteOne({ _id: before });
+    return res.json({ success: true, data: { imageUrl: recipe.imageUrl } });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+router.delete("/:id/photo", async (req, res) => {
+  try {
+    const recipe = await Recipe.findById(req.params.id);
+    if (!recipe) return res.status(404).json({ success: false, message: "Recipe not found" });
+    const before = photoIdFrom(recipe.imageUrl);
+    recipe.imageUrl = "";
+    await recipe.save();
+    if (before) await Photo.deleteOne({ _id: before });
+    return res.json({ success: true, data: { imageUrl: "" } });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 router.post("/:id/rating-prompt", ratingPromptHandler(Recipe, "Recipe"));
 
 router.post("/:id/scores", async (req, res) => {

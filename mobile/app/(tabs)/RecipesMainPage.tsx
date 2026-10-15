@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WebRecipesScreen } from "@/src/components/recipes/web/WebRecipesScreen";
+import { RecipeThumb } from "@/src/components/recipes/RecipeThumb";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { usePaneDimensions } from "@/src/utils/pane";
 import {
@@ -557,9 +558,15 @@ function PhoneRecipesMainPage() {
           className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4"
           onPress={() => router.push({ pathname: "/recipes/[id]", params: { id: recipe._id } })}
         >
-          <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-            <Ionicons name="book-outline" size={18} color="#2563EB" />
-          </View>
+          <RecipeThumb
+            imageUrl={recipe.imageUrl}
+            size={40}
+            fallback={
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
+                <Ionicons name="book-outline" size={18} color="#2563EB" />
+              </View>
+            }
+          />
 
           <View className="ml-4 flex-1">
             <Text className="text-base font-bold text-slate-900">{recipe.name}</Text>
@@ -1002,9 +1009,15 @@ function PhoneRecipesMainPage() {
                         router.push({ pathname: "/recipes/[id]", params: { id: recipe._id } });
                       }}
                     >
-                      <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
-                        <Ionicons name="book-outline" size={21} color="#2563EB" />
-                      </View>
+                      <RecipeThumb
+                        imageUrl={recipe.imageUrl}
+                        size={44}
+                        fallback={
+                          <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
+                            <Ionicons name="book-outline" size={21} color="#2563EB" />
+                          </View>
+                        }
+                      />
                       <View className="ml-3 flex-1">
                         <Text className="font-semibold text-slate-900">{recipe.name}</Text>
                         <Text className="mt-0.5 text-sm text-slate-500">

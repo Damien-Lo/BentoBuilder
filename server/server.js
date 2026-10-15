@@ -24,6 +24,7 @@ import todoRoutes from "./routes/TodoRoutes.js";
 import calendarRoutes from "./routes/CalendarRoutes.js";
 import { chosenDatabase, connectDatabase, DATABASES } from "./config/database.js";
 import developerRoutes from "./routes/DeveloperRoutes.js";
+import photoRoutes from "./routes/PhotoRoutes.js";
 
 
 
@@ -76,6 +77,7 @@ app.use("/api/weight-entries", weightEntryRoutes);
 app.use("/api/todo", todoRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/developer", developerRoutes);
+app.use("/api/photos", photoRoutes);
 
 
 app.use((req, res) => {

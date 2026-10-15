@@ -29,6 +29,7 @@ import {
 
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { useWideForm } from "@/src/components/forms/wideForm";
+import { applyPhotoChange, RecipePhotoField, type PhotoChange } from "@/src/components/recipes/RecipePhotoField";
 import { getIngredients, updateIngredient, type Ingredient } from "@/src/services/ingredientApi";
 import { createTag, getTags, getUnitSuggestions, type SelectOption } from "@/src/services/optionsApi";
 import {
@@ -184,6 +185,8 @@ export default function AddRecipePage() {
   const [prepTimeMinutes, setPrepTimeMinutes] = useState("");
   const [cookTimeMinutes, setCookTimeMinutes] = useState("");
   const [notes, setNotes] = useState("");
+  const [source, setSource] = useState("");
+  const [photoChange, setPhotoChange] = useState<PhotoChange>({ kind: "keep" });
 
   // Ingredient rows
   const [ingredientRows, setIngredientRows] = useState<IngredientRow[]>([]);
@@ -596,6 +599,7 @@ export default function AddRecipePage() {
         prepTimeMinutes: prepTimeMinutes.trim() ? Number(prepTimeMinutes) : null,
         cookTimeMinutes: cookTimeMinutes.trim() ? Number(cookTimeMinutes) : null,
         notes: notes.trim() || undefined,
+        source: source.trim(),
         ingredientList: ingredientRows.map((row) => ({
           ingredient: row.ingredientId,
           quantity: Number(row.quantity),
@@ -613,6 +617,13 @@ export default function AddRecipePage() {
         nutrition: hasNutritionData ? perServingNutrition : undefined,
         isConfirmed,
       });
+
+      // (Its photo, now it has an id to go with.)
+      try {
+        await applyPhotoChange(savedRecipe._id, photoChange);
+      } catch (error) {
+        Alert.alert("The recipe's saved, but not its photo", error instanceof Error ? error.message : "Try adding it from the recipe's page.");
+      }
 
       if (producesIngredient && produceIngredientId) {
         try {
@@ -699,6 +710,15 @@ export default function AddRecipePage() {
         onChangeText={setNotes}
       />
     </View>
+    <View className="mt-4" />
+    <FieldLabel text="Source" />
+    <FormInput
+      value={source}
+      placeholder="A link to where it's from, or a book or person"
+      autoCapitalize="none"
+      autoCorrect={false}
+      onChangeText={setSource}
+    />
     </FormCard>
     </>
   );
@@ -756,6 +776,7 @@ export default function AddRecipePage() {
           <View style={layout.columns}>
           <View style={[layout.column, { zIndex: 2 }]}>
           <FormCard icon="book-outline" title="Recipe details" description="Give your recipe a name and tell us when it's eaten." zIndex={60}>
+          <RecipePhotoField change={photoChange} onChange={setPhotoChange} />
 
           <View {...nameSection.wrapperProps}>
             <FieldLabel text="Recipe name" required />

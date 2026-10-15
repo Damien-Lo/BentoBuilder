@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import { RecipeThumb } from "@/src/components/recipes/RecipeThumb";
 import { Button, Empty, PageTitle, Segmented, WEB, WebPage } from "@/src/components/web/ui";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
@@ -177,6 +178,7 @@ export function WebRecipesScreen() {
                   return (
                     <Tile
                       key={recipe._id}
+                      photo={recipe.imageUrl}
                       icon="book-outline"
                       tint="#2563EB"
                       title={recipe.name}
@@ -233,6 +235,7 @@ export function WebRecipesScreen() {
 }
 
 function Tile({
+  photo,
   icon,
   tint,
   title,
@@ -242,6 +245,8 @@ function Tile({
   lines,
   onPress,
 }: {
+  // A photo, shown in place of the icon.
+  photo?: string;
   icon: keyof typeof Ionicons.glyphMap;
   tint: string;
   title: string;
@@ -268,9 +273,16 @@ function Tile({
       })}
     >
       <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
-        <View style={{ width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: `${tint}1A` }}>
-          <Ionicons name={icon} size={17} color={tint} />
-        </View>
+        <RecipeThumb
+          imageUrl={photo}
+          size={44}
+          radius={10}
+          fallback={
+            <View style={{ width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: `${tint}1A` }}>
+              <Ionicons name={icon} size={17} color={tint} />
+            </View>
+          }
+        />
         <View style={{ flex: 1, marginLeft: 10 }}>
           <Text numberOfLines={2} style={{ fontSize: 15, fontWeight: "700", lineHeight: 19, color: WEB.text }}>
             {title}

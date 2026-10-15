@@ -85,6 +85,8 @@ export interface Recipe {
   nutrition?: RecipeNutrition;
   imageUrl?: string;
   notes?: string;
+  // Where it came from: a link, or a book or a person (see sourceLink).
+  source?: string;
   isArchived?: boolean;
   // Made in advance and kept, rather than cooked at the meal: what a prep
   // session is for. Only meaningful for a recipe that produces an ingredient.
@@ -137,6 +139,8 @@ export interface CreateRecipeInput {
   nutrition?: RecipeNutrition;
   imageUrl?: string;
   notes?: string;
+  // Where it came from: a link, or a book or a person (see sourceLink).
+  source?: string;
   madeAhead?: boolean;
   // Something to start before cooking that isn't a recipe of its own (soak,
   // salt overnight): how many hours before the meal, and what.
@@ -193,6 +197,23 @@ export async function getArchivedRecipes(): Promise<Recipe[]> {
   const response = await fetch(`${API_BASE_URL}/api/recipes?archived=true`);
   const result = await parseResponse<RecipeListResponse>(response);
   return Array.isArray(result.data) ? result.data : [];
+}
+
+// Gives a recipe a photo (in place of any it had), or takes it away. The
+// recipe's imageUrl is then the photo's address (see utils/photos.ts).
+export async function setRecipePhoto(recipeId: string, photo: { base64: string; width: number; height: number }): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/api/recipes/${recipeId}/photo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ imageBase64: photo.base64, mediaType: "image/jpeg", width: photo.width, height: photo.height }),
+  });
+  const result = await parseResponse<{ success: boolean; data: { imageUrl: string } }>(response);
+  return result.data.imageUrl;
+}
+
+export async function removeRecipePhoto(recipeId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/recipes/${recipeId}/photo`, { method: "DELETE" });
+  await parseResponse<{ success: boolean }>(response);
 }
 
 export async function getRecipeById(recipeId: string): Promise<Recipe> {
@@ -321,4 +342,17 @@ export async function deleteRecipeScore(
   });
   const result = await parseResponse<{ success: boolean; data: RecipeScore[] }>(response);
   return result.data;
+}
+
+// A recipe's source as a link, when it is one: the address to open, and the
+// site's name to show for it ("madewithlau.com").
+export function sourceLink(source: string | undefined): { url: string; label: string } | null {
+  const text = (source ?? "").trim();
+  const url = /^https?:\/\//i.test(text) ? text : /^www\.|^[a-z0-9-]+\.[a-z]{2,}(\/|$)/i.test(text) ? `https://${text}` : null;
+  if (!url) return null;
+  try {
+    return { url, label: new URL(url).hostname.replace(/^www\./, "") };
+  } catch {
+    return null;
+  }
 }
