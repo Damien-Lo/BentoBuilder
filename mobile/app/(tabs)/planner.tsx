@@ -44,6 +44,7 @@ import {
   getLastEntriesBeforeDate,
   getLastUsedMap,
   getMealPlanForDate,
+  moveMealPlanEntry,
   setMealPlanEntryPieces,
   unconfirmMealPlanEntry,
   updateMealPlanEntryQuantity,
@@ -66,7 +67,7 @@ import { RecipeThumb } from "@/src/components/recipes/RecipeThumb";
 import { pieceGroups, usePlanNeeds, withPiece, type PieceChoice } from "@/src/components/planner/usePlanNeeds";
 import { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch";
 import { WebWeekPlanScreen } from "@/src/components/planner/web/WebWeekPlanScreen";
-import { menuLeft, menuName } from "@/src/services/menuApi";
+import { addToMenu, menuLeft, menuName } from "@/src/services/menuApi";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { NutritionSummaryCard, type NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
 import { NutritionDetailOverlay, type NutritionDetailPage } from "@/src/components/planner/NutritionDetailOverlay";
@@ -289,6 +290,9 @@ function PhonePlannerScreen() {
   // still reach the full catalog page from here. Meal/restaurant entries
   // keep navigating directly (no analogous single-quantity field to edit).
   const [editEntry, setEditEntry] = useState<MealPlanEntry | null>(null);
+  // A planned meal being moved to another day or meal (or back onto the
+  // menu), and where to.
+  const [moving, setMoving] = useState<{ entry: MealPlanEntry; date: string; slot: MealSlot } | null>(null);
   const [editQuantity, setEditQuantity] = useState("1");
   const [editUnit, setEditUnit] = useState("");
   // Restaurant entries edit differently (per-dish quantity, not one scalar)
@@ -1263,12 +1267,27 @@ function PhonePlannerScreen() {
         leftThreshold={40}
         rightThreshold={40}
         renderLeftActions={() => (
-          <Pressable
-            className="mb-2 w-20 items-center justify-center rounded-2xl bg-red-500 active:bg-red-600"
-            onPress={() => handleDeleteEntry(entry._id)}
-          >
-            <Ionicons name="trash-outline" size={20} color="white" />
-          </Pressable>
+          <View className="mb-2 flex-row gap-2">
+            <Pressable
+              className="w-20 items-center justify-center rounded-2xl bg-red-500 active:bg-red-600"
+              onPress={() => handleDeleteEntry(entry._id)}
+            >
+              <Ionicons name="trash-outline" size={20} color="white" />
+            </Pressable>
+            {/* (Still to come: to another day or meal, or back on the menu.) */}
+            {entry.status === "planned" && (
+              <Pressable
+                className="w-20 items-center justify-center rounded-2xl bg-violet-600 active:opacity-80"
+                onPress={() => {
+                  swipeableRefs.get(entry._id)?.current?.close();
+                  setMoving({ entry, date: entry.date, slot: entry.slot });
+                }}
+              >
+                <Ionicons name="swap-horizontal-outline" size={20} color="white" />
+                <Text className="mt-1 text-[10px] font-semibold text-white">Move</Text>
+              </Pressable>
+            )}
+          </View>
         )}
         renderRightActions={() =>
           entry.status === "planned" && (entry.recipe || entry.ingredient) ? (
@@ -1606,6 +1625,109 @@ function PhonePlannerScreen() {
     } catch (error) {
       Alert.alert("Couldn't change that", error instanceof Error ? error.message : "Something went wrong.");
     }
+  }
+
+  // A planned meal to the day and meal picked, or back onto the menu (as
+  // dragging it does on the desktop week plan).
+  async function handleMove(toMenu: boolean) {
+    if (!moving || saving) return;
+    const { entry, date, slot } = moving;
+    try {
+      setSaving(true);
+      if (toMenu) {
+        await addToMenu(entry.recipe ? { recipe: entry.recipe._id } : { meal: entry.meal!._id });
+        await deleteMealPlanEntry(entry._id);
+        setEntries(prev => prev.filter(e => e._id !== entry._id));
+      } else if (date !== entry.date || slot !== entry.slot) {
+        const moved = await moveMealPlanEntry(entry._id, date, slot);
+        setEntries(prev => (date === selectedDate ? prev.map(e => (e._id === entry._id ? moved : e)) : prev.filter(e => e._id !== entry._id)));
+      }
+      kitchenPlan.reload();
+      setMoving(null);
+    } catch (err) {
+      Alert.alert("Couldn't move it", err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function renderMoveOverlay() {
+    if (!moving) return null;
+    const { entry } = moving;
+    // The next two weeks, from today.
+    const days = Array.from({ length: 14 }, (_, i) => {
+      const d = parseLocalDate(today);
+      d.setDate(d.getDate() + i);
+      return toDateStr(d);
+    });
+    const dayChip = (date: string) => {
+      const d = parseLocalDate(date);
+      return { top: date === today ? "Today" : d.toLocaleDateString(undefined, { weekday: "short" }), day: d.getDate() };
+    };
+    const unchanged = moving.date === entry.date && moving.slot === entry.slot;
+    return (
+      <View className="absolute inset-0">
+        <Pressable className="absolute inset-0 bg-black/40" onPress={() => setMoving(null)} />
+        <View className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl bg-white pb-8">
+          <View className="items-center pt-3">
+            <View className="h-1 w-10 rounded-full bg-slate-200" />
+          </View>
+          <View className="flex-row items-center px-5 pb-2 pt-3">
+            <Text className="flex-1 text-lg font-bold text-slate-950" numberOfLines={2}>
+              Move {entryDisplayName(entry)}
+            </Text>
+            <Pressable hitSlop={10} onPress={() => setMoving(null)} className="ml-2 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100">
+              <Ionicons name="close" size={20} color="#64748B" />
+            </Pressable>
+          </View>
+
+          <Text className="mb-2 mt-2 px-5 text-xs font-bold uppercase tracking-wide text-slate-400">Day</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
+            {days.map(date => {
+              const on = moving.date === date;
+              const { top, day } = dayChip(date);
+              return (
+                <Pressable key={date} onPress={() => setMoving({ ...moving, date })} className={`w-14 items-center rounded-2xl py-2 ${on ? "bg-violet-600" : "bg-slate-100 active:bg-slate-200"}`}>
+                  <Text className={`text-[11px] font-semibold ${on ? "text-violet-100" : "text-slate-500"}`}>{top}</Text>
+                  <Text className={`mt-0.5 text-base font-bold ${on ? "text-white" : "text-slate-900"}`}>{day}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <Text className="mb-2 mt-5 px-5 text-xs font-bold uppercase tracking-wide text-slate-400">Meal</Text>
+          <View className="flex-row flex-wrap gap-2 px-5">
+            {SLOTS.map(slot => {
+              const on = moving.slot === slot.id;
+              return (
+                <Pressable key={slot.id} onPress={() => setMoving({ ...moving, slot: slot.id })} className={`flex-row items-center rounded-full px-4 py-2 ${on ? "bg-violet-600" : "bg-slate-100 active:bg-slate-200"}`}>
+                  <Ionicons name={slot.icon} size={14} color={on ? "white" : slot.iconColor} />
+                  <Text className={`ml-1.5 text-sm font-semibold ${on ? "text-white" : "text-slate-700"}`}>{slot.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View className="mt-6 px-5">
+            <Pressable
+              disabled={saving || unchanged}
+              onPress={() => void handleMove(false)}
+              className={`items-center rounded-2xl py-4 ${saving || unchanged ? "bg-violet-300" : "bg-violet-600 active:bg-violet-700"}`}
+            >
+              <Text className="font-semibold text-white">
+                {unchanged ? "Pick a day or meal" : `Move to ${friendlyDayLabel(moving.date).toLowerCase() === "today" ? "today" : friendlyDayLabel(moving.date)}, ${SLOT_MAP[moving.slot].label.toLowerCase()}`}
+              </Text>
+            </Pressable>
+            {(entry.recipe || entry.meal) && (
+              <Pressable disabled={saving} onPress={() => void handleMove(true)} className="mt-3 flex-row items-center justify-center rounded-2xl border border-violet-200 py-4 active:bg-violet-50">
+                <Ionicons name="restaurant-outline" size={16} color="#7C3AED" />
+                <Text className="ml-2 font-semibold text-violet-700">Take it off the day, back on the menu</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </View>
+    );
   }
 
   // ── Edit-entry overlay: how much of this ingredient/recipe was eaten,
@@ -1990,6 +2112,18 @@ function PhonePlannerScreen() {
             >
               <Text className="font-semibold text-white">{editSaving ? "Saving…" : "Save changes"}</Text>
             </Pressable>
+            {editEntry.status === "planned" && (
+              <Pressable
+                className="mb-3 flex-row items-center justify-center rounded-2xl border border-violet-200 py-4 active:bg-violet-50"
+                onPress={() => {
+                  setMoving({ entry: editEntry, date: editEntry.date, slot: editEntry.slot });
+                  setEditEntry(null);
+                }}
+              >
+                <Ionicons name="swap-horizontal-outline" size={16} color="#7C3AED" />
+                <Text className="ml-2 font-semibold text-violet-700">Move to another day or meal…</Text>
+              </Pressable>
+            )}
             <Pressable
               className="items-center rounded-2xl border border-slate-200 py-4 active:bg-slate-50"
               onPress={handleViewFullItem}
@@ -3153,6 +3287,7 @@ function PhonePlannerScreen() {
 
       {renderInfoOverlay()}
       {renderEditEntryOverlay()}
+      {renderMoveOverlay()}
 
       <NutritionDetailOverlay
         visible={nutritionDetailPage != null}

@@ -8,6 +8,7 @@ import { compactDate } from "@/src/components/web/fields";
 import { KitchenPage } from "@/src/components/planner/KitchenPage";
 import { Card, CardLink, WEB } from "@/src/components/web/ui";
 import { minutesLabel } from "@/src/components/calendar/calendarUtils";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Kitchen → Overview: what the kitchen needs doing, what's wrong with the
 // plan, and what's booked — the Kitchen's assistant, in one place. All of it
@@ -19,6 +20,9 @@ export function KitchenOverview({ inTabs = false }: { inTabs?: boolean }) {
   const plan = usePlanNeeds();
   const { today } = plan;
   const sessions = plan.sessions.slice(0, 6);
+  // (Sessions are booked from the week plan on the desktop; on the phone,
+  // from Prep & shopping.)
+  const wide = useWideWeb();
 
   return (
     <KitchenPage title="Kitchen" subtitle="What needs doing, from your meal plan, pantry and booked sessions" back={!inTabs}>
@@ -42,8 +46,8 @@ export function KitchenOverview({ inTabs = false }: { inTabs?: boolean }) {
             )}
           </Card>
 
-          <Card title="Booked" subtitle="Prep sessions and shopping trips to come" action={<CardLink label="Week plan" onPress={() => router.push("/planner")} />} padded={false}>
-            {plan.ready && sessions.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 16, fontSize: 13, color: WEB.muted }}>None booked. Add one from the week plan.</Text>}
+          <Card title="Booked" subtitle="Prep sessions and shopping trips to come" action={<CardLink label={wide ? "Week plan" : "Prep & shopping"} onPress={() => router.push(wide ? "/planner" : "/kitchen/needs")} />} padded={false}>
+            {plan.ready && sessions.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 16, fontSize: 13, color: WEB.muted }}>None booked. Add one from {wide ? "the week plan" : "Prep & shopping"}.</Text>}
             <View style={{ paddingBottom: sessions.length ? 8 : 0 }}>
               {sessions.map((session) => {
                 const count = session.kind === "shop" ? plan.buy.filter((n) => n.session === session.id).length : plan.prep.filter((n) => n.session === session.id).length;
