@@ -28,6 +28,8 @@ import { chosenDatabase, connectDatabase, DATABASES } from "./config/database.js
 import developerRoutes from "./routes/DeveloperRoutes.js";
 import photoRoutes from "./routes/PhotoRoutes.js";
 import menuRoutes from "./routes/MenuRoutes.js";
+import authRoutes from "./routes/AuthRoutes.js";
+import { authenticate } from "./services/auth.js";
 
 
 
@@ -41,6 +43,12 @@ app.use(cors());
 // receipt photo (a few MB) — raised here since the global parser runs
 // before any route-level override would ever see the request.
 app.use(express.json({ limit: "15mb" }));
+// (Render sits in front of the server: the caller's address is the one it
+// passes on, which the sign-in limiter goes by.)
+app.set("trust proxy", 1);
+// Who each request is from, when it carries a session token (req.user).
+// Nothing requires it yet apart from /api/auth's own routes.
+app.use(authenticate);
 
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
@@ -84,6 +92,7 @@ app.use("/api/calendar", calendarRoutes);
 app.use("/api/developer", developerRoutes);
 app.use("/api/photos", photoRoutes);
 app.use("/api/menu", menuRoutes);
+app.use("/api/auth", authRoutes);
 
 
 app.use((req, res) => {
