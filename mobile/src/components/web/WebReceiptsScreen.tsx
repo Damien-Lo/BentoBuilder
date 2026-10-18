@@ -6,9 +6,10 @@ import { ActivityIndicator, Alert, Modal, Pressable, Text, View } from "react-na
 
 import { compactDate } from "@/src/components/web/fields";
 import { PairPhoneCard } from "@/src/components/devices/PairPhoneCard";
+import { WebcamModal, type WebPhoto } from "@/src/components/web/WebcamModal";
 import { getThisDevice, requestCapture, watchCapture } from "@/src/services/deviceApi";
 import { createReceiptDraftFrom, finishReceiptDraft, getReceiptDrafts, type ReceiptDraftSummary } from "@/src/services/receiptApi";
-import { photoUri, pickPhoto } from "@/src/utils/photos";
+import { photoUri } from "@/src/utils/photos";
 
 import { Button, Card, PageTitle, WEB, WebPage } from "./ui";
 
@@ -20,9 +21,10 @@ type Hover = { hovered?: boolean };
 // room, with the photo to check against. The review itself is the same
 // screen as on the phone (receipts/review), working on the saved receipt.
 //
-// A receipt can also be started here: a photo uploaded from this computer,
-// or taken on the phone this computer's paired with (Settings → Devices) —
-// the phone's "computer's camera" screen opens its camera for it.
+// A receipt can also be started here: a photo from this computer (its
+// webcam, or a file), or taken on the phone this computer's paired with
+// (Settings → Devices) — the phone's "computer's camera" screen opens its
+// camera for it.
 
 const STATUS: Record<string, { label: string; fg: string; bg: string }> = {
   parsing: { label: "Reading…", fg: "#B45309", bg: "#FEF3C7" },
@@ -62,12 +64,13 @@ export function WebReceiptsScreen() {
 
   // Starting one here.
   const [uploading, setUploading] = useState(false);
+  const [webcam, setWebcam] = useState(false);
   const [phone, setPhone] = useState<{ status: string; message?: string; stop?: () => void } | null>(null);
   const [pairing, setPairing] = useState(false);
-  async function upload() {
+  // A photo from this computer: the webcam's, or a file.
+  async function upload(photo: WebPhoto) {
+    setWebcam(false);
     try {
-      const photo = await pickPhoto("library");
-      if (!photo) return;
       setUploading(true);
       await createReceiptDraftFrom(photo, "desktop");
       load();
@@ -105,7 +108,7 @@ export function WebReceiptsScreen() {
         subtitle={drafts?.length ? `${drafts.length} to review` : "Scanned on your phone, reviewed here"}
         right={
           <View style={{ flexDirection: "row", gap: 8 }}>
-            <Button label={uploading ? "Adding…" : "Upload a photo"} icon="image-outline" onPress={() => void upload()} />
+            <Button label={uploading ? "Adding…" : "From this computer"} icon="desktop-outline" onPress={() => setWebcam(true)} />
             <Button label="Take it with my phone" icon="phone-portrait-outline" kind="primary" onPress={() => void withPhone()} />
           </View>
         }
@@ -122,7 +125,7 @@ export function WebReceiptsScreen() {
             <Text style={{ marginLeft: 12, fontSize: 15, fontWeight: "700", color: WEB.text }}>No receipts waiting</Text>
           </View>
           <Text style={{ marginTop: 10, fontSize: 13, lineHeight: 20, color: WEB.muted }}>
-            Use <Text style={{ fontWeight: "700", color: WEB.body }}>Take it with my phone</Text> or <Text style={{ fontWeight: "700", color: WEB.body }}>Upload a photo</Text> above, or on your phone scan
+            Use <Text style={{ fontWeight: "700", color: WEB.body }}>Take it with my phone</Text> or <Text style={{ fontWeight: "700", color: WEB.body }}>From this computer</Text> (webcam or a file) above, or on your phone scan
             a receipt from the Pantry or the Grocery list and choose <Text style={{ fontWeight: "700", color: WEB.body }}>Review on desktop</Text>. It shows up here while it&apos;s read, then
             you can check each line against the photo and add it all to the pantry.
           </Text>
@@ -182,6 +185,9 @@ export function WebReceiptsScreen() {
           })}
         </View>
       )}
+      {/* Taking one with this computer: webcam or a file */}
+      <WebcamModal visible={webcam} mode="photo" title="Receipt from this computer" onClose={() => setWebcam(false)} onPhoto={(photo) => void upload(photo)} />
+
       {/* Taking one with the phone */}
       <Modal visible={!!phone} transparent animationType="fade" onRequestClose={() => (phone?.stop?.(), setPhone(null))}>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: "rgba(15,23,42,0.45)" }}>

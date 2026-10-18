@@ -433,8 +433,12 @@ export interface NutritionLabelScan {
 }
 
 export async function parseNutritionLabel(photoUri: string): Promise<NutritionLabelScan> {
-  const imageBase64 = await new File(photoUri).base64();
+  return parseNutritionLabelImage(await new File(photoUri).base64());
+}
 
+// The same, from a photo already read into base64 (a webcam photo or an
+// upload in a browser, where there's no file to read).
+export async function parseNutritionLabelImage(imageBase64: string): Promise<NutritionLabelScan> {
   const response = await fetch(`${API_BASE_URL}/api/ingredients/parse-label`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

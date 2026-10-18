@@ -27,6 +27,7 @@ import Animated, {
 
 import { BarcodeScannerModal, lookupBarcode, type ScannedProduct } from "@/src/components/BarcodeScannerModal";
 import { PairPhoneCard } from "@/src/components/devices/PairPhoneCard";
+import { WebcamModal } from "@/src/components/web/WebcamModal";
 import { getThisDevice, requestCapture, watchCapture } from "@/src/services/deviceApi";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { countReadNutrients, labelNutrition, labelServing } from "@/src/utils/nutritionLabel";
@@ -43,6 +44,7 @@ import {
   getIngredients,
   createIngredient,
   parseNutritionLabel,
+  parseNutritionLabelImage,
   updateIngredient,
   type Ingredient,
   type IngredientNutrition,
@@ -1441,6 +1443,9 @@ export default function ReceiptReviewPage() {
     // (No phone yet: pair one now.)
     if (mode === "phone") void getThisDevice().then((me) => !me.paired.length && setShowPair(true), () => {});
   }
+  // A barcode or label being taken with this computer's webcam (in a
+  // browser, with "This computer" chosen), for which line.
+  const [webcam, setWebcam] = useState<{ kind: "barcode" | "label"; rowKey: string } | null>(null);
   // A barcode or label being taken on the phone, and how it's going.
   const [phoneJob, setPhoneJob] = useState<{ id: string; kind: "barcode" | "label"; rowName: string; status: string; message?: string; stop?: () => void } | null>(null);
   const { width: windowWidth, height: windowHeight } = usePaneDimensions();
@@ -1841,25 +1846,42 @@ export default function ReceiptReviewPage() {
     }
     if (kind === "barcode" && final.result?.barcode) {
       settle("looking", "");
-      const { product, problem } = await lookupBarcode(final.result.barcode);
-      handleBarcodeScanned(product, rowKey);
-      settle(
-        problem ? "failed" : "filled",
-        problem === "notFound"
-          ? `Barcode ${final.result.barcode} isn't in the product database: it's saved on the line so it's recognised next time.`
-          : problem === "noName"
-            ? `Barcode ${final.result.barcode} was found without a name: it's saved on the line.`
-            : problem === "failed"
-              ? "Couldn't reach the product database: the barcode is saved on the line."
-              : `Found ${product.name}${product.brand ? ` (${product.brand})` : ""}. Check the values.`,
-      );
+      const outcome = await barcodeInto(rowKey, final.result.barcode);
+      settle(outcome.ok ? "filled" : "failed", outcome.message);
     } else if (kind === "label" && final.result?.scan) {
       const scan = final.result.scan;
-      const outcome = await readLabelInto(rowKey, async () => scan);
+      const outcome = await readLabelInto(rowKey, async () => scan, false);
       settle(outcome.ok ? "filled" : "failed", outcome.message);
     } else {
       settle("failed", "Nothing came back from the phone.");
     }
+  }
+
+  // A barcode (from the phone, the webcam or typed) looked up and put on a
+  // line; says what happened.
+  async function barcodeInto(rowKey: string, code: string): Promise<{ ok: boolean; message: string }> {
+    const { product, problem } = await lookupBarcode(code);
+    handleBarcodeScanned(product, rowKey);
+    if (!problem) return { ok: true, message: `Found ${product.name}${product.brand ? ` (${product.brand})` : ""}. Check the values.` };
+    return {
+      ok: false,
+      message:
+        problem === "notFound"
+          ? `Barcode ${code} isn't in the product database: it's saved on the line so it's recognised next time.`
+          : problem === "noName"
+            ? `Barcode ${code} was found without a name: it's saved on the line.`
+            : "Couldn't reach the product database: the barcode is saved on the line.",
+    };
+  }
+
+  // What the webcam took, for the line it was taken for (shown in the same
+  // panel as the phone's).
+  async function fromWebcam(kind: "barcode" | "label", rowKey: string, take: () => Promise<{ ok: boolean; message: string }>) {
+    setWebcam(null);
+    const rowName = rows.find((r) => r.key === rowKey)?.name ?? "";
+    setPhoneJob({ id: "webcam", kind, rowName, status: "looking" });
+    const outcome = await take().catch((error) => ({ ok: false, message: error instanceof Error ? error.message : "Something went wrong." }));
+    setPhoneJob((job) => (job && job.id === "webcam" ? { ...job, status: outcome.ok ? "filled" : "failed", message: outcome.message } : job));
   }
 
   function updateRow(key: string, updates: Partial<ReviewRow>) {
@@ -2041,10 +2063,11 @@ export default function ReceiptReviewPage() {
     if (rowKey) void readLabelInto(rowKey, () => parseNutritionLabel(photoUri));
   }
 
-  // A label (photographed here, or on the paired phone and read on the
-  // server) into a line's nutrition and serving. Says what it did, for a
-  // browser — where alerts don't show — as well as alerting it.
-  async function readLabelInto(rowKey: string, getScan: () => Promise<NutritionLabelScan>): Promise<{ ok: boolean; message: string }> {
+  // A label (photographed here, with the webcam, or on the paired phone and
+  // read on the server) into a line's nutrition and serving. Says what it
+  // did — alerting it too, unless the caller shows it (the camera panel).
+  async function readLabelInto(rowKey: string, getScan: () => Promise<NutritionLabelScan>, alert = true): Promise<{ ok: boolean; message: string }> {
+    const say = (title: string, message: string) => alert && Alert.alert(title, message);
     const row = rows.find((r) => r.key === rowKey);
     if (!row) return { ok: false, message: "That line is gone." };
 
@@ -2053,7 +2076,7 @@ export default function ReceiptReviewPage() {
       const scan = await getScan();
       if (!scan.isNutritionLabel) {
         const message = "Couldn't read a nutrition or supplement facts label in that photo. Try again with the whole panel in frame and in focus.";
-        Alert.alert("No label found", message);
+        say("No label found", message);
         return { ok: false, message };
       }
 
@@ -2087,11 +2110,11 @@ export default function ReceiptReviewPage() {
       }
       if (scan.labelType === "supplement_facts") lines.push("Anything not on the supplement label was set to 0.");
       if (scan.notes.trim()) lines.push(`Note: ${scan.notes.trim()}`);
-      Alert.alert("Label read — check the values", lines.join("\n\n"));
+      say("Label read — check the values", lines.join("\n\n"));
       return { ok: true, message: lines.join(" ") };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Something went wrong.";
-      Alert.alert("Couldn't read label", message);
+      say("Couldn't read label", message);
       return { ok: false, message };
     } finally {
       setReadingLabelRowKey(null);
@@ -2556,8 +2579,10 @@ export default function ReceiptReviewPage() {
     updateRow,
     applyIngredientMatch,
     handleNameChange,
-    onScanBarcode: (rowKey: string) => (usePhone ? void viaPhone("barcode", rowKey) : setBarcodeScanRowKey(rowKey)),
-    onScanLabel: (rowKey: string) => (usePhone ? void viaPhone("label", rowKey) : setLabelScanRowKey(rowKey)),
+    // (On the phone: its own camera. In a browser: the paired phone, or
+    // this computer's webcam.)
+    onScanBarcode: (rowKey: string) => (usePhone ? void viaPhone("barcode", rowKey) : Platform.OS === "web" ? setWebcam({ kind: "barcode", rowKey }) : setBarcodeScanRowKey(rowKey)),
+    onScanLabel: (rowKey: string) => (usePhone ? void viaPhone("label", rowKey) : Platform.OS === "web" ? setWebcam({ kind: "label", rowKey }) : setLabelScanRowKey(rowKey)),
     readingLabelRowKey,
     onDeleteRow: handleDeleteRow,
     onOpenGroceryLink: setGroceryLinkRowKey,
@@ -3001,7 +3026,9 @@ export default function ReceiptReviewPage() {
                   : phoneJob.status === "capturing"
                     ? `Camera open on your phone`
                     : phoneJob.status === "looking"
-                      ? "Looking it up…"
+                      ? phoneJob.kind === "barcode"
+                        ? "Looking it up…"
+                        : "Reading the label…"
                       : phoneJob.status === "filled"
                         ? `${phoneJob.kind === "barcode" ? "Barcode" : "Label"} filled in`
                         : phoneJob.status === "cancelled"
@@ -3039,6 +3066,16 @@ export default function ReceiptReviewPage() {
           </View>
         </View>
       </Modal>
+
+      {/* This computer's webcam (in a browser, with "This computer" chosen). */}
+      <WebcamModal
+        visible={!!webcam}
+        mode={webcam?.kind === "barcode" ? "barcode" : "photo"}
+        title={webcam ? `${webcam.kind === "barcode" ? "Barcode" : "Nutrition label"}${rows.find((r) => r.key === webcam.rowKey)?.name ? ` for ${rows.find((r) => r.key === webcam.rowKey)!.name}` : ""}` : ""}
+        onClose={() => setWebcam(null)}
+        onBarcode={(code) => webcam && void fromWebcam("barcode", webcam.rowKey, () => barcodeInto(webcam.rowKey, code))}
+        onPhoto={(photo) => webcam && void fromWebcam("label", webcam.rowKey, () => readLabelInto(webcam.rowKey, () => parseNutritionLabelImage(photo.base64), false))}
+      />
 
       {/* Pairing a phone, the first time "My phone" is chosen. */}
       <Modal visible={showPair} transparent animationType="fade" onRequestClose={() => setShowPair(false)}>
