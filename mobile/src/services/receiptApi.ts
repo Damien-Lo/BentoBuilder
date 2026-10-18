@@ -2,6 +2,7 @@ import { File } from "expo-file-system";
 
 import { API_BASE_URL } from "@/src/config/api";
 import type { NullableNutrition } from "@/src/types/nutrition";
+import type { ReceiptReviewDraft } from "@/src/utils/receiptReviewStore";
 
 export type ReceiptNutrition = NullableNutrition;
 
@@ -90,3 +91,46 @@ export async function getLastParsedReceipt(): Promise<ReceiptParseResult | null>
   const result = await parseResponse<ReceiptParseResponse>(response);
   return result.data;
 }
+
+// --- Drafts: a scan saved on the server to review on any device ----------
+// (see server/models/ReceiptDraft.js). The photo is read there in the
+// background: "parsing", then "ready" or "failed".
+
+export type ReceiptDraftStatus = "parsing" | "ready" | "failed" | "done" | "discarded";
+
+export interface ReceiptDraftSummary {
+  _id: string;
+  status: ReceiptDraftStatus;
+  source: "phone" | "desktop";
+  error: string;
+  photoUrl: string | null;
+  storeName: string | null;
+  purchaseDate: string | null;
+  lineCount: number;
+  // A review has been started (its edits are saved).
+  reviewing: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReceiptDraft extends ReceiptDraftSummary {
+  result: ReceiptParseResult | null;
+  review: ReceiptReviewDraft | null;
+}
+
+async function draftCall<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/api/receipts/drafts${path}`, { headers: { "Content-Type": "application/json" }, ...init });
+  const result = await parseResponse<{ success: boolean; data: T }>(response);
+  return result.data;
+}
+
+// A photo taken on the phone, saved to review later (on any device).
+export async function createReceiptDraft(photoUri: string, source: "phone" | "desktop" = "phone"): Promise<ReceiptDraftSummary> {
+  const imageBase64 = await new File(photoUri).base64();
+  return draftCall<ReceiptDraftSummary>("", { method: "POST", body: JSON.stringify({ imageBase64, mediaType: "image/jpeg", source }) });
+}
+
+export const getReceiptDrafts = () => draftCall<ReceiptDraftSummary[]>("");
+export const getReceiptDraft = (id: string) => draftCall<ReceiptDraft>(`/${id}`);
+export const saveReceiptDraftReview = (id: string, review: ReceiptReviewDraft) => draftCall<ReceiptDraftSummary>(`/${id}`, { method: "PATCH", body: JSON.stringify({ review }) });
+export const finishReceiptDraft = (id: string, status: "done" | "discarded") => draftCall<ReceiptDraftSummary>(`/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });

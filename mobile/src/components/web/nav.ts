@@ -54,7 +54,7 @@ export const WEB_SECTIONS: WebSection[] = [
       { label: "Recipes & meals", path: "/RecipesMainPage", also: ["/recipes", "/meals", "/restaurant-meals"] },
       { label: "Pantry", path: "/PantryMainPage", also: ["/pantry", "/ingredients"] },
       { label: "Grocery list", path: "/grocery-list" },
-      { label: "Receipts", path: "/receipts", planned: true },
+      { label: "Receipts", path: "/receipts" },
     ],
   },
   {

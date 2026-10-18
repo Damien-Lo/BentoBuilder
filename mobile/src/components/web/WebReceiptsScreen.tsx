@@ -1,87 +1,136 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Text, View } from "react-native";
+import { Image } from "expo-image";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 
-import { Card, PageTitle, Row, WEB, WebPage } from "./ui";
+import { compactDate } from "@/src/components/web/fields";
+import { finishReceiptDraft, getReceiptDrafts, type ReceiptDraftSummary } from "@/src/services/receiptApi";
+import { photoUri } from "@/src/utils/photos";
 
-// Receipts on the desktop — a design, not a working page yet.
+import { Card, PageTitle, WEB, WebPage } from "./ui";
+
+type Hover = { hovered?: boolean };
+
+// Receipts on the desktop: scans waiting to be reviewed. A receipt is
+// photographed on the phone and saved with "Review on desktop"; it's read
+// on the server (a few seconds) and then reviewed here, where every line has
+// room, with the photo to check against. The review itself is the same
+// screen as on the phone (receipts/review), working on the saved receipt.
 //
-// Reviewing a scanned receipt is the one job that's cramped on a phone:
-// every line needs an ingredient match, an amount, a unit, a price, a
-// location and an expiry. The plan is to keep the camera on the phone and
-// move the review here, where each line can be a full table row.
-//
-// What it needs that doesn't exist yet: today a scan is parsed and handed
-// straight back to the phone that took it, and nothing is kept. For the
-// phone to scan and the desktop to review, the parsed receipt has to be
-// saved on the server as a draft that either can open.
+// Starting a receipt from here (a photo from this computer, or the phone's
+// camera) comes next.
 
-const STEPS: { icon: keyof typeof Ionicons.glyphMap; title: string; text: string }[] = [
-  { icon: "camera-outline", title: "Scan on your phone", text: "Photograph the receipt as now. Instead of opening the review there, choose “Review on desktop” and it's saved as a draft." },
-  { icon: "desktop-outline", title: "Review it here", text: "The draft appears on this page. Each line is a row: matched ingredient, amount, unit, price, where it goes and when it expires." },
-  { icon: "basket-outline", title: "Add to the pantry", text: "Fix what was misread, skip what isn't food, then add the lot in one go. Lines that fail stay on the page to retry." },
-];
-
-const COLUMNS = ["Receipt line", "Ingredient", "Amount", "Unit", "Price", "Location", "Expires", ""];
+const STATUS: Record<string, { label: string; fg: string; bg: string }> = {
+  parsing: { label: "Reading…", fg: "#B45309", bg: "#FEF3C7" },
+  ready: { label: "Ready to review", fg: "#1D4ED8", bg: "#DBEAFE" },
+  reviewing: { label: "In progress", fg: "#7C3AED", bg: "#EDE9FE" },
+  failed: { label: "Couldn't read", fg: "#B91C1C", bg: "#FEE2E2" },
+};
 
 export function WebReceiptsScreen() {
+  const router = useRouter();
+  const [drafts, setDrafts] = useState<ReceiptDraftSummary[] | null>(null);
+
+  const load = useCallback(() => {
+    getReceiptDrafts()
+      .then(setDrafts)
+      .catch(() => setDrafts((prev) => prev ?? []));
+  }, []);
+  useFocusEffect(load);
+  // (While one's being read, look again every few seconds.)
+  const reading = (drafts ?? []).some((d) => d.status === "parsing");
+  useEffect(() => {
+    if (!reading) return;
+    const timer = setInterval(load, 3000);
+    return () => clearInterval(timer);
+  }, [reading, load]);
+
+  function discard(draft: ReceiptDraftSummary) {
+    const go = () => void finishReceiptDraft(draft._id, "discarded").then(load, () => {});
+    if (typeof window !== "undefined" && window.confirm) {
+      if (window.confirm("Throw this receipt away? Nothing from it has been added to the pantry.")) go();
+    } else {
+      Alert.alert("Throw this receipt away?", undefined, [{ text: "Cancel", style: "cancel" }, { text: "Discard", style: "destructive", onPress: go }]);
+    }
+  }
+
+  const open = (draft: ReceiptDraftSummary) => router.push({ pathname: "/receipts/review", params: { draft: draft._id } });
+
   return (
     <WebPage>
-      <PageTitle title="Receipts" subtitle="Planned: scan on the phone, review on the big screen" />
+      <PageTitle title="Receipts" subtitle={drafts?.length ? `${drafts.length} to review` : "Scanned on your phone, reviewed here"} />
 
-      <Row>
-        {STEPS.map((step, index) => (
-          <Card key={step.title} style={{ flex: 1, minWidth: 260 }}>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: WEB.blueSoft }}>
-                <Ionicons name={step.icon} size={18} color={WEB.blue} />
-              </View>
-              <Text style={{ marginLeft: 10, fontSize: 12, fontWeight: "700", color: WEB.faint }}>STEP {index + 1}</Text>
+      {drafts === null ? (
+        <ActivityIndicator style={{ marginTop: 40 }} color={WEB.blue} />
+      ) : drafts.length === 0 ? (
+        <Card>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View style={{ width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: WEB.blueSoft }}>
+              <Ionicons name="receipt-outline" size={20} color={WEB.blue} />
             </View>
-            <Text style={{ marginTop: 12, fontSize: 15, fontWeight: "700", color: WEB.text }}>{step.title}</Text>
-            <Text style={{ marginTop: 4, fontSize: 13, lineHeight: 19, color: WEB.muted }}>{step.text}</Text>
-          </Card>
-        ))}
-      </Row>
-
-      {/* How the review would be laid out */}
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 16 }}>
-        <View style={{ width: 280, borderRadius: 16, borderWidth: 1.5, borderStyle: "dashed", borderColor: "#CBD5E1", backgroundColor: "#FBFCFE", padding: 16 }}>
-          <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 1, color: WEB.faint }}>DRAFTS</Text>
-          {["Whole Foods · today", "Trader Joe's · Sunday", "H Mart · last week"].map((label, i) => (
-            <View key={label} style={{ marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: i === 0 ? "#93C5FD" : WEB.border, backgroundColor: i === 0 ? WEB.blueSoft : "#FFFFFF" }}>
-              <Text style={{ fontSize: 13, fontWeight: "600", color: WEB.body }}>{label}</Text>
-              <Text style={{ marginTop: 2, fontSize: 12, color: WEB.faint }}>{[14, 9, 22][i]} lines · {[3, 0, 5][i]} to check</Text>
-            </View>
-          ))}
-          <Text style={{ marginTop: 12, fontSize: 11, lineHeight: 16, color: WEB.faint }}>Example only — scans waiting to be reviewed would list here.</Text>
-        </View>
-
-        <View style={{ flex: 1, borderRadius: 16, borderWidth: 1.5, borderStyle: "dashed", borderColor: "#CBD5E1", backgroundColor: "#FBFCFE", overflow: "hidden" }}>
-          <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: WEB.border, backgroundColor: "#F8FAFC" }}>
-            {COLUMNS.map((column, i) => (
-              <View key={i} style={{ flex: i === 0 || i === 1 ? 2 : 1, height: 38, justifyContent: "center", paddingHorizontal: 12 }}>
-                <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.6, color: WEB.muted }}>{column.toUpperCase()}</Text>
-              </View>
-            ))}
+            <Text style={{ marginLeft: 12, fontSize: 15, fontWeight: "700", color: WEB.text }}>No receipts waiting</Text>
           </View>
-          {Array.from({ length: 6 }, (_, row) => (
-            <View key={row} style={{ flexDirection: "row", alignItems: "center", height: 46, borderBottomWidth: 1, borderBottomColor: WEB.line }}>
-              {COLUMNS.map((_, i) => (
-                <View key={i} style={{ flex: i === 0 || i === 1 ? 2 : 1, paddingHorizontal: 12 }}>
-                  <View style={{ height: 10, borderRadius: 5, backgroundColor: "#E2E8F0", width: `${[78, 64, 40, 34, 46, 58, 52, 30][i] - (row % 3) * 6}%` }} />
+          <Text style={{ marginTop: 10, fontSize: 13, lineHeight: 20, color: WEB.muted }}>
+            On your phone, scan a receipt from the Pantry or the Grocery list and choose <Text style={{ fontWeight: "700", color: WEB.body }}>Review on desktop</Text>. It shows up here
+            while it&apos;s read, then you can check each line against the photo and add it all to the pantry.
+          </Text>
+        </Card>
+      ) : (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16 }}>
+          {drafts.map((draft) => {
+            const state = STATUS[draft.reviewing && draft.status === "ready" ? "reviewing" : draft.status] ?? STATUS.ready;
+            const canOpen = draft.status === "ready";
+            const uri = photoUri(draft.photoUrl);
+            const when = draft.purchaseDate ? compactDate(draft.purchaseDate.slice(0, 10)) : null;
+            return (
+              <Pressable
+                key={draft._id}
+                disabled={!canOpen}
+                onPress={() => open(draft)}
+                style={({ hovered }: Hover) => ({
+                  width: 260,
+                  borderRadius: 16,
+                  overflow: "hidden",
+                  borderWidth: 1,
+                  borderColor: hovered && canOpen ? "#93C5FD" : WEB.border,
+                  backgroundColor: WEB.card,
+                  boxShadow: hovered && canOpen ? "0 8px 20px rgba(15,23,42,0.10)" : undefined,
+                })}
+              >
+                <View style={{ height: 180, backgroundColor: "#E2E8F0" }}>
+                  {uri ? <Image source={{ uri }} style={{ width: "100%", height: "100%" }} contentFit="cover" contentPosition="top" transition={120} /> : null}
                 </View>
-              ))}
-            </View>
-          ))}
-          <View style={{ padding: 14, alignItems: "center" }}>
-            <Text style={{ fontSize: 13, fontWeight: "700", color: WEB.body }}>The review table</Text>
-            <Text style={{ marginTop: 3, maxWidth: 520, textAlign: "center", fontSize: 12, lineHeight: 17, color: WEB.muted }}>
-              One row per receipt line, editable in place, with the receipt photo alongside to check against. Scanning and reviewing on the
-              phone stays exactly as it is.
-            </Text>
-          </View>
+                <View style={{ padding: 14 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: "700", color: WEB.text }}>
+                      {draft.storeName || (draft.status === "parsing" ? "New receipt" : "Receipt")}
+                    </Text>
+                    <Pressable onPress={() => discard(draft)} hitSlop={8} accessibilityLabel="Discard this receipt">
+                      {({ hovered }: Hover) => <Ionicons name="trash-outline" size={16} color={hovered ? "#DC2626" : WEB.faint} />}
+                    </Pressable>
+                  </View>
+                  <Text style={{ marginTop: 2, fontSize: 12, color: WEB.muted }}>
+                    {[when, draft.lineCount ? `${draft.lineCount} line${draft.lineCount === 1 ? "" : "s"}` : null, `scanned ${compactDate(draft.createdAt.slice(0, 10))}`].filter(Boolean).join(" · ")}
+                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: state.bg }}>
+                      {draft.status === "parsing" && <ActivityIndicator size="small" color={state.fg} style={{ marginRight: 5, transform: [{ scale: 0.7 }] }} />}
+                      <Text style={{ fontSize: 11, fontWeight: "700", color: state.fg }}>{state.label}</Text>
+                    </View>
+                    {canOpen && <Text style={{ marginLeft: "auto", fontSize: 12, fontWeight: "600", color: WEB.blue }}>{draft.reviewing ? "Continue" : "Review"} ›</Text>}
+                  </View>
+                  {draft.status === "failed" && !!draft.error && (
+                    <Text numberOfLines={2} style={{ marginTop: 6, fontSize: 11, color: WEB.faint }}>
+                      {draft.error}
+                    </Text>
+                  )}
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
-      </View>
+      )}
     </WebPage>
   );
 }

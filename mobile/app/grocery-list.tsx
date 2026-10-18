@@ -74,6 +74,7 @@ import {
 } from "@/src/utils/pantryDefaults";
 import { groupGroceryItemsByStore } from "@/src/utils/groceryGrouping";
 import { ReceiptScannerModal } from "@/src/components/ReceiptScannerModal";
+import { chooseReceiptReview } from "@/src/components/receipts/chooseReceiptReview";
 import { parseReceipt } from "@/src/services/receiptApi";
 import { clearReviewDraft, setPendingReceipt } from "@/src/utils/receiptReviewStore";
 
@@ -1547,24 +1548,30 @@ export default function GroceryListScreen() {
         onClose={() => setReceiptScannerVisible(false)}
         onCaptured={(photoUri) => {
           setReceiptScannerVisible(false);
-          setParsingReceipt(true);
+          // Here, or saved for the desktop (see chooseReceiptReview).
+          chooseReceiptReview(photoUri, {
+            busy: setParsingReceipt,
+            reviewNow: () => {
+              setParsingReceipt(true);
 
-          parseReceipt(photoUri)
-            .then((result) => {
-              // A fresh scan supersedes any unfinished review still saved on
-              // disk — otherwise the review screen would ignore this new
-              // result and resume the stale draft instead.
-              void clearReviewDraft();
-              setPendingReceipt(result);
-              router.push("/receipts/review");
-            })
-            .catch((error) => {
-              Alert.alert(
-                "Couldn't read receipt",
-                error instanceof Error ? error.message : "Something went wrong parsing the receipt.",
-              );
-            })
-            .finally(() => setParsingReceipt(false));
+              parseReceipt(photoUri)
+                .then((result) => {
+                  // A fresh scan supersedes any unfinished review still saved on
+                  // disk — otherwise the review screen would ignore this new
+                  // result and resume the stale draft instead.
+                  void clearReviewDraft();
+                  setPendingReceipt(result);
+                  router.push("/receipts/review");
+                })
+                .catch((error) => {
+                  Alert.alert(
+                    "Couldn't read receipt",
+                    error instanceof Error ? error.message : "Something went wrong parsing the receipt.",
+                  );
+                })
+                .finally(() => setParsingReceipt(false));
+            },
+          });
         }}
       />
 

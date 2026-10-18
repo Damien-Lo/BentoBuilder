@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { usePaneDimensions } from "@/src/utils/pane";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { Image } from "expo-image";
+import { photoUri as photoSource } from "@/src/utils/photos";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -55,7 +57,10 @@ import {
 } from "@/src/services/optionsApi";
 import { addIngredientToPantry, getPantryItems } from "@/src/services/pantryApi";
 import {
+  finishReceiptDraft,
   getLastParsedReceipt,
+  getReceiptDraft,
+  saveReceiptDraftReview,
   type ReceiptLineItem,
   type ReceiptNutrition,
   type ReceiptParseResult,
@@ -152,6 +157,11 @@ interface ReviewRow {
   // keystroke (typing "5" over a snapped-back "1" becomes "15"). Parsed
   // with Number(...) wherever it's actually used for math.
   defaultPortionAmount: string;
+  // A matched ingredient's own serving unit: its catalog serving and
+  // nutrition are shown as they are ("100 g"), never restated in what was
+  // bought ("1 item"), so editing how much was bought can't change them.
+  // Unset for a new ingredient, whose serving is in `unit` as above.
+  portionUnit?: string;
 
   // Only meaningful while matchedIngredientId is null, like the proposal
   // fields above - a real, reusable unit conversion (e.g. "1 stalk = 15
@@ -185,6 +195,62 @@ function convertPortionAmount(
   const converted = convertUnits(amount, fromUnit, targetUnit, customConversions);
   // Rounded to 3 decimals, so 100 g in lb reads 0.22, not 0.220462.
   return converted == null ? 1 : Math.round(converted * 1000) / 1000;
+}
+
+// A matched, not-yet-added line with its ingredient's serving and nutrition
+// from the catalog (see ReviewRow.portionUnit).
+function withCatalogServing(row: ReviewRow, ingredients: Ingredient[]): ReviewRow {
+  if (!row.matchedIngredientId || row.submitted) return row;
+  const ingredient = ingredients.find((ing) => ing._id === row.matchedIngredientId);
+  if (!ingredient) return row;
+  // Its conversions as the catalog has them now, plus any added in this
+  // review — Confirm saves this list to the ingredient, so a stale one
+  // would undo the catalog's.
+  const key = (c: { unit: string; baseUnit: string }) => `${c.unit.trim().toLowerCase()}|${c.baseUnit.trim().toLowerCase()}`;
+  const catalog = ingredient.unitConversions ?? [];
+  const added = (row.unitConversions ?? []).filter((c) => !catalog.some((k) => key(k) === key(c)));
+  return {
+    ...row,
+    nutrition: toReceiptNutrition(ingredient.nutrition),
+    defaultPortionAmount: String(ingredient.defaultPortionAmount ?? 1),
+    portionUnit: ingredient.defaultPortionUnit ?? "item",
+    unitConversions: [...catalog, ...added],
+  };
+}
+
+// How much of a matched ingredient was bought, in its usual unit — the
+// one it was last bought in (or its own unit, if never). For every
+// ingredient alike:
+//   - A bare count on the receipt ("1 item", "2 ea") is a number of packs
+//     when the ingredient knows its pack size (a "pack" conversion): 1 pack
+//     of fish cakes is 4 pieces. Without one, the count is put in the usual
+//     unit as it is, if that's a count too (3 lemons), to be corrected —
+//     the line shows what the receipt said. Against a weight or volume it's
+//     left as the receipt has it: there's no telling how much it was.
+//   - A real weight or volume ("1.2 lb") is converted when it can be.
+// "item" itself is never treated as a conversion: it means a lemon on one
+// receipt and a pack on the next.
+// ("ct" and "pcs" aren't among them: "EGGS 12 CT" is 12 eggs, not 12 packs.)
+const BARE_COUNTS = new Set(["", "item", "items", "each", "ea", "unit", "units", "pack", "packs", "pkg", "package", "packages"]);
+const PACK_NAMES = ["pack", "package", "pkg"];
+const isMeasure = (unit: string) => convertUnits(1, unit, "g", []) != null || convertUnits(1, unit, "ml", []) != null;
+function boughtLikeLastTime(
+  quantity: number,
+  unit: string,
+  usualUnit: string | null | undefined,
+  conversions: CustomUnitConversion[],
+): { quantity: number; unit: string } {
+  const round = (n: number) => Math.round(n * 1000) / 1000;
+  if (!usualUnit || usualUnit.trim().toLowerCase() === unit.trim().toLowerCase()) return { quantity, unit };
+  if (BARE_COUNTS.has(unit.trim().toLowerCase())) {
+    for (const pack of PACK_NAMES) {
+      const inUsual = convertUnits(quantity, pack, usualUnit, conversions);
+      if (inUsual != null) return { quantity: round(inUsual), unit: usualUnit };
+    }
+    return isMeasure(usualUnit) ? { quantity, unit } : { quantity, unit: usualUnit };
+  }
+  const converted = convertUnits(quantity, unit, usualUnit, conversions);
+  return converted != null ? { quantity: round(converted), unit: usualUnit } : { quantity, unit };
 }
 
 // Scales `base` (nutrition per baseAmount/baseUnit) onto quantity/unit —
@@ -299,6 +365,7 @@ function normalizeDraftRow(row: Partial<ReviewRow>): ReviewRow {
     barcode: row.barcode ?? null,
     nutrition: { ...unknownNutrition(), ...(row.nutrition ?? {}) },
     defaultPortionAmount: text(row.defaultPortionAmount),
+    portionUnit: row.portionUnit ? text(row.portionUnit) : undefined,
     unitConversions: Array.isArray(row.unitConversions) ? row.unitConversions : [],
   };
 }
@@ -539,8 +606,11 @@ function NutritionCell({
           placeholder="—"
           placeholderTextColor="#CBD5E1"
           className={`flex-1 py-0.5 text-[15px] font-medium ${editable ? "text-slate-950" : "text-slate-500"}`}
+          // (In a browser an input keeps a default width; let it shrink so
+          // the unit stays inside the box.)
+          style={{ minWidth: 0 }}
         />
-        <Text className="text-[11px] text-slate-400">{unit}</Text>
+        <Text className="ml-1 text-[11px] text-slate-400" style={{ flexShrink: 0 }}>{unit}</Text>
       </View>
     </View>
   );
@@ -654,9 +724,15 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
   // A matched ingredient's own conversions come straight from the catalog;
   // a brand-new one has no catalog entry yet, so its only source is
   // whatever's been entered in this row's own Unit conversions section below.
+  // (For a matched one, what's been entered here too, so the total shows
+  // as soon as a conversion's added — it's saved to the ingredient on
+  // Confirm.)
   const customConversions = matchedIngredient
-    ? getIngredientConversions(matchedIngredient, [], ingredients)
+    ? [...row.unitConversions, ...getIngredientConversions(matchedIngredient, [], ingredients)]
     : row.unitConversions;
+  // The unit the serving and nutrition are in: the catalog's for a matched
+  // ingredient, the unit bought for a new one (see ReviewRow.portionUnit).
+  const servingUnit = row.portionUnit ?? row.unit;
 
   const filledExtended = EXTENDED_NUTRITION_FIELDS.filter((f) => row.nutrition[f] != null).length;
   const updateNutrient = (field: keyof ReceiptNutrition, value: number | null) =>
@@ -697,6 +773,81 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         updateRow(row.key, { storageLocationId: option._id, storageLocationName: option.name })
       }
     />
+  );
+
+  // (Expiry: under the nutrition on a phone; in the left column, beside it,
+  // in a desktop browser. Unit conversions follow the nutrition either way.)
+  const expiryBlock = (
+      <View {...expirySection.wrapperProps}>
+        <View className="mb-1.5 mt-4 flex-row items-center">
+          <Text className="flex-1 text-[13px] font-semibold text-slate-700">Expiry date</Text>
+          {row.expirySuggestion && !row.expiryTouched && row.expiryDate ? (
+            <View className="rounded-full bg-slate-100 px-2 py-0.5">
+              <Text className="text-[10px] font-medium text-slate-500">auto-filled</Text>
+            </View>
+          ) : null}
+        </View>
+        <View className="flex-row gap-2">
+          <Pressable
+            onPress={() => {
+              expirySection.trigger();
+              setPickingExpiry(true);
+            }}
+            className="flex-1 flex-row items-center rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-50"
+            style={{ height: 44 }}
+          >
+            <Ionicons name="calendar-outline" size={17} color="#64748B" />
+            <Text className={`ml-2 flex-1 text-sm ${row.expiryDate ? "text-slate-950" : "text-slate-400"}`}>
+              {formatDateDisplay(row.expiryDate) ?? "Pick a date"}
+            </Text>
+            <Ionicons name="chevron-down" size={14} color="#64748B" />
+          </Pressable>
+          <Pressable
+            className="flex-row items-center rounded-xl bg-blue-50 px-3 active:bg-blue-100"
+            style={{ height: 44 }}
+            onPress={() => setShowDurationPicker((current) => !current)}
+          >
+            <Ionicons name="time-outline" size={16} color="#1D4ED8" />
+            <Text className="ml-1.5 text-xs font-semibold text-blue-700">
+              {showDurationPicker ? "Hide" : "Use duration"}
+            </Text>
+          </Pressable>
+        </View>
+
+        {showDurationPicker && (
+          <View className="mt-2">
+            <DurationExpiryInput
+              purchaseDate={purchaseDate}
+              initialAmount={row.expirySuggestion ? String(row.expirySuggestion.amount) : undefined}
+              initialUnit={row.expirySuggestion?.unit}
+              onApply={(value) => updateRow(row.key, { expiryDate: value, expiryTouched: true })}
+            />
+          </View>
+        )}
+      </View>
+  );
+  const conversionsBlock = (
+    <>
+        {/* Available for a matched ingredient too, not just a brand-new one —
+            a receipt is often the first time an ingredient's real conversion
+            (e.g. "1 box = 340g") turns up, and editing it here saves straight
+            back to that ingredient's own catalog record on Confirm (see
+            handleConfirm) rather than being a one-off, thrown away after this
+            review the way it used to be. */}
+        <View className="mt-5 border-t border-slate-100 pt-4">
+          <View className="mb-2 flex-row items-center">
+            <Ionicons name="scale-outline" size={17} color="#2563EB" />
+            <Text className="ml-2 text-[13px] font-semibold text-slate-700">Unit conversions</Text>
+            <Text className="ml-1.5 text-[11px] text-slate-400">{row.unit || "unit"} ↔ other units</Text>
+          </View>
+          <UnitConversionsEditor
+            compact
+            conversions={row.unitConversions}
+            unitOptions={unitOptions}
+            onChange={(conversions) => updateRow(row.key, { unitConversions: conversions })}
+          />
+        </View>
+    </>
   );
 
   return (
@@ -791,6 +942,12 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             than the ScrollView itself. */}
         <View ref={scrollAnchorRef} collapsable={false} />
 
+        {/* In a desktop browser: two columns, so a line fits on screen —
+            what was bought and where it goes on the left, its nutrition on
+            the right. */}
+        <View style={layout.wide ? { flexDirection: "row", gap: 24, alignItems: "flex-start" } : undefined}>
+        <View style={layout.wide ? { flex: 1, minWidth: 0 } : undefined}>
+
         {!row.submitted && !isRowComplete && (
           <View className="mt-3 flex-row items-start rounded-xl bg-amber-50 px-3 py-2.5">
             <Ionicons name="alert-circle" size={16} color="#D97706" />
@@ -861,6 +1018,23 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             </View>
           </View>
         </View>
+
+        {/* What the receipt itself said, when it's been put another way (a
+            pack into pieces) or may need correcting (a bare count). Not on
+            a line added by hand. */}
+        {(() => {
+          const li = row.lineItem;
+          if (!li?.rawText || row.submitted) return null;
+          const printed = `${li.quantity} ${li.unit || "item"}`.trim();
+          const now = `${row.quantity} ${row.unit}`.trim();
+          if (printed.toLowerCase() === now.toLowerCase()) return null;
+          return (
+            <Text className="mt-1.5 text-[11px] text-slate-400">
+              On the receipt: {printed}
+              {li.packageQuantity != null ? ` (${li.packageQuantity} ${li.packageUnit ?? ""} each)` : ""} — check it&apos;s right.
+            </Text>
+          );
+        })()}
 
         {/* A new ingredient pairs the storage location with Branded /
             Generic; a matched one only needs the location. */}
@@ -975,6 +1149,10 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           </View>
         )}
 
+        {layout.wide && expiryBlock}
+        </View>
+
+        <View style={layout.wide ? { flex: 1, minWidth: 0 } : undefined}>
         {/* Serving size nutrition is defined for — independent of how much was
             bought above, but always the *same unit* as that (there's only
             ever one unit in play for a row - if the ingredient's natural
@@ -1009,14 +1187,16 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             <View className="w-28 flex-row items-center rounded-xl border border-slate-200 bg-white px-3" style={{ height: 40 }}>
               <TextInput
                 value={row.defaultPortionAmount}
+                editable={isNew}
                 onChangeText={(value) => updateRow(row.key, { defaultPortionAmount: value })}
                 onFocus={servingSizeSection.trigger}
                 keyboardType="decimal-pad"
                 placeholder="Amt"
                 placeholderTextColor="#94A3B8"
-                className="flex-1 text-sm text-slate-950"
+                className={`flex-1 text-sm ${isNew ? "text-slate-950" : "text-slate-500"}`}
+                style={{ minWidth: 0 }}
               />
-              <Text className="ml-1 text-sm text-slate-400">{row.unit || "unit"}</Text>
+              <Text className="ml-1 text-sm text-slate-400" style={{ flexShrink: 0 }}>{servingUnit || "unit"}</Text>
             </View>
             <Text className="ml-2.5 flex-1 text-[11px] leading-4 text-slate-400">
               {isNew
@@ -1091,12 +1271,24 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             ? scaleNutritionToQuantity(
                 row.nutrition,
                 Number(row.defaultPortionAmount),
-                row.unit,
+                servingUnit,
                 qty,
                 row.unit,
                 customConversions,
               )
             : null;
+          // (Bought in a unit the serving isn't in, with nothing to say how
+          // they relate: ask, rather than guess.)
+          if (Number.isFinite(qty) && qty > 0 && !totalNutrition && servingUnit && row.unit && servingUnit.trim().toLowerCase() !== row.unit.trim().toLowerCase()) {
+            return (
+              <View className="mt-2 flex-row items-start rounded-xl bg-amber-50 px-3 py-2">
+                <Ionicons name="scale-outline" size={14} color="#D97706" />
+                <Text className="ml-2 flex-1 text-[11px] leading-4 text-amber-800">
+                  How much is 1 {row.unit.replace(/s$/, "")} in {servingUnit}? Add it under Unit conversions below to see the total for all {row.quantity} {row.unit}. It&apos;s saved to the ingredient.
+                </Text>
+              </View>
+            );
+          }
           return (
             <Text className="mt-2 text-[11px] text-slate-400">
               ≈ all {row.quantity || "?"} {row.unit}: {totalNutrition?.calories ?? "—"} kcal ·{" "}
@@ -1106,72 +1298,11 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           );
         })()}
 
-        <View {...expirySection.wrapperProps}>
-          <View className="mb-1.5 mt-4 flex-row items-center">
-            <Text className="flex-1 text-[13px] font-semibold text-slate-700">Expiry date</Text>
-            {row.expirySuggestion && !row.expiryTouched && row.expiryDate ? (
-              <View className="rounded-full bg-slate-100 px-2 py-0.5">
-                <Text className="text-[10px] font-medium text-slate-500">auto-filled</Text>
-              </View>
-            ) : null}
-          </View>
-          <View className="flex-row gap-2">
-            <Pressable
-              onPress={() => {
-                expirySection.trigger();
-                setPickingExpiry(true);
-              }}
-              className="flex-1 flex-row items-center rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-50"
-              style={{ height: 44 }}
-            >
-              <Ionicons name="calendar-outline" size={17} color="#64748B" />
-              <Text className={`ml-2 flex-1 text-sm ${row.expiryDate ? "text-slate-950" : "text-slate-400"}`}>
-                {formatDateDisplay(row.expiryDate) ?? "Pick a date"}
-              </Text>
-              <Ionicons name="chevron-down" size={14} color="#64748B" />
-            </Pressable>
-            <Pressable
-              className="flex-row items-center rounded-xl bg-blue-50 px-3 active:bg-blue-100"
-              style={{ height: 44 }}
-              onPress={() => setShowDurationPicker((current) => !current)}
-            >
-              <Ionicons name="time-outline" size={16} color="#1D4ED8" />
-              <Text className="ml-1.5 text-xs font-semibold text-blue-700">
-                {showDurationPicker ? "Hide" : "Use duration"}
-              </Text>
-            </Pressable>
-          </View>
+        {!layout.wide && expiryBlock}
 
-          {showDurationPicker && (
-            <View className="mt-2">
-              <DurationExpiryInput
-                purchaseDate={purchaseDate}
-                initialAmount={row.expirySuggestion ? String(row.expirySuggestion.amount) : undefined}
-                initialUnit={row.expirySuggestion?.unit}
-                onApply={(value) => updateRow(row.key, { expiryDate: value, expiryTouched: true })}
-              />
-            </View>
-          )}
+        {conversionsBlock}
+
         </View>
-
-        {/* Available for a matched ingredient too, not just a brand-new one —
-            a receipt is often the first time an ingredient's real conversion
-            (e.g. "1 box = 340g") turns up, and editing it here saves straight
-            back to that ingredient's own catalog record on Confirm (see
-            handleConfirm) rather than being a one-off, thrown away after this
-            review the way it used to be. */}
-        <View className="mt-5 border-t border-slate-100 pt-4">
-          <View className="mb-2 flex-row items-center">
-            <Ionicons name="scale-outline" size={17} color="#2563EB" />
-            <Text className="ml-2 text-[13px] font-semibold text-slate-700">Unit conversions</Text>
-            <Text className="ml-1.5 text-[11px] text-slate-400">{row.unit || "unit"} ↔ other units</Text>
-          </View>
-          <UnitConversionsEditor
-            compact
-            conversions={row.unitConversions}
-            unitOptions={unitOptions}
-            onChange={(conversions) => updateRow(row.key, { unitConversions: conversions })}
-          />
         </View>
 
         {row.error && <Text className="mt-2 text-xs text-red-600">{row.error}</Text>}
@@ -1262,6 +1393,14 @@ function ReceiptRowSummary({
 
 export default function ReceiptReviewPage() {
   const router = useRouter();
+  // A receipt saved on the server to review (see services/receiptApi.ts
+  // drafts) — scanned on a phone, reviewed here, or the other way round. Its
+  // edits are saved to it, not to this device. Without one, the review is
+  // of a scan just taken on this device, as before.
+  const { draft: draftParam } = useLocalSearchParams<{ draft?: string }>();
+  const draftId = typeof draftParam === "string" && draftParam ? draftParam : null;
+  const [draftPhoto, setDraftPhoto] = useState<string | null>(null);
+  const [showPhoto, setShowPhoto] = useState(false);
   const { width: windowWidth, height: windowHeight } = usePaneDimensions();
   const pagerRef = useRef<FlatList<ReviewRow>>(null);
   const layout = useWideForm();
@@ -1461,19 +1600,25 @@ export default function ReceiptReviewPage() {
             // by however many of that product were printed (2 boxes @ 500g
             // each = 1000g total), since a mass/volume unit is far more
             // useful to have on file than a bare discrete count.
-            const resultingUnit = lineItem.packageQuantity != null
+            const printedUnit = lineItem.packageQuantity != null
               ? lineItem.packageUnit ?? lineItem.unit
               : lineItem.unit;
-            const resultingQuantity = lineItem.packageQuantity != null
+            const printedQuantity = lineItem.packageQuantity != null
               ? lineItem.quantity * lineItem.packageQuantity
               : lineItem.quantity;
+            // How much, in the ingredient's usual unit (see
+            // boughtLikeLastTime).
+            const bought = matched
+              ? boughtLikeLastTime(printedQuantity, printedUnit, history[0]?.quantityUnit || matched.defaultPortionUnit, getIngredientConversions(matched, [], ingredientList))
+              : { quantity: printedQuantity, unit: printedUnit };
+            const resultingUnit = bought.unit;
+            const resultingQuantity = bought.quantity;
 
-            const portionAmount = convertPortionAmount(
-              matched?.defaultPortionAmount ?? proposal?.defaultPortionAmount ?? 1,
-              matched?.defaultPortionUnit ?? proposal?.defaultPortionUnit ?? "item",
-              resultingUnit,
-              matched ? getIngredientConversions(matched, [], ingredientList) : [],
-            );
+            // A matched ingredient's serving is its catalog's, as it is; a
+            // proposal's is put in the unit bought.
+            const portionAmount = matched
+              ? matched.defaultPortionAmount ?? 1
+              : convertPortionAmount(proposal?.defaultPortionAmount ?? 1, proposal?.defaultPortionUnit ?? "item", resultingUnit, []);
 
             return {
               key: `${index}-${lineItem.rawText}`,
@@ -1503,6 +1648,7 @@ export default function ReceiptReviewPage() {
               barcode: null,
               nutrition: portionNutrition,
               defaultPortionAmount: String(portionAmount),
+              portionUnit: matched ? matched.defaultPortionUnit ?? "item" : undefined,
               unitConversions: matched?.unitConversions ?? [],
               submitted: false,
             };
@@ -1526,7 +1672,35 @@ export default function ReceiptReviewPage() {
       // already consumed.
       const pending = capturedPending;
 
-      if (pending) {
+      let draft: Awaited<ReturnType<typeof loadReviewDraft>> = null;
+      if (draftId) {
+        let saved: Awaited<ReturnType<typeof getReceiptDraft>>;
+        try {
+          saved = await getReceiptDraft(draftId);
+        } catch (error) {
+          if (cancelled) return;
+          setLoadError(error instanceof Error ? error.message : "Couldn't load this receipt.");
+          setLoading(false);
+          return;
+        }
+        if (cancelled) return;
+        setDraftPhoto(saved.photoUrl);
+        const savedRows = Array.isArray(saved.review?.rows) ? saved.review!.rows : [];
+        if (savedRows.length) {
+          draft = saved.review;
+        } else if (saved.status === "ready" && saved.result) {
+          setReceipt(saved.result);
+          setStoreName(saved.result.storeName ?? "");
+          setStoreDraft(saved.result.storeName ?? "");
+          if (saved.result.purchaseDate) setPurchaseDate(saved.result.purchaseDate);
+          await loadReferenceData(saved.result);
+          return;
+        } else {
+          setLoadError(saved.status === "failed" ? saved.error || "Couldn't read this receipt." : saved.status === "parsing" ? "Still reading this receipt: try again in a moment." : "This receipt has already been dealt with.");
+          setLoading(false);
+          return;
+        }
+      } else if (pending) {
         setReceipt(pending);
         setStoreName(pending.storeName ?? "");
         setStoreDraft(pending.storeName ?? "");
@@ -1535,7 +1709,7 @@ export default function ReceiptReviewPage() {
         return;
       }
 
-      const draft = await loadReviewDraft();
+      if (!draftId) draft = await loadReviewDraft();
       if (cancelled) return;
 
       if (draft && draft.rows.length > 0) {
@@ -1552,7 +1726,12 @@ export default function ReceiptReviewPage() {
             lineItems: draftRows.map((row) => row.lineItem),
           });
 
-          await loadOptionLists();
+          // A matched line's serving and nutrition are the catalog's as it
+          // is now — not as they were when the review was saved (the
+          // ingredient may have been corrected since, or the review saved
+          // by an older version of this page).
+          const lists = await loadOptionLists();
+          if (lists && !cancelled) setRows((prev) => prev.map((row) => withCatalogServing(row, lists.ingredientList)));
         } catch (error) {
           const message = error instanceof Error ? error.message : "Something went wrong.";
           setLoadError(message);
@@ -1593,7 +1772,7 @@ export default function ReceiptReviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, retryToken, capturedPending]);
+  }, [router, retryToken, capturedPending, draftId]);
 
   function updateRow(key: string, updates: Partial<ReviewRow>) {
     setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...updates } : row)));
@@ -1643,11 +1822,14 @@ export default function ReceiptReviewPage() {
 
     const timeout = setTimeout(() => {
       if (draftClearedRef.current) return;
-      void saveReviewDraft({ rows, storeId, storeName, storeDraft, purchaseDate });
-    }, 500);
+      const review = { rows, storeId, storeName, storeDraft, purchaseDate };
+      // (A saved receipt keeps its edits on the server, for any device.)
+      if (draftId) void saveReceiptDraftReview(draftId, review).catch(() => {});
+      else void saveReviewDraft(review);
+    }, draftId ? 1200 : 500);
 
     return () => clearTimeout(timeout);
-  }, [rows, storeId, storeName, storeDraft, purchaseDate, loading]);
+  }, [rows, storeId, storeName, storeDraft, purchaseDate, loading, draftId]);
 
   // Keeps focusedIndex in range whenever rows are added/removed (deleting
   // the last item, etc.) so the pager and bottom list never point past the
@@ -1707,18 +1889,9 @@ export default function ReceiptReviewPage() {
       expiryTouched: false,
       expirySuggestion: suggestedExpiry,
       nutrition: toReceiptNutrition(ingredient.nutrition),
-      // Same one-unit-per-row rule as initial parsing - convert the
-      // matched ingredient's own portion into the row's existing unit
-      // when possible, otherwise fall back to 1 rather than pair a wrong
-      // amount with the wrong unit.
-      defaultPortionAmount: String(
-        convertPortionAmount(
-          ingredient.defaultPortionAmount ?? 1,
-          ingredient.defaultPortionUnit ?? "item",
-          row?.unit ?? "item",
-          getIngredientConversions(ingredient, [], ingredients),
-        ),
-      ),
+      // Its catalog serving, as it is (see ReviewRow.portionUnit).
+      defaultPortionAmount: String(ingredient.defaultPortionAmount ?? 1),
+      portionUnit: ingredient.defaultPortionUnit ?? "item",
       unitConversions: ingredient.unitConversions ?? [],
       error: undefined,
     });
@@ -1762,6 +1935,7 @@ export default function ReceiptReviewPage() {
             barcode: null,
             nutrition: unknownNutrition(),
             defaultPortionAmount: "1",
+            portionUnit: undefined,
             unitConversions: [],
             expirySuggestion: null,
           }
@@ -2081,7 +2255,8 @@ export default function ReceiptReviewPage() {
           style: "destructive",
           onPress: () => {
             draftClearedRef.current = true;
-            void clearReviewDraft();
+            if (draftId) void finishReceiptDraft(draftId, "discarded").catch(() => {});
+            else void clearReviewDraft();
             router.back();
           },
         },
@@ -2238,7 +2413,8 @@ export default function ReceiptReviewPage() {
 
       if (failures.length === 0) {
         draftClearedRef.current = true;
-        await clearReviewDraft();
+        if (draftId) await finishReceiptDraft(draftId, "done").catch(() => {});
+        else await clearReviewDraft();
         router.back();
       } else {
         Alert.alert(
@@ -2399,7 +2575,7 @@ export default function ReceiptReviewPage() {
   return (
     <SafeAreaView
       className="flex-1 bg-slate-50"
-      style={layout.wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : undefined}
+      style={layout.wide ? { width: "100%", maxWidth: 1600, alignSelf: "center" } : undefined}
       edges={["top", "left", "right"]}
     >
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -2412,6 +2588,17 @@ export default function ReceiptReviewPage() {
             <Ionicons name="chevron-back" size={26} color="#0F172A" />
           </Pressable>
           <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Review Receipt</Text>
+          {/* The receipt itself, to check the lines against. */}
+          {!!draftPhoto && (
+            <Pressable
+              accessibilityLabel="Show the receipt"
+              className="mr-2 h-10 flex-row items-center rounded-xl bg-slate-100 px-3 active:bg-slate-200"
+              onPress={() => setShowPhoto(true)}
+            >
+              <Ionicons name="receipt-outline" size={18} color="#475569" />
+              {layout.wide && <Text className="ml-1.5 font-semibold text-slate-700">Receipt</Text>}
+            </Pressable>
+          )}
           <Pressable
             disabled={submitting}
             accessibilityLabel="Discard receipt"
@@ -2684,6 +2871,18 @@ export default function ReceiptReviewPage() {
               )}
             </ScrollView>
           </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* The receipt photo, full size, to check the lines against. */}
+      <Modal visible={showPhoto && !!draftPhoto} transparent animationType="fade" onRequestClose={() => setShowPhoto(false)}>
+        <Pressable className="flex-1 items-center justify-center bg-black/80 p-4" onPress={() => setShowPhoto(false)}>
+          {!!draftPhoto && (
+            <Image source={{ uri: photoSource(draftPhoto)! }} style={{ width: "100%", height: "100%", maxWidth: 900 }} contentFit="contain" />
+          )}
+          <View className="absolute right-5 top-5 h-10 w-10 items-center justify-center rounded-full bg-white/90">
+            <Ionicons name="close" size={22} color="#0F172A" />
+          </View>
         </Pressable>
       </Modal>
     </SafeAreaView>
