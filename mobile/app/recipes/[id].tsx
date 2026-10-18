@@ -52,6 +52,8 @@ import { countQualifyingPantryPieces, getIngredientStockInUnit } from "@/src/uti
 import { RateRecipeModal } from "@/src/components/recipes/RateRecipeModal";
 import { ResolveIngredientSourcesModal } from "@/src/components/planner/ResolveIngredientSourcesModal";
 import { StartAhead } from "@/src/components/planner/StartAhead";
+import { PlanRecipeModal } from "@/src/components/recipes/PlanRecipeModal";
+import { addToMenu, getMenu, removeFromMenu, type MenuItem } from "@/src/services/menuApi";
 import { DateTextInput, DurationExpiryInput, FieldLabel, FormInput, SearchableObjectDropdown } from "@/src/components/forms";
 import type { MealPlanEntry } from "@/src/services/mealPlanApi";
 import {
@@ -64,7 +66,7 @@ import {
   type DeductionInstruction,
   type IngredientRequirement,
 } from "@/src/utils/pantryDeduction";
-import { scaleIngredientNutrition } from "@/src/utils/mealPlan";
+import { friendlyDayLabel, scaleIngredientNutrition, SLOT_MAP } from "@/src/utils/mealPlan";
 import { useWideForm } from "@/src/components/forms/wideForm";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { referenceId, referenceName } from "@/src/utils/pantryDefaults";
@@ -285,6 +287,26 @@ export default function RecipeDetailPage() {
   // not chosen yet). A piece goes into one batch only.
   const wide = useWideWeb();
   const layout = useWideForm();
+  // From the top bar: on the menu (see services/menuApi.ts), or straight
+  // onto a day. `planNotice` says where it went, for a few seconds.
+  const [menuItem, setMenuItem] = useState<MenuItem | null>(null);
+  const [planning, setPlanning] = useState(false);
+  const [planNotice, setPlanNotice] = useState<string | null>(null);
+  const loadMenu = useCallback(() => {
+    getMenu()
+      .then((menu) => setMenuItem(menu.find((item) => item.state === "menu" && item.recipe?._id === id) ?? null))
+      .catch(() => {});
+  }, [id]);
+  useFocusEffect(loadMenu);
+  function menuPressed() {
+    if (!menuItem) {
+      addToMenu({ recipe: String(id) }).then(loadMenu, (err) => Alert.alert("Couldn't add it to the menu", err instanceof Error ? err.message : "Something went wrong."));
+      return;
+    }
+    showActions("On your menu", [
+      { label: "Take it off the menu", destructive: true, onPress: () => void removeFromMenu(menuItem._id).then(loadMenu, () => {}) },
+    ]);
+  }
   const [batchSlots, setBatchSlots] = useState<PieceSlot[]>([]);
   const [batches, setBatches] = useState<string[][]>([]);
   // The slot whose list of pieces is open, as "batch:slot".
@@ -1391,8 +1413,27 @@ export default function RecipeDetailPage() {
           {recipe.name}
         </Text>
 
+        {/* On the menu, or onto a day. */}
         <Pressable
-          className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
+          onPress={menuPressed}
+          accessibilityLabel={menuItem ? "On your menu" : "Add to menu"}
+          className={`ml-2 h-9 flex-row items-center justify-center rounded-xl bg-violet-50 active:bg-violet-100 ${wide ? "px-3" : "w-9"}`}
+        >
+          <Ionicons name={menuItem ? "checkmark" : "restaurant-outline"} size={wide ? 15 : 17} color="#7C3AED" />
+          {/* (On a phone, just the icons: the title needs the room.) */}
+          {wide && <Text className="ml-1.5 text-sm font-semibold text-violet-700">{menuItem ? "On the menu" : "Add to menu"}</Text>}
+        </Pressable>
+        <Pressable
+          onPress={() => setPlanning(true)}
+          accessibilityLabel="Plan on a day"
+          className={`ml-2 h-9 flex-row items-center justify-center rounded-xl bg-blue-600 active:bg-blue-700 ${wide ? "px-3" : "w-9"}`}
+        >
+          <Ionicons name="calendar-outline" size={wide ? 15 : 17} color="white" />
+          {wide && <Text className="ml-1.5 text-sm font-semibold text-white">Plan</Text>}
+        </Pressable>
+
+        <Pressable
+          className="ml-1 h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
           onPress={() =>
             router.push({ pathname: "/recipes/edit/[id]", params: { id } })
           }
@@ -1400,6 +1441,14 @@ export default function RecipeDetailPage() {
           <Ionicons name="create-outline" size={24} color="#2563EB" />
         </Pressable>
       </View>
+
+      {!!planNotice && (
+        <Pressable onPress={() => router.navigate("/planner")} className="flex-row items-center border-b border-blue-100 bg-blue-50 px-5 py-2.5">
+          <Ionicons name="checkmark-circle" size={16} color="#2563EB" />
+          <Text className="ml-2 flex-1 text-sm text-blue-800">{planNotice}</Text>
+          <Text className="text-sm font-semibold text-blue-700">Open planner</Text>
+        </Pressable>
+      )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -1436,6 +1485,19 @@ export default function RecipeDetailPage() {
         )}
       </ScrollView>
     </SafeAreaView>
+
+    <PlanRecipeModal
+      recipeId={String(id)}
+      recipeName={recipe.name}
+      nutrition={recipe.nutrition}
+      visible={planning}
+      onClose={() => setPlanning(false)}
+      onPlanned={(date, slot) => {
+        const day = friendlyDayLabel(date);
+        setPlanNotice(`Planned for ${day === "Today" || day === "Tomorrow" ? day.toLowerCase() : day}, ${SLOT_MAP[slot].label.toLowerCase()}`);
+        setTimeout(() => setPlanNotice(null), 6000);
+      }}
+    />
 
     <RateRecipeModal
       visible={showRateModal}

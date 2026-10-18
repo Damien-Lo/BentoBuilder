@@ -1,16 +1,21 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { useCallback, useState, type ReactNode } from "react";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 
+import { PlanRecipeModal } from "@/src/components/recipes/PlanRecipeModal";
 import { RecipeThumb } from "@/src/components/recipes/RecipeThumb";
+import { showActions } from "@/src/components/todo/theme";
 import { Button, Empty, PageTitle, Segmented, WEB, WebPage } from "@/src/components/web/ui";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
+import { addToMenu, getMenu, removeFromMenu, type MenuItem } from "@/src/services/menuApi";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { getRestaurantMeals, type RestaurantMeal } from "@/src/services/restaurantMealApi";
 import { loadSettings } from "@/src/services/settingsService";
-import { courseName, getMealKcal, getRecipeKcal } from "@/src/utils/mealPlan";
+import { courseName, friendlyDayLabel, getMealKcal, getRecipeKcal, SLOT_MAP } from "@/src/utils/mealPlan";
+import { photoUri } from "@/src/utils/photos";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 // Recipes, meals and eating out in a desktop browser: cards to browse and
@@ -18,11 +23,22 @@ import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 // existing page. The recipes are set out in groups — by category or by the
 // meal they're for — each of which folds away; the ones that only make
 // something for other recipes (a marinated fillet, a stock) are a group of
-// their own at the end.
+// their own at the end. They're shown as larger photo cards by default, or
+// as compact cards, many to a row (the choice is remembered in this browser).
 
 type Hover = { hovered?: boolean };
 type Kind = "recipes" | "meals" | "eating";
 type GroupBy = "category" | "meal" | "none";
+type View_ = "compact" | "photos";
+
+const VIEW_KEY = "recipes.view";
+function savedView(): View_ {
+  try {
+    return globalThis.localStorage?.getItem(VIEW_KEY) === "compact" ? "compact" : "photos";
+  } catch {
+    return "photos";
+  }
+}
 
 const MEAL_GROUPS = ["breakfast", "lunch", "dinner", "snack"] as const;
 const PREP_GROUP = "Prep";
@@ -42,6 +58,32 @@ export function WebRecipesScreen() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [groupBy, setGroupBy] = useState<GroupBy>("category");
   const [folded, setFolded] = useState<string[]>([]);
+  const [view, setViewState] = useState<View_>(savedView);
+  // Each card's quick actions: on the menu, or onto a day.
+  const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [planning, setPlanning] = useState<Recipe | null>(null);
+  const [planNotice, setPlanNotice] = useState<string | null>(null);
+  const loadMenu = useCallback(() => {
+    getMenu().then(setMenu).catch(() => {});
+  }, []);
+  const onMenu = (recipe: Recipe) => menu.find((item) => item.state === "menu" && item.recipe?._id === recipe._id);
+  function menuPressed(recipe: Recipe) {
+    const item = onMenu(recipe);
+    if (!item) {
+      addToMenu({ recipe: recipe._id }).then(loadMenu, (err) => Alert.alert("Couldn't add it to the menu", err instanceof Error ? err.message : "Something went wrong."));
+      return;
+    }
+    showActions(`${recipe.name} is on your menu`, [{ label: "Take it off the menu", destructive: true, onPress: () => void removeFromMenu(item._id).then(loadMenu, () => {}) }]);
+  }
+  const actionsFor = (recipe: Recipe) => <CardActions onMenu={!!onMenu(recipe)} onMenuPress={() => menuPressed(recipe)} onPlanPress={() => setPlanning(recipe)} />;
+  const setView = (next: View_) => {
+    setViewState(next);
+    try {
+      globalThis.localStorage?.setItem(VIEW_KEY, next);
+    } catch {
+      // (Not remembered, but still shown.)
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -50,7 +92,8 @@ export function WebRecipesScreen() {
       getRestaurantMeals().then(setRestaurants).catch(() => {});
       getIngredients().then(setIngredients).catch(() => {});
       loadSettings().then((s) => setConversions(s.unitConversions)).catch(() => {});
-    }, []),
+      loadMenu();
+    }, [loadMenu]),
   );
 
   const q = search.trim().toLowerCase();
@@ -132,7 +175,16 @@ export function WebRecipesScreen() {
                 <Text style={{ marginLeft: 4, fontSize: 12, fontWeight: "600", color: WEB.blue }}>{allFolded ? "Expand all" : "Collapse all"}</Text>
               </Pressable>
             )}
-            <Text style={{ fontSize: 12, color: WEB.muted }}>Group by</Text>
+            <Text style={{ fontSize: 12, color: WEB.muted }}>View</Text>
+            <Segmented
+              options={[
+                { value: "compact", label: "Compact" },
+                { value: "photos", label: "Photos" },
+              ]}
+              value={view}
+              onChange={setView}
+            />
+            <Text style={{ marginLeft: 6, fontSize: 12, color: WEB.muted }}>Group by</Text>
             <Segmented
               options={[
                 { value: "category", label: "Category" },
@@ -145,6 +197,14 @@ export function WebRecipesScreen() {
           </View>
         )}
       </View>
+
+      {!!planNotice && (
+        <Pressable onPress={() => router.navigate("/planner")} style={{ flexDirection: "row", alignItems: "center", marginBottom: 14, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: WEB.blueSoft }}>
+          <Ionicons name="checkmark-circle" size={16} color={WEB.blue} />
+          <Text style={{ flex: 1, marginLeft: 8, fontSize: 13, color: WEB.text }}>{planNotice}</Text>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: WEB.blue }}>Open week plan</Text>
+        </Pressable>
+      )}
 
       {count === 0 && <Empty icon="restaurant-outline" text={q ? "Nothing matches that search" : "Nothing here yet"} />}
 
@@ -168,13 +228,18 @@ export function WebRecipesScreen() {
                 </Pressable>
               )}
               {!closed && (
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 14 }}>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: view === "photos" ? 18 : 14 }}>
                   {group.recipes.map((recipe) => {
                   const kcal = getRecipeKcal(recipe, 1);
                   const n = recipe.nutrition;
                   const minutes = (recipe.prepTimeMinutes ?? 0) + (recipe.cookTimeMinutes ?? 0);
                   const scores = (recipe.scores ?? []).map((s) => Number((s as { value?: number }).value)).filter((v) => Number.isFinite(v));
                   const rating = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+                  const tag = groupBy === "category" ? (recipe.mealCategory ?? []).map(titled).join(" · ") : nameOf(recipe.recipeCategory) || recipe.mealCategory?.[0];
+                  const macros = n ? `P ${Math.round(n.protein ?? 0)} g · C ${Math.round(n.carbs ?? 0)} g · F ${Math.round(n.fats ?? 0)} g` : "";
+                  const facts = [minutes ? `${minutes} min` : "", rating != null ? `rated ${rating.toFixed(1)}` : ""].filter(Boolean).join(" · ");
+                  const open = () => router.push({ pathname: "/recipes/[id]", params: { id: recipe._id } });
+                  if (view === "photos") return <PhotoTile key={recipe._id} photo={recipe.imageUrl} title={recipe.name} tag={tag} kcal={kcal} macros={macros} facts={facts} onPress={open} actions={actionsFor(recipe)} />;
                   return (
                     <Tile
                       key={recipe._id}
@@ -183,14 +248,12 @@ export function WebRecipesScreen() {
                       tint="#2563EB"
                       title={recipe.name}
                       // (Not what its heading already says.)
-                      tag={groupBy === "category" ? (recipe.mealCategory ?? []).map(titled).join(" · ") : nameOf(recipe.recipeCategory) || recipe.mealCategory?.[0]}
+                      tag={tag}
                       kcal={kcal}
                       kcalNote="a serving"
-                      lines={[
-                        n ? `P ${Math.round(n.protein ?? 0)} g · C ${Math.round(n.carbs ?? 0)} g · F ${Math.round(n.fats ?? 0)} g` : "",
-                        [`${recipe.ingredientList?.length ?? 0} ingredients`, minutes ? `${minutes} min` : "", rating != null ? `rated ${rating.toFixed(1)}` : ""].filter(Boolean).join(" · "),
-                      ]}
-                      onPress={() => router.push({ pathname: "/recipes/[id]", params: { id: recipe._id } })}
+                      lines={[macros, [`${recipe.ingredientList?.length ?? 0} ingredients`, facts].filter(Boolean).join(" · ")]}
+                      onPress={open}
+                      actions={actionsFor(recipe)}
                     />
                   );
                   })}
@@ -230,7 +293,38 @@ export function WebRecipesScreen() {
             />
           ))}
       </View>
+
+      {planning && (
+        <PlanRecipeModal
+          recipeId={planning._id}
+          recipeName={planning.name}
+          nutrition={planning.nutrition}
+          visible
+          onClose={() => setPlanning(null)}
+          onPlanned={(date, slot) => {
+            const day = friendlyDayLabel(date);
+            setPlanNotice(`${planning.name} planned for ${day === "Today" || day === "Tomorrow" ? day.toLowerCase() : day}, ${SLOT_MAP[slot].label.toLowerCase()}`);
+            setTimeout(() => setPlanNotice(null), 6000);
+          }}
+        />
+      )}
     </WebPage>
+  );
+}
+
+// A recipe card's quick actions, at its bottom right: on the menu (ticked
+// when it is) and plan on a day.
+function CardActions({ onMenu, onMenuPress, onPlanPress }: { onMenu: boolean; onMenuPress: () => void; onPlanPress: () => void }) {
+  const button = (hovered: boolean | undefined, bg: string, hover: string) => ({ width: 30, height: 30, borderRadius: 9, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: hovered ? hover : bg });
+  return (
+    <View style={{ flexDirection: "row", gap: 6 }}>
+      <Pressable onPress={onMenuPress} accessibilityLabel={onMenu ? "On your menu" : "Add to menu"} style={({ hovered }: Hover) => button(hovered, onMenu ? "#EDE9FE" : "#F5F3FF", "#DDD6FE")}>
+        <Ionicons name={onMenu ? "checkmark" : "restaurant-outline"} size={15} color="#7C3AED" />
+      </Pressable>
+      <Pressable onPress={onPlanPress} accessibilityLabel="Plan on a day" style={({ hovered }: Hover) => button(hovered, WEB.blueSoft, "#BFDBFE")}>
+        <Ionicons name="calendar-outline" size={15} color={WEB.blue} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -244,6 +338,7 @@ function Tile({
   kcalNote,
   lines,
   onPress,
+  actions,
 }: {
   // A photo, shown in place of the icon.
   photo?: string;
@@ -255,6 +350,8 @@ function Tile({
   kcalNote?: string;
   lines: string[];
   onPress: () => void;
+  // Quick actions, at the bottom right.
+  actions?: ReactNode;
 }) {
   return (
     <Pressable
@@ -297,10 +394,59 @@ function Tile({
       )}
       <View style={{ marginTop: kcal != null ? 4 : 12 }}>
         {lines.filter(Boolean).map((line, i) => (
-          <Text key={i} numberOfLines={1} style={{ fontSize: 12, lineHeight: 18, color: WEB.muted }}>
+          <Text key={i} numberOfLines={1} style={{ fontSize: 12, lineHeight: 18, color: WEB.muted, marginRight: actions && i === lines.filter(Boolean).length - 1 ? 72 : 0 }}>
             {line}
           </Text>
         ))}
+      </View>
+      {actions && <View style={{ position: "absolute", right: 12, bottom: 12 }}>{actions}</View>}
+    </Pressable>
+  );
+}
+
+// A recipe as a larger card: its photo across the top (or, without one, a
+// plain panel with the recipe icon), then the name, meals, calories and
+// macros underneath.
+function PhotoTile({ photo, title, tag, kcal, macros, facts, onPress, actions }: { photo?: string; title: string; tag?: string; kcal: number | null; macros: string; facts: string; onPress: () => void; actions?: ReactNode }) {
+  const uri = photoUri(photo);
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ hovered }: Hover) => ({
+        flexGrow: 1,
+        flexBasis: 250,
+        maxWidth: 340,
+        borderRadius: 16,
+        overflow: "hidden",
+        borderWidth: 1,
+        borderColor: hovered ? "#93C5FD" : WEB.border,
+        backgroundColor: WEB.card,
+        boxShadow: hovered ? "0 8px 20px rgba(15,23,42,0.10)" : undefined,
+      })}
+    >
+      <View style={{ width: "100%", aspectRatio: 4 / 3, backgroundColor: "#E2E8F0" }}>
+        {uri ? (
+          <Image source={{ uri }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={120} />
+        ) : (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#2563EB14" }}>
+            <Ionicons name="book-outline" size={34} color="#2563EB" />
+            <Text style={{ marginTop: 6, fontSize: 12, color: WEB.faint }}>No photo yet</Text>
+          </View>
+        )}
+      </View>
+      <View style={{ padding: 14 }}>
+        <Text numberOfLines={2} style={{ fontSize: 15, fontWeight: "700", lineHeight: 19, color: WEB.text }}>
+          {title}
+        </Text>
+        {!!tag && <Text style={{ marginTop: 2, fontSize: 12, color: WEB.muted }}>{tag}</Text>}
+        {kcal != null && (
+          <Text style={{ marginTop: 10, fontSize: 13, color: WEB.muted }}>
+            <Text style={{ fontSize: 18, fontWeight: "700", color: WEB.text }}>{Math.round(kcal)}</Text> kcal a serving
+          </Text>
+        )}
+        {!!macros && <Text style={{ marginTop: 2, fontSize: 12, color: WEB.muted, marginRight: actions ? 72 : 0 }}>{macros}</Text>}
+        {!!facts && <Text style={{ marginTop: 2, fontSize: 12, color: WEB.faint, marginRight: actions ? 72 : 0 }}>{facts}</Text>}
+        {actions && <View style={{ position: "absolute", right: 12, bottom: 12 }}>{actions}</View>}
       </View>
     </Pressable>
   );
