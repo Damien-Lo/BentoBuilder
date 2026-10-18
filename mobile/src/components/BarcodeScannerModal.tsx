@@ -99,151 +99,108 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onProductFound: (product: ScannedProduct) => void;
+  // Just the code, without looking the product up here (when another
+  // device does the lookup — the computer this phone is scanning for).
+  onBarcode?: (code: string) => void;
 }
 
-export function BarcodeScannerModal({
-  visible,
-  onClose,
-  onProductFound,
-}: Props) {
-  const [permission, requestPermission] = useCameraPermissions();
-  const [looking, setLooking] = useState(false);
-  const processingRef = useRef(false);
+// A product by its barcode, from Open Food Facts: name, brand, package size,
+// serving and nutrition. `problem` says what went wrong, if anything —
+// "notFound" (not in the database), "noName" (found without a name),
+// "failed" (couldn't reach it) — with what's known so far (at least the
+// barcode, to save so it's recognised next time). Used by the scanner here,
+// and by a computer looking up a barcode its paired phone scanned.
+const bare = (data: string): ScannedProduct => ({ name: "", barcode: data, servingSize: 1, servingUnit: "", servingIsEstimated: true });
+export async function lookupBarcode(data: string): Promise<{ product: ScannedProduct; problem: "notFound" | "noName" | "failed" | null }> {
+  try {
+    const res = await fetch(
+      `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(data)}.json`,
+    );
+    const json = (await res.json()) as {
+      status: number;
+      product?: Record<string, unknown>;
+    };
 
-  async function handleBarcode({ data }: { type: string; data: string }) {
-    if (processingRef.current || looking) return;
-    processingRef.current = true;
-    setLooking(true);
+    if (json.status !== 1 || !json.product) return { product: bare(data), problem: "notFound" };
 
-    try {
-      const res = await fetch(
-        `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(data)}.json`,
-      );
-      const json = (await res.json()) as {
-        status: number;
-        product?: Record<string, unknown>;
-      };
+    const p = json.product;
+    const nutriments = (p.nutriments ?? {}) as Record<string, unknown>;
 
-      console.log(`Scanned barcode: ${data}, lookup status: ${json.status}`);
-      console.log("Product data:", json);
+    // Package total — computed early (moved up from further below) since
+    // the serving-size sanity check just below needs it.
+    const pkgQty = p.product_quantity != null ? parseFloat(String(p.product_quantity)) : NaN;
+    const pkgUnit = String(p.product_quantity_unit ?? "g").trim() || "g";
 
-      if (json.status !== 1 || !json.product) {
-        Alert.alert(
-          "Product not found",
-          "This barcode wasn't in the database. You can still add it manually — the barcode will be saved so it's recognized next time.",
-          [
-            { text: "Cancel", style: "cancel", onPress: onClose },
-            {
-              text: "Continue",
-              onPress: () => {
-                onProductFound({ name: "", barcode: data, servingSize: 1, servingUnit: "", servingIsEstimated: true });
-                onClose();
-              },
-            },
-          ],
-        );
-        return;
+    // Serving size — numeric grams per serving. A declared serving that's
+    // suspiciously close to (or bigger than) the whole package is almost
+    // always a mislabeled entry rather than a real serving — common for
+    // bulk/dry goods (spice jars, etc.) that don't have a natural
+    // discrete serving, where a contributor enters the container's total
+    // instead. Treat that the same as no serving data at all rather than
+    // let it become "1 serving = the whole product".
+    const rawServingQty =
+      p.serving_quantity != null
+        ? parseFloat(String(p.serving_quantity))
+        : NaN;
+    const servingLooksLikeWholePackage =
+      Number.isFinite(pkgQty) && pkgQty > 0 && Number.isFinite(rawServingQty) && rawServingQty >= pkgQty * 0.9;
+    const hasServing = Number.isFinite(rawServingQty) && rawServingQty > 0 && !servingLooksLikeWholePackage;
+    const servingQty = hasServing ? rawServingQty : NaN;
+    // Not a real per-serving amount when !hasServing — see
+    // ScannedProduct.servingIsEstimated. Kept at 100 (rather than left
+    // blank) purely so getNum's per-100g scaling below still has a
+    // consistent reference amount to divide by.
+    const portionAmount = hasServing ? servingQty : 100;
+
+    // Open Food Facts uses several suffix variants depending on product type:
+    // _prepared_serving (cooked/instant foods), _serving, _prepared_100g, _100g
+    function getNum(key: string): number | undefined {
+      const candidates = hasServing
+        ? [
+            nutriments[key + "_prepared_serving"],
+            nutriments[key + "_serving"],
+          ]
+        : [];
+      for (const v of candidates) {
+        if (typeof v === "number" && Number.isFinite(v)) return v;
       }
-
-      const p = json.product;
-      const nutriments = (p.nutriments ?? {}) as Record<string, unknown>;
-
-      // Package total — computed early (moved up from further below) since
-      // the serving-size sanity check just below needs it.
-      const pkgQty = p.product_quantity != null ? parseFloat(String(p.product_quantity)) : NaN;
-      const pkgUnit = String(p.product_quantity_unit ?? "g").trim() || "g";
-
-      // Serving size — numeric grams per serving. A declared serving that's
-      // suspiciously close to (or bigger than) the whole package is almost
-      // always a mislabeled entry rather than a real serving — common for
-      // bulk/dry goods (spice jars, etc.) that don't have a natural
-      // discrete serving, where a contributor enters the container's total
-      // instead. Treat that the same as no serving data at all rather than
-      // let it become "1 serving = the whole product".
-      const rawServingQty =
-        p.serving_quantity != null
-          ? parseFloat(String(p.serving_quantity))
-          : NaN;
-      const servingLooksLikeWholePackage =
-        Number.isFinite(pkgQty) && pkgQty > 0 && Number.isFinite(rawServingQty) && rawServingQty >= pkgQty * 0.9;
-      const hasServing = Number.isFinite(rawServingQty) && rawServingQty > 0 && !servingLooksLikeWholePackage;
-      const servingQty = hasServing ? rawServingQty : NaN;
-      // Not a real per-serving amount when !hasServing — see
-      // ScannedProduct.servingIsEstimated. Kept at 100 (rather than left
-      // blank) purely so getNum's per-100g scaling below still has a
-      // consistent reference amount to divide by.
-      const portionAmount = hasServing ? servingQty : 100;
-
-      // Open Food Facts uses several suffix variants depending on product type:
-      // _prepared_serving (cooked/instant foods), _serving, _prepared_100g, _100g
-      function getNum(key: string): number | undefined {
-        const candidates = hasServing
-          ? [
-              nutriments[key + "_prepared_serving"],
-              nutriments[key + "_serving"],
-            ]
-          : [];
-        for (const v of candidates) {
-          if (typeof v === "number" && Number.isFinite(v)) return v;
+      // Fall back to per-100g variants, scaled to serving size
+      const per100Candidates = [
+        nutriments[key + "_prepared_100g"],
+        nutriments[key + "_100g"],
+      ];
+      for (const v of per100Candidates) {
+        if (typeof v === "number" && Number.isFinite(v)) {
+          return hasServing ? (v / 100) * servingQty : v;
         }
-        // Fall back to per-100g variants, scaled to serving size
-        const per100Candidates = [
-          nutriments[key + "_prepared_100g"],
-          nutriments[key + "_100g"],
-        ];
-        for (const v of per100Candidates) {
-          if (typeof v === "number" && Number.isFinite(v)) {
-            return hasServing ? (v / 100) * servingQty : v;
-          }
-        }
-        return undefined;
       }
+      return undefined;
+    }
 
-      const nutrition = {} as NullableNutrition;
-      for (const field of CORE_NUTRITION_FIELDS) nutrition[field] = null;
-      for (const field of ALL_NUTRITION_FIELDS) {
-        const { key, factor } = OFF_NUTRIENTS[field];
-        const parts = (Array.isArray(key) ? key : [key])
-          .map((k) => getNum(k))
-          .filter((n): n is number => n != null);
-        if (parts.length === 0) continue;
-        const raw = parts.reduce((sum, n) => sum + n, 0);
-        const decimals = 10 ** NUTRITION_FIELD_META[field].decimals;
-        nutrition[field] = Math.round(raw * factor * decimals) / decimals;
-      }
+    const nutrition = {} as NullableNutrition;
+    for (const field of CORE_NUTRITION_FIELDS) nutrition[field] = null;
+    for (const field of ALL_NUTRITION_FIELDS) {
+      const { key, factor } = OFF_NUTRIENTS[field];
+      const parts = (Array.isArray(key) ? key : [key])
+        .map((k) => getNum(k))
+        .filter((n): n is number => n != null);
+      if (parts.length === 0) continue;
+      const raw = parts.reduce((sum, n) => sum + n, 0);
+      const decimals = 10 ** NUTRITION_FIELD_META[field].decimals;
+      nutrition[field] = Math.round(raw * factor * decimals) / decimals;
+    }
 
-      // Brand — take the first brand when multiple are comma-separated
-      const rawBrand = String(p.brands ?? "").trim();
-      const brand = rawBrand ? rawBrand.split(",")[0].trim() : undefined;
+    // Brand — take the first brand when multiple are comma-separated
+    const rawBrand = String(p.brands ?? "").trim();
+    const brand = rawBrand ? rawBrand.split(",")[0].trim() : undefined;
 
-      const name = String(p.product_name_en ?? p.product_name ?? "").trim();
+    const name = String(p.product_name_en ?? p.product_name ?? "").trim();
 
-      if (!name) {
-        Alert.alert(
-          "No product name",
-          "Barcode found, but it has no name on file. You can still add it manually — the barcode will be saved so it's recognized next time.",
-          [
-            { text: "Cancel", style: "cancel", onPress: onClose },
-            {
-              text: "Continue",
-              onPress: () => {
-                onProductFound({
-                  name: "",
-                  barcode: data,
-                  brand: brand || undefined,
-                  servingSize: 1,
-                  servingUnit: "",
-                  servingIsEstimated: true,
-                });
-                onClose();
-              },
-            },
-          ],
-        );
-        return;
-      }
+    if (!name) return { product: { ...bare(data), brand: brand || undefined }, problem: "noName" };
 
-      onProductFound({
+    return {
+      problem: null,
+      product: {
         name,
         barcode: data,
         brand: brand || undefined,
@@ -263,23 +220,57 @@ export function BarcodeScannerModal({
         // convention regardless of product type.
         servingUnit: hasServing ? pkgUnit : "g",
         nutrition,
-      });
+      },
+    };
+  } catch {
+    return { product: bare(data), problem: "failed" };
+  }
+}
+
+export function BarcodeScannerModal({
+  visible,
+  onClose,
+  onProductFound,
+  onBarcode,
+}: Props) {
+  const [permission, requestPermission] = useCameraPermissions();
+  const [looking, setLooking] = useState(false);
+  const processingRef = useRef(false);
+
+  async function handleBarcode({ data }: { type: string; data: string }) {
+    if (processingRef.current || looking) return;
+    processingRef.current = true;
+    if (onBarcode) {
+      onBarcode(data);
       onClose();
-    } catch {
-      Alert.alert(
-        "Lookup failed",
-        "Could not reach the product database. You can still add it manually — the barcode will be saved so it's recognized next time.",
-        [
-          { text: "Cancel", style: "cancel", onPress: onClose },
-          {
-            text: "Continue",
-            onPress: () => {
-              onProductFound({ name: "", barcode: data, servingSize: 1, servingUnit: "", servingIsEstimated: true });
-              onClose();
-            },
+      processingRef.current = false;
+      return;
+    }
+    setLooking(true);
+
+    try {
+      const { product, problem } = await lookupBarcode(data);
+      if (!problem) {
+        onProductFound(product);
+        onClose();
+        return;
+      }
+      const [title, message] =
+        problem === "notFound"
+          ? ["Product not found", "This barcode wasn't in the database. You can still add it manually — the barcode will be saved so it's recognized next time."]
+          : problem === "noName"
+            ? ["No product name", "Barcode found, but it has no name on file. You can still add it manually — the barcode will be saved so it's recognized next time."]
+            : ["Lookup failed", "Could not reach the product database. You can still add it manually — the barcode will be saved so it's recognized next time."];
+      Alert.alert(title, message, [
+        { text: "Cancel", style: "cancel", onPress: onClose },
+        {
+          text: "Continue",
+          onPress: () => {
+            onProductFound(product);
+            onClose();
           },
-        ],
-      );
+        },
+      ]);
     } finally {
       setLooking(false);
       processingRef.current = false;

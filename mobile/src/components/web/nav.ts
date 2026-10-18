@@ -90,7 +90,13 @@ export const WEB_SECTIONS: WebSection[] = [
     icon: "settings-outline",
     path: "/settings-section/kitchen",
     also: ["/settings-section", "/manage-lists"],
-    tabs: [],
+    tabs: [
+      { label: "Kitchen", path: "/settings-section/kitchen", also: ["/manage-lists"] },
+      { label: "Scheduling", path: "/settings-section/scheduling" },
+      { label: "Home planning", path: "/settings-section/home-planning" },
+      { label: "Documents", path: "/settings-section/documents" },
+      { label: "Devices", path: "/settings-section/devices" },
+    ],
     footer: true,
   },
   {

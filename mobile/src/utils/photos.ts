@@ -71,14 +71,15 @@ export function pastedImage(event: ClipboardEvent): string | null {
 }
 
 // Shrinks an image (at a file, data or blob address) to what's kept.
-export async function preparePhoto(uri: string): Promise<PreparedPhoto> {
+// (`maxSide`: a receipt or a label needs more pixels than a dish does.)
+export async function preparePhoto(uri: string, maxSide: number = PHOTO_MAX): Promise<PreparedPhoto> {
   const { ImageManipulator, SaveFormat } = await manipulator();
   // (Its size isn't always known beforehand — a pasted image's — so it's
   // read first, and only a larger one made smaller.)
   let image = await ImageManipulator.manipulate(uri).renderAsync();
-  if (Math.max(image.width, image.height) > PHOTO_MAX) {
+  if (Math.max(image.width, image.height) > maxSide) {
     image = await ImageManipulator.manipulate(image)
-      .resize(image.width >= image.height ? { width: PHOTO_MAX } : { height: PHOTO_MAX })
+      .resize(image.width >= image.height ? { width: maxSide } : { height: maxSide })
       .renderAsync();
   }
   const saved = await image.saveAsync({ compress: 0.75, format: SaveFormat.JPEG, base64: true });

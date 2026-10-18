@@ -130,6 +130,10 @@ export async function createReceiptDraft(photoUri: string, source: "phone" | "de
   return draftCall<ReceiptDraftSummary>("", { method: "POST", body: JSON.stringify({ imageBase64, mediaType: "image/jpeg", source }) });
 }
 
+// A photo already read into base64 (an upload in a browser), saved likewise.
+export const createReceiptDraftFrom = (photo: { base64: string; width: number; height: number }, source: "phone" | "desktop" = "desktop") =>
+  draftCall<ReceiptDraftSummary>("", { method: "POST", body: JSON.stringify({ imageBase64: photo.base64, mediaType: "image/jpeg", width: photo.width, height: photo.height, source }) });
+
 export const getReceiptDrafts = () => draftCall<ReceiptDraftSummary[]>("");
 export const getReceiptDraft = (id: string) => draftCall<ReceiptDraft>(`/${id}`);
 export const saveReceiptDraftReview = (id: string, review: ReceiptReviewDraft) => draftCall<ReceiptDraftSummary>(`/${id}`, { method: "PATCH", body: JSON.stringify({ review }) });

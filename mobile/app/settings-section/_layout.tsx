@@ -40,6 +40,15 @@ export default function SettingsSectionLayout() {
         }}
       />
       <Tabs.Screen
+        name="devices"
+        options={{
+          title: "Devices",
+          tabBarIcon: ({ color }) => (
+            <Ionicons size={26} name="phone-portrait-outline" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="documents"
         options={{
           title: "Documents",

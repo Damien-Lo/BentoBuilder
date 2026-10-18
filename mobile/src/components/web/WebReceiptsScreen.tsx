@@ -2,13 +2,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, Text, View } from "react-native";
 
 import { compactDate } from "@/src/components/web/fields";
-import { finishReceiptDraft, getReceiptDrafts, type ReceiptDraftSummary } from "@/src/services/receiptApi";
-import { photoUri } from "@/src/utils/photos";
+import { PairPhoneCard } from "@/src/components/devices/PairPhoneCard";
+import { getThisDevice, requestCapture, watchCapture } from "@/src/services/deviceApi";
+import { createReceiptDraftFrom, finishReceiptDraft, getReceiptDrafts, type ReceiptDraftSummary } from "@/src/services/receiptApi";
+import { photoUri, pickPhoto } from "@/src/utils/photos";
 
-import { Card, PageTitle, WEB, WebPage } from "./ui";
+import { Button, Card, PageTitle, WEB, WebPage } from "./ui";
 
 type Hover = { hovered?: boolean };
 
@@ -18,8 +20,9 @@ type Hover = { hovered?: boolean };
 // room, with the photo to check against. The review itself is the same
 // screen as on the phone (receipts/review), working on the saved receipt.
 //
-// Starting a receipt from here (a photo from this computer, or the phone's
-// camera) comes next.
+// A receipt can also be started here: a photo uploaded from this computer,
+// or taken on the phone this computer's paired with (Settings → Devices) —
+// the phone's "computer's camera" screen opens its camera for it.
 
 const STATUS: Record<string, { label: string; fg: string; bg: string }> = {
   parsing: { label: "Reading…", fg: "#B45309", bg: "#FEF3C7" },
@@ -57,9 +60,56 @@ export function WebReceiptsScreen() {
 
   const open = (draft: ReceiptDraftSummary) => router.push({ pathname: "/receipts/review", params: { draft: draft._id } });
 
+  // Starting one here.
+  const [uploading, setUploading] = useState(false);
+  const [phone, setPhone] = useState<{ status: string; message?: string; stop?: () => void } | null>(null);
+  const [pairing, setPairing] = useState(false);
+  async function upload() {
+    try {
+      const photo = await pickPhoto("library");
+      if (!photo) return;
+      setUploading(true);
+      await createReceiptDraftFrom(photo, "desktop");
+      load();
+    } catch (error) {
+      Alert.alert("Couldn't add the receipt", error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setUploading(false);
+    }
+  }
+  async function withPhone() {
+    const me = await getThisDevice().catch(() => null);
+    if (!me?.paired.length) {
+      setPairing(true);
+      return;
+    }
+    try {
+      const request = await requestCapture("receipt");
+      const watch = watchCapture(request._id, (update) => setPhone((p) => (p ? { ...p, status: update.status } : p)));
+      setPhone({ status: request.status, stop: watch.stop });
+      const final = await watch.done.catch(() => null);
+      if (!final) return;
+      if (final.status === "done") {
+        setPhone(null);
+        load();
+      } else setPhone({ status: final.status, message: final.status === "cancelled" ? "Cancelled on the phone." : final.error || "That didn't work." });
+    } catch (error) {
+      setPhone({ status: "failed", message: error instanceof Error ? error.message : "Something went wrong." });
+    }
+  }
+
   return (
     <WebPage>
-      <PageTitle title="Receipts" subtitle={drafts?.length ? `${drafts.length} to review` : "Scanned on your phone, reviewed here"} />
+      <PageTitle
+        title="Receipts"
+        subtitle={drafts?.length ? `${drafts.length} to review` : "Scanned on your phone, reviewed here"}
+        right={
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Button label={uploading ? "Adding…" : "Upload a photo"} icon="image-outline" onPress={() => void upload()} />
+            <Button label="Take it with my phone" icon="phone-portrait-outline" kind="primary" onPress={() => void withPhone()} />
+          </View>
+        }
+      />
 
       {drafts === null ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={WEB.blue} />
@@ -72,8 +122,9 @@ export function WebReceiptsScreen() {
             <Text style={{ marginLeft: 12, fontSize: 15, fontWeight: "700", color: WEB.text }}>No receipts waiting</Text>
           </View>
           <Text style={{ marginTop: 10, fontSize: 13, lineHeight: 20, color: WEB.muted }}>
-            On your phone, scan a receipt from the Pantry or the Grocery list and choose <Text style={{ fontWeight: "700", color: WEB.body }}>Review on desktop</Text>. It shows up here
-            while it&apos;s read, then you can check each line against the photo and add it all to the pantry.
+            Use <Text style={{ fontWeight: "700", color: WEB.body }}>Take it with my phone</Text> or <Text style={{ fontWeight: "700", color: WEB.body }}>Upload a photo</Text> above, or on your phone scan
+            a receipt from the Pantry or the Grocery list and choose <Text style={{ fontWeight: "700", color: WEB.body }}>Review on desktop</Text>. It shows up here while it&apos;s read, then
+            you can check each line against the photo and add it all to the pantry.
           </Text>
         </Card>
       ) : (
@@ -131,6 +182,49 @@ export function WebReceiptsScreen() {
           })}
         </View>
       )}
+      {/* Taking one with the phone */}
+      <Modal visible={!!phone} transparent animationType="fade" onRequestClose={() => (phone?.stop?.(), setPhone(null))}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: "rgba(15,23,42,0.45)" }}>
+          <View style={{ width: "100%", maxWidth: 440, alignItems: "center", padding: 26, borderRadius: 20, backgroundColor: WEB.card }}>
+            {phone && (() => {
+              const open = ["waiting", "capturing"].includes(phone.status);
+              return (
+                <>
+                  {open ? <ActivityIndicator color={WEB.blue} /> : <Ionicons name="close-circle-outline" size={30} color={WEB.faint} />}
+                  <Text style={{ marginTop: 12, fontSize: 17, fontWeight: "700", color: WEB.text }}>
+                    {phone.status === "waiting" ? "Waiting for your phone…" : phone.status === "capturing" ? "Camera open on your phone" : "That didn't work"}
+                  </Text>
+                  <Text style={{ marginTop: 6, textAlign: "center", fontSize: 13, lineHeight: 19, color: WEB.muted }}>
+                    {phone.status === "waiting"
+                      ? "On your phone, keep BentoBuilder open at Settings → Devices → Be my computer's camera: the camera opens by itself."
+                      : phone.status === "capturing"
+                        ? "Take the receipt. It appears here as soon as it arrives, and is read in the background."
+                        : phone.message}
+                  </Text>
+                  <View style={{ marginTop: 18 }}>
+                    <Button label={open ? "Cancel" : "Close"} onPress={() => (open && phone.stop?.(), setPhone(null))} />
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Pairing a phone first */}
+      <Modal visible={pairing} transparent animationType="fade" onRequestClose={() => setPairing(false)}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: "rgba(15,23,42,0.45)" }}>
+          <View style={{ width: "100%", maxWidth: 680, padding: 24, borderRadius: 20, backgroundColor: WEB.card }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
+              <Text style={{ flex: 1, fontSize: 17, fontWeight: "700", color: WEB.text }}>Pair your phone</Text>
+              <Pressable onPress={() => setPairing(false)} accessibilityLabel="Close">
+                <Ionicons name="close" size={22} color={WEB.muted} />
+              </Pressable>
+            </View>
+            {pairing && <PairPhoneCard onPaired={() => setTimeout(() => setPairing(false), 1800)} />}
+          </View>
+        </View>
+      </Modal>
     </WebPage>
   );
 }

@@ -111,26 +111,31 @@ const full = (draft) => ({ ...summary(draft), result: draft.result, review: draf
  * Saves the photo as a draft and answers at once; the receipt is read in
  * the background (the draft goes from "parsing" to "ready" or "failed").
  */
+// A receipt photo saved as a draft, read in the background (the phone, or
+// whatever sent it, needn't wait). Also used for a receipt the desktop asked
+// a paired phone to photograph (see CaptureRoutes.js).
+export async function createReceiptDraft({ imageBase64, mediaType = "image/jpeg", width, height, source }) {
+  const draft = await ReceiptDraft.create({ source: source === "desktop" ? "desktop" : "phone" });
+  const photo = await Photo.create({ data: Buffer.from(imageBase64, "base64"), contentType: mediaType, width: Number(width) || null, height: Number(height) || null, of: { kind: "receipt", id: draft._id } });
+  draft.photo = photo._id;
+  await draft.save();
+  readReceipt(imageBase64, mediaType)
+    .then((result) => ReceiptDraft.updateOne({ _id: draft._id, status: "parsing" }, { status: "ready", result }))
+    .catch((error) => {
+      console.error("Failed to read receipt draft:", error);
+      return ReceiptDraft.updateOne({ _id: draft._id, status: "parsing" }, { status: "failed", error: error.message || "Couldn't read the receipt." });
+    })
+    .catch(() => {});
+  return summary(draft);
+}
+
 router.post("/drafts", async (req, res) => {
   try {
-    const { imageBase64, mediaType = "image/jpeg", width, height, source } = req.body;
+    const { imageBase64 } = req.body;
     if (typeof imageBase64 !== "string" || !imageBase64) return res.status(400).json({ success: false, message: "imageBase64 is required." });
-    const draft = await ReceiptDraft.create({ source: source === "desktop" ? "desktop" : "phone" });
-    const photo = await Photo.create({ data: Buffer.from(imageBase64, "base64"), contentType: mediaType, width: Number(width) || null, height: Number(height) || null, of: { kind: "receipt", id: draft._id } });
-    draft.photo = photo._id;
-    await draft.save();
-    res.status(201).json({ success: true, data: summary(draft) });
-
-    // (After answering: the phone needn't wait for the reading.)
-    readReceipt(imageBase64, mediaType)
-      .then((result) => ReceiptDraft.updateOne({ _id: draft._id, status: "parsing" }, { status: "ready", result }))
-      .catch((error) => {
-        console.error("Failed to read receipt draft:", error);
-        return ReceiptDraft.updateOne({ _id: draft._id, status: "parsing" }, { status: "failed", error: error.message || "Couldn't read the receipt." });
-      })
-      .catch(() => {});
+    return res.status(201).json({ success: true, data: await createReceiptDraft(req.body) });
   } catch (error) {
-    if (!res.headersSent) res.status(400).json({ success: false, message: error.message });
+    return res.status(400).json({ success: false, message: error.message });
   }
 });
 

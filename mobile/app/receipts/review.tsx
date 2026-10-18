@@ -25,7 +25,9 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 
-import { BarcodeScannerModal, type ScannedProduct } from "@/src/components/BarcodeScannerModal";
+import { BarcodeScannerModal, lookupBarcode, type ScannedProduct } from "@/src/components/BarcodeScannerModal";
+import { PairPhoneCard } from "@/src/components/devices/PairPhoneCard";
+import { getThisDevice, requestCapture, watchCapture } from "@/src/services/deviceApi";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { countReadNutrients, labelNutrition, labelServing } from "@/src/utils/nutritionLabel";
 import {
@@ -44,6 +46,7 @@ import {
   updateIngredient,
   type Ingredient,
   type IngredientNutrition,
+  type NutritionLabelScan,
 } from "@/src/services/ingredientApi";
 import {
   createBrand,
@@ -195,6 +198,18 @@ function convertPortionAmount(
   const converted = convertUnits(amount, fromUnit, targetUnit, customConversions);
   // Rounded to 3 decimals, so 100 g in lb reads 0.22, not 0.220462.
   return converted == null ? 1 : Math.round(converted * 1000) / 1000;
+}
+
+// A scanned product's serving, for a new line: what its nutrition is per
+// (its declared serving, or 100 g when it has none), in the unit bought if
+// that converts, or else as it is.
+function servingFromProduct(product: ScannedProduct, unitBought: string): Pick<ReviewRow, "defaultPortionAmount" | "portionUnit"> {
+  const amount = product.servingIsEstimated ? 100 : product.servingSize;
+  const unit = (product.servingIsEstimated ? product.servingUnit || "g" : product.servingUnit) || unitBought;
+  const inUnitBought = convertUnits(amount, unit, unitBought, []);
+  return inUnitBought != null
+    ? { defaultPortionAmount: String(Math.round(inUnitBought * 1000) / 1000), portionUnit: undefined }
+    : { defaultPortionAmount: String(amount), portionUnit: unit };
 }
 
 // A matched, not-yet-added line with its ingredient's serving and nutrition
@@ -1200,7 +1215,9 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             </View>
             <Text className="ml-2.5 flex-1 text-[11px] leading-4 text-slate-400">
               {isNew
-                ? "Same unit as quantity bought. Nutrition below is per this amount."
+                ? servingUnit === row.unit
+                  ? "Same unit as quantity bought. Nutrition below is per this amount."
+                  : "Nutrition below is per this amount (from the product's barcode)."
                 : "Nutrition below is per this amount, from your catalog — edit it on the ingredient's page."}
             </Text>
           </View>
@@ -1401,6 +1418,31 @@ export default function ReceiptReviewPage() {
   const draftId = typeof draftParam === "string" && draftParam ? draftParam : null;
   const [draftPhoto, setDraftPhoto] = useState<string | null>(null);
   const [showPhoto, setShowPhoto] = useState(false);
+
+  // In a browser: whether barcodes and labels are taken with this computer
+  // or with the phone it's paired with (Settings → Devices), chosen once and
+  // remembered here, so it isn't asked each time.
+  const [cameraMode, setCameraModeState] = useState<"computer" | "phone">(() => {
+    try {
+      return Platform.OS === "web" && globalThis.localStorage?.getItem("receipts.camera") === "phone" ? "phone" : "computer";
+    } catch {
+      return "computer";
+    }
+  });
+  const usePhone = Platform.OS === "web" && cameraMode === "phone";
+  const [showPair, setShowPair] = useState(false);
+  function setCameraMode(mode: "computer" | "phone") {
+    setCameraModeState(mode);
+    try {
+      globalThis.localStorage?.setItem("receipts.camera", mode);
+    } catch {
+      // (Not remembered, but used.)
+    }
+    // (No phone yet: pair one now.)
+    if (mode === "phone") void getThisDevice().then((me) => !me.paired.length && setShowPair(true), () => {});
+  }
+  // A barcode or label being taken on the phone, and how it's going.
+  const [phoneJob, setPhoneJob] = useState<{ id: string; kind: "barcode" | "label"; rowName: string; status: string; message?: string; stop?: () => void } | null>(null);
   const { width: windowWidth, height: windowHeight } = usePaneDimensions();
   const pagerRef = useRef<FlatList<ReviewRow>>(null);
   const layout = useWideForm();
@@ -1774,6 +1816,52 @@ export default function ReceiptReviewPage() {
     };
   }, [router, retryToken, capturedPending, draftId]);
 
+  // A line's barcode or label, taken on the paired phone: the request goes
+  // to the phone (whose "computer's camera" screen opens the camera), and
+  // what comes back is filled in here as if taken on this computer.
+  async function viaPhone(kind: "barcode" | "label", rowKey: string) {
+    const rowName = rows.find((r) => r.key === rowKey)?.name ?? "";
+    let request: Awaited<ReturnType<typeof requestCapture>>;
+    try {
+      request = await requestCapture(kind, rowName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Something went wrong.";
+      if (/pair a phone/i.test(message)) setShowPair(true);
+      else setPhoneJob({ id: "", kind, rowName, status: "failed", message });
+      return;
+    }
+    const watch = watchCapture(request._id, (update) => setPhoneJob((job) => (job && job.id === update._id ? { ...job, status: update.status } : job)));
+    setPhoneJob({ id: request._id, kind, rowName, status: request.status, stop: watch.stop });
+    const final = await watch.done.catch(() => null);
+    if (!final) return;
+    const settle = (status: string, message: string) => setPhoneJob((job) => (job && job.id === final._id ? { ...job, status, message } : job));
+    if (final.status !== "done") {
+      settle(final.status, final.status === "cancelled" ? "Cancelled on the phone." : final.error || "That didn't work.");
+      return;
+    }
+    if (kind === "barcode" && final.result?.barcode) {
+      settle("looking", "");
+      const { product, problem } = await lookupBarcode(final.result.barcode);
+      handleBarcodeScanned(product, rowKey);
+      settle(
+        problem ? "failed" : "filled",
+        problem === "notFound"
+          ? `Barcode ${final.result.barcode} isn't in the product database: it's saved on the line so it's recognised next time.`
+          : problem === "noName"
+            ? `Barcode ${final.result.barcode} was found without a name: it's saved on the line.`
+            : problem === "failed"
+              ? "Couldn't reach the product database: the barcode is saved on the line."
+              : `Found ${product.name}${product.brand ? ` (${product.brand})` : ""}. Check the values.`,
+      );
+    } else if (kind === "label" && final.result?.scan) {
+      const scan = final.result.scan;
+      const outcome = await readLabelInto(rowKey, async () => scan);
+      settle(outcome.ok ? "filled" : "failed", outcome.message);
+    } else {
+      settle("failed", "Nothing came back from the phone.");
+    }
+  }
+
   function updateRow(key: string, updates: Partial<ReviewRow>) {
     setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...updates } : row)));
   }
@@ -1858,7 +1946,6 @@ export default function ReceiptReviewPage() {
   // Shared by both the exact-match-while-typing case and explicitly tapping
   // a suggestion from the name dropdown — snaps a row onto a real ingredient.
   function applyIngredientMatch(rowKey: string, ingredient: Ingredient) {
-    const row = rows.find((r) => r.key === rowKey);
     const history = recentPantryEntries(
       pantryItems.filter((item) => referenceId(item.ingredient) === ingredient._id),
     );
@@ -1948,21 +2035,26 @@ export default function ReceiptReviewPage() {
   // expressed in the row's own unit — the same helpers the add-ingredient
   // page's "Scan label" uses. A serving that can't be put in the row's unit
   // is flagged rather than guessed.
-  async function handleLabelPhoto(photoUri: string) {
+  function handleLabelPhoto(photoUri: string) {
     const rowKey = labelScanRowKey;
     setLabelScanRowKey(null);
+    if (rowKey) void readLabelInto(rowKey, () => parseNutritionLabel(photoUri));
+  }
+
+  // A label (photographed here, or on the paired phone and read on the
+  // server) into a line's nutrition and serving. Says what it did, for a
+  // browser — where alerts don't show — as well as alerting it.
+  async function readLabelInto(rowKey: string, getScan: () => Promise<NutritionLabelScan>): Promise<{ ok: boolean; message: string }> {
     const row = rows.find((r) => r.key === rowKey);
-    if (!rowKey || !row) return;
+    if (!row) return { ok: false, message: "That line is gone." };
 
     setReadingLabelRowKey(rowKey);
     try {
-      const scan = await parseNutritionLabel(photoUri);
+      const scan = await getScan();
       if (!scan.isNutritionLabel) {
-        Alert.alert(
-          "No label found",
-          "Couldn't read a nutrition or supplement facts label in that photo. Try again with the whole panel in frame and in focus.",
-        );
-        return;
+        const message = "Couldn't read a nutrition or supplement facts label in that photo. Try again with the whole panel in frame and in focus.";
+        Alert.alert("No label found", message);
+        return { ok: false, message };
       }
 
       const serving = row.unit.trim() ? labelServing(scan, row.unit, row.unitConversions) : null;
@@ -1973,6 +2065,7 @@ export default function ReceiptReviewPage() {
                 ...r,
                 nutrition: { ...r.nutrition, ...labelNutrition(scan) },
                 defaultPortionAmount: serving ? String(serving.amount) : r.defaultPortionAmount,
+                ...(serving ? { portionUnit: undefined } : {}),
               }
             : r,
         ),
@@ -1995,15 +2088,18 @@ export default function ReceiptReviewPage() {
       if (scan.labelType === "supplement_facts") lines.push("Anything not on the supplement label was set to 0.");
       if (scan.notes.trim()) lines.push(`Note: ${scan.notes.trim()}`);
       Alert.alert("Label read — check the values", lines.join("\n\n"));
+      return { ok: true, message: lines.join(" ") };
     } catch (error) {
-      Alert.alert("Couldn't read label", error instanceof Error ? error.message : "Something went wrong.");
+      const message = error instanceof Error ? error.message : "Something went wrong.";
+      Alert.alert("Couldn't read label", message);
+      return { ok: false, message };
     } finally {
       setReadingLabelRowKey(null);
     }
   }
 
-  function handleBarcodeScanned(product: ScannedProduct) {
-    const rowKey = barcodeScanRowKey;
+  function handleBarcodeScanned(product: ScannedProduct, forRow?: string) {
+    const rowKey = forRow ?? barcodeScanRowKey;
     setBarcodeScanRowKey(null);
     if (!rowKey) return;
 
@@ -2057,14 +2153,9 @@ export default function ReceiptReviewPage() {
         ...(product.packageQuantity != null
           ? { quantity: String(product.packageQuantity), unit: matchedResultingUnit }
           : {}),
-        defaultPortionAmount: String(
-          convertPortionAmount(
-            existingMatch.defaultPortionAmount ?? 1,
-            existingMatch.defaultPortionUnit ?? "item",
-            matchedResultingUnit,
-            getIngredientConversions(existingMatch, [], ingredients),
-          ),
-        ),
+        // Its catalog serving, as it is (see ReviewRow.portionUnit).
+        defaultPortionAmount: String(existingMatch.defaultPortionAmount ?? 1),
+        portionUnit: existingMatch.defaultPortionUnit ?? "item",
         unitConversions: existingMatch.unitConversions ?? [],
         error: undefined,
       });
@@ -2128,12 +2219,11 @@ export default function ReceiptReviewPage() {
       ...(product.packageQuantity != null
         ? { quantity: String(product.packageQuantity), unit: resultingUnit }
         : {}),
-      // Only a real declared serving is meaningful to convert/apply here —
-      // an estimated 100g/100ml reference isn't a genuine per-use amount,
-      // so leave the row's existing defaultPortionAmount untouched instead.
-      ...(product.servingIsEstimated
-        ? {}
-        : { defaultPortionAmount: String(convertPortionAmount(product.servingSize, product.servingUnit, resultingUnit)) }),
+      // The nutrition is per the label's serving — or, with none declared,
+      // per 100 g (the database's own reference), so that's the serving.
+      // In the unit bought when it converts; otherwise kept as it is, in its
+      // own unit (see ReviewRow.portionUnit), never re-labelled.
+      ...servingFromProduct(product, resultingUnit),
       nutrition: product.nutrition ?? unknownNutrition(),
       unitConversions: [],
       expirySuggestion: null,
@@ -2339,7 +2429,7 @@ export default function ReceiptReviewPage() {
               genericName:
                 row.isGeneric || row.genericParentId ? undefined : row.genericName || undefined,
               defaultPortionAmount: Number(row.defaultPortionAmount) || 1,
-              defaultPortionUnit: row.unit || "item",
+              defaultPortionUnit: row.portionUnit || row.unit || "item",
               nutrition: toNutritionInput(row.nutrition),
               unitConversions: row.unitConversions,
             });
@@ -2466,8 +2556,8 @@ export default function ReceiptReviewPage() {
     updateRow,
     applyIngredientMatch,
     handleNameChange,
-    onScanBarcode: setBarcodeScanRowKey,
-    onScanLabel: setLabelScanRowKey,
+    onScanBarcode: (rowKey: string) => (usePhone ? void viaPhone("barcode", rowKey) : setBarcodeScanRowKey(rowKey)),
+    onScanLabel: (rowKey: string) => (usePhone ? void viaPhone("label", rowKey) : setLabelScanRowKey(rowKey)),
     readingLabelRowKey,
     onDeleteRow: handleDeleteRow,
     onOpenGroceryLink: setGroceryLinkRowKey,
@@ -2588,6 +2678,30 @@ export default function ReceiptReviewPage() {
             <Ionicons name="chevron-back" size={26} color="#0F172A" />
           </Pressable>
           <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Review Receipt</Text>
+          {/* (In a browser: which camera barcodes and labels use.) */}
+          {Platform.OS === "web" && (
+            <View className="mr-3 flex-row items-center">
+              <Text className="mr-2 text-xs font-medium text-slate-500">Camera</Text>
+              <View className="flex-row rounded-xl bg-slate-100 p-1">
+                {(
+                  [
+                    ["computer", "desktop-outline", "This computer"],
+                    ["phone", "phone-portrait-outline", "My phone"],
+                  ] as const
+                ).map(([mode, icon, text]) => (
+                  <Pressable
+                    key={mode}
+                    onPress={() => setCameraMode(mode)}
+                    accessibilityLabel={`Use ${text.toLowerCase()} for photos`}
+                    className={`flex-row items-center rounded-lg px-3 py-1.5 ${cameraMode === mode ? "bg-white" : ""}`}
+                  >
+                    <Ionicons name={icon} size={14} color={cameraMode === mode ? "#2563EB" : "#64748B"} />
+                    <Text className={`ml-1.5 text-xs font-semibold ${cameraMode === mode ? "text-blue-700" : "text-slate-500"}`}>{text}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
           {/* The receipt itself, to check the lines against. */}
           {!!draftPhoto && (
             <Pressable
@@ -2872,6 +2986,73 @@ export default function ReceiptReviewPage() {
             </ScrollView>
           </Pressable>
         </Pressable>
+      </Modal>
+
+      {/* A barcode or label being taken on the paired phone. */}
+      <Modal visible={!!phoneJob} transparent animationType="fade" onRequestClose={() => (phoneJob?.stop?.(), setPhoneJob(null))}>
+        <View className="flex-1 items-center justify-center bg-black/40 px-6">
+          <View className="w-full items-center rounded-3xl bg-white px-6 py-7" style={{ maxWidth: 440 }}>
+            {phoneJob && (() => {
+              const what = phoneJob.kind === "barcode" ? "barcode" : "nutrition label";
+              const open = ["waiting", "capturing", "looking"].includes(phoneJob.status);
+              const title =
+                phoneJob.status === "waiting"
+                  ? "Waiting for your phone…"
+                  : phoneJob.status === "capturing"
+                    ? `Camera open on your phone`
+                    : phoneJob.status === "looking"
+                      ? "Looking it up…"
+                      : phoneJob.status === "filled"
+                        ? `${phoneJob.kind === "barcode" ? "Barcode" : "Label"} filled in`
+                        : phoneJob.status === "cancelled"
+                          ? "Cancelled"
+                          : "That didn't work";
+              return (
+                <>
+                  <View className={`h-14 w-14 items-center justify-center rounded-full ${phoneJob.status === "filled" ? "bg-emerald-50" : open ? "bg-blue-50" : "bg-slate-100"}`}>
+                    {open ? (
+                      <ActivityIndicator color="#2563EB" />
+                    ) : (
+                      <Ionicons name={phoneJob.status === "filled" ? "checkmark" : "close"} size={26} color={phoneJob.status === "filled" ? "#16A34A" : "#64748B"} />
+                    )}
+                  </View>
+                  <Text className="mt-4 text-center text-lg font-bold text-slate-900">{title}</Text>
+                  <Text className="mt-1 text-center text-sm text-slate-500">
+                    {phoneJob.status === "waiting"
+                      ? `Scan the ${what}${phoneJob.rowName ? ` for ${phoneJob.rowName}` : ""} on your phone. On it, keep BentoBuilder open at Settings → Devices → Be my computer's camera: the camera opens by itself.`
+                      : phoneJob.status === "capturing"
+                        ? `Take the ${what}${phoneJob.rowName ? ` for ${phoneJob.rowName}` : ""}. It's filled in here as soon as it arrives.`
+                        : phoneJob.message ?? ""}
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      if (open) phoneJob.stop?.();
+                      setPhoneJob(null);
+                    }}
+                    className={`mt-5 rounded-xl px-5 py-2.5 ${open ? "bg-slate-100 active:bg-slate-200" : "bg-blue-600 active:bg-blue-700"}`}
+                  >
+                    <Text className={`font-semibold ${open ? "text-slate-700" : "text-white"}`}>{open ? "Cancel" : "Done"}</Text>
+                  </Pressable>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Pairing a phone, the first time "My phone" is chosen. */}
+      <Modal visible={showPair} transparent animationType="fade" onRequestClose={() => setShowPair(false)}>
+        <View className="flex-1 items-center justify-center bg-black/40 px-6">
+          <View className="w-full rounded-3xl bg-white p-6" style={{ maxWidth: 680 }}>
+            <View className="mb-4 flex-row items-center">
+              <Text className="flex-1 text-lg font-bold text-slate-900">Pair your phone</Text>
+              <Pressable onPress={() => setShowPair(false)} hitSlop={10} accessibilityLabel="Close">
+                <Ionicons name="close" size={22} color="#64748B" />
+              </Pressable>
+            </View>
+            {showPair && <PairPhoneCard onPaired={() => setTimeout(() => setShowPair(false), 1800)} />}
+          </View>
+        </View>
       </Modal>
 
       {/* The receipt photo, full size, to check the lines against. */}

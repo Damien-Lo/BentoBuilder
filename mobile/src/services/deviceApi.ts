@@ -1,0 +1,143 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+
+import { API_BASE_URL } from "@/src/config/api";
+import type { NutritionLabelScan } from "@/src/services/ingredientApi";
+
+// This device, as the server knows it (see server/models/Device.js): a
+// computer and a phone are paired once — the phone scans a QR code the
+// computer shows — and from then on the computer can ask the phone to take
+// a photo (a barcode, a nutrition label, a receipt) without asking again.
+// The id and secret are kept here (localStorage in a browser) and sent with
+// each request. Later, with accounts, devices will belong to the account
+// instead of being paired; nothing else here changes.
+
+export interface DeviceInfo {
+  _id: string;
+  kind: "phone" | "computer";
+  name: string;
+  lastSeenAt?: string;
+}
+export interface ThisDevice extends DeviceInfo {
+  paired: DeviceInfo[];
+}
+interface Identity {
+  _id: string;
+  secret: string;
+  kind: "phone" | "computer";
+}
+
+const KEY = "@bentobuilder/device";
+export const thisKind: "phone" | "computer" = Platform.OS === "web" ? "computer" : "phone";
+
+function defaultName(): string {
+  if (Platform.OS !== "web") return Platform.OS === "ios" ? "iPhone" : "Phone";
+  const agent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const browser = /Edg\//.test(agent) ? "Edge" : /Chrome\//.test(agent) ? "Chrome" : /Safari\//.test(agent) ? "Safari" : /Firefox\//.test(agent) ? "Firefox" : "Browser";
+  const os = /Mac OS X/.test(agent) ? "Mac" : /Windows/.test(agent) ? "Windows" : /Linux/.test(agent) ? "Linux" : "Computer";
+  return `${os} · ${browser}`;
+}
+
+async function parse<T>(response: Response): Promise<T> {
+  const data = (await response.json().catch(() => null)) as { success?: boolean; data?: T; message?: string } | null;
+  if (!response.ok || !data?.success) {
+    const error = new Error(data?.message ?? `Request failed (${response.status})`) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+  return data.data as T;
+}
+
+let identity: Promise<Identity> | null = null;
+// This device's id and secret, registering it the first time.
+function getIdentity(): Promise<Identity> {
+  identity ??= (async () => {
+    try {
+      const saved = await AsyncStorage.getItem(KEY);
+      if (saved) return JSON.parse(saved) as Identity;
+    } catch {
+      // (Unreadable: register afresh.)
+    }
+    const made = await parse<Identity & DeviceInfo>(await fetch(`${API_BASE_URL}/api/devices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: thisKind, name: defaultName() }) }));
+    const kept = { _id: made._id, secret: made.secret, kind: made.kind };
+    await AsyncStorage.setItem(KEY, JSON.stringify(kept)).catch(() => {});
+    return kept;
+  })();
+  return identity;
+}
+
+// A request as this device. A server that no longer knows it (a fresh
+// database) means registering again, once.
+async function call<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
+  const me = await getIdentity();
+  const response = await fetch(`${API_BASE_URL}/api${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", "x-device-id": me._id, "x-device-secret": me.secret, ...(init.headers ?? {}) },
+  });
+  if (response.status === 401 && !retried) {
+    identity = null;
+    await AsyncStorage.removeItem(KEY).catch(() => {});
+    return call<T>(path, init, true);
+  }
+  return parse<T>(response);
+}
+
+export const getThisDevice = () => call<ThisDevice>("/devices/me");
+export const renameThisDevice = (name: string) => call<void>("/devices/me", { method: "PATCH", body: JSON.stringify({ name }) });
+export const unpairDevice = (id: string) => call<void>(`/devices/paired/${id}`, { method: "DELETE" });
+
+// A computer's one-time code for a phone to scan; and what the QR code holds.
+export const makePairCode = () => call<{ code: string; expiresAt: string }>("/devices/pair-code", { method: "POST" });
+export const pairLink = (code: string) => `bentobuilder-pair:${code}`;
+// The code in a scanned QR code (or a pasted one), if it's a pairing code.
+export const codeFromScan = (text: string) => (text.startsWith("bentobuilder-pair:") ? text.slice("bentobuilder-pair:".length) : /^[A-Za-z0-9_-]{16,}$/.test(text) ? text : null);
+export const pairWithCode = (code: string) => call<DeviceInfo>("/devices/pair", { method: "POST", body: JSON.stringify({ code }) });
+
+// --- Camera requests: a computer asking its phone for a photo ------------
+
+export type CaptureKind = "barcode" | "label" | "receipt";
+export interface CaptureRequest {
+  _id: string;
+  kind: CaptureKind;
+  label: string;
+  status: "waiting" | "capturing" | "done" | "cancelled" | "failed";
+  error: string;
+  result: { barcode?: string; photoUrl?: string; scan?: NutritionLabelScan; draftId?: string } | null;
+  createdAt: string;
+}
+
+export const requestCapture = (kind: CaptureKind, label = "") => call<CaptureRequest>("/capture", { method: "POST", body: JSON.stringify({ kind, label }) });
+export const getCapture = (id: string) => call<CaptureRequest>(`/capture/${id}`);
+// Called off — with `reason` when it failed on the phone (the computer is told).
+export const cancelCapture = (id: string, reason?: string) => call<CaptureRequest>(`/capture/${id}`, { method: "DELETE", ...(reason ? { body: JSON.stringify({ reason }) } : {}) });
+export const nextCapture = () => call<CaptureRequest | null>("/capture/next");
+export const claimCapture = (id: string) => call<CaptureRequest>(`/capture/${id}/claim`, { method: "POST" });
+export const sendCaptureBarcode = (id: string, barcode: string) => call<CaptureRequest>(`/capture/${id}/result`, { method: "POST", body: JSON.stringify({ barcode }) });
+export const sendCapturePhoto = (id: string, photo: { base64: string; width: number; height: number }) =>
+  call<CaptureRequest>(`/capture/${id}/result`, { method: "POST", body: JSON.stringify({ imageBase64: photo.base64, mediaType: "image/jpeg", width: photo.width, height: photo.height }) });
+
+// Waits for a request to be answered (or called off), checking every
+// `every` ms; `onUpdate` sees each change of state. Returns the request as
+// it ended. `stop()` cancels it.
+export function watchCapture(id: string, onUpdate: (request: CaptureRequest) => void, every = 1500): { done: Promise<CaptureRequest>; stop: () => void } {
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    void cancelCapture(id).catch(() => {});
+  };
+  const done = (async () => {
+    let last = "";
+    for (;;) {
+      if (stopped) throw new Error("cancelled");
+      const request = await getCapture(id).catch(() => null);
+      if (request) {
+        if (request.status !== last) onUpdate(request);
+        last = request.status;
+        if (["done", "cancelled", "failed"].includes(request.status)) return request;
+      }
+      await new Promise((resolve) => setTimeout(resolve, every));
+    }
+  })();
+  return { done, stop };
+}
