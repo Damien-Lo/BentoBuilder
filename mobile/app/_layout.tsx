@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ServerGate } from "@/src/components/ServerGate";
+import { AuthGate } from "@/src/components/auth/AuthGate";
 import { WebAlertHost } from "@/src/components/web/WebAlert";
 import { DataBadge } from "@/src/components/DataBadge";
 import { WebShell } from "@/src/components/web/WebShell";
@@ -29,6 +30,7 @@ export default function RootLayout() {
       value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
     >
       <ServerGate>
+      <AuthGate>
       <WebShell>
       <Stack>
         <Stack.Screen
@@ -257,6 +259,7 @@ export default function RootLayout() {
         />
       </Stack>
       </WebShell>
+      </AuthGate>
       {/* Which data is on show, where there's a choice. */}
       <DataBadge />
       </ServerGate>

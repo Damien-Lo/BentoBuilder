@@ -154,7 +154,7 @@ router.patch("/me", requireUser, async (req, res) => {
       if (email !== req.user.email) {
         if (!isEmail(email)) return fail(res, 400, "Enter a valid email address.");
         const me = await User.findById(req.user._id).select("+passwordHash");
-        if (!(await verifyPassword(req.body.currentPassword ?? "", me.passwordHash))) return fail(res, 401, "Your current password isn't right.");
+        if (!(await verifyPassword(req.body.currentPassword ?? "", me.passwordHash))) return fail(res, 400, "Your current password isn't right.");
         if (await User.exists({ email })) return fail(res, 409, "There's already an account with that email.");
         updates.email = email;
       }
@@ -178,7 +178,7 @@ router.post("/password", requireUser, async (req, res) => {
     const me = await User.findById(req.user._id).select("+passwordHash");
     if (!(await verifyPassword(req.body.currentPassword ?? "", me.passwordHash))) {
       noteFailure(keys);
-      return fail(res, 401, "Your current password isn't right.");
+      return fail(res, 400, "Your current password isn't right.");
     }
     const problem = passwordProblem(req.body.newPassword);
     if (problem) return fail(res, 400, problem);

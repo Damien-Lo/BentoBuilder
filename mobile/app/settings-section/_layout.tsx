@@ -57,6 +57,15 @@ export default function SettingsSectionLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="account"
+        options={{
+          title: "Account",
+          tabBarIcon: ({ color }) => (
+            <Ionicons size={26} name="person-circle-outline" color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

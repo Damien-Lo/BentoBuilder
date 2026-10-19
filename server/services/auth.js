@@ -122,6 +122,14 @@ export function requireAdmin(req, res, next) {
   next();
 }
 
+// The developer tools (switching databases, data fixes) are the admin's.
+// (A request without an account is the admin's until sign-in is required —
+// see services/ownership.js.)
+export function adminOrNoAccount(req, res, next) {
+  if (req.user && req.user.role !== "admin") return res.status(403).json({ success: false, message: "Only the admin can do that." });
+  next();
+}
+
 // Slowing down guessing: after LIMIT failures for the same key (an email,
 // or a network address) within WINDOW, further tries are refused until the
 // window has passed. Kept in memory: a restart forgets it, which is fine

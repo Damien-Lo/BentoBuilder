@@ -29,7 +29,7 @@ import developerRoutes from "./routes/DeveloperRoutes.js";
 import photoRoutes from "./routes/PhotoRoutes.js";
 import menuRoutes from "./routes/MenuRoutes.js";
 import authRoutes from "./routes/AuthRoutes.js";
-import { authenticate } from "./services/auth.js";
+import { adminOrNoAccount, authenticate } from "./services/auth.js";
 import { ownerScope } from "./services/ownership.js";
 
 
@@ -92,7 +92,7 @@ app.use("/api/capture", captureRoutes);
 app.use("/api/weight-entries", weightEntryRoutes);
 app.use("/api/todo", todoRoutes);
 app.use("/api/calendar", calendarRoutes);
-app.use("/api/developer", developerRoutes);
+app.use("/api/developer", adminOrNoAccount, developerRoutes);
 app.use("/api/photos", photoRoutes);
 app.use("/api/menu", menuRoutes);
 app.use("/api/auth", authRoutes);

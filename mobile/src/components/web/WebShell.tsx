@@ -3,6 +3,7 @@ import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
 import { useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { useAccount } from "@/src/components/auth/AuthGate";
 import { PaneContext } from "@/src/utils/pane";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 
@@ -37,6 +38,8 @@ export function WebShell({ children }: { children: ReactNode }) {
   const wide = useWideWeb();
   const router = useRouter();
   const pathname = usePathname();
+  // (The developer tools are the admin's.)
+  const isAdmin = useAccount().account?.role === "admin";
   const params = useGlobalSearchParams();
   // The content pane's own size, for screens that lay out by width.
   const [pane, setPane] = useState<{ width: number; height: number } | null>(null);
@@ -203,7 +206,7 @@ export function WebShell({ children }: { children: ReactNode }) {
             </View>
           )}
         </View>
-        {WEB_SECTIONS.filter((s) => s.footer).map((s) => (
+        {WEB_SECTIONS.filter((s) => s.footer && (s.id !== "developer" || isAdmin)).map((s) => (
           <RailButton key={s.id} section={s} on={section?.id === s.id} onPress={() => go(s.path)} />
         ))}
       </View>

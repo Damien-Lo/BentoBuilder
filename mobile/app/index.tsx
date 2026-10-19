@@ -1,12 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { WebHomeScreen } from "@/src/components/web/WebHomeScreen";
 import { useWideWeb } from "@/src/utils/useWideWeb";
+import { useAccount } from "@/src/components/auth/AuthGate";
 
 const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -125,15 +126,18 @@ export default function HomeScreen() {
 
 function PhoneHomeScreen() {
   const router = useRouter();
-  const [sections, setSections] = useState(SECTIONS);
+  // (The developer tools are the admin's.)
+  const isAdmin = useAccount().account?.role === "admin";
+  const allowed = useCallback((list: Section[]) => list.filter((s) => s.id !== "developer" || isAdmin), [isAdmin]);
+  const [sections, setSections] = useState(() => allowed(SECTIONS));
   // Reorder mode: the cards show arrows instead of opening.
   const [reordering, setReordering] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(ORDER_KEY)
-      .then((saved) => saved && setSections(arrange(JSON.parse(saved))))
+      .then((saved) => saved && setSections(allowed(arrange(JSON.parse(saved)))))
       .catch(() => {});
-  }, []);
+  }, [allowed]);
 
   function move(index: number, by: -1 | 1) {
     const target = index + by;
@@ -145,7 +149,7 @@ function PhoneHomeScreen() {
   }
 
   function resetOrder() {
-    setSections(SECTIONS);
+    setSections(allowed(SECTIONS));
     AsyncStorage.removeItem(ORDER_KEY).catch(() => {});
   }
 

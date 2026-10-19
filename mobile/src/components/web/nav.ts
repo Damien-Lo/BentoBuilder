@@ -96,6 +96,7 @@ export const WEB_SECTIONS: WebSection[] = [
       { label: "Home planning", path: "/settings-section/home-planning" },
       { label: "Documents", path: "/settings-section/documents" },
       { label: "Devices", path: "/settings-section/devices" },
+      { label: "Account", path: "/settings-section/account" },
     ],
     footer: true,
   },

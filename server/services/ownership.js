@@ -48,6 +48,10 @@ const OPEN = [/^\/api\/health$/, /^\/api\/auth\/(signin|signup|reset)$/, /^\/api
 export async function ownerScope(req, res, next) {
   try {
     let owner = req.user?._id ?? null;
+    // (A session that's ended, or a token from elsewhere — the other
+    // database on a developer's machine — isn't "no account": it's turned
+    // away, so the app asks to sign in again.)
+    if (!owner && req.authProblem && !OPEN.some((path) => path.test(req.path))) return res.status(401).json({ success: false, message: req.authProblem });
     if (!owner) {
       if (signInRequired()) {
         if (!OPEN.some((path) => path.test(req.path))) return res.status(401).json({ success: false, message: req.authProblem ?? "Sign in first." });

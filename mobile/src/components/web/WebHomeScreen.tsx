@@ -6,6 +6,7 @@ import { Pressable, Text, View } from "react-native";
 import { addDays, calendarColor, minutesLabel, nowMinutes as currentMinutes, WEEKDAYS_SHORT, weekOf } from "@/src/components/calendar/calendarUtils";
 import { entryName, mealLine } from "@/src/components/calendar/mealFood";
 import { useCalendarData } from "@/src/components/calendar/useCalendarData";
+import { useAccount } from "@/src/components/auth/AuthGate";
 import { friendlyDate, longToday } from "@/src/components/todo/theme";
 import { getMealPlanRange, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { getPantryItems } from "@/src/services/pantryApi";
@@ -29,6 +30,7 @@ type Hover = { hovered?: boolean };
 const dayOf = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : null);
 
 export function WebHomeScreen() {
+  const { account } = useAccount();
   const router = useRouter();
   const today = todayStr();
   const calendar = useCalendarData(today);
@@ -113,6 +115,8 @@ export function WebHomeScreen() {
   }
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  // (The name set in Settings, or else the account's first name.)
+  const name = settings.displayName || account?.name.split(" ")[0] || "";
 
   return (
     <WebPage>
@@ -120,7 +124,7 @@ export function WebHomeScreen() {
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 28, fontWeight: "700", color: WEB.text }}>
             {greeting}
-            {settings.displayName ? `, ${settings.displayName}` : ""}
+            {name ? `, ${name}` : ""}
           </Text>
           <Text style={{ marginTop: 2, fontSize: 14, color: WEB.muted }}>{longToday()}</Text>
         </View>
