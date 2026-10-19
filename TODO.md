@@ -235,7 +235,7 @@ Built: sign-in (own email + password), invite-only accounts, per-person data, a 
 - Check the sign-in limiter sees real addresses behind Render's proxy (`trust proxy` is 1): a few wrong passwords from one place shouldn't hold off sign-in from another.
 
 **Soon:**
-- Host the web app on **Cloudflare Pages** (chosen Oct 18): repo connected, production branch `WorkingSave`, root `mobile`, build `npx expo export --platform web`, output `dist`, `NODE_VERSION=22`. Headers (security policy, caching) are in `mobile/public/_headers` — if the server's address changes, change it there too. Then set `WEB_ORIGINS=https://<project>.pages.dev` on Render, and put the address in Developer → People → Invite links.
+- **Web app hosted on Cloudflare Pages** (Oct 18) at https://bentobuilder.pages.dev: production branch `WorkingSave`, root `mobile`, build command `npm run build:web` (export, then `scripts/fix-web-export.mjs` moves package files out of `assets/node_modules/`, which Pages won't upload — without it every icon is a square), output `dist`, `NODE_VERSION=22`. Headers (security policy, caching) are in `mobile/public/_headers` — if the server's address changes, change it there too. Still to do: set `WEB_ORIGINS=https://bentobuilder.pages.dev` on Render, and put the address in Developer → People → Invite links.
 - Atlas: strong database password; check whether network access is open to everyone.
 - Local server: `REQUIRE_SIGN_IN=true` in `server/.env` when on shared Wi-Fi (the sign-in page's real/test switch then stops working).
 - Two of the three UserProfile records are unused duplicates — remove them.
