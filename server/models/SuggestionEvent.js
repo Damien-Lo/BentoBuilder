@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 // What was done with a meal suggestion: taken, turned over for another,
 // or waved away. Kept with what was offered and how it scored, because
@@ -44,5 +45,8 @@ const suggestionEventSchema = new mongoose.Schema(
 );
 
 suggestionEventSchema.index({ date: 1, slot: 1 });
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+suggestionEventSchema.plugin(ownedByUser);
 
 export default mongoose.model("SuggestionEvent", suggestionEventSchema);

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 // One demand source contributing to this item's quantity — either a specific
 // meal-plan entry's shortfall, or the user's own manual add. `amount` is
@@ -101,6 +102,9 @@ const groceryItemSchema = new mongoose.Schema(
 );
 
 groceryItemSchema.index({ ingredient: 1, status: 1 });
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+groceryItemSchema.plugin(ownedByUser);
 
 const GroceryItem = mongoose.model("GroceryItem", groceryItemSchema);
 

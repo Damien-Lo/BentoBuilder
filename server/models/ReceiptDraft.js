@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 // A scanned receipt waiting to be reviewed — kept on the server so the scan
 // can be reviewed on any device (a phone scans it, the desktop reviews it).
@@ -23,5 +24,8 @@ const receiptDraftSchema = new mongoose.Schema(
 );
 
 receiptDraftSchema.index({ status: 1, createdAt: -1 });
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+receiptDraftSchema.plugin(ownedByUser);
 
 export default mongoose.model("ReceiptDraft", receiptDraftSchema);

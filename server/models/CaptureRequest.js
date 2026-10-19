@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 // A computer asking one of its paired phones to use its camera: a product's
 // barcode, a nutrition label, or a whole receipt. The phone's "ready"
@@ -24,5 +25,8 @@ const captureRequestSchema = new mongoose.Schema(
 );
 
 captureRequestSchema.index({ computer: 1, status: 1, createdAt: 1 });
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+captureRequestSchema.plugin(ownedByUser);
 
 export default mongoose.model("CaptureRequest", captureRequestSchema);

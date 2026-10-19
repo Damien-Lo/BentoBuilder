@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 export const TASK_STATUSES = ["not_started", "in_progress", "on_hold", "completed"];
 export const TASK_PRIORITIES = ["low", "medium", "high", "urgent"];
@@ -89,6 +90,9 @@ todoTaskSchema.pre("countDocuments", hideDeleted);
 todoTaskSchema.index({ list: 1, completed: 1 });
 todoTaskSchema.index({ parent: 1 });
 todoTaskSchema.index({ deletedAt: 1 });
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+todoTaskSchema.plugin(ownedByUser);
 
 const TodoTask = mongoose.model("TodoTask", todoTaskSchema);
 export default TodoTask;

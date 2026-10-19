@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 import { createConfirmedNutritionSchema } from "./nutritionSchema.js";
 
 const stockDeductionSchema = new mongoose.Schema(
@@ -136,6 +137,9 @@ mealPlanEntrySchema.index(
   { usual: 1, date: 1 },
   { unique: true, partialFilterExpression: { usual: { $type: "objectId" } } },
 );
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+mealPlanEntrySchema.plugin(ownedByUser);
 
 const MealPlanEntry = mongoose.model("MealPlanEntry", mealPlanEntrySchema);
 export default MealPlanEntry;

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 const pantryItemSchema = new mongoose.Schema(
   {
@@ -133,6 +134,9 @@ const pantryItemSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+pantryItemSchema.plugin(ownedByUser);
 
 const PantryItem = mongoose.model("PantryItem", pantryItemSchema);
 

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 // One of the user's calendars (like Outlook's "Personal", "Dining", "Gym"):
 // a coloured group of events that can be shown or hidden as a whole.
@@ -38,6 +39,9 @@ const eventCalendarSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+eventCalendarSchema.plugin(ownedByUser);
 
 const EventCalendar = mongoose.model("EventCalendar", eventCalendarSchema);
 export default EventCalendar;

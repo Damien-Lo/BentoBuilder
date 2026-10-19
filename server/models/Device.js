@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 // A phone or computer this app runs on, so one can ask another to take a
 // photo (a computer reviewing a receipt asks the phone for a barcode or a
@@ -25,5 +26,8 @@ const deviceSchema = new mongoose.Schema(
 );
 
 deviceSchema.index({ pairCode: 1 }, { sparse: true });
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+deviceSchema.plugin(ownedByUser);
 
 export default mongoose.model("Device", deviceSchema);

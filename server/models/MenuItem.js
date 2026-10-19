@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 // The menu: recipes (or saved meals) you'd like to have, not yet on a day.
 // One that's "on the menu" is wanted soon — its servings not yet put on a
@@ -20,5 +21,8 @@ const menuItemSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+menuItemSchema.plugin(ownedByUser);
 
 export default mongoose.model("MenuItem", menuItemSchema);

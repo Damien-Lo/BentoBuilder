@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 // A user-made to-do list (or the built-in default "Tasks" list). The smart
 // lists — My Day, Important, Planned, All — aren't stored: they're views
@@ -42,6 +43,9 @@ const todoListSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+todoListSchema.plugin(ownedByUser);
 
 const TodoList = mongoose.model("TodoList", todoListSchema);
 export default TodoList;

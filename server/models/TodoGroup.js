@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 // A named folder of to-do lists on the Lists home (e.g. "Personal Admin"
 // holding "Personal Tasks" and "Shopping List"). One level deep only — a
@@ -12,6 +13,9 @@ const todoGroupSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+todoGroupSchema.plugin(ownedByUser);
 
 const TodoGroup = mongoose.model("TodoGroup", todoGroupSchema);
 export default TodoGroup;

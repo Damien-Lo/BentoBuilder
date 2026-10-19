@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 import { createExtendedNutrientGoalsSchema } from "./nutritionSchema.js";
 
 const userProfileSchema = new mongoose.Schema(
@@ -50,6 +51,9 @@ const userProfileSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+userProfileSchema.plugin(ownedByUser);
 
 const UserProfile = mongoose.model("UserProfile", userProfileSchema);
 export default UserProfile;

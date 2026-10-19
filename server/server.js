@@ -30,6 +30,7 @@ import photoRoutes from "./routes/PhotoRoutes.js";
 import menuRoutes from "./routes/MenuRoutes.js";
 import authRoutes from "./routes/AuthRoutes.js";
 import { authenticate } from "./services/auth.js";
+import { ownerScope } from "./services/ownership.js";
 
 
 
@@ -46,9 +47,11 @@ app.use(express.json({ limit: "15mb" }));
 // (Render sits in front of the server: the caller's address is the one it
 // passes on, which the sign-in limiter goes by.)
 app.set("trust proxy", 1);
-// Who each request is from, when it carries a session token (req.user).
-// Nothing requires it yet apart from /api/auth's own routes.
+// Who each request is from, when it carries a session token (req.user),
+// and so whose records it reads and writes (see services/ownership.js).
+// Without a session it's the admin's, until REQUIRE_SIGN_IN=true.
 app.use(authenticate);
+app.use(ownerScope);
 
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);

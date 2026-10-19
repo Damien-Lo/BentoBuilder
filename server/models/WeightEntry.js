@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 // One entry per calendar day — logging again on the same date updates that
 // day's weigh-in rather than creating a second entry (see the upsert-by-date
@@ -11,7 +12,10 @@ const weightEntrySchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-weightEntrySchema.index({ date: -1 }, { unique: true });
+weightEntrySchema.index({ owner: 1, date: -1 }, { unique: true });
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+weightEntrySchema.plugin(ownedByUser);
 
 const WeightEntry = mongoose.model("WeightEntry", weightEntrySchema);
 export default WeightEntry;

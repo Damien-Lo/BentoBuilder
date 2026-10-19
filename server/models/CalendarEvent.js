@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -59,6 +60,9 @@ const calendarEventSchema = new mongoose.Schema(
 );
 
 calendarEventSchema.index({ date: 1 });
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+calendarEventSchema.plugin(ownedByUser);
 
 const CalendarEvent = mongoose.model("CalendarEvent", calendarEventSchema);
 export default CalendarEvent;

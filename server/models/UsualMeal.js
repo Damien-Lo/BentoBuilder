@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -44,6 +45,9 @@ usualMealSchema.pre("validate", function () {
   if (count !== 1) throw new Error("A usual needs exactly one of meal, recipe, ingredient or restaurantMeal");
   if (!this.weekdays?.length) throw new Error("Pick at least one day of the week");
 });
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+usualMealSchema.plugin(ownedByUser);
 
 const UsualMeal = mongoose.model("UsualMeal", usualMealSchema);
 export default UsualMeal;
