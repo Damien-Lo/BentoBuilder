@@ -43,7 +43,22 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT) || 5050;
 
-app.use(cors());
+// Which websites may call the server from a browser: WEB_ORIGINS, comma
+// separated (e.g. https://bentobuilder.pages.dev), each with its preview
+// addresses (https://<anything>.bentobuilder.pages.dev). The phone app
+// sends no origin and isn't affected. Without WEB_ORIGINS (a developer's
+// machine), any.
+const webOrigins = (process.env.WEB_ORIGINS ?? "").split(",").map((o) => o.trim().replace(/\/$/, "")).filter(Boolean);
+function allowedOrigin(origin) {
+  if (!origin || !webOrigins.length) return true;
+  try {
+    const host = new URL(origin).hostname;
+    return webOrigins.some((allowed) => origin === allowed || (origin.startsWith("https://") && host.endsWith(`.${new URL(allowed).hostname}`)));
+  } catch {
+    return false;
+  }
+}
+app.use(cors({ origin: (origin, done) => done(null, allowedOrigin(origin)) }));
 // (Render sits in front of the server: the caller's address is the one it
 // passes on, which the sign-in limiter goes by.)
 app.set("trust proxy", 1);

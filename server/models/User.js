@@ -19,10 +19,11 @@ const userSchema = new mongoose.Schema(
     lastSignInAt: { type: Date, default: null },
     // Turned off by the admin: can't sign in, and is signed out everywhere.
     disabledAt: { type: Date, default: null },
-    // The admin's: links put in every invite message — where a new person
-    // registers their iPhone for the app (Apple only installs a test build
-    // on phones registered first), and where they install it.
+    // The admin's: links put in every invite message — the web app; where a
+    // new person registers their iPhone for the app (Apple only installs a
+    // test build on phones registered first), and where they install it.
     inviteLinks: {
+      web: { type: String, trim: true, default: "" },
       register: { type: String, trim: true, default: "" },
       install: { type: String, trim: true, default: "" },
     },

@@ -283,19 +283,23 @@ router.get("/invites", requireAdmin, async (req, res) => {
 
 /**
  * GET /api/auth/invite-links — the links put in invite messages.
- * PUT /api/auth/invite-links  { register?, install? }
+ * PUT /api/auth/invite-links  { web?, register?, install? }
  */
 const asLink = (value) => {
   const text = String(value ?? "").trim().slice(0, 500);
   return !text || /^https:\/\/\S+$/.test(text) ? text : null;
 };
-router.get("/invite-links", requireAdmin, (req, res) => res.json({ success: true, data: { register: req.user.inviteLinks?.register ?? "", install: req.user.inviteLinks?.install ?? "" } }));
+router.get("/invite-links", requireAdmin, (req, res) => {
+  const links = req.user.inviteLinks ?? {};
+  return res.json({ success: true, data: { web: links.web ?? "", register: links.register ?? "", install: links.install ?? "" } });
+});
 router.put("/invite-links", requireAdmin, async (req, res) => {
+  const web = asLink(req.body.web);
   const register = asLink(req.body.register);
   const install = asLink(req.body.install);
-  if (register === null || install === null) return fail(res, 400, "Links start with https://.");
-  await User.updateOne({ _id: req.user._id }, { inviteLinks: { register, install } });
-  return res.json({ success: true, data: { register, install } });
+  if (web === null || register === null || install === null) return fail(res, 400, "Links start with https://.");
+  await User.updateOne({ _id: req.user._id }, { inviteLinks: { web, register, install } });
+  return res.json({ success: true, data: { web, register, install } });
 });
 
 /**

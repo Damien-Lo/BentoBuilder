@@ -1,0 +1,21 @@
+# Cloudflare Pages: headers for the hosted web app (copied into dist/ by
+# `expo export`). Every address that isn't a file is the app itself
+# (Cloudflare does that by itself when there's no 404.html).
+#
+# The content security policy is what keeps the sign-in token (kept in the
+# browser) safe: the page runs only its own code, and talks only to the
+# BentoBuilder server and Open Food Facts (barcodes). Photos can come from
+# anywhere over https (an ingredient's picture can be a link). If the server
+# moves, change the address here.
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://bentobuilder.onrender.com https://world.openfoodfacts.org; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=()
+
+# (Fingerprinted names: a new version is a new file, so keep them for good.)
+/_expo/static/*
+  Cache-Control: public, max-age=31536000, immutable
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

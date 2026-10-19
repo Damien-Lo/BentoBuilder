@@ -31,13 +31,16 @@ import {
 // can be given a reset code (a forgotten password), turned off, or removed.
 
 function inviteMessage(invite: AccessCodeInfo, links: InviteLinks, from: string) {
-  const steps: string[] = [];
-  if (links.register) steps.push(`Register your iPhone for the app — open this on your iPhone:\n${links.register}\n(I'll let you know when the app's ready for it.)`);
-  if (links.install) steps.push(`Install BentoBuilder on your iPhone:\n${links.install}`);
-  steps.push(`Open BentoBuilder, tap “Have an invite code? Join”, and enter this code:\n${invite.code}${invite.email ? `\nwith this email address: ${invite.email}` : ""}`);
+  const ways: string[] = [];
+  if (links.web) ways.push(`Use it in your browser (phone or computer):\n${links.web}`);
+  const iphone: string[] = [];
+  if (links.register) iphone.push(`Register your iPhone — open this on it:\n${links.register}\n(I'll let you know when the app's ready for it.)`);
+  if (links.install) iphone.push(`Install the app:\n${links.install}`);
+  if (iphone.length) ways.push(`${links.web ? "Or as" : "As"} an iPhone app:\n${iphone.map((step, i) => (iphone.length > 1 ? `${i + 1}. ${step}` : step)).join("\n")}`);
   return [
     `${from ? `${from} has invited you` : "You're invited"} to BentoBuilder, a meal-planning and kitchen app.`,
-    steps.map((step, i) => (steps.length > 1 ? `${i + 1}. ${step}` : step)).join("\n\n"),
+    ...ways,
+    `To join, tap “Have an invite code? Join” and enter this code:\n${invite.code}${invite.email ? `\nwith this email address: ${invite.email}` : ""}`,
     `The code works once, until ${new Date(invite.expiresAt).toLocaleDateString(undefined, { dateStyle: "medium" })}.`,
   ].join("\n\n");
 }
@@ -71,7 +74,7 @@ function InviteReady({ invite, links, from, onDone }: { invite: AccessCodeInfo; 
       <Text selectable className="mt-3 rounded-lg bg-white p-3 text-[13px] leading-5 text-slate-700">
         {message}
       </Text>
-      {!links.install && <Text className="mt-2 text-xs text-amber-700">No install link yet: add it under “Invite links” so it goes in the message.</Text>}
+      {!links.web && !links.install && <Text className="mt-2 text-xs text-amber-700">No web or install link yet: add them under “Invite links” so they go in the message.</Text>}
       <View className="mt-3 flex-row flex-wrap gap-2">
         <Button label="Send…" icon="share-outline" onPress={() => void share(message).then((how) => setNote(how === "copied" ? "Copied: paste it into a message." : how === "failed" ? "Couldn't open sharing: copy it instead." : null))} />
         <Button label="Copy message" tone="plain" icon="copy-outline" onPress={() => void copy(message).then((ok) => setNote(ok ? "Copied." : "Couldn't copy."))} />
@@ -108,8 +111,8 @@ export default function PeopleScreen() {
   const layout = useWideForm();
   const [people, setPeople] = useState<Account[] | null>(null);
   const [invites, setInvites] = useState<AccessCodeInfo[]>([]);
-  const [links, setLinks] = useState<InviteLinks>({ register: "", install: "" });
-  const [linkDraft, setLinkDraft] = useState<InviteLinks>({ register: "", install: "" });
+  const [links, setLinks] = useState<InviteLinks>({ web: "", register: "", install: "" });
+  const [linkDraft, setLinkDraft] = useState<InviteLinks>({ web: "", register: "", install: "" });
   const [linksState, setLinksState] = useState<{ busy?: boolean; error?: string; saved?: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -158,7 +161,7 @@ export default function PeopleScreen() {
   async function saveLinks() {
     setLinksState({ busy: true });
     try {
-      const saved = await saveInviteLinks({ register: linkDraft.register.trim(), install: linkDraft.install.trim() });
+      const saved = await saveInviteLinks({ web: linkDraft.web.trim(), register: linkDraft.register.trim(), install: linkDraft.install.trim() });
       setLinks(saved);
       setLinkDraft(saved);
       setLinksState({ saved: true });
@@ -168,7 +171,7 @@ export default function PeopleScreen() {
   }
 
   const act = (job: Promise<unknown>) => void job.then(load, (err) => setError(errorText(err)));
-  const linksChanged = linkDraft.register.trim() !== links.register || linkDraft.install.trim() !== links.install;
+  const linksChanged = linkDraft.web.trim() !== links.web || linkDraft.register.trim() !== links.register || linkDraft.install.trim() !== links.install;
   const firstName = account.name.split(" ")[0] ?? "";
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={layout.page}>
@@ -280,7 +283,10 @@ export default function PeopleScreen() {
         <Heading>Invite links</Heading>
         <Card>
           <View className="px-4 py-3">
-            <Text className="text-sm text-slate-500">Put in every invite message. Until the app is on the App Store, an iPhone has to be registered before a build is made for it to install.</Text>
+            <Text className="text-sm text-slate-500">Put in every invite message. Until the app is on the App Store, an iPhone has to be registered before a build is made for it to install — the web app needs nothing.</Text>
+            <Text className="mt-4 text-xs font-semibold text-slate-500">Use it in a browser</Text>
+            <Input value={linkDraft.web} onChangeText={(web) => setLinkDraft((d) => ({ ...d, web }))} placeholder="https://bentobuilder.pages.dev" keyboardType="url" />
+            <Text className="mt-1 text-xs text-slate-400">The hosted web app&apos;s address.</Text>
             <Text className="mt-4 text-xs font-semibold text-slate-500">Register their iPhone</Text>
             <Input
               value={linkDraft.register}

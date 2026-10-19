@@ -194,6 +194,7 @@ export const withdrawInvite = (id: string) => call<void>(`/invites/${id}`, { met
 export const makeResetCode = (userId: string) => call<AccessCodeInfo>(`/users/${userId}/reset-code`, { method: "POST" });
 // The links put in every invite message (see app/settings-section/people.tsx).
 export interface InviteLinks {
+  web: string;
   register: string;
   install: string;
 }

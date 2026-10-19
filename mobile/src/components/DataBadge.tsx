@@ -9,7 +9,7 @@ import { useWideWeb } from "@/src/utils/useWideWeb";
 // A small marker, over everything, saying which data is on show — where
 // there's a choice (a developer's machine: see services/databaseApi.ts).
 // Tapping it opens the page that switches. On the deployed app there's no
-// choice, and no marker.
+// choice, and no marker — a release build doesn't even ask.
 export function DataBadge() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -17,6 +17,7 @@ export function DataBadge() {
   const [state, setState] = useState<DatabaseState | null>(null);
 
   useEffect(() => {
+    if (!__DEV__) return;
     const load = () => getDatabaseState().then(setState, () => setState(null));
     load();
     // (It may have been switched from another window.)
