@@ -1,3 +1,5 @@
+import { requireOptionalNativeModule } from "expo";
+import { Platform } from "react-native";
 import { API_BASE_URL } from "@/src/config/api";
 
 // Photos the app keeps (a recipe's, for now): taken, picked or pasted, then shrunk
@@ -12,9 +14,12 @@ export const PHOTO_MAX = 1200;
 // never needs them, and an app built before they were added still runs —
 // adding a photo there says it needs the newer app instead of failing to open.
 const OLD_APP = "Adding photos needs the latest version of the app. Install the newest build, then try again.";
-// (`needs`: something the package has once it's really there — an app
-// built without it can still load its code, just not use it.)
-async function load<T>(get: () => Promise<T>, needs: string): Promise<T> {
+// (`native`: the package's native module, asked for first — in an app built
+// without it, even loading the package fails, and a development build shows
+// that as a crash before anything can catch it. `needs`: something the
+// package has once it's really there.)
+async function load<T>(get: () => Promise<T>, needs: string, native: string): Promise<T> {
+  if (Platform.OS !== "web" && !requireOptionalNativeModule(native)) throw new Error(OLD_APP);
   let loaded: unknown;
   try {
     loaded = await get();
@@ -25,9 +30,9 @@ async function load<T>(get: () => Promise<T>, needs: string): Promise<T> {
   if (!mod || typeof (mod as Record<string, unknown>)[needs] !== "function") throw new Error(OLD_APP);
   return mod as T;
 }
-const picker = () => load(() => import("expo-image-picker"), "launchCameraAsync");
-const manipulator = () => load(() => import("expo-image-manipulator"), "manipulateAsync");
-const clipboard = () => load(() => import("expo-clipboard"), "getImageAsync");
+const picker = () => load(() => import("expo-image-picker"), "launchCameraAsync", "ExponentImagePicker");
+const manipulator = () => load(() => import("expo-image-manipulator"), "manipulateAsync", "ExpoImageManipulator");
+const clipboard = () => load(() => import("expo-clipboard"), "getImageAsync", "ExpoClipboard");
 
 export interface PreparedPhoto {
   base64: string;

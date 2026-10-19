@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { requireOptionalNativeModule } from "expo";
 import { Platform } from "react-native";
 
 import { API_BASE_URL } from "@/src/config/api";
@@ -48,11 +49,14 @@ const PERSONAL_KEYS = ["@bentobuilder/receiptReviewDraft", "kitchen.tasks.done",
 let token: string | null = null;
 let loaded = false;
 
-// The phone's keychain — or, in an app built before it was added (where
-// loading it fails), the ordinary storage until the next build.
+// The phone's keychain — or, in an app built before it was added, the
+// ordinary storage until the next build. (Asked first: in such an app even
+// loading the package fails, and in a development build that failure is
+// shown as a crash before anything can catch it.)
 type Keychain = typeof import("expo-secure-store");
 let keychain: Promise<Keychain | null> | null = null;
 function getKeychain() {
+  if (!requireOptionalNativeModule("ExpoSecureStore")) return Promise.resolve(null);
   keychain ??= import("expo-secure-store")
     .then((mod) => ((mod as Keychain).getItemAsync ? (mod as Keychain) : ((mod as { default?: Keychain }).default ?? null)))
     .then(async (mod) => (mod && (await mod.isAvailableAsync().catch(() => false)) ? mod : null))

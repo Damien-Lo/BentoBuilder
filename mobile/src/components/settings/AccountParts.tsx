@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { type ComponentProps, type ReactNode } from "react";
+import { requireOptionalNativeModule } from "expo";
 import { ActivityIndicator, Alert, Platform, Pressable, Text, TextInput, View } from "react-native";
 
 // The pieces Settings → Account and Settings → People are made of.
@@ -15,7 +16,8 @@ export function confirm(title: string, message: string, action: string, go: () =
 export async function copy(text: string) {
   try {
     if (Platform.OS === "web") await navigator.clipboard.writeText(text);
-    else await (await import("expo-clipboard")).setStringAsync(text);
+    else if (requireOptionalNativeModule("ExpoClipboard")) await (await import("expo-clipboard")).setStringAsync(text);
+    else return false;
     return true;
   } catch {
     return false;
