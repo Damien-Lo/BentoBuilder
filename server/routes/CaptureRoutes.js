@@ -5,6 +5,7 @@ import { parseNutritionLabel } from "../services/nutritionLabelParsing.js";
 import { deviceAuth } from "./DeviceRoutes.js";
 import { photoUrl } from "./PhotoRoutes.js";
 import { createReceiptDraft } from "./ReceiptRoutes.js";
+import { AllowanceError, takeAllowance } from "../services/aiAllowance.js";
 
 // A computer asking a paired phone to take a photo (see
 // models/CaptureRequest.js). Every call is from a registered device.
@@ -131,6 +132,13 @@ router.post("/:id/result", async (req, res) => {
     } else {
       const { imageBase64, mediaType = "image/jpeg", width, height } = req.body;
       if (typeof imageBase64 !== "string" || !imageBase64) return res.status(400).json({ success: false, message: "imageBase64 is required." });
+      // (A photo to be read by the AI service counts against the day's allowance.)
+      try {
+        res.on("finish", await takeAllowance(req));
+      } catch (error) {
+        if (error instanceof AllowanceError) return res.status(429).json({ success: false, message: error.message });
+        throw error;
+      }
       if (request.kind === "receipt") {
         const draft = await createReceiptDraft({ imageBase64, mediaType, width, height, source: "phone" });
         request.result = { draftId: draft._id };
@@ -138,11 +146,11 @@ router.post("/:id/result", async (req, res) => {
         const photo = await Photo.create({ data: Buffer.from(imageBase64, "base64"), contentType: mediaType, width: Number(width) || null, height: Number(height) || null, of: { kind: "label", id: request._id } });
         try {
           const scan = await parseNutritionLabel({ imageBase64, mediaType });
-          request.result = { photoUrl: photoUrl(photo._id), scan };
+          request.result = { photoUrl: photoUrl(photo), scan };
         } catch (error) {
           request.status = "failed";
           request.error = error.message || "Couldn't read the label.";
-          request.result = { photoUrl: photoUrl(photo._id) };
+          request.result = { photoUrl: photoUrl(photo) };
           await request.save();
           return res.json({ success: true, data: request });
         }

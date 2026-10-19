@@ -228,7 +228,7 @@ export function WebShell({ children }: { children: ReactNode }) {
             <View style={{ justifyContent: "center", marginRight: 28 }}>
               <Text style={{ fontSize: 18, fontWeight: "700", color: "#0F172A" }}>{section.label}</Text>
             </View>
-            {section.tabs.map((t) => {
+            {section.tabs.filter((t) => !t.adminOnly || isAdmin).map((t) => {
               const on = tab?.path === t.path;
               return (
                 <Pressable

@@ -1,6 +1,7 @@
 import express from "express";
 import RestaurantMeal from "../models/RestaurantMeal.js";
 import { estimateMealPhoto } from "../services/mealPhotoEstimation.js";
+import { aiAllowance } from "../services/aiAllowance.js";
 
 const router = express.Router();
 
@@ -85,7 +86,7 @@ router.post("/", async (req, res) => {
  * existing dish-row editing UI as a starting point, same as any manually
  * typed dish.
  */
-router.post("/estimate-photo", async (req, res) => {
+router.post("/estimate-photo", aiAllowance, async (req, res) => {
   try {
     const { imageBase64, mediaType, restaurantName, singleDish } = req.body;
 

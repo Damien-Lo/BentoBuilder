@@ -14,6 +14,8 @@ export interface WebTab {
   exact?: boolean;
   // Shown with a "Planned" tag: the page is a design, not built yet.
   planned?: boolean;
+  // Only for the admin.
+  adminOnly?: boolean;
 }
 
 export interface WebSection {
@@ -106,7 +108,13 @@ export const WEB_SECTIONS: WebSection[] = [
     icon: "construct-outline",
     path: "/developer/home",
     also: ["/developer"],
-    tabs: [],
+    tabs: [
+      { label: "Overview", path: "/developer/home" },
+      { label: "People", path: "/developer/people" },
+      { label: "Data", path: "/developer/data" },
+      { label: "Ingredients", path: "/developer/ingredients" },
+      { label: "Suggestions", path: "/developer/suggestions" },
+    ],
     footer: true,
   },
 ];

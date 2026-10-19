@@ -1,112 +1,30 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useState, type ComponentProps, type ReactNode } from "react";
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAccount } from "@/src/components/auth/AuthGate";
+import { PrivacyPolicyModal } from "@/src/components/legal/PrivacyPolicy";
+import { Button, Card, confirm, errorText, Heading, Input, when } from "@/src/components/settings/AccountParts";
 import {
   changePassword,
+  deleteMyAccount,
   endOtherSessions,
   endSession,
-  getAccounts,
-  getInvites,
   getSessions,
-  makeInvite,
-  makeResetCode,
   updateMe,
-  withdrawInvite,
-  type Account,
-  type AccessCodeInfo,
   type SessionInfo,
 } from "@/src/services/authApi";
 
 // Settings → Account: who's signed in — name, email, password — the devices
-// signed in to the account, and signing out. The admin also lets people in
-// here: invite codes for new accounts, and reset codes for a forgotten
-// password (no email is sent; the admin passes the code on).
-
-function confirm(title: string, message: string, action: string, go: () => void) {
-  if (Platform.OS === "web") {
-    if (window.confirm(`${title}\n\n${message}`)) go();
-  } else {
-    Alert.alert(title, message, [{ text: "Cancel", style: "cancel" }, { text: action, style: "destructive", onPress: go }]);
-  }
-}
-
-async function copy(text: string) {
-  try {
-    if (Platform.OS === "web") await navigator.clipboard.writeText(text);
-    else await (await import("expo-clipboard")).setStringAsync(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—");
-const errorText = (err: unknown) => (err instanceof Error ? err.message : "Something went wrong.");
-
-function Heading({ children }: { children: ReactNode }) {
-  return <Text className="mb-2 mt-7 text-xs font-bold uppercase tracking-wide text-slate-400">{children}</Text>;
-}
-function Card({ children }: { children: ReactNode }) {
-  return <View className="rounded-2xl border border-slate-200 bg-white">{children}</View>;
-}
-function Input(props: ComponentProps<typeof TextInput>) {
-  return (
-    <TextInput
-      placeholderTextColor="#94A3B8"
-      autoCapitalize="none"
-      autoCorrect={false}
-      className="mt-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-[15px] text-slate-900"
-      style={Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : undefined}
-      {...props}
-    />
-  );
-}
-function Button({ label, onPress, busy, tone = "blue", icon }: { label: string; onPress: () => void; busy?: boolean; tone?: "blue" | "plain" | "red"; icon?: keyof typeof Ionicons.glyphMap }) {
-  const look = tone === "blue" ? "bg-blue-600 active:bg-blue-700" : tone === "red" ? "bg-red-50 active:bg-red-100" : "bg-slate-100 active:bg-slate-200";
-  const text = tone === "blue" ? "text-white" : tone === "red" ? "text-red-600" : "text-slate-700";
-  return (
-    <Pressable onPress={onPress} disabled={busy} className={`flex-row items-center self-start rounded-xl px-4 py-2.5 ${look}`}>
-      {busy ? (
-        <ActivityIndicator size="small" color={tone === "blue" ? "white" : "#64748B"} style={{ marginRight: 6 }} />
-      ) : (
-        icon && <Ionicons name={icon} size={16} color={tone === "blue" ? "white" : tone === "red" ? "#DC2626" : "#334155"} style={{ marginRight: 6 }} />
-      )}
-      <Text className={`text-sm font-semibold ${text}`}>{label}</Text>
-    </Pressable>
-  );
-}
-
-// A code just made: shown once, to pass on.
-function CodeShown({ info, onDone }: { info: AccessCodeInfo; onDone: () => void }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <View className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
-      <Text className="text-xs font-semibold text-blue-700">
-        {info.kind === "invite" ? "Invite code" : "Reset code"}
-        {info.email ? ` for ${info.email}` : ""} — shown only now; valid until {when(info.expiresAt)}
-      </Text>
-      <Text selectable className="mt-2 text-2xl font-bold tracking-widest text-slate-900" style={{ fontVariant: ["tabular-nums"] }}>
-        {info.code}
-      </Text>
-      <Text className="mt-1 text-xs text-slate-500">
-        {info.kind === "invite"
-          ? "They open BentoBuilder, choose “Have an invite code? Join”, and enter it."
-          : "They choose “Forgot your password? Use a reset code” on the sign-in page, and enter it with their email."}
-      </Text>
-      <View className="mt-3 flex-row gap-2">
-        <Button label={copied ? "Copied" : "Copy"} icon={copied ? "checkmark" : "copy-outline"} tone="plain" onPress={() => void copy(info.code ?? "").then(setCopied)} />
-        <Button label="Done" tone="plain" onPress={onDone} />
-      </View>
-    </View>
-  );
-}
+// signed in to the account, signing out, and deleting the account. (The
+// admin lets people in, and looks after their accounts, in Developer →
+// People.)
 
 export default function AccountSettingsScreen() {
   const { account, setAccount, signOut } = useAccount();
+  const router = useRouter();
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,22 +42,17 @@ export default function AccountSettingsScreen() {
   const [again, setAgain] = useState("");
   const [passwordState, setPasswordState] = useState<{ busy?: boolean; error?: string; done?: string } | null>(null);
 
-  // The admin's
   const isAdmin = account?.role === "admin";
-  const [people, setPeople] = useState<Account[]>([]);
-  const [invites, setInvites] = useState<AccessCodeInfo[]>([]);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteNote, setInviteNote] = useState("");
-  const [shown, setShown] = useState<AccessCodeInfo | null>(null);
-  const [adminBusy, setAdminBusy] = useState(false);
+
+  // Deleting the account
+  const [deleting, setDeleting] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteState, setDeleteState] = useState<{ busy?: boolean; error?: string } | null>(null);
+  const [privacy, setPrivacy] = useState(false);
 
   const load = useCallback(() => {
     getSessions().then(setSessions, (err) => setError(errorText(err)));
-    if (isAdmin) {
-      getAccounts().then(setPeople, () => {});
-      getInvites().then(setInvites, () => {});
-    }
-  }, [isAdmin]);
+  }, []);
   useFocusEffect(load);
 
   if (!account) return null;
@@ -183,17 +96,14 @@ export default function AccountSettingsScreen() {
     }
   }
 
-  async function invite() {
-    setAdminBusy(true);
+  async function deleteAccount() {
+    setDeleteState({ busy: true });
     try {
-      setShown(await makeInvite(inviteEmail.trim(), inviteNote.trim()));
-      setInviteEmail("");
-      setInviteNote("");
-      load();
+      await deleteMyAccount(deletePassword);
+      // (Signed out, and a fresh start.)
+      await signOut();
     } catch (err) {
-      setError(errorText(err));
-    } finally {
-      setAdminBusy(false);
+      setDeleteState({ error: errorText(err) });
     }
   }
 
@@ -335,71 +245,65 @@ export default function AccountSettingsScreen() {
 
         {isAdmin && (
           <>
-            {/* People */}
             <Heading>People</Heading>
             <Card>
-              {people.map((person, i) => (
-                <View key={person._id} className={`flex-row items-center px-4 py-3 ${i ? "border-t border-slate-100" : ""}`}>
-                  <Ionicons name={person.role === "admin" ? "shield-checkmark-outline" : "person-circle-outline"} size={20} color="#475569" />
-                  <View className="ml-3 flex-1">
-                    <Text className="text-[15px] font-semibold text-slate-900">
-                      {person.name || person.email}
-                      {person.role === "admin" ? <Text className="text-xs font-semibold text-slate-400">  · admin</Text> : null}
-                    </Text>
-                    <Text className="text-xs text-slate-400">
-                      {person.email} · last signed in {when(person.lastSignInAt)}
-                    </Text>
-                  </View>
-                  {person._id !== account._id && (
-                    <Pressable
-                      onPress={() =>
-                        confirm(`A reset code for ${person.name || person.email}?`, "For a forgotten password: they set a new one with it, and are signed out everywhere.", "Make code", () =>
-                          void makeResetCode(person._id).then(setShown, (err) => setError(errorText(err))),
-                        )
-                      }
-                      hitSlop={8}
-                      className="rounded-lg bg-slate-100 px-3 py-1.5 active:bg-slate-200"
-                    >
-                      <Text className="text-xs font-semibold text-slate-600">Reset code</Text>
-                    </Pressable>
-                  )}
-                </View>
-              ))}
-            </Card>
-
-            {/* Invites */}
-            <Heading>Invite someone</Heading>
-            <Card>
-              <View className="px-4 py-3">
-                <Text className="text-sm text-slate-500">They get their own pantry, planner and lists, and share your food catalog. An invite code works once, for 7 days.</Text>
-                <Input value={inviteEmail} onChangeText={setInviteEmail} placeholder="Their email (optional: only they can use the code)" keyboardType="email-address" />
-                <Input value={inviteNote} onChangeText={setInviteNote} placeholder="Note for yourself (optional), e.g. “Mum”" autoCapitalize="sentences" />
-                <View className="mt-3">
-                  <Button label="Make invite code" icon="person-add-outline" busy={adminBusy} onPress={() => void invite()} />
-                </View>
-                {shown && <CodeShown info={shown} onDone={() => setShown(null)} />}
-              </View>
-              {invites.length > 0 && (
-                <View className="border-t border-slate-100 px-4 py-3">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">Waiting to be used</Text>
-                  {invites.map((inv) => (
-                    <View key={inv._id} className="mt-2 flex-row items-center">
-                      <Text className="flex-1 text-sm text-slate-700">
-                        {inv.note || inv.email || "Anyone with the code"}
-                        <Text className="text-xs text-slate-400">
-                          {inv.note && inv.email ? ` · ${inv.email}` : ""} · until {when(inv.expiresAt)}
-                        </Text>
-                      </Text>
-                      <Pressable onPress={() => confirm("Withdraw this invite?", "The code will stop working.", "Withdraw", () => void withdrawInvite(inv._id).then(load, () => {}))} hitSlop={8}>
-                        <Text className="text-xs font-semibold text-red-600">Withdraw</Text>
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              )}
+              <Pressable onPress={() => router.push("/developer/people")} className="flex-row items-center px-4 py-3.5 active:bg-slate-50">
+                <Ionicons name="people-outline" size={18} color="#475569" />
+                <Text className="ml-3 flex-1 text-[15px] text-slate-900">Invite people and look after their accounts</Text>
+                <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+              </Pressable>
             </Card>
           </>
         )}
+
+        {/* Deleting the account (not the admin's: they look after everyone's) */}
+        {!isAdmin && (
+          <>
+            <Heading>Delete my account</Heading>
+            <Card>
+              <View className="px-4 py-3">
+                <Text className="text-sm text-slate-500">
+                  Deletes your account and everything that&apos;s yours — your pantry, plans, meals, lists, weight, receipts and photos — for good. It can&apos;t be undone.
+                </Text>
+                {deleting ? (
+                  <>
+                    <Input value={deletePassword} onChangeText={setDeletePassword} placeholder="Your password, to confirm" secureTextEntry textContentType="password" autoComplete="current-password" />
+                    {!!deleteState?.error && <Text className="mt-2 text-sm text-red-600">{deleteState.error}</Text>}
+                    <View className="mt-3 flex-row gap-2">
+                      <Button
+                        label="Delete everything"
+                        tone="red"
+                        icon="trash-outline"
+                        busy={deleteState?.busy}
+                        onPress={() =>
+                          confirm("Delete your account?", "Everything that's yours is deleted for good. This can't be undone.", "Delete", () => void deleteAccount())
+                        }
+                      />
+                      <Button
+                        label="Cancel"
+                        tone="plain"
+                        onPress={() => {
+                          setDeleting(false);
+                          setDeletePassword("");
+                          setDeleteState(null);
+                        }}
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <View className="mt-3">
+                    <Button label="Delete my account…" tone="red" icon="trash-outline" onPress={() => setDeleting(true)} />
+                  </View>
+                )}
+              </View>
+            </Card>
+          </>
+        )}
+
+        <Pressable onPress={() => setPrivacy(true)} hitSlop={6} className="mt-8 items-center">
+          <Text className="text-xs font-semibold text-slate-400">Privacy policy</Text>
+        </Pressable>
+        <PrivacyPolicyModal visible={privacy} onClose={() => setPrivacy(false)} />
       </ScrollView>
     </SafeAreaView>
   );

@@ -3,6 +3,7 @@ import { useEffect, useState, type ComponentProps } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { PrivacyPolicyModal } from "@/src/components/legal/PrivacyPolicy";
 import { joinWithInvite, resetPassword, signIn, type Account } from "@/src/services/authApi";
 import { getDatabaseState, switchDatabase, type DatabaseId, type DatabaseState } from "@/src/services/databaseApi";
 
@@ -48,8 +49,12 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
   const [data, setData] = useState<DatabaseState | null>(null);
   const [switching, setSwitching] = useState(false);
 
+  const [privacy, setPrivacy] = useState(false);
+
+  // (Only in a development build: an app built for release never offers it,
+  // whatever a server says.)
   useEffect(() => {
-    getDatabaseState().then(setData, () => {});
+    if (__DEV__) getDatabaseState().then(setData, () => {});
   }, []);
 
   async function chooseData(id: DatabaseId) {
@@ -181,7 +186,12 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
               )}
             </View>
 
-            {data?.canSwitch && (
+            <Pressable onPress={() => setPrivacy(true)} hitSlop={6} className="mt-6 items-center">
+              <Text className="text-xs font-semibold text-slate-400">Privacy policy</Text>
+            </Pressable>
+            <PrivacyPolicyModal visible={privacy} onClose={() => setPrivacy(false)} />
+
+            {__DEV__ && data?.canSwitch && (
               <View className="mt-8 items-center">
                 <View className="flex-row rounded-xl bg-slate-200/70 p-1">
                   {data.databases.map((db) => {

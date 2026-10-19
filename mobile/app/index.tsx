@@ -100,7 +100,7 @@ const SECTIONS: Section[] = [
   {
     id: "developer",
     name: "Developer",
-    description: "Data quality & fixable items",
+    description: "People, data & reports",
     icon: "construct-outline",
     iconColor: "#D97706",
     iconBg: "#FFFBEB",

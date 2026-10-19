@@ -30,7 +30,11 @@ import photoRoutes from "./routes/PhotoRoutes.js";
 import menuRoutes from "./routes/MenuRoutes.js";
 import authRoutes from "./routes/AuthRoutes.js";
 import { adminOrNoAccount, authenticate } from "./services/auth.js";
-import { ownerScope } from "./services/ownership.js";
+
+// (Any key starting with "$", however deep.)
+const hasOperator = (value, depth = 0) =>
+  depth < 20 && !!value && typeof value === "object" && Object.entries(value).some(([key, inner]) => key.startsWith("$") || hasOperator(inner, depth + 1));
+import { ownerScope, signInRequired } from "./services/ownership.js";
 
 
 
@@ -40,18 +44,24 @@ const app = express();
 const PORT = Number(process.env.PORT) || 5050;
 
 app.use(cors());
-// Default express.json() limit (~100kb) is too small for a base64-encoded
-// receipt photo (a few MB) — raised here since the global parser runs
-// before any route-level override would ever see the request.
-app.use(express.json({ limit: "15mb" }));
 // (Render sits in front of the server: the caller's address is the one it
 // passes on, which the sign-in limiter goes by.)
 app.set("trust proxy", 1);
 // Who each request is from, when it carries a session token (req.user),
 // and so whose records it reads and writes (see services/ownership.js).
-// Without a session it's the admin's, until REQUIRE_SIGN_IN=true.
+// Without a session it's the admin's until sign-in is required — which it
+// is on the deployed server.
 app.use(authenticate);
 app.use(ownerScope);
+// Request bodies: a photo (base64, a few MB) only from someone signed in —
+// or anyone, while sign-in isn't required; a little otherwise, so a
+// stranger can't make the server hold large bodies.
+const smallBody = express.json({ limit: "20kb" });
+const largeBody = express.json({ limit: "15mb" });
+app.use((req, res, next) => (req.user || !signInRequired() ? largeBody : smallBody)(req, res, next));
+// No database instructions ("$set", "$rename"…) in what's sent: some routes
+// pass a body to the database as it is, and the app never sends them.
+app.use((req, res, next) => (hasOperator(req.body) ? res.status(400).json({ success: false, message: "That request isn't allowed." }) : next()));
 
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
@@ -102,6 +112,18 @@ app.use((req, res) => {
   return res.status(404).json({
     success: false,
     message: `Route not found: ${req.method} ${req.originalUrl}`,
+  });
+});
+
+// Anything that went wrong without a route answering — a body that isn't
+// JSON, or too large: a plain message, never the details.
+// eslint-disable-next-line no-unused-vars
+app.use((error, req, res, next) => {
+  const status = Number(error.status ?? error.statusCode) || 500;
+  if (status >= 500) console.error(`${req.method} ${req.url}:`, error);
+  return res.status(status).json({
+    success: false,
+    message: error.type === "entity.too.large" ? "That's too large to send." : status < 500 ? "That request couldn't be read." : "Something went wrong on the server.",
   });
 });
 

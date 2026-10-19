@@ -16,7 +16,7 @@ import User from "../models/User.js";
 // and nothing is filtered.
 //
 // Until the app signs in (and while the server doesn't require it — see
-// REQUIRE_SIGN_IN), a request without an account is taken to be the admin's,
+// signInRequired), a request without an account is taken to be the admin's,
 // since everything so far is theirs. The admin also sees records that don't
 // have an owner yet (from before accounts), so nothing goes missing between
 // this server going live and the existing records being given their owner
@@ -27,7 +27,15 @@ const context = new AsyncLocalStorage();
 // { owner, legacy } for the request being handled, or undefined.
 export const currentScope = () => context.getStore();
 
-export const signInRequired = () => process.env.REQUIRE_SIGN_IN === "true";
+// Whether a request needs an account. On the deployed server (Render sets
+// RENDER) it does unless REQUIRE_SIGN_IN=false says otherwise — so a
+// forgotten or mistyped setting can't leave it open; on a developer's
+// machine it doesn't unless REQUIRE_SIGN_IN=true.
+export function signInRequired() {
+  const setting = String(process.env.REQUIRE_SIGN_IN ?? "").trim().toLowerCase();
+  if (setting === "false") return false;
+  return setting === "true" || !!process.env.RENDER || process.env.NODE_ENV === "production";
+}
 
 // (The admin, looked up at most once a minute.)
 let admin = { id: null, at: 0 };
@@ -41,7 +49,7 @@ export async function adminId() {
 
 // Paths anyone can call without an account, once sign-in is required:
 // signing in itself, the health check, and photos (opened by their link).
-const OPEN = [/^\/api\/health$/, /^\/api\/auth\/(signin|signup|reset)$/, /^\/api\/photos\/[^/]+$/];
+const OPEN = [/^\/api\/health$/, /^\/api\/auth\/(signin|signup|reset)$/, /^\/api\/photos\/[^/]+(\/[^/]+)?$/];
 
 // Express middleware (after `authenticate`): runs the rest of the request
 // as its owner's.
@@ -74,9 +82,18 @@ function ownerCondition(scope) {
 
 const QUERIES = ["find", "findOne", "findOneAndUpdate", "findOneAndDelete", "findOneAndReplace", "updateOne", "updateMany", "replaceOne", "deleteOne", "deleteMany", "countDocuments", "distinct"];
 
+// No update may move a record to someone else — not even by renaming
+// another field to "owner".
+export function refuseOwnerRename(update) {
+  for (const target of Object.values(update?.$rename ?? {})) {
+    if (String(target).split(".")[0] === "owner") throw new Error("A record can't be moved to someone else.");
+  }
+}
+
 // (An update from a request never moves a record to someone else.)
 function withoutOwner(update) {
   if (!update || Array.isArray(update)) return update;
+  refuseOwnerRename(update);
   const rest = { ...update };
   delete rest.owner;
   for (const op of ["$set", "$setOnInsert", "$unset", "$rename"]) {

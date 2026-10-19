@@ -8,6 +8,10 @@
 // tags) is left as it is: records without an owner are the shared catalog
 // (services/catalog.js).
 //
+// Photos also get a key — their address becomes /api/photos/<id>/<key>, so
+// no one can guess one — and every address kept on a record (a recipe's
+// imageUrl) is brought up to date.
+//
 // Run from server/, after making the admin (create_admin.js):
 //   node manual_controls/scripts/assign_owners.js                  (real data: says what it would do)
 //   node manual_controls/scripts/assign_owners.js --apply          (real data: does it)
@@ -15,6 +19,7 @@
 // Take a backup first (backup_all_data.js). Running it again is harmless:
 // only records without an owner are changed.
 import "dotenv/config";
+import crypto from "node:crypto";
 import mongoose from "mongoose";
 
 import { TEST_DB_NAME } from "../../config/database.js";
@@ -40,6 +45,7 @@ const OWNED = [
   "weightentries",
   "devices",
   "capturerequests",
+  "photos",
 ];
 
 // Rules for one person that become per-person: [collection, old index name].
@@ -82,6 +88,33 @@ async function main() {
     }
   }
   console.log(`${total} record(s) ${apply ? "given an owner" : "would be given an owner"}.`);
+
+  // Photo keys, and the addresses that point at them.
+  const keyless = await db.collection("photos").find({ $or: [{ key: { $exists: false } }, { key: null }] }, { projection: { _id: 1 } }).toArray();
+  if (keyless.length) {
+    if (apply) {
+      for (const { _id } of keyless) await db.collection("photos").updateOne({ _id }, { $set: { key: crypto.randomBytes(16).toString("hex") } });
+      console.log(`  photos: ${keyless.length} given a key`);
+    } else {
+      console.log(`  photos: ${keyless.length} without a key`);
+    }
+  }
+  for (const name of ["recipes", "ingredients", "meals", "restaurantmeals"]) {
+    const records = await db.collection(name).find({ imageUrl: { $regex: "^/api/photos/[a-f0-9]{24}$" } }, { projection: { imageUrl: 1 } }).toArray();
+    if (!records.length) continue;
+    if (!apply) {
+      console.log(`  ${name}: ${records.length} photo address(es) to bring up to date`);
+      continue;
+    }
+    let updated = 0;
+    for (const record of records) {
+      const photo = await db.collection("photos").findOne({ _id: new mongoose.Types.ObjectId(record.imageUrl.split("/").pop()) }, { projection: { key: 1 } });
+      if (!photo?.key) continue;
+      await db.collection(name).updateOne({ _id: record._id }, { $set: { imageUrl: `/api/photos/${photo._id}/${photo.key}` } });
+      updated += 1;
+    }
+    console.log(`  ${name}: ${updated} photo address(es) brought up to date`);
+  }
 
   for (const [name, index] of OLD_INDEXES) {
     const exists = (await db.collection(name).indexes().catch(() => [])).some((i) => i.name === index);

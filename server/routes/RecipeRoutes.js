@@ -104,9 +104,11 @@ router.post("/:id/photo", async (req, res) => {
     if (!data.length) return res.status(400).json({ success: false, message: "No image was sent" });
     const photo = await Photo.create({ data, contentType: req.body.mediaType || "image/jpeg", width: Number(req.body.width) || null, height: Number(req.body.height) || null, of: { kind: "recipe", id: recipe._id } });
     const before = photoIdFrom(recipe.imageUrl);
-    recipe.imageUrl = photoUrl(photo._id);
+    recipe.imageUrl = photoUrl(photo);
     await recipe.save();
-    if (before) await Photo.deleteOne({ _id: before });
+    // (Only a photo that was this recipe's own — not one another recipe, or
+    // the shared original of a copy, still shows.)
+    if (before) await Photo.deleteOne({ _id: before, "of.id": recipe._id });
     return res.json({ success: true, data: { imageUrl: recipe.imageUrl } });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });
@@ -120,7 +122,9 @@ router.delete("/:id/photo", async (req, res) => {
     const before = photoIdFrom(recipe.imageUrl);
     recipe.imageUrl = "";
     await recipe.save();
-    if (before) await Photo.deleteOne({ _id: before });
+    // (Only a photo that was this recipe's own — not one another recipe, or
+    // the shared original of a copy, still shows.)
+    if (before) await Photo.deleteOne({ _id: before, "of.id": recipe._id });
     return res.json({ success: true, data: { imageUrl: "" } });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });

@@ -17,6 +17,8 @@ export interface Account {
   role: "admin" | "member";
   createdAt?: string;
   lastSignInAt?: string | null;
+  // Turned off by the admin.
+  disabledAt?: string | null;
 }
 export interface SessionInfo {
   _id: string;
@@ -174,6 +176,11 @@ export const changePassword = (currentPassword: string, newPassword: string) => 
 export const getSessions = () => call<SessionInfo[]>("/sessions");
 export const endSession = (id: string) => call<void>(`/sessions/${id}`, { method: "DELETE" });
 export const endOtherSessions = () => call<{ signedOut: number }>("/sessions", { method: "DELETE" });
+// Deletes this account and everything that's theirs; signs this device out.
+export async function deleteMyAccount(password: string) {
+  await call<{ removed: Record<string, number> }>("/me", { method: "DELETE", body: JSON.stringify({ password }) });
+  await forgetToken();
+}
 
 // The admin's
 export const getAccounts = () => call<Account[]>("/users");
@@ -181,3 +188,13 @@ export const makeInvite = (email = "", note = "") => call<AccessCodeInfo>("/invi
 export const getInvites = () => call<AccessCodeInfo[]>("/invites");
 export const withdrawInvite = (id: string) => call<void>(`/invites/${id}`, { method: "DELETE" });
 export const makeResetCode = (userId: string) => call<AccessCodeInfo>(`/users/${userId}/reset-code`, { method: "POST" });
+// The links put in every invite message (see app/settings-section/people.tsx).
+export interface InviteLinks {
+  register: string;
+  install: string;
+}
+export const getInviteLinks = () => call<InviteLinks>("/invite-links");
+export const saveInviteLinks = (links: InviteLinks) => call<InviteLinks>("/invite-links", { method: "PUT", body: JSON.stringify(links) });
+export const turnOffAccount = (userId: string) => call<Account>(`/users/${userId}/disable`, { method: "POST" });
+export const turnOnAccount = (userId: string) => call<Account>(`/users/${userId}/enable`, { method: "POST" });
+export const removeAccount = (userId: string) => call<{ removed: Record<string, number> }>(`/users/${userId}`, { method: "DELETE" });

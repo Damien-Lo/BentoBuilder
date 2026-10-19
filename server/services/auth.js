@@ -27,6 +27,8 @@ export async function hashPassword(password) {
 }
 
 export async function verifyPassword(password, stored) {
+  // (No password is longer than this: a huge one isn't worth hashing.)
+  if (typeof password !== "string" || password.length > 200) return false;
   const [kind, N, r, p, salt, hash] = String(stored ?? "").split("$");
   if (kind !== "scrypt" || !salt || !hash) return false;
   const expected = Buffer.from(hash, "base64url");
@@ -46,8 +48,8 @@ export function passwordProblem(password) {
   return null;
 }
 
-export const normalEmail = (email) => String(email ?? "").trim().toLowerCase();
-export const isEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 200;
+export const normalEmail = (email) => (typeof email === "string" ? email.slice(0, 300).trim().toLowerCase() : "");
+export const isEmail = (email) => typeof email === "string" && email.length <= 200 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 export const sha256 = (text) => crypto.createHash("sha256").update(text).digest("hex");
 
@@ -98,6 +100,10 @@ export async function authenticate(req, res, next) {
       req.authProblem = "That account no longer exists.";
       return next();
     }
+    if (user.disabledAt) {
+      req.authProblem = BLOCKED;
+      return next();
+    }
     if (Date.now() - session.lastUsedAt.getTime() > TOUCH_EVERY) {
       session.lastUsedAt = new Date();
       session.expiresAt = new Date(Date.now() + SESSION_DAYS * DAY);
@@ -107,9 +113,12 @@ export async function authenticate(req, res, next) {
     req.session = session;
     next();
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("authenticate:", error);
+    res.status(500).json({ success: false, message: "Something went wrong on the server." });
   }
 }
+
+export const BLOCKED = "This account has been turned off. Ask whoever runs your BentoBuilder.";
 
 export function requireUser(req, res, next) {
   if (!req.user) return res.status(401).json({ success: false, message: req.authProblem ?? "Sign in first." });
@@ -130,11 +139,14 @@ export function adminOrNoAccount(req, res, next) {
   next();
 }
 
-// Slowing down guessing: after LIMIT failures for the same key (an email,
-// or a network address) within WINDOW, further tries are refused until the
-// window has passed. Kept in memory: a restart forgets it, which is fine
-// for this purpose.
-const LIMIT = { perEmail: 5, perAddress: 20 };
+// Slowing down guessing: after LIMIT failures for the same key within
+// WINDOW, further tries are refused until the window has passed. The keys:
+// the network address; the email from that address (so one person's typos
+// don't lock anyone else out); and the email from anywhere, with a higher
+// limit (a guesser spread over many addresses is still slowed, and can't
+// lock an account out with a handful of tries). Kept in memory: a restart
+// forgets it, which is fine for this purpose.
+const LIMIT = { perAddress: 20, perEmailHere: 5, perEmail: 50 };
 const WINDOW = 15 * 60 * 1000;
 const failures = new Map();
 
@@ -165,5 +177,10 @@ export function noteFailure(keys) {
 
 export const clearFailures = (keys) => keys.forEach(([key]) => failures.delete(key));
 
-// The limiter keys for a request: its address, and the email if there is one.
-export const attemptKeys = (req, email) => [[`ip:${req.ip}`, LIMIT.perAddress], ...(email ? [[`email:${email}`, LIMIT.perEmail]] : [])];
+// The limiter keys for a request: its address, and the email if there is
+// one. (Only a real-looking email is kept: anything else — a huge string
+// sent to fill the server's memory — counts against the address alone.)
+export const attemptKeys = (req, email) => [
+  [`ip:${req.ip}`, LIMIT.perAddress],
+  ...(email && isEmail(email) ? [[`email:${email}|ip:${req.ip}`, LIMIT.perEmailHere], [`email:${email}`, LIMIT.perEmail]] : []),
+];

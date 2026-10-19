@@ -3,8 +3,10 @@ import express from "express";
 import AccessCode from "../models/AccessCode.js";
 import Session from "../models/Session.js";
 import User from "../models/User.js";
+import { deleteAccount } from "../services/accounts.js";
 import {
   attemptKeys,
+  BLOCKED,
   clearFailures,
   codeHash,
   hashPassword,
@@ -32,7 +34,7 @@ const router = express.Router();
 const INVITE_DAYS = 7;
 const RESET_HOURS = 24;
 
-const shownUser = (user) => ({ _id: user._id, email: user.email, name: user.name, role: user.role, createdAt: user.createdAt, lastSignInAt: user.lastSignInAt });
+const shownUser = (user) => ({ _id: user._id, email: user.email, name: user.name, role: user.role, createdAt: user.createdAt, lastSignInAt: user.lastSignInAt, disabledAt: user.disabledAt ?? null });
 const shownSession = (session, current) => ({ _id: session._id, deviceName: session.deviceName, createdAt: session.createdAt, lastUsedAt: session.lastUsedAt, current: String(session._id) === String(current?._id) });
 const shownCode = (code) => ({ _id: code._id, kind: code.kind, email: code.email, user: code.user, note: code.note, expiresAt: code.expiresAt, usedAt: code.usedAt, createdAt: code.createdAt });
 
@@ -60,6 +62,7 @@ router.post("/signin", async (req, res) => {
       return fail(res, 401, "That email and password don't match an account.");
     }
     clearFailures(keys);
+    if (user.disabledAt) return fail(res, 403, BLOCKED);
     const { token } = await startSession(user, req.body.deviceName);
     return res.json({ success: true, data: { token, user: shownUser(user) } });
   } catch (error) {
@@ -86,7 +89,11 @@ router.post("/signup", async (req, res) => {
     if (invite.email && invite.email !== email) return fail(res, 400, "This invite is for a different email address.");
     const problem = passwordProblem(req.body.password);
     if (problem) return fail(res, 400, problem);
-    if (await User.exists({ email })) return fail(res, 409, "There's already an account with that email. Sign in instead.");
+    if (await User.exists({ email })) {
+      // (Counted, so an invite code can't be used to test emails endlessly.)
+      noteFailure(keys);
+      return fail(res, 409, "There's already an account with that email. Sign in instead.");
+    }
 
     const user = await User.create({ email, name: String(req.body.name ?? "").trim().slice(0, 80), passwordHash: await hashPassword(req.body.password), role: "member" });
     // (Used up — and only once, even if two tries race.)
@@ -122,6 +129,7 @@ router.post("/reset", async (req, res) => {
     }
     const problem = passwordProblem(req.body.password);
     if (problem) return fail(res, 400, problem);
+    if (user.disabledAt) return fail(res, 403, BLOCKED);
     const claimed = await AccessCode.updateOne({ _id: reset._id, usedAt: null }, { usedAt: new Date(), usedBy: user._id });
     if (!claimed.modifiedCount) return fail(res, 400, "That reset code has just been used.");
     await User.updateOne({ _id: user._id }, { passwordHash: await hashPassword(req.body.password) });
@@ -153,8 +161,14 @@ router.patch("/me", requireUser, async (req, res) => {
       const email = normalEmail(req.body.email);
       if (email !== req.user.email) {
         if (!isEmail(email)) return fail(res, 400, "Enter a valid email address.");
+        const keys = attemptKeys(req, req.user.email);
+        const wait = waitMinutes(keys);
+        if (wait) return tooMany(res, wait);
         const me = await User.findById(req.user._id).select("+passwordHash");
-        if (!(await verifyPassword(req.body.currentPassword ?? "", me.passwordHash))) return fail(res, 400, "Your current password isn't right.");
+        if (!(await verifyPassword(req.body.currentPassword ?? "", me.passwordHash))) {
+          noteFailure(keys);
+          return fail(res, 400, "Your current password isn't right.");
+        }
         if (await User.exists({ email })) return fail(res, 409, "There's already an account with that email.");
         updates.email = email;
       }
@@ -268,6 +282,23 @@ router.get("/invites", requireAdmin, async (req, res) => {
 });
 
 /**
+ * GET /api/auth/invite-links — the links put in invite messages.
+ * PUT /api/auth/invite-links  { register?, install? }
+ */
+const asLink = (value) => {
+  const text = String(value ?? "").trim().slice(0, 500);
+  return !text || /^https:\/\/\S+$/.test(text) ? text : null;
+};
+router.get("/invite-links", requireAdmin, (req, res) => res.json({ success: true, data: { register: req.user.inviteLinks?.register ?? "", install: req.user.inviteLinks?.install ?? "" } }));
+router.put("/invite-links", requireAdmin, async (req, res) => {
+  const register = asLink(req.body.register);
+  const install = asLink(req.body.install);
+  if (register === null || install === null) return fail(res, 400, "Links start with https://.");
+  await User.updateOne({ _id: req.user._id }, { inviteLinks: { register, install } });
+  return res.json({ success: true, data: { register, install } });
+});
+
+/**
  * DELETE /api/auth/invites/:id — withdraws an unused invite.
  */
 router.delete("/invites/:id", requireAdmin, async (req, res) => {
@@ -301,6 +332,81 @@ router.post("/users/:id/reset-code", requireAdmin, async (req, res) => {
     return res.status(201).json({ success: true, data: { ...shownCode(reset), code } });
   } catch (error) {
     return fail(res, 400, error.message);
+  }
+});
+
+/**
+ * DELETE /api/auth/me  { password }
+ * Deletes this account and everything that's theirs (services/accounts.js).
+ * Not the admin's: the admin looks after everyone else's accounts.
+ */
+router.delete("/me", requireUser, async (req, res) => {
+  try {
+    if (req.user.role === "admin") return fail(res, 400, "The admin's account can't be deleted from the app.");
+    const keys = attemptKeys(req, req.user.email);
+    const wait = waitMinutes(keys);
+    if (wait) return tooMany(res, wait);
+    const me = await User.findById(req.user._id).select("+passwordHash");
+    if (!(await verifyPassword(req.body?.password ?? "", me.passwordHash))) {
+      noteFailure(keys);
+      return fail(res, 400, "That password isn't right.");
+    }
+    const removed = await deleteAccount(me._id);
+    return res.json({ success: true, data: { removed } });
+  } catch (error) {
+    console.error("Delete account:", error);
+    return fail(res, 500, "The account couldn't be deleted. Try again.");
+  }
+});
+
+// (Someone else's account, for the admin.)
+async function otherAccount(req, res) {
+  const user = await User.findById(req.params.id).catch(() => null);
+  if (!user) {
+    fail(res, 404, "No such account.");
+    return null;
+  }
+  if (String(user._id) === String(req.user._id)) {
+    fail(res, 400, "That's your own account.");
+    return null;
+  }
+  return user;
+}
+
+/**
+ * POST /api/auth/users/:id/disable — turns an account off: signed out
+ * everywhere, and can't sign in until turned back on.
+ * POST /api/auth/users/:id/enable — turns it back on.
+ */
+router.post("/users/:id/disable", requireAdmin, async (req, res) => {
+  const user = await otherAccount(req, res);
+  if (!user) return;
+  user.disabledAt = new Date();
+  await user.save();
+  await Session.deleteMany({ user: user._id });
+  return res.json({ success: true, data: shownUser(user) });
+});
+router.post("/users/:id/enable", requireAdmin, async (req, res) => {
+  const user = await otherAccount(req, res);
+  if (!user) return;
+  user.disabledAt = null;
+  await user.save();
+  return res.json({ success: true, data: shownUser(user) });
+});
+
+/**
+ * DELETE /api/auth/users/:id — removes someone's account and everything
+ * that's theirs.
+ */
+router.delete("/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const user = await otherAccount(req, res);
+    if (!user) return;
+    const removed = await deleteAccount(user._id);
+    return res.json({ success: true, data: { removed } });
+  } catch (error) {
+    console.error("Remove account:", error);
+    return fail(res, 500, "The account couldn't be removed. Try again.");
   }
 });
 

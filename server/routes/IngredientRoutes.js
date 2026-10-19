@@ -6,6 +6,7 @@ import Recipe from "../models/Recipe.js";
 import { getAvailableStock } from "../services/ingredientAvailability.js";
 import { parseNutritionLabel } from "../services/nutritionLabelParsing.js";
 import { wouldCreateCycle } from "../services/productionCycle.js";
+import { aiAllowance } from "../services/aiAllowance.js";
 
 const router = express.Router();
 
@@ -161,7 +162,7 @@ router.get("/:id/availability", async (req, res) => {
  * Facts label into per-serving nutrition plus the printed serving, for the
  * add/edit ingredient form to fill in.
  */
-router.post("/parse-label", async (req, res) => {
+router.post("/parse-label", aiAllowance, async (req, res) => {
   try {
     const { imageBase64, mediaType } = req.body;
 

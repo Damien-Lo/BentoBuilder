@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 import FoodSettings from "../models/FoodSettings.js";
 import StorageLocation from "../models/StorageLocation.js";
-import { currentScope } from "./ownership.js";
+import { currentScope, refuseOwnerRename } from "./ownership.js";
 
 // The food catalog — ingredients, recipes, brands, stores, tags and their
 // categories — shared by everyone, plus what each person adds for
@@ -182,6 +182,7 @@ export function sharedCatalog(schema, { kind = null } = {}) {
     if (!scope || this.getOptions().anyOwner) return;
     const update = this.getUpdate();
     // (No one moves a record to someone else, or out of the shared catalog.)
+    if (update) refuseOwnerRename(update);
     if (update && /replace/i.test(this.op)) {
       const replacement = { ...update };
       delete replacement.owner;

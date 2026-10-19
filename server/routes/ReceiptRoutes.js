@@ -8,6 +8,8 @@ import { parseReceiptImage } from "../services/receiptParsing.js";
 import Photo from "../models/Photo.js";
 import ReceiptDraft from "../models/ReceiptDraft.js";
 import { photoUrl } from "./PhotoRoutes.js";
+import { canSwitchDatabase } from "../config/database.js";
+import { aiAllowance } from "../services/aiAllowance.js";
 
 const router = express.Router();
 
@@ -38,7 +40,7 @@ async function readReceipt(imageBase64, mediaType) {
  * ingredients per line item; the client commits them via the existing
  * ingredient/store/pantry endpoints once the user confirms.
  */
-router.post("/parse", async (req, res) => {
+router.post("/parse", aiAllowance, async (req, res) => {
   try {
     const { imageBase64, mediaType } = req.body;
 
@@ -51,10 +53,14 @@ router.post("/parse", async (req, res) => {
 
     const data = await readReceipt(imageBase64, mediaType);
 
-    // Best-effort — never let a disk hiccup fail a real request.
-    fs.mkdir(path.dirname(LAST_PARSE_PATH), { recursive: true })
-      .then(() => fs.writeFile(LAST_PARSE_PATH, JSON.stringify(data, null, 2)))
-      .catch((err) => console.error("Failed to save dev receipt fixture:", err));
+    // Best-effort — never let a disk hiccup fail a real request. (Only on a
+    // developer's machine: elsewhere it would be anyone's receipt, kept for
+    // anyone to read back.)
+    if (canSwitchDatabase()) {
+      fs.mkdir(path.dirname(LAST_PARSE_PATH), { recursive: true })
+        .then(() => fs.writeFile(LAST_PARSE_PATH, JSON.stringify(data, null, 2)))
+        .catch((err) => console.error("Failed to save dev receipt fixture:", err));
+    }
 
     return res.status(200).json({ success: true, data });
   } catch (error) {
@@ -74,6 +80,7 @@ router.post("/parse", async (req, res) => {
  * 404 if nothing's been scanned yet.
  */
 router.get("/last", async (_req, res) => {
+  if (!canSwitchDatabase()) return res.status(404).json({ success: false, message: "No saved receipt scan yet." });
   try {
     const raw = await fs.readFile(LAST_PARSE_PATH, "utf-8");
     return res.status(200).json({ success: true, data: JSON.parse(raw) });
@@ -117,7 +124,8 @@ const full = (draft) => ({ ...summary(draft), result: draft.result, review: draf
 export async function createReceiptDraft({ imageBase64, mediaType = "image/jpeg", width, height, source }) {
   const draft = await ReceiptDraft.create({ source: source === "desktop" ? "desktop" : "phone" });
   const photo = await Photo.create({ data: Buffer.from(imageBase64, "base64"), contentType: mediaType, width: Number(width) || null, height: Number(height) || null, of: { kind: "receipt", id: draft._id } });
-  draft.photo = photo._id;
+  // (The photo itself, so its address — with its key — is in the answer.)
+  draft.photo = photo;
   await draft.save();
   readReceipt(imageBase64, mediaType)
     .then((result) => ReceiptDraft.updateOne({ _id: draft._id, status: "parsing" }, { status: "ready", result }))
@@ -129,7 +137,7 @@ export async function createReceiptDraft({ imageBase64, mediaType = "image/jpeg"
   return summary(draft);
 }
 
-router.post("/drafts", async (req, res) => {
+router.post("/drafts", aiAllowance, async (req, res) => {
   try {
     const { imageBase64 } = req.body;
     if (typeof imageBase64 !== "string" || !imageBase64) return res.status(400).json({ success: false, message: "imageBase64 is required." });
@@ -145,7 +153,7 @@ router.post("/drafts", async (req, res) => {
  */
 router.get("/drafts", async (_req, res) => {
   try {
-    const drafts = await ReceiptDraft.find({ status: { $in: ["parsing", "ready", "failed"] } }).sort({ createdAt: -1 }).lean();
+    const drafts = await ReceiptDraft.find({ status: { $in: ["parsing", "ready", "failed"] } }).sort({ createdAt: -1 }).populate("photo", "key").lean();
     return res.json({ success: true, data: drafts.map(summary) });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });
@@ -157,7 +165,7 @@ router.get("/drafts", async (_req, res) => {
  */
 router.get("/drafts/:id", async (req, res) => {
   try {
-    const draft = await ReceiptDraft.findById(req.params.id).lean();
+    const draft = await ReceiptDraft.findById(req.params.id).populate("photo", "key").lean();
     if (!draft) return res.status(404).json({ success: false, message: "Receipt not found" });
     return res.json({ success: true, data: full(draft) });
   } catch (error) {
@@ -174,7 +182,7 @@ router.patch("/drafts/:id", async (req, res) => {
     const changes = {};
     if (req.body.review !== undefined) changes.review = req.body.review;
     if (["done", "discarded"].includes(req.body.status)) changes.status = req.body.status;
-    const draft = await ReceiptDraft.findByIdAndUpdate(req.params.id, changes, { new: true }).lean();
+    const draft = await ReceiptDraft.findByIdAndUpdate(req.params.id, changes, { new: true }).populate("photo", "key").lean();
     if (!draft) return res.status(404).json({ success: false, message: "Receipt not found" });
     return res.json({ success: true, data: summary(draft) });
   } catch (error) {

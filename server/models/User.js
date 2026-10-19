@@ -17,6 +17,15 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ["admin", "member"], default: "member" },
     household: { type: mongoose.Schema.Types.ObjectId, default: null },
     lastSignInAt: { type: Date, default: null },
+    // Turned off by the admin: can't sign in, and is signed out everywhere.
+    disabledAt: { type: Date, default: null },
+    // The admin's: links put in every invite message — where a new person
+    // registers their iPhone for the app (Apple only installs a test build
+    // on phones registered first), and where they install it.
+    inviteLinks: {
+      register: { type: String, trim: true, default: "" },
+      install: { type: String, trim: true, default: "" },
+    },
   },
   { timestamps: true },
 );
