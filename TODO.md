@@ -223,6 +223,29 @@ Planning a whole project — phases, deliverables, a timeline — without a new 
 - **Checked:** with a temporary trip and session (deleted after): the week plan grouping, the booking dialog creating a session, the desktop preview and the phone event page each listing the sea bass prep; rice no longer listed as prep. **Not checked:** repeating sessions, a session edited through the event card, several sessions splitting the needs between them, the Made ahead switch by tap.
 - **Known rough edges:** a generic ingredient and its branded variants are claimed from separate pools; the buy list is read-only (the grocery list's own "add missing" is still per meal); sessions can only be booked from the desktop week plan (the phone shows them but has no button to make one, and the event forms have no kind picker); ticking a prep off isn't on the list itself — you open the recipe and cook from there; confirming a prep recipe in the planner still counts it as a meal.
 
+## Accounts (branch `Accounts`, started Oct 18)
+
+Built: sign-in (own email + password), invite-only accounts, per-person data, a shared food catalog with private additions and per-person settings, Settings → Account (incl. deleting your account), Developer → People (invites with a ready message, reset codes, turn off / remove), privacy policy, and the security fixes from the pre-deploy review. Real data migrated Oct 18 (backup in `server/tmp/backup-real-…`). How to invite people: `INVITING.local.md` (local only, not in git).
+
+**Before inviting anyone:**
+- **Change the admin account to the real Gmail and a new, unique password** (Settings → Account) — it's still on a placeholder email. Not the Gmail password: one used nowhere else, ideally from a password manager. Do it once the accounts server is deployed.
+
+**Right after deploying:**
+- Rerun `node manual_controls/scripts/assign_owners.js --apply` (gives photos owners and keys, updates recipe photo addresses).
+- Check the sign-in limiter sees real addresses behind Render's proxy (`trust proxy` is 1): a few wrong passwords from one place shouldn't hold off sign-in from another.
+
+**Soon:**
+- Host the web app (static export on Render, deploy from WorkingSave; limit CORS to it and the app).
+- Atlas: strong database password; check whether network access is open to everyone.
+- Local server: `REQUIRE_SIGN_IN=true` in `server/.env` when on shared Wi-Fi (the sign-in page's real/test switch then stops working).
+- Two of the three UserProfile records are unused duplicates — remove them.
+
+**Later:**
+- Step E: devices found through the account (drop the QR pairing), then push notifications.
+- Email (a sending service + domain): verification and self-service "forgot password" — needed before any public sign-up.
+- Two-step sign-in for the admin.
+- C2: an invited person's edit to a shared item becomes their own version everywhere in their account (for now they make a copy); hiding shared items from your own lists.
+
 ## Bugs caught in use (logged Sept 27, both fixed)
 
 Reported by the user while using the app.

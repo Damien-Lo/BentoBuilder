@@ -17,3 +17,6 @@ web-build/
 # Editor swap files
 *.swp
 *.swo
+
+# Local notes, never committed
+*.local.md
