@@ -1,5 +1,6 @@
 import express from "express";
 import { ratingPromptHandler } from "../services/ratingPrompt.js";
+import { copyForMe } from "../services/catalog.js";
 import Recipe from "../models/Recipe.js";
 import Ingredient from "../models/Ingredient.js";
 import Photo from "../models/Photo.js";
@@ -371,6 +372,21 @@ router.delete("/:id", async (req, res) => {
       success: false,
       message: "Invalid recipe ID",
     });
+  }
+});
+
+/**
+ * POST /api/recipes/:id/copy
+ * One's own copy of a recipe, to change as one likes (a shared recipe can
+ * only be changed by the admin — see services/catalog.js).
+ */
+router.post("/:id/copy", async (req, res) => {
+  try {
+    const copy = await copyForMe(Recipe, req.params.id);
+    if (!copy) return res.status(404).json({ success: false, message: "Recipe not found" });
+    return res.status(201).json({ success: true, data: copy });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
   }
 });
 

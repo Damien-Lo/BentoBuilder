@@ -1,7 +1,12 @@
-// Accounts, step B: gives every personal record from before accounts an
-// owner — the admin, whose they all are — and replaces database rules that
-// were for one person with per-person ones (one weight entry per day was
-// for everyone; now it's per person).
+// Accounts: gives every personal record from before accounts an owner —
+// the admin, whose they all are — and replaces database rules that were for
+// one person with per-person ones (one weight entry per day was for
+// everyone; now it's per person; a brand or category name was once in the
+// whole database, now once per person and once in the shared catalog).
+//
+// The catalog itself (ingredients, recipes, brands, categories, stores,
+// tags) is left as it is: records without an owner are the shared catalog
+// (services/catalog.js).
 //
 // Run from server/, after making the admin (create_admin.js):
 //   node manual_controls/scripts/assign_owners.js                  (real data: says what it would do)
@@ -17,6 +22,9 @@ import { TEST_DB_NAME } from "../../config/database.js";
 // The personal collections (models using services/ownership.js).
 const OWNED = [
   "calendarevents",
+  "meals",
+  "restaurantmeals",
+  "storagelocations",
   "eventcalendars",
   "groceryitems",
   "mealplanentries",
@@ -36,7 +44,16 @@ const OWNED = [
 
 // Rules for one person that become per-person: [collection, old index name].
 // (The per-person ones are made by the server when it starts.)
-const OLD_INDEXES = [["weightentries", "date_-1"]];
+const OLD_INDEXES = [
+  ["weightentries", "date_-1"],
+  ["storagelocations", "normalizedName_1"],
+  ["brands", "normalizedName_1"],
+  ["stores", "normalizedName_1"],
+  ["tags", "normalizedName_1"],
+  ["ingredientcategories", "normalizedName_1"],
+  ["recipecategories", "normalizedName_1"],
+  ["ingredients", "barcode_1"],
+];
 
 async function main() {
   const test = process.argv.includes("--test");

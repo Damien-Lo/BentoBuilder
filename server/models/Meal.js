@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 // A course is either a recipe (eaten in `servings`) or a single ingredient
 // (eaten as `quantity` `unit`, e.g. 150 g of yogurt) — one or the other.
@@ -56,6 +57,9 @@ const mealSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+mealSchema.plugin(ownedByUser);
 
 const Meal = mongoose.model("Meal", mealSchema);
 export default Meal;

@@ -31,7 +31,7 @@ export const signInRequired = () => process.env.REQUIRE_SIGN_IN === "true";
 
 // (The admin, looked up at most once a minute.)
 let admin = { id: null, at: 0 };
-async function adminId() {
+export async function adminId() {
   if (Date.now() - admin.at > 60_000) {
     const found = await User.findOne({ role: "admin" }).sort({ createdAt: 1 }).select("_id").lean();
     admin = { id: found?._id ?? null, at: Date.now() };
@@ -95,7 +95,9 @@ export function ownedByUser(schema) {
 
   schema.pre(QUERIES, { document: false, query: true }, function () {
     const scope = currentScope();
-    if (!scope) return;
+    // (`anyOwner`: a query that deliberately looks past the current owner —
+    // the admin's settings that everyone shares, like unit conversions.)
+    if (!scope || this.getOptions().anyOwner) return;
     this.where({ owner: ownerCondition(scope) });
     const update = this.getUpdate();
     if (update) {

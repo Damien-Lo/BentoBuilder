@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 
 const storageLocationSchema = new mongoose.Schema(
   {
@@ -29,18 +30,16 @@ const storageLocationSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-
-    // Add userId here once authentication exists.
   },
   {
     timestamps: true,
   }
 );
 
-storageLocationSchema.index(
-  { normalizedName: 1 },
-  { unique: true }
-);
+storageLocationSchema.index({ owner: 1, normalizedName: 1 }, { unique: true });
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+storageLocationSchema.plugin(ownedByUser);
 
 const StorageLocation = mongoose.model(
   "StorageLocation",

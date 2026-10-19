@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { sharedCatalog } from "../services/catalog.js";
 import { ratingPromptSchema } from "../services/ratingPrompt.js";
 import { createNutritionSchema } from "./nutritionSchema.js";
 
@@ -220,6 +221,9 @@ recipeSchema.pre("validate", function () {
     }
   }
 });
+
+// (Shared, or someone's own — see services/catalog.js.)
+recipeSchema.plugin(sharedCatalog, { kind: "recipe" });
 
 const Recipe = mongoose.model("Recipe", recipeSchema);
 

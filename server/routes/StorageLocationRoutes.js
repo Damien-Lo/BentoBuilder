@@ -4,11 +4,21 @@ import PantryItem from "../models/PantryItem.js";
 
 const router = express.Router();
 
+// Where things are kept: each person's own. Someone new starts with these.
+const STARTING_LOCATIONS = ["Refrigerator", "Freezer", "Pantry", "Cabinet", "Counter", "Spice Rack", "Other"];
+
 router.get("/", async (req, res) => {
   try {
-    const locations = await StorageLocation.find({
+    let locations = await StorageLocation.find({
       isArchived: false,
     }).sort({ name: 1 });
+
+    if (!locations.length && !(await StorageLocation.exists({}))) {
+      await StorageLocation.insertMany(
+        STARTING_LOCATIONS.map((name) => ({ name, normalizedName: name.toLowerCase(), isDefault: true })),
+      );
+      locations = await StorageLocation.find({ isArchived: false }).sort({ name: 1 });
+    }
 
     res.json({
       success: true,

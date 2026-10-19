@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { sharedCatalog } from "../services/catalog.js";
 
 const recipeCategorySchema = new mongoose.Schema(
   {
@@ -30,7 +31,10 @@ const recipeCategorySchema = new mongoose.Schema(
   },
 );
 
-recipeCategorySchema.index({ normalizedName: 1 }, { unique: true });
+recipeCategorySchema.index({ owner: 1, normalizedName: 1 }, { unique: true });
+
+// (Shared, or someone's own — see services/catalog.js.)
+recipeCategorySchema.plugin(sharedCatalog);
 
 const RecipeCategory = mongoose.model("RecipeCategory", recipeCategorySchema);
 

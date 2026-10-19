@@ -1,5 +1,6 @@
 import express from "express";
 import { ratingPromptHandler } from "../services/ratingPrompt.js";
+import { copyForMe } from "../services/catalog.js";
 import Ingredient from "../models/Ingredient.js";
 import Recipe from "../models/Recipe.js";
 import { getAvailableStock } from "../services/ingredientAvailability.js";
@@ -449,6 +450,21 @@ router.delete("/:id/scores/:scoreId", async (req, res) => {
       success: false,
       message: "Invalid ingredient or score ID",
     });
+  }
+});
+
+/**
+ * POST /api/ingredients/:id/copy
+ * One's own copy of a ingredient, to change as one likes (a shared ingredient can
+ * only be changed by the admin — see services/catalog.js).
+ */
+router.post("/:id/copy", async (req, res) => {
+  try {
+    const copy = await copyForMe(Ingredient, req.params.id);
+    if (!copy) return res.status(404).json({ success: false, message: "Ingredient not found" });
+    return res.status(201).json({ success: true, data: copy });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
   }
 });
 

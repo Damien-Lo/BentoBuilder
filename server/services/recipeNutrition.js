@@ -1,10 +1,10 @@
-import UserProfile from "../models/UserProfile.js";
 import Ingredient from "../models/Ingredient.js";
 import {
   ALL_NUTRITION_FIELD_NAMES,
   CORE_NUTRITION_FIELD_NAMES,
   EXTENDED_NUTRITION_FIELD_NAMES,
 } from "../models/nutritionSchema.js";
+import { getGlobalUnitConversions } from "./ingredientAvailability.js";
 import { convertUnits, getIngredientConversions } from "./unitConversion.js";
 
 // Shared by RecipeRoutes.js (create/update/self-heal-on-read) and the
@@ -14,8 +14,7 @@ import { convertUnits, getIngredientConversions } from "./unitConversion.js";
 // Expects recipe.ingredientList.ingredient to already be populated (with
 // nutrition, defaultPortionAmount/Unit, unitConversions, genericParent).
 export async function calcNutrition(recipe) {
-  const profile = await UserProfile.findOne().select("unitConversions").lean();
-  const globalConversions = profile?.unitConversions ?? [];
+  const globalConversions = await getGlobalUnitConversions();
 
   const servings = Math.max(1, recipe.servings || 1);
   const totals = Object.fromEntries(ALL_NUTRITION_FIELD_NAMES.map((field) => [field, 0]));

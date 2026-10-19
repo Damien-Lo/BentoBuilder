@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { sharedCatalog } from "../services/catalog.js";
 
 const ingredientCategorySchema = new mongoose.Schema(
   {
@@ -24,18 +25,16 @@ const ingredientCategorySchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-
-    // Add userId here once authentication exists.
   },
   {
     timestamps: true,
   }
 );
 
-ingredientCategorySchema.index(
-  { normalizedName: 1 },
-  { unique: true }
-);
+ingredientCategorySchema.index({ owner: 1, normalizedName: 1 }, { unique: true });
+
+// (Shared, or someone's own — see services/catalog.js.)
+ingredientCategorySchema.plugin(sharedCatalog);
 
 const IngredientCategory = mongoose.model(
   "IngredientCategory",

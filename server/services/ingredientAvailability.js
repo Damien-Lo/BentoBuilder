@@ -1,10 +1,16 @@
 import Ingredient from "../models/Ingredient.js";
 import PantryItem from "../models/PantryItem.js";
 import UserProfile from "../models/UserProfile.js";
+import { adminId } from "./ownership.js";
 import { convertibleTotal, getIngredientConversions } from "./unitConversion.js";
 
-async function getGlobalUnitConversions() {
-  const profile = await UserProfile.findOne().select("unitConversions").lean();
+// The unit conversions everyone shares ("1 packet = 340 g"): the admin's,
+// kept on their profile — like the catalog they go with, so a recipe's
+// nutrition is the same whoever looks at it.
+export async function getGlobalUnitConversions() {
+  const profile = await UserProfile.findOne({ owner: { $in: [await adminId(), null] } }, null, { anyOwner: true })
+    .select("unitConversions")
+    .lean();
   return profile?.unitConversions ?? [];
 }
 

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { sharedCatalog } from "../services/catalog.js";
 import { ratingPromptSchema } from "../services/ratingPrompt.js";
 import { createNutritionSchema } from "./nutritionSchema.js";
 
@@ -264,20 +265,26 @@ ingredientSchema.pre("validate", function () {
 
 ingredientSchema.index({ genericParent: 1 });
 
-// Prevent multiple ingredient records from using the same barcode.
+// Prevent one person's (or the shared catalog's) ingredients from using the
+// same barcode twice.
 // Sparse means ingredients without a barcode are still allowed.
 ingredientSchema.index(
-  { barcode: 1 },
+  { owner: 1, barcode: 1 },
   {
     unique: true,
     partialFilterExpression: {
+      // ($gt "" rather than $ne "": MongoDB doesn't allow $ne here, and the
+      // rule was silently never made.)
       barcode: {
         $type: "string",
-        $ne: "",
+        $gt: "",
       },
     },
   },
 );
+// (Shared, or someone's own — see services/catalog.js.)
+ingredientSchema.plugin(sharedCatalog, { kind: "ingredient" });
+
 const Ingredient = mongoose.model("Ingredient", ingredientSchema);
 
 export default Ingredient;

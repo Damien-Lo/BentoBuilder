@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ownedByUser } from "../services/ownership.js";
 import { createNutritionSchema } from "./nutritionSchema.js";
 
 const nutritionSchema = createNutritionSchema();
@@ -72,6 +73,9 @@ const restaurantMealSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+// (Personal: each record belongs to an account — see services/ownership.js.)
+restaurantMealSchema.plugin(ownedByUser);
 
 const RestaurantMeal = mongoose.model("RestaurantMeal", restaurantMealSchema);
 
