@@ -1,9 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { FlatList, Modal, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { NutritionSummaryCard, type NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
+import { type NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
+import { NutritionRings } from "@/src/components/planner/NutritionRings";
+import { Tap } from "@/src/components/ui/Tap";
+import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import type { AppSettings } from "@/src/services/settingsService";
 import {
   EXTENDED_NUTRITION_FIELDS,
@@ -11,7 +14,7 @@ import {
   NUTRITION_FIELD_META,
   type ExtendedNutritionField,
 } from "@/src/types/nutrition";
-import { hexToRgba, pct, type DayNutrition } from "@/src/utils/mealPlan";
+import { pct, type DayNutrition } from "@/src/utils/mealPlan";
 import { getEffectiveNutrientGoal } from "@/src/utils/nutritionGoals";
 
 // One of the planner's nutrition cards (the day, the last 7 days, or the
@@ -27,14 +30,7 @@ export interface NutritionDetailPage {
   goalScale: number;
 }
 
-const GROUP_COLORS: Record<string, string> = {
-  "Sugars & fats": "#F59E0B",
-  Vitamins: "#10B981",
-  Minerals: "#6366F1",
-  Other: "#64748B",
-};
-
-// Goals that are a ceiling (less is better) — only these turn red when
+// Goals that are a ceiling (less is better) — only these turn amber when
 // passed. Everything else (omega-3, potassium, the vitamins...) is a target
 // where going over is fine.
 const LIMIT_FIELDS = new Set<ExtendedNutritionField>([
@@ -52,8 +48,9 @@ function formatAmount(value: number, decimals: number): string {
 
 // A tap on a planner nutrition card opens this: the same card at the top
 // (calories, the macros, sodium), then every extended nutrient against its
-// goal, scrollable. Swipe sideways to switch between the day / 7-day /
-// average views, like the cards themselves.
+// goal, scrollable — a card for each group. Swipe sideways to switch between
+// the day / 7-day / average views, like the cards themselves. In Orbit's
+// look, light or dark, like Log under it.
 export function NutritionDetailOverlay({
   visible,
   pages,
@@ -70,6 +67,7 @@ export function NutritionDetailOverlay({
   onClose: (page: number) => void;
 }) {
   const { width } = useWindowDimensions();
+  const { colors: oc } = useOrbitTheme();
   // SafeAreaView doesn't pick up the notch inside a Modal, so pad by the
   // insets directly.
   const insets = useSafeAreaInsets();
@@ -85,30 +83,28 @@ export function NutritionDetailOverlay({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => onClose(page)}>
-      <View className="flex-1 bg-black/40">
-        <View className="flex-1" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
-          <View className="mx-3 my-2 flex-1 overflow-hidden rounded-3xl bg-slate-50">
-            {/* Header: which view, page dots, close */}
-            <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-              <View className="flex-1">
-                <Text className="text-lg font-bold text-slate-950">{current?.title}</Text>
-                {!!current?.subtitle && <Text className="text-xs text-slate-500">{current.subtitle}</Text>}
+      <View style={{ flex: 1, backgroundColor: oc.scrim }}>
+        <View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
+          <View style={{ flex: 1, marginHorizontal: 12, marginVertical: 8, overflow: "hidden", borderRadius: 26, backgroundColor: oc.canvas, borderWidth: 1, borderColor: oc.border }}>
+            {/* Header, on the sheet itself: which view, page dots, close */}
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingTop: 16, paddingBottom: 4 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 22, fontWeight: "800", letterSpacing: -0.4, color: oc.text }}>{current?.title}</Text>
+                {!!current?.subtitle && <Text style={{ marginTop: 1, fontSize: 13, color: oc.muted }}>{current.subtitle}</Text>}
               </View>
-              <View className="mr-3 flex-row gap-1.5">
+              <View style={{ marginRight: 12, flexDirection: "row", gap: 6 }}>
                 {pages.map((p, i) => (
-                  <View
-                    key={p.title}
-                    className={`h-1.5 rounded-full ${i === page ? "w-4 bg-blue-600" : "w-1.5 bg-slate-300"}`}
-                  />
+                  <View key={p.title} style={{ height: 6, width: i === page ? 16 : 6, borderRadius: 3, backgroundColor: i === page ? oc.ink : oc.track }} />
                 ))}
               </View>
-              <Pressable
+              <Tap
                 accessibilityLabel="Close"
                 onPress={() => onClose(page)}
-                className="h-9 w-9 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                style={{ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: oc.surface, borderWidth: 1, borderColor: oc.border }}
+                pressedStyle={{ backgroundColor: oc.pill }}
               >
-                <Ionicons name="close" size={20} color="#334155" />
-              </Pressable>
+                <Ionicons name="close" size={20} color={oc.text} />
+              </Tap>
             </View>
 
             <FlatList
@@ -127,12 +123,13 @@ export function NutritionDetailOverlay({
                   contentContainerStyle={{ padding: 12, paddingBottom: 32 }}
                   showsVerticalScrollIndicator={false}
                 >
-                  <NutritionSummaryCard
+                  <NutritionRings
                     title={item.title}
                     subtitle={item.subtitle}
                     confirmed={item.confirmed}
                     planned={item.planned}
                     limits={item.limits}
+                    untitled
                   />
                   <ExtendedNutrientList page={item} settings={settings} />
                 </ScrollView>
@@ -146,39 +143,41 @@ export function NutritionDetailOverlay({
 }
 
 function ExtendedNutrientList({ page, settings }: { page: NutritionDetailPage; settings: AppSettings | null }) {
+  const { colors: oc } = useOrbitTheme();
   const known = EXTENDED_NUTRITION_FIELDS.filter(
     (f) => page.confirmed[f] != null || page.planned[f] != null,
   ).length;
+  const eyebrow = { fontSize: 11, fontWeight: "700" as const, letterSpacing: 1.2, color: oc.faint };
 
   return (
     <>
-      <View className="mb-2 mt-5 flex-row items-end justify-between px-1">
-        <Text className="text-xs font-bold uppercase tracking-widest text-slate-400">All nutrients</Text>
-        <Text className="text-xs text-slate-400">
+      <View style={{ marginTop: 22, marginBottom: 2, paddingHorizontal: 4, flexDirection: "row", alignItems: "flex-end" }}>
+        <Text style={{ flex: 1, fontSize: 17, fontWeight: "700", color: oc.text }}>All nutrients</Text>
+        <Text style={{ fontSize: 12, color: oc.faint }}>
           {known} of {EXTENDED_NUTRITION_FIELDS.length} with data
         </Text>
       </View>
-      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        {EXTENDED_NUTRITION_GROUPS.map((group) => (
-          <View key={group.title}>
-            <View className="border-b border-slate-100 bg-slate-50 px-4 py-2">
-              <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">{group.title}</Text>
-            </View>
-            {group.fields.map((field) => (
+      {/* A card for each group */}
+      {EXTENDED_NUTRITION_GROUPS.map((group) => (
+        <View key={group.title}>
+          <Text style={[eyebrow, { marginTop: 16, marginBottom: 8, marginLeft: 4 }]}>{group.title.toUpperCase()}</Text>
+          <View style={{ overflow: "hidden", borderRadius: 18, borderWidth: 1, borderColor: oc.border, backgroundColor: oc.surface }}>
+            {group.fields.map((field, index) => (
               <NutrientRow
                 key={field}
                 field={field}
                 confirmed={page.confirmed[field]}
                 planned={page.planned[field]}
                 goal={settings ? scaleGoal(getEffectiveNutrientGoal(settings, field), page.goalScale) : null}
-                color={GROUP_COLORS[group.title] ?? "#3B82F6"}
+                first={index === 0}
+                colors={oc}
               />
             ))}
           </View>
-        ))}
-      </View>
-      <Text className="mt-3 px-1 text-xs leading-5 text-slate-400">
-        Solid bars are what you&apos;ve eaten, lighter bars add what&apos;s planned. Vitamins and
+        </View>
+      ))}
+      <Text style={{ marginTop: 14, paddingHorizontal: 4, fontSize: 12, lineHeight: 18, color: oc.faint }}>
+        Solid bars are what you&apos;ve eaten, the faded part adds what&apos;s planned. Vitamins and
         minerals are measured against the daily value unless you&apos;ve set your own goal. These
         only add up from foods that have that nutrient on file.
       </Text>
@@ -195,13 +194,15 @@ function NutrientRow({
   confirmed,
   planned,
   goal,
-  color,
+  first,
+  colors: oc,
 }: {
   field: ExtendedNutritionField;
   confirmed: number | null | undefined;
   planned: number | null | undefined;
   goal: number | null;
-  color: string;
+  first: boolean;
+  colors: OrbitColors;
 }) {
   const meta = NUTRITION_FIELD_META[field];
   const eaten = confirmed ?? 0;
@@ -210,24 +211,22 @@ function NutrientRow({
   const confirmedF = pct(eaten, goal);
   const plannedF = Math.max(pct(eaten + plannedAmount, goal) - confirmedF, 0);
   const over = confirmedF >= 1 && LIMIT_FIELDS.has(field);
-  const barColor = over ? "#F87171" : color;
+  const tone = over ? oc.warning : oc.fill;
 
   return (
-    <View className="border-b border-slate-100 px-4 py-2.5">
-      <View className="flex-row items-center">
-        <Text className="flex-1 text-sm text-slate-700">{meta.label}</Text>
+    <View style={{ paddingHorizontal: 16, paddingVertical: 11, borderTopWidth: first ? 0 : 1, borderTopColor: oc.border }}>
+      <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+        <Text style={{ flex: 1, fontSize: 14, color: hasData ? oc.text : oc.muted }}>{meta.label}</Text>
         {hasData ? (
-          <Text className="text-sm font-semibold text-slate-900">
+          <Text style={{ fontSize: 14, fontWeight: "700", color: over ? oc.warning : oc.text }}>
             {formatAmount(eaten, meta.decimals)}
-            {plannedAmount > 0 && (
-              <Text className="font-normal text-slate-300"> +{formatAmount(plannedAmount, meta.decimals)}</Text>
-            )}
-            <Text className="font-normal text-slate-400"> {meta.unit}</Text>
+            {plannedAmount > 0 && <Text style={{ fontWeight: "400", color: oc.faint }}> +{formatAmount(plannedAmount, meta.decimals)}</Text>}
+            <Text style={{ fontWeight: "400", color: oc.faint }}> {meta.unit}</Text>
           </Text>
         ) : (
-          <Text className="text-sm text-slate-300">—</Text>
+          <Text style={{ fontSize: 14, color: oc.faint }}>—</Text>
         )}
-        <Text className="w-20 text-right text-xs text-slate-400">
+        <Text style={{ width: 76, textAlign: "right", fontSize: 12, color: over ? oc.warning : oc.faint }}>
           {goal != null
             ? meta.dailyValue
               ? `${Math.round((eaten / goal) * 100)}% DV`
@@ -236,9 +235,9 @@ function NutrientRow({
         </Text>
       </View>
       {goal != null && (
-        <View className="mt-1.5 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100">
-          <View style={{ width: `${confirmedF * 100}%`, backgroundColor: barColor }} />
-          <View style={{ width: `${plannedF * 100}%`, backgroundColor: hexToRgba(barColor, 0.35) }} />
+        <View style={{ marginTop: 7, height: 4, borderRadius: 2, overflow: "hidden", flexDirection: "row", backgroundColor: oc.track }}>
+          <View style={{ width: `${confirmedF * 100}%`, backgroundColor: tone }} />
+          <View style={{ width: `${plannedF * 100}%`, backgroundColor: tone, opacity: 0.35 }} />
         </View>
       )}
     </View>

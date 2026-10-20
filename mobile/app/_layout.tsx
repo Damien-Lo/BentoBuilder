@@ -6,7 +6,6 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
@@ -14,6 +13,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ServerGate } from "@/src/components/ServerGate";
 import { AuthGate } from "@/src/components/auth/AuthGate";
 import { OrbitThemeProvider } from "@/src/theme/orbit";
+import { OrbitStatusBar } from "@/src/theme/OrbitStatusBar";
 import { WebAlertHost } from "@/src/components/web/WebAlert";
 import { DataBadge } from "@/src/components/DataBadge";
 import { WebShell } from "@/src/components/web/WebShell";
@@ -268,7 +268,7 @@ export default function RootLayout() {
       </ServerGate>
 
       <WebAlertHost />
-      <StatusBar style="auto" />
+      <OrbitStatusBar />
     </ThemeProvider>
     </OrbitThemeProvider>
     </GestureHandlerRootView>

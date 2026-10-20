@@ -69,7 +69,11 @@ import { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch"
 import { WebWeekPlanScreen } from "@/src/components/planner/web/WebWeekPlanScreen";
 import { addToMenu, menuLeft, menuName } from "@/src/services/menuApi";
 import { useWideWeb } from "@/src/utils/useWideWeb";
-import { NutritionSummaryCard, type NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
+import { type NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
+import { NutritionRings } from "@/src/components/planner/NutritionRings";
+import { Tap } from "@/src/components/ui/Tap";
+import { OrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { StatusBar } from "expo-status-bar";
 import { NutritionDetailOverlay, type NutritionDetailPage } from "@/src/components/planner/NutritionDetailOverlay";
 import {
   computeConfirmedRecipeNutrition,
@@ -137,6 +141,10 @@ export default function PlannerScreen() {
 
 function PhonePlannerScreen() {
   const router = useRouter();
+  // The day itself in Orbit's look, light or dark (`oc`: its colours). The
+  // sheets over it — adding, an entry's details, moving one — keep the
+  // older look for now.
+  const { colors: oc, dark } = useOrbitTheme();
   // The add sheet in a desktop browser (it opens from the week plan there).
   const wideAdd = useWideWeb();
   const addGrid = wideAdd ? { numColumns: 3, columnWrapperStyle: { gap: 12 } } : {};
@@ -1062,28 +1070,32 @@ function PhonePlannerScreen() {
           setSelectedDate(dateStr);
           dateStripRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
         }}
-        style={{ width: CELL_WIDTH, marginRight: CELL_GAP }}
-        className="items-center"
+        style={{ width: CELL_WIDTH, marginRight: CELL_GAP, alignItems: "center" }}
+        accessibilityLabel={friendlyDayLabel(dateStr)}
+        accessibilityState={{ selected: isSelected }}
       >
-        <Text className={`mb-1 text-xs font-medium ${isSelected ? "text-blue-600" : "text-slate-400"}`}>
+        <Text style={{ marginBottom: 5, fontSize: 11, fontWeight: "600", color: isSelected ? oc.text : oc.faint }}>
           {DAY_ABBREVS[d.getDay()]}
         </Text>
+        {/* The chosen day in ink; today, if it isn't chosen, ringed like
+            the home screen's chosen section. */}
         <View
-          className={`h-10 w-10 items-center justify-center rounded-full ${
-            isSelected ? "bg-blue-600" : isThisToday ? "bg-slate-100" : ""
-          }`}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: isSelected ? oc.ink : "transparent",
+            borderWidth: !isSelected && isThisToday ? 2 : 0,
+            borderColor: oc.selectedRing,
+          }}
         >
-          <Text
-            className={`text-base font-bold ${
-              isSelected ? "text-white" : isThisToday ? "text-blue-600" : "text-slate-700"
-            }`}
-          >
+          <Text style={{ fontSize: 16, fontWeight: "700", color: isSelected ? oc.onInk : dateStr < today ? oc.muted : oc.text }}>
             {d.getDate()}
           </Text>
         </View>
-        {isSelected && entries.length > 0 && (
-          <View className="mt-1 h-1.5 w-1.5 rounded-full bg-blue-600" />
-        )}
+        <View style={{ marginTop: 5, width: 5, height: 5, borderRadius: 2.5, backgroundColor: isSelected && entries.length > 0 ? oc.ink : "transparent" }} />
       </Pressable>
     );
   }
@@ -1270,6 +1282,7 @@ function PhonePlannerScreen() {
           <View className="mb-2 flex-row gap-2">
             <Pressable
               className="w-20 items-center justify-center rounded-2xl bg-red-500 active:bg-red-600"
+              style={{ borderRadius: 16 }}
               onPress={() => handleDeleteEntry(entry._id)}
             >
               <Ionicons name="trash-outline" size={20} color="white" />
@@ -1328,11 +1341,12 @@ function PhonePlannerScreen() {
       >
         <Pressable
           className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 py-3 active:bg-slate-50"
-          style={entry.status === "planned" ? styles.plannedEntry : undefined}
+          // (Planned, not eaten yet: an outline, like a section still to come.)
+          style={entry.status === "planned" ? { backgroundColor: "transparent", borderColor: oc.orbit, borderStyle: "dashed", borderRadius: 16 } : { backgroundColor: oc.surface, borderColor: oc.border, borderRadius: 16 }}
           onPress={() => handleOpenEntry(entry)}
         >
           {entry.status === "planned" && (
-            <Ionicons name="time-outline" size={16} color="#94A3B8" style={{ marginRight: 8 }} />
+            <Ionicons name="time-outline" size={16} color={oc.faint} style={{ marginRight: 8 }} />
           )}
           {entry.status === "planned" && availabilityIcon && (
             <Ionicons
@@ -1343,13 +1357,13 @@ function PhonePlannerScreen() {
             />
           )}
           <View className="flex-1">
-            <Text className="font-semibold text-slate-900" numberOfLines={1}>
+            <Text className="font-semibold text-slate-900" numberOfLines={1} style={{ color: entry.status === "planned" ? oc.icon : oc.text }}>
               {title}
               {/* Filled in by one of your usual meals. */}
               {entry.usual ? "  " : ""}
-              {entry.usual && <Ionicons name="repeat" size={13} color="#2563EB" />}
+              {entry.usual && <Ionicons name="repeat" size={13} color={oc.muted} />}
             </Text>
-            <Text className="mt-0.5 text-xs text-slate-400">
+            <Text className="mt-0.5 text-xs text-slate-400" style={{ color: oc.faint }}>
               {subtitle}{entry.status === "planned" ? " · Planned" : ""}
             </Text>
             {entry.status === "planned" && (availability === "yellow" || availability === "red") && (
@@ -1358,13 +1372,13 @@ function PhonePlannerScreen() {
                 hitSlop={6}
                 onPress={() => void handleAddMissingToGroceryList(entry)}
               >
-                <Ionicons name="cart-outline" size={12} color="#2563EB" />
-                <Text className="ml-1 text-xs font-medium text-blue-600">Add missing to grocery list</Text>
+                <Ionicons name="cart-outline" size={12} color={oc.accent} />
+                <Text className="ml-1 text-xs font-medium text-blue-600" style={{ color: oc.accent }}>Add missing to grocery list</Text>
               </Pressable>
             )}
           </View>
           {kcal != null && (
-            <Text className="text-sm font-semibold text-slate-500">{kcal} kcal</Text>
+            <Text className="text-sm font-semibold text-slate-500" style={{ color: oc.muted }}>{kcal} kcal</Text>
           )}
         </Pressable>
       </ReanimatedSwipeable>
@@ -2137,40 +2151,27 @@ function PhonePlannerScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={{ backgroundColor: oc.canvas }}>
+      <OrbitPage>
       {/* ── Top strip (non-scrolling): part of the page, not a band of its own ── */}
-      <View className="pb-1">
-        {/* Month header */}
-        <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
+      <View style={{ paddingBottom: 4 }}>
+        {/* The month, small, over the days */}
+        <View style={{ flexDirection: "row", alignItems: "center", minHeight: 34, paddingHorizontal: 20, paddingTop: 2, paddingBottom: 8 }}>
           {fromCalendar && (
-            <Pressable
+            <Tap
               onPress={() => router.back()}
               accessibilityLabel="Back to the calendar"
-              className="mr-2 h-9 flex-row items-center rounded-xl bg-slate-100 pl-1.5 pr-3 active:bg-slate-200"
+              style={{ marginRight: 10, height: 32, flexDirection: "row", alignItems: "center", paddingLeft: 6, paddingRight: 12, borderRadius: 16, backgroundColor: oc.pill }}
             >
-              <Ionicons name="chevron-back" size={18} color="#334155" />
-              <Text className="text-xs font-bold text-slate-700">Calendar</Text>
-            </Pressable>
+              <Ionicons name="chevron-back" size={17} color={oc.onPill} />
+              <Text style={{ fontSize: 13, fontWeight: "600", color: oc.onPill }}>Calendar</Text>
+            </Tap>
           )}
-          <Text className="flex-1 text-lg font-bold text-slate-900">{selectedMonthLabel}</Text>
-          {/* The menu: what you'd like soon, not yet on a day. */}
-          <Pressable
-            onPress={() => router.push("/menu")}
-            accessibilityLabel="Menu"
-            className="mr-2 flex-row items-center rounded-xl bg-violet-50 px-3 py-1.5 active:bg-violet-100"
-          >
-            <Ionicons name="restaurant-outline" size={13} color="#7C3AED" />
-            <Text className="ml-1 text-xs font-bold text-violet-700">
-              Menu{menuToPlace.length ? ` · ${menuToPlace.length}` : ""}
-            </Text>
-          </Pressable>
+          <Text style={{ flex: 1, fontSize: 12, fontWeight: "700", letterSpacing: 1.4, color: oc.muted }}>{selectedMonthLabel.toUpperCase()}</Text>
           {!isToday && (
-            <Pressable
-              onPress={jumpToToday}
-              className="rounded-xl bg-blue-100 px-3 py-1.5 active:bg-blue-200"
-            >
-              <Text className="text-xs font-bold text-blue-700">Today</Text>
-            </Pressable>
+            <Tap onPress={jumpToToday} accessibilityLabel="Back to today" style={{ height: 32, justifyContent: "center", paddingHorizontal: 14, borderRadius: 16, backgroundColor: oc.ink }}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: oc.onInk }}>Today</Text>
+            </Tap>
           )}
         </View>
 
@@ -2199,26 +2200,33 @@ function PhonePlannerScreen() {
       {/* ── Main scrollable content ── */}
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 120 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Day label */}
-        <View className="mb-5 flex-row items-center justify-between">
-          <Text className="text-2xl font-bold text-slate-900">
-            {friendlyDayLabel(selectedDate)}
-          </Text>
-          {/* Suggestions for the empty meals, on or off. */}
+        {/* The day, large, and how far through its meals it is */}
+        <View style={{ marginBottom: 18, flexDirection: "row", alignItems: "center" }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 30, fontWeight: "800", letterSpacing: -0.6, color: oc.text }}>
+              {friendlyDayLabel(selectedDate)}
+            </Text>
+            {!isLoading && (
+              <Text style={{ marginTop: 2, fontSize: 14, color: oc.muted }}>
+                {dayLine(entries, isToday, selectedDate < today)}
+              </Text>
+            )}
+          </View>
+          {/* Suggestions for the empty meals, on or off — the orb's. */}
           <SuggestionsToggle on={showSuggestions} onPress={toggleSuggestions} />
         </View>
 
         {isLoading ? (
           <View className="items-center py-16">
-            <ActivityIndicator size="large" color="#2563EB" />
+            <ActivityIndicator size="large" color={oc.muted} />
           </View>
         ) : (
           <>
             {/* Daily / daily-average / last-7-days nutrition — swipe to switch */}
-            <View className="mb-5">
+            <View style={{ marginBottom: 26 }}>
               <ScrollView
                 ref={nutritionPagerRef}
                 horizontal
@@ -2231,119 +2239,129 @@ function PhonePlannerScreen() {
                 style={{ width: windowWidth - 32 }}
               >
                 {nutritionPages.map((page, index) => (
-                  <Pressable
+                  <Tap
                     key={page.title}
                     style={{ width: windowWidth - 32 }}
-                    className="active:opacity-80"
+                    pressedStyle={{ opacity: 0.85 }}
                     onPress={() => setNutritionDetailPage(index)}
                   >
-                    <NutritionSummaryCard
+                    <NutritionRings
                       title={page.title}
                       subtitle={page.subtitle}
                       confirmed={page.confirmed}
                       planned={page.planned}
                       limits={page.limits}
                     />
-                  </Pressable>
+                  </Tap>
                 ))}
               </ScrollView>
 
               {/* Page dots */}
-              <View className="mt-3 flex-row items-center justify-center gap-1.5">
-                <View
-                  className="h-1.5 w-1.5 rounded-full bg-slate-200"
-                  style={nutritionView === 0 ? pageDotStyles.active : undefined}
-                />
-                <View
-                  className="h-1.5 w-1.5 rounded-full bg-slate-200"
-                  style={nutritionView === 1 ? pageDotStyles.active : undefined}
-                />
-                <View
-                  className="h-1.5 w-1.5 rounded-full bg-slate-200"
-                  style={nutritionView === 2 ? pageDotStyles.active : undefined}
-                />
+              <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                {[0, 1, 2].map((i) => (
+                  <View key={i} style={{ height: 6, width: nutritionView === i ? 16 : 6, borderRadius: 3, backgroundColor: nutritionView === i ? oc.ink : oc.track }} />
+                ))}
               </View>
             </View>
 
-            {/* Slots */}
-            {SLOTS.map(slot => {
+            {/* The day's meals as a timeline: a node for each on a dotted
+                path, like the home screen's orbit — eaten ones filled in,
+                the one due now ringed. */}
+            {SLOTS.map((slot, slotIndex) => {
               const slotEntries = entriesBySlot.get(slot.id) ?? [];
               // A suggestion to take or leave (nothing, with the cards off).
               const suggestionCard = suggested.offerFor(slot.id) && (
                 <MealSuggestion suggested={suggested} slot={slot.id} className={slotEntries.length ? "mt-2" : ""} onPlanned={(added) => setEntries(prev => [...prev, ...added])} />
               );
+              const eaten = slotEntries.length > 0 && slotEntries.every(e => e.status === "confirmed");
+              const due = isToday && !eaten && slot.id === slotDueNow();
+              const last = slotIndex === SLOTS.length - 1;
               return (
-                <View key={slot.id} className="mb-5">
-                  {/* Slot header */}
-                  <View className="mb-3 flex-row items-center justify-between">
-                    <View className="flex-row items-center gap-2">
-                      <Ionicons name={slot.icon} size={18} color={slot.iconColor} />
-                      <Text className="text-sm font-bold text-slate-700">{slot.label}</Text>
-                      <Text className="text-xs text-slate-400">{slot.time}</Text>
-                    </View>
-                    <Pressable
-                      onPress={() => openAdd(slot.id)}
-                      className="flex-row items-center rounded-xl bg-slate-100 px-3 py-1.5 active:bg-slate-200"
-                    >
-                      <Ionicons name="add" size={14} color="#2563EB" />
-                      <Text className="ml-1 text-xs font-semibold text-blue-600">Add</Text>
-                    </Pressable>
+                <View key={slot.id} style={{ flexDirection: "row" }}>
+                  {/* The path */}
+                  <View style={{ width: 34, alignItems: "center" }}>
+                    <SlotNode icon={slot.icon} eaten={eaten} due={due} some={slotEntries.length > 0} colors={oc} />
+                    {!last && <DottedPath color={oc.orbit} />}
                   </View>
 
-                  {/* Entries */}
-                  {slotEntries.length > 0 ? (
-                    <>
-                      {slotEntries.map(renderEntry)}
-                      {suggestionCard}
-                    </>
-                  ) : suggestionCard ? (
-                    suggestionCard
-                  ) : lastEntryBySlot?.[slot.id] ? (
-                    (() => {
-                      const lastEntry = lastEntryBySlot[slot.id]!;
-                      const name = entryDisplayName(lastEntry);
-                      const when = daysAgoLabel(lastEntry.date, selectedDate);
-                      return (
-                        <ReanimatedSwipeable
-                          friction={2}
-                          leftThreshold={40}
-                          renderLeftActions={() => (
-                            <Pressable
-                              className="mb-0 flex-1 items-center justify-center rounded-2xl bg-emerald-500 px-4 active:bg-emerald-600"
-                              onPress={() => void handleQuickAddFromLastEntry(slot.id, lastEntry)}
+                  <View style={{ flex: 1, marginLeft: 12, paddingBottom: last ? 0 : 22 }}>
+                    {/* Slot header */}
+                    <View style={{ minHeight: 34, marginBottom: 8, flexDirection: "row", alignItems: "center" }}>
+                      <Text style={{ fontSize: 16, fontWeight: "700", color: oc.text }}>{slot.label}</Text>
+                      <Text style={{ marginLeft: 8, fontSize: 12, color: due ? oc.accent : oc.faint, fontWeight: due ? "600" : "400" }}>{due ? "Now" : slot.time}</Text>
+                      <View style={{ flex: 1 }} />
+                      <Tap
+                        onPress={() => openAdd(slot.id)}
+                        accessibilityLabel={`Add to ${slot.label.toLowerCase()}`}
+                        style={{ height: 30, flexDirection: "row", alignItems: "center", paddingLeft: 9, paddingRight: 12, borderRadius: 15, backgroundColor: oc.pill }}
+                      >
+                        <Ionicons name="add" size={15} color={oc.onPill} />
+                        <Text style={{ marginLeft: 3, fontSize: 13, fontWeight: "600", color: oc.onPill }}>Add</Text>
+                      </Tap>
+                    </View>
+
+                      {/* Entries */}
+                      {slotEntries.length > 0 ? (
+                        <>
+                          {slotEntries.map(renderEntry)}
+                          {suggestionCard}
+                        </>
+                      ) : suggestionCard ? (
+                        suggestionCard
+                      ) : lastEntryBySlot?.[slot.id] ? (
+                        (() => {
+                          const lastEntry = lastEntryBySlot[slot.id]!;
+                          const name = entryDisplayName(lastEntry);
+                          const when = daysAgoLabel(lastEntry.date, selectedDate);
+                          return (
+                            <ReanimatedSwipeable
+                              friction={2}
+                              leftThreshold={40}
+                              renderLeftActions={() => (
+                                <Pressable
+                                  className="mb-0 flex-1 items-center justify-center rounded-2xl bg-emerald-500 px-4 active:bg-emerald-600"
+                                  style={{ borderRadius: 16 }}
+                                  onPress={() => void handleQuickAddFromLastEntry(slot.id, lastEntry)}
+                                >
+                                  <Ionicons name="repeat-outline" size={18} color="white" />
+                                  <Text className="mt-1 text-center text-xs font-semibold text-white">
+                                    Add &quot;{name}&quot;
+                                  </Text>
+                                </Pressable>
+                              )}
                             >
-                              <Ionicons name="repeat-outline" size={18} color="white" />
-                              <Text className="mt-1 text-center text-xs font-semibold text-white">
-                                Add &quot;{name}&quot;
-                              </Text>
-                            </Pressable>
-                          )}
+                              <Pressable
+                                onPress={() => openAdd(slot.id)}
+                                className="items-center rounded-2xl border border-dashed border-slate-200 py-5 active:bg-slate-50"
+                                style={{ borderColor: oc.border, borderRadius: 16, paddingVertical: 16 }}
+                              >
+                                <Text className="px-6 text-center text-sm text-slate-400" style={{ color: oc.faint }}>
+                                  Swipe to add {slot.label.toLowerCase()} from {when}: &quot;{name}&quot;
+                                </Text>
+                              </Pressable>
+                            </ReanimatedSwipeable>
+                          );
+                        })()
+                      ) : (
+                        <Pressable
+                          onPress={() => openAdd(slot.id)}
+                          className="items-center rounded-2xl border border-dashed border-slate-200 py-5 active:bg-slate-50"
+                          style={{ borderColor: oc.border, borderRadius: 16, paddingVertical: 16 }}
                         >
-                          <Pressable
-                            onPress={() => openAdd(slot.id)}
-                            className="items-center rounded-2xl border border-dashed border-slate-200 py-5 active:bg-slate-50"
-                          >
-                            <Text className="px-6 text-center text-sm text-slate-400">
-                              Swipe to add {slot.label.toLowerCase()} from {when}: &quot;{name}&quot;
-                            </Text>
-                          </Pressable>
-                        </ReanimatedSwipeable>
-                      );
-                    })()
-                  ) : (
-                    <Pressable
-                      onPress={() => openAdd(slot.id)}
-                      className="items-center rounded-2xl border border-dashed border-slate-200 py-5 active:bg-slate-50"
-                    >
-                      <Text className="text-sm text-slate-400">No {slot.label.toLowerCase()} planned</Text>
-                    </Pressable>
-                  )}
+                          <Text className="text-sm text-slate-400" style={{ color: oc.faint }}>No {slot.label.toLowerCase()} planned</Text>
+                        </Pressable>
+                      )}
+                  </View>
                 </View>
               );
             })}
           </>
         )}
       </ScrollView>
+      </OrbitPage>
+
+      {/* (The add sheet is light for now: the clock over it, dark.) */}
+      {showAdd && dark && <StatusBar style="dark" />}
 
       {/* ── Add-to-plan overlay ── plain absolutely-positioned View, no
           RN Modal and no navigation — sidesteps the navigation-context
@@ -3339,14 +3357,56 @@ const styles = StyleSheet.create({
   inactivePillText: {
     color: "#64748b",
   },
-  plannedEntry: {
-    opacity: 0.55,
-  },
 });
 
-const pageDotStyles = StyleSheet.create({
-  active: {
-    width: 16,
-    backgroundColor: "#2563EB",
-  },
-});
+// "2 of 3 meals eaten · 1 planned", or the like, under the day's name.
+function dayLine(entries: MealPlanEntry[], isToday: boolean, past: boolean): string {
+  const eaten = entries.filter((e) => e.status === "confirmed").length;
+  const planned = entries.length - eaten;
+  if (!entries.length) return isToday ? "Nothing logged yet" : past ? "Nothing logged" : "Nothing planned yet";
+  const parts = [];
+  if (eaten) parts.push(`${eaten} eaten`);
+  if (planned) parts.push(`${planned} planned`);
+  return parts.join(" · ");
+}
+
+// The meal due about now, by the time of day.
+function slotDueNow(): MealSlot {
+  const hour = new Date().getHours();
+  return hour < 11 ? "breakfast" : hour < 16 ? "lunch" : "dinner";
+}
+
+// A meal's node on the day's path: filled in once it's all eaten, ringed in
+// the assistant's blue when it's the one due now, quiet otherwise.
+function SlotNode({ icon, eaten, due, some, colors: oc }: { icon: keyof typeof Ionicons.glyphMap; eaten: boolean; due: boolean; some: boolean; colors: OrbitColors }) {
+  return (
+    <View
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: eaten ? oc.ink : oc.node,
+        borderWidth: eaten ? 0 : due ? 2 : 1,
+        borderColor: due ? oc.selectedRing : oc.nodeBorder,
+      }}
+    >
+      <Ionicons name={eaten ? "checkmark" : icon} size={eaten ? 17 : 16} color={eaten ? oc.onInk : due || some ? oc.text : oc.faint} />
+    </View>
+  );
+}
+
+// The dotted path down to the next meal, as long as the meal above is tall.
+function DottedPath({ color }: { color: string }) {
+  return (
+    <View style={{ flex: 1, alignSelf: "stretch", overflow: "hidden", marginTop: 6, marginBottom: 4 }}>
+      {/* (Laid over it, so the dots never make the meal any taller.) */}
+      <View style={{ position: "absolute", top: 0, left: 0, right: 0, alignItems: "center" }}>
+        {Array.from({ length: 80 }, (_, i) => (
+          <View key={i} style={{ width: 3, height: 3, borderRadius: 1.5, marginBottom: 5, backgroundColor: color }} />
+        ))}
+      </View>
+    </View>
+  );
+}
