@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 
+import { useOrbitPage } from "@/src/theme/orbit";
+
 // Two decimals is plenty for a portion ("0.5", "1.25") and keeps float
 // noise from +/- steps (0.1 + 1 + 1 ...) out of what gets saved.
 function roundQty(n: number): number {
@@ -30,6 +32,8 @@ export function DishQuantityStepper({
   onRemove?: () => void;
 }) {
   const [text, setText] = useState(String(value));
+  // (On an Orbit page, in its colours.)
+  const o = useOrbitPage();
 
   // Only resync when the value actually differs from what's typed, so
   // reporting "1." as 1 mid-typing doesn't snap the field back to "1".
@@ -60,8 +64,10 @@ export function DishQuantityStepper({
         hitSlop={8}
         onPress={decrement}
         className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+        style={o && { backgroundColor: o.pill }}
+        accessibilityLabel="Less"
       >
-        <Ionicons name="remove" size={14} color="#475569" />
+        <Ionicons name="remove" size={14} color={o?.onPill ?? "#475569"} />
       </Pressable>
       <TextInput
         value={text}
@@ -70,13 +76,16 @@ export function DishQuantityStepper({
         keyboardType="decimal-pad"
         selectTextOnFocus
         className="mx-2 min-w-[44px] rounded-lg bg-slate-100 px-2 py-1 text-center text-sm font-semibold text-slate-700"
+        style={o && { backgroundColor: o.pill, color: o.text }}
       />
       <Pressable
         hitSlop={8}
         onPress={() => onChange(roundQty(value + 1))}
         className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+        style={o && { backgroundColor: o.pill }}
+        accessibilityLabel="More"
       >
-        <Ionicons name="add" size={14} color="#475569" />
+        <Ionicons name="add" size={14} color={o?.onPill ?? "#475569"} />
       </Pressable>
     </View>
   );

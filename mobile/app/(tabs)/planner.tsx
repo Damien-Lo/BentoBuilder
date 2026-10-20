@@ -243,16 +243,17 @@ function PhonePlannerScreen() {
   const togglePieceGroup = (group: string) => setOpenPieces((prev) => (prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]));
   // A piece's heading, folding its options to what it's set to; "Not
   // chosen" while it's the planner's to choose.
-  const pieceHeading = (group: string, expanded: boolean, now: string | undefined, chosen: boolean) => (
-    <Pressable onPress={() => togglePieceGroup(group)} className="mb-1 flex-row items-center py-1 active:opacity-60">
-      <Ionicons name={expanded ? "chevron-down" : "chevron-forward"} size={14} color="#94A3B8" />
+  // (`orbit`: in a sheet redesigned in Orbit's look.)
+  const pieceHeading = (group: string, expanded: boolean, now: string | undefined, chosen: boolean, orbit = false) => (
+    <Pressable onPress={() => togglePieceGroup(group)} className="mb-1 flex-row items-center py-1 active:opacity-60" style={orbit ? { paddingHorizontal: 4 } : undefined}>
+      <Ionicons name={expanded ? "chevron-down" : "chevron-forward"} size={14} color={orbit ? oc.faint : "#94A3B8"} />
       <View className="ml-1.5 flex-1">
-        <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">{group}</Text>
-        {!expanded && !!now && <Text className="text-sm text-slate-700" numberOfLines={1}>{now}</Text>}
+        <Text className="text-xs font-bold uppercase tracking-wide text-slate-400" style={orbit ? { color: oc.faint } : undefined}>{group}</Text>
+        {!expanded && !!now && <Text className="text-sm text-slate-700" numberOfLines={1} style={orbit ? { color: oc.icon } : undefined}>{now}</Text>}
       </View>
       {!chosen && (
-        <View className="rounded-full bg-amber-100 px-2 py-0.5">
-          <Text className="text-[11px] font-bold text-amber-700">Not chosen</Text>
+        <View className="rounded-full bg-amber-100 px-2 py-0.5" style={orbit ? { backgroundColor: dark ? "rgba(251,191,36,0.15)" : "#FEF3C7" } : undefined}>
+          <Text className="text-[11px] font-bold text-amber-700" style={orbit ? { color: oc.warning } : undefined}>Not chosen</Text>
         </View>
       )}
     </Pressable>
@@ -1845,57 +1846,75 @@ function PhonePlannerScreen() {
 
     const canSave = isRestaurant ? editDishQuantities.size > 0 : validQty;
 
+    // In Orbit's look, like Log under it.
+    const eaten = editEntry.status === "confirmed";
+    const eyebrow = { fontSize: 11, fontWeight: "700" as const, letterSpacing: 1.2, color: oc.faint, marginBottom: 8, marginLeft: 4 };
+    const card = { backgroundColor: oc.surface, borderRadius: 18, borderWidth: 1, borderColor: oc.border, overflow: "hidden" as const };
+    const field = { height: 56, borderRadius: 16, borderWidth: 1, borderColor: oc.border, backgroundColor: oc.surface, paddingHorizontal: 16, fontSize: 16, color: oc.text };
+    const fmt = (v: number | null | undefined, unit: string) => (v == null ? null : unit === "g" ? Math.round(v * 10) / 10 : Math.round(v));
+    const [calRow, ...otherRows] = rows;
+    const calNow = fmt(calRow[1], calRow[2]);
+    const calWas = fmt(calRow[3], calRow[2]);
+
     return (
       <View className="absolute inset-0">
-        <Pressable className="absolute inset-0 bg-black/40" onPress={() => setEditEntry(null)} />
+        <Pressable style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: oc.scrim }} onPress={() => setEditEntry(null)} accessibilityLabel="Close" />
+        <OrbitPage>
         <View
-          className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl bg-white"
-          style={{ maxHeight: windowHeight * 0.85 }}
+          style={{ position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: windowHeight * 0.88, overflow: "hidden", borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: oc.canvas }}
         >
-          <View className="items-center pt-3">
-            <View className="h-1 w-10 rounded-full bg-slate-200" />
+          <View style={{ alignItems: "center", paddingTop: 10 }}>
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: oc.track }} />
           </View>
-          <View className="flex-row items-center border-b border-slate-100 px-5 pb-4 pt-3">
-            <View className="h-11 w-11 items-center justify-center rounded-xl bg-blue-50">
-              <Ionicons name={icon} size={20} color="#2563EB" />
+          {/* What it is, as a node like the day's timeline (filled once eaten), and when */}
+          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 14, paddingBottom: 6 }}>
+            <View style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: eaten ? oc.ink : oc.node, borderWidth: eaten ? 0 : 1, borderColor: oc.nodeBorder }}>
+              <Ionicons name={icon} size={20} color={eaten ? oc.onInk : oc.text} />
             </View>
-            <Text className="ml-3 flex-1 text-lg font-bold text-slate-950" numberOfLines={2}>
-              {title}
-            </Text>
-            <Pressable
-              hitSlop={10}
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text numberOfLines={2} style={{ fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: oc.text }}>
+                {title}
+              </Text>
+              <Text style={{ marginTop: 2, fontSize: 13, color: oc.muted }}>
+                {eaten ? "Eaten" : "Planned"} · {SLOT_MAP[editEntry.slot]?.label ?? editEntry.slot} · {friendlyDayLabel(editEntry.date)}
+              </Text>
+            </View>
+            <Tap
+              hitSlop={8}
               onPress={() => setEditEntry(null)}
-              className="ml-2 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+              accessibilityLabel="Close"
+              style={{ marginLeft: 8, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: oc.surface, borderWidth: 1, borderColor: oc.border }}
+              pressedStyle={{ backgroundColor: oc.pill }}
             >
-              <Ionicons name="close" size={20} color="#64748B" />
-            </Pressable>
+              <Ionicons name="close" size={19} color={oc.text} />
+            </Tap>
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
             {recipeConfirmedLocked ? (
-              <View className="mb-5 rounded-2xl bg-slate-50 px-4 py-3">
-                <Text className="text-sm text-slate-600">
-                  This meal is confirmed — the nutrition below reflects exactly what was really used,
-                  not the servings number below it. Unconfirm the entry first if you need to change
-                  servings and have it actually affect the logged nutrition.
+              <View style={[card, { marginBottom: 18, flexDirection: "row", padding: 14 }]}>
+                <Ionicons name="lock-closed-outline" size={16} color={oc.muted} style={{ marginTop: 1 }} />
+                <Text style={{ flex: 1, marginLeft: 10, fontSize: 13, lineHeight: 18, color: oc.muted }}>
+                  This meal is confirmed — the nutrition below is exactly what was really used, not the
+                  servings number. Unconfirm it first if you need to change the servings and have it
+                  affect what&apos;s logged.
                 </Text>
               </View>
             ) : null}
 
             {isRestaurant ? (
               <>
-                <Text className="mb-1.5 text-sm font-semibold text-slate-700">What did you get?</Text>
-                <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <Text style={eyebrow}>WHAT DID YOU GET?</Text>
+                <View style={[card, { marginBottom: 20 }]}>
                   {restaurantDishes.map((dish, i) => {
                     const qty = editDishQuantities.get(dish._id);
                     const checked = qty != null;
                     return (
-                      <View
-                        key={dish._id}
-                        className={`px-4 py-3.5 ${i < restaurantDishes.length - 1 ? "border-b border-slate-100" : ""}`}
-                      >
+                      <View key={dish._id} style={{ paddingHorizontal: 16, paddingVertical: 13, borderTopWidth: i ? 1 : 0, borderTopColor: oc.border }}>
                         <Pressable
-                          className="flex-row items-center justify-between active:opacity-70"
+                          accessibilityRole="checkbox"
+                          accessibilityState={{ checked }}
+                          style={{ flexDirection: "row", alignItems: "center" }}
                           onPress={() => {
                             setEditDishQuantities(prev => {
                               const next = new Map(prev);
@@ -1905,24 +1924,20 @@ function PhonePlannerScreen() {
                             });
                           }}
                         >
-                          <View className="flex-1 flex-row items-center">
-                            <Ionicons
-                              name={checked ? "checkbox" : "square-outline"}
-                              size={22}
-                              color={checked ? "#2563EB" : "#94A3B8"}
-                            />
-                            <View className="ml-3 flex-1">
-                              <Text className="font-semibold text-slate-900">{dish.name}</Text>
-                              {dish.nutrition?.calories != null && (
-                                <Text className="mt-0.5 text-xs text-slate-400">{dish.nutrition.calories} kcal each</Text>
-                              )}
-                            </View>
+                          <View style={{ width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: checked ? oc.ink : "transparent", borderWidth: checked ? 0 : 1.5, borderColor: oc.faint }}>
+                            {checked && <Ionicons name="checkmark" size={14} color={oc.onInk} />}
+                          </View>
+                          <View style={{ flex: 1, marginLeft: 12 }}>
+                            <Text style={{ fontSize: 15, fontWeight: "600", color: oc.text }}>{dish.name}</Text>
+                            {dish.nutrition?.calories != null && (
+                              <Text style={{ marginTop: 2, fontSize: 12, color: oc.muted }}>{dish.nutrition.calories} kcal each</Text>
+                            )}
                           </View>
                         </Pressable>
 
                         {checked && (
-                          <View className="mt-2 flex-row items-center justify-end">
-                            <Text className="mr-2 text-xs font-medium text-slate-400">Quantity</Text>
+                          <View style={{ marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "flex-end" }}>
+                            <Text style={{ marginRight: 8, fontSize: 12, color: oc.faint }}>Quantity</Text>
                             <DishQuantityStepper
                               value={qty}
                               onChange={next =>
@@ -1953,35 +1968,36 @@ function PhonePlannerScreen() {
                   if (!groups.some((g) => g.choices.length > 1)) return null;
                   const pinned = (editEntry.pieces ?? []).length > 0;
                   const meal = choices.find((c) => c.current)?.calories;
+                  const heading = <Text style={eyebrow}>{groups.length > 1 ? "WHICH ONES" : "WHICH ONE"}</Text>;
                   // (Folded to what it's counted at, until it's to be changed.)
                   if (!showPieces) {
                     return (
                       <>
-                        <Text className="mb-1.5 text-sm font-semibold text-slate-700">{groups.length > 1 ? "Which ones" : "Which one"}</Text>
-                        <Pressable onPress={() => setShowPieces(true)} className="mb-6 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 py-3 active:bg-slate-50">
-                          <View className="flex-1">
+                        {heading}
+                        <Tap onPress={() => setShowPieces(true)} style={[card, { marginBottom: 20, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13 }]} pressedStyle={{ opacity: 0.8 }}>
+                          <View style={{ flex: 1 }}>
                             {groups.map((g) => (
-                              <Text key={g.group} className="text-base text-slate-900" numberOfLines={1}>
+                              <Text key={g.group} style={{ fontSize: 15, color: oc.text }} numberOfLines={1}>
                                 {g.choices.find((c) => c.current)?.label ?? `${g.group}: not chosen`}
                               </Text>
                             ))}
                           </View>
-                          {meal != null && <Text className="mr-2 text-sm font-semibold text-slate-500">{meal} kcal</Text>}
-                          <Text className="text-sm font-semibold text-blue-600">Change</Text>
-                          <Ionicons name="chevron-forward" size={15} color="#2563EB" />
-                        </Pressable>
+                          {meal != null && <Text style={{ marginRight: 8, fontSize: 13, fontWeight: "600", color: oc.muted }}>{meal} kcal</Text>}
+                          <Text style={{ fontSize: 13, fontWeight: "600", color: oc.accent }}>Change</Text>
+                          <Ionicons name="chevron-forward" size={15} color={oc.accent} />
+                        </Tap>
                       </>
                     );
                   }
                   return (
                     <>
-                      <Text className="mb-1.5 text-sm font-semibold text-slate-700">{groups.length > 1 ? "Which ones" : "Which one"}</Text>
+                      {heading}
                       {groups.map((g) => {
                         const expanded = groups.length === 1 || openPieces.includes(g.group);
                         return (
-                        <View key={g.group} className="mb-2">
-                          {groups.length > 1 && pieceHeading(g.group, expanded, g.choices.find((c) => c.current)?.label, g.choices.some((c) => editEntry.pieces?.includes(c.pantryItemId)))}
-                          {expanded && <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                        <View key={g.group} style={{ marginBottom: 8 }}>
+                          {groups.length > 1 && pieceHeading(g.group, expanded, g.choices.find((c) => c.current)?.label, g.choices.some((c) => editEntry.pieces?.includes(c.pantryItemId)), true)}
+                          {expanded && <View style={card}>
                             {g.choices.map((c, i) => (
                               <Pressable
                                 key={c.pantryItemId}
@@ -1989,22 +2005,22 @@ function PhonePlannerScreen() {
                                   if (groups.length === 1) setShowPieces(false);
                                   void choosePiece(editEntry, withPiece(editEntry.pieces, choices, c));
                                 }}
-                                className={`flex-row items-center px-4 py-3 active:bg-slate-50 ${i > 0 ? "border-t border-slate-100" : ""}`}
+                                style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: i ? 1 : 0, borderTopColor: oc.border }}
                               >
                                 {/* (Marked: what's been kept for it; the planner's own pick is labelled.) */}
-                                <Ionicons name={c.chosen ? "radio-button-on" : "radio-button-off"} size={20} color={c.chosen ? "#2563EB" : "#94A3B8"} />
-                                <View className="ml-3 flex-1">
-                                  <Text className="text-base text-slate-900">
+                                <Ionicons name={c.chosen ? "radio-button-on" : "radio-button-off"} size={20} color={c.chosen ? oc.ink : oc.faint} />
+                                <View style={{ flex: 1, marginLeft: 12 }}>
+                                  <Text style={{ fontSize: 15, color: oc.text }}>
                                     {c.label}
-                                    {c.current && !g.choices.some((x) => x.chosen) && <Text className="text-xs text-violet-600">  · planner&apos;s pick</Text>}
+                                    {c.current && !g.choices.some((x) => x.chosen) && <Text style={{ fontSize: 12, color: oc.accent }}>  · planner&apos;s pick</Text>}
                                   </Text>
                                   {!!c.elsewhere && (
-                                    <Text className="text-xs text-slate-400">
+                                    <Text style={{ fontSize: 12, color: oc.faint }}>
                                       going to {shortDateLabel(c.elsewhere.date)} {c.elsewhere.slot}
                                     </Text>
                                   )}
                                 </View>
-                                <Text className="text-sm font-semibold text-slate-500">{c.calories} kcal</Text>
+                                <Text style={{ fontSize: 13, fontWeight: "600", color: oc.muted }}>{c.calories} kcal</Text>
                               </Pressable>
                             ))}
                             {/* Or none in particular: the planner's to choose. */}
@@ -2013,48 +2029,46 @@ function PhonePlannerScreen() {
                                 if (groups.length === 1) setShowPieces(false);
                                 void choosePiece(editEntry, (editEntry.pieces ?? []).filter((id) => !g.choices.some((c) => c.pantryItemId === id)));
                               }}
-                              className="flex-row items-center border-t border-slate-100 px-4 py-3 active:bg-slate-50"
+                              style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: oc.border }}
                             >
                               {(() => {
                                 const mine = g.choices.some((c) => editEntry.pieces?.includes(c.pantryItemId));
-                                return <Ionicons name={mine ? "radio-button-off" : "radio-button-on"} size={20} color={mine ? "#94A3B8" : "#7C3AED"} />;
+                                return <Ionicons name={mine ? "radio-button-off" : "radio-button-on"} size={20} color={mine ? oc.faint : oc.accent} />;
                               })()}
-                              <Text className="ml-3 flex-1 text-base text-violet-700">Let the planner choose</Text>
+                              <Text style={{ flex: 1, marginLeft: 12, fontSize: 15, color: oc.accent }}>Let the planner choose</Text>
                             </Pressable>
                           </View>}
                         </View>
                         );
                       })}
-                      <View className="mb-6 mt-0.5 flex-row items-center">
-                        <Text className="flex-1 text-xs text-slate-400">
+                      <View style={{ marginBottom: 20, marginTop: 2, paddingHorizontal: 4, flexDirection: "row", alignItems: "center" }}>
+                        <Text style={{ flex: 1, fontSize: 12, color: oc.faint }}>
                           {pinned ? "Kept for this meal." : "Chosen for you: the best fit for the day, then the soonest to go."}
                         </Text>
                         {pinned && (
                           <Pressable onPress={() => void choosePiece(editEntry, [])} hitSlop={8}>
-                            <Text className="text-xs font-semibold text-blue-600">Let the planner choose</Text>
+                            <Text style={{ fontSize: 12, fontWeight: "600", color: oc.accent }}>Let the planner choose</Text>
                           </Pressable>
                         )}
-                        <Pressable onPress={() => setShowPieces(false)} hitSlop={8} className="ml-3">
-                          <Text className="text-xs font-semibold text-slate-500">Done</Text>
+                        <Pressable onPress={() => setShowPieces(false)} hitSlop={8} style={{ marginLeft: 12 }}>
+                          <Text style={{ fontSize: 12, fontWeight: "600", color: oc.muted }}>Done</Text>
                         </Pressable>
                       </View>
                     </>
                   );
                 })()}
-                <Text className="mb-1.5 text-sm font-semibold text-slate-700">
-                  {isIngredient ? "Quantity eaten" : "Servings eaten"}
-                </Text>
+                <Text style={eyebrow}>{isIngredient ? "QUANTITY EATEN" : "SERVINGS EATEN"}</Text>
                 {isIngredient ? (
-                  <View className="mb-6 flex-row gap-2">
+                  <View style={{ marginBottom: 20, flexDirection: "row", gap: 8 }}>
                     <TextInput
                       value={editQuantity}
                       onChangeText={setEditQuantity}
                       keyboardType="decimal-pad"
                       placeholder="1"
-                      placeholderTextColor="#94A3B8"
-                      className="h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+                      placeholderTextColor={oc.faint}
+                      style={[field, { flex: 1 }]}
                     />
-                    <View className="flex-1">
+                    <View style={{ flex: 1 }}>
                       <CreatableStringDropdown options={unitChoices(editEntry.ingredient!)} selectedValue={editUnit} placeholder="unit" onSelect={setEditUnit} height={56} />
                     </View>
                   </View>
@@ -2064,88 +2078,90 @@ function PhonePlannerScreen() {
                     onChangeText={setEditQuantity}
                     keyboardType="decimal-pad"
                     placeholder="1"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={oc.faint}
                     editable={!recipeConfirmedLocked}
-                    className={`mb-6 h-14 rounded-2xl border border-slate-200 px-4 text-base text-slate-950 ${
-                      recipeConfirmedLocked ? "bg-slate-100" : "bg-white"
-                    }`}
+                    style={[field, { marginBottom: 20 }, recipeConfirmedLocked && { backgroundColor: oc.pill, color: oc.muted }]}
                   />
                 )}
               </>
             )}
 
-            {/* Live nutrition preview for this entry — for a confirmed
-                recipe with a real logged total, "original" is the recipe's
-                own generic estimate at its logged servings, shown only
-                when it actually differs from what was really used. */}
-            <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              {rows.map(([label, value, unit, original], i) => {
-                const roundedValue = value != null ? Math.round(value * 10) / 10 : null;
-                const roundedOriginal = original != null ? Math.round(original * 10) / 10 : null;
-                const showComparison = roundedOriginal != null && roundedValue != null
-                  && roundedOriginal !== roundedValue;
-                return (
-                  <View
-                    key={label}
-                    className={`flex-row items-center justify-between px-4 py-3 ${
-                      i < rows.length - 1 ? "border-b border-slate-100" : ""
-                    }`}
-                  >
-                    <Text className="text-base text-slate-600">{label}</Text>
-                    <Text className="text-base font-semibold text-slate-900">
-                      {showComparison
-                        ? `${roundedOriginal} → ${roundedValue} ${unit}`
-                        : roundedValue != null
-                          ? `${roundedValue} ${unit}`
-                          : "—"}
-                    </Text>
-                  </View>
-                );
-              })}
+            {/* Live nutrition preview for this entry: calories large, the
+                rest beside each other — for a confirmed recipe with a real
+                logged total, what the recipe's own generic estimate was
+                ("was"), shown only where it differs from what was used. */}
+            <Text style={eyebrow}>NUTRITION</Text>
+            <View style={[card, { padding: 16, marginBottom: loggedNutrition ? 8 : 20 }]}>
+              <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+                <Text style={{ fontSize: 30, fontWeight: "800", letterSpacing: -0.6, color: oc.text }}>{calNow ?? "—"}</Text>
+                <Text style={{ marginLeft: 5, fontSize: 14, color: oc.muted }}>kcal</Text>
+                {calWas != null && calNow != null && calWas !== calNow && <Text style={{ marginLeft: 10, fontSize: 13, color: oc.faint }}>was {calWas}</Text>}
+              </View>
+              <View style={{ marginTop: 12, flexDirection: "row" }}>
+                {otherRows.map(([label, value, unit, original]) => {
+                  const now = fmt(value, unit);
+                  const was = fmt(original, unit);
+                  return (
+                    <View key={label} style={{ flex: 1 }}>
+                      <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 15, fontWeight: "700", color: oc.text }}>
+                        {now ?? "—"}
+                        {now != null && <Text style={{ fontSize: 11, fontWeight: "400", color: oc.faint }}>{unit === "mg" ? " mg" : unit}</Text>}
+                      </Text>
+                      <Text style={{ marginTop: 2, fontSize: 12, color: oc.muted }}>{label}</Text>
+                      {was != null && now != null && was !== now && <Text numberOfLines={1} style={{ fontSize: 10.5, color: oc.faint }}>was {was}</Text>}
+                    </View>
+                  );
+                })}
+              </View>
             </View>
             {loggedNutrition && (
-              <Text className="-mt-4 mb-6 text-xs leading-4 text-slate-400">
-                Original → true log: the recipe&apos;s own estimate vs. what you actually
-                confirmed (real weights used, per-ingredient).
+              <Text style={{ marginBottom: 20, paddingHorizontal: 4, fontSize: 12, lineHeight: 17, color: oc.faint }}>
+                &quot;Was&quot;: the recipe&apos;s own estimate. The numbers are what you actually
+                confirmed (the real weights used, per ingredient).
               </Text>
             )}
 
             {!recipeConfirmedLocked && isIngredient && editEntry.status === "confirmed" && (
-              <Text className="mb-4 text-xs text-slate-400">
-                Note: this updates the logged amount only — it won&apos;t adjust pantry stock, which was
+              <Text style={{ marginBottom: 16, paddingHorizontal: 4, fontSize: 12, lineHeight: 17, color: oc.faint }}>
+                This updates the logged amount only — it won&apos;t adjust pantry stock, which was
                 already deducted when this entry was confirmed.
               </Text>
             )}
 
-            <Pressable
-              disabled={editSaving || recipeConfirmedLocked || !canSave}
-              className={`mb-3 items-center rounded-2xl py-4 ${
-                editSaving || recipeConfirmedLocked || !canSave ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
-              }`}
-              onPress={() => void handleSaveEntryQuantity()}
-            >
-              <Text className="font-semibold text-white">{editSaving ? "Saving…" : "Save changes"}</Text>
-            </Pressable>
+            {/* (Nothing to save on a confirmed recipe: it's what was used.) */}
+            {!recipeConfirmedLocked && (
+              <Tap
+                disabled={editSaving || !canSave}
+                onPress={() => void handleSaveEntryQuantity()}
+                style={{ marginBottom: 10, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: oc.ink, opacity: editSaving || !canSave ? 0.35 : 1 }}
+                pressedStyle={{ opacity: 0.85 }}
+              >
+                <Text style={{ fontSize: 16, fontWeight: "600", color: oc.onInk }}>{editSaving ? "Saving…" : "Save changes"}</Text>
+              </Tap>
+            )}
             {editEntry.status === "planned" && (
-              <Pressable
-                className="mb-3 flex-row items-center justify-center rounded-2xl border border-violet-200 py-4 active:bg-violet-50"
+              <Tap
                 onPress={() => {
                   setMoving({ entry: editEntry, date: editEntry.date, slot: editEntry.slot });
                   setEditEntry(null);
                 }}
+                style={{ marginBottom: 10, height: 52, borderRadius: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: oc.pill }}
               >
-                <Ionicons name="swap-horizontal-outline" size={16} color="#7C3AED" />
-                <Text className="ml-2 font-semibold text-violet-700">Move to another day or meal…</Text>
-              </Pressable>
+                <Ionicons name="swap-horizontal-outline" size={17} color={oc.onPill} />
+                <Text style={{ marginLeft: 8, fontSize: 15, fontWeight: "600", color: oc.onPill }}>Move to another day or meal</Text>
+              </Tap>
             )}
-            <Pressable
-              className="items-center rounded-2xl border border-slate-200 py-4 active:bg-slate-50"
+            <Tap
               onPress={handleViewFullItem}
+              style={{ height: 52, borderRadius: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: oc.surface, borderWidth: 1, borderColor: oc.border }}
+              pressedStyle={{ backgroundColor: oc.pill }}
             >
-              <Text className="font-semibold text-slate-700">View full item</Text>
-            </Pressable>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: oc.text }}>View full item</Text>
+              <Ionicons name="chevron-forward" size={16} color={oc.faint} style={{ marginLeft: 4 }} />
+            </Tap>
           </ScrollView>
         </View>
+        </OrbitPage>
       </View>
     );
   }
