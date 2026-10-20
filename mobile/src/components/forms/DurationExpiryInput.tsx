@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import { useOrbitPage } from "@/src/theme/orbit";
 import { addDurationToDate, type DurationUnit } from "@/src/utils/date";
 
 const UNIT_OPTIONS: { value: DurationUnit; label: string }[] = [
@@ -46,6 +47,8 @@ export function DurationExpiryInput({
     onApply(addDurationToDate(purchaseDate, parsedAmount, unit));
   }
 
+  const o = useOrbitPage();
+  const field = o && { backgroundColor: o.surface, borderColor: o.border };
   return (
     <View>
       <View className="flex-row items-center">
@@ -56,11 +59,12 @@ export function DurationExpiryInput({
           editable={!disabled}
           keyboardType="number-pad"
           placeholder="e.g. 2"
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor={o?.faint ?? "#94A3B8"}
           className="mr-2 h-11 w-16 rounded-xl border border-slate-200 bg-white px-3 text-base text-slate-950"
+          style={o ? [field, { color: o.text }] : undefined}
         />
 
-        <View className="mr-2 flex-1 flex-row rounded-xl border border-slate-200 bg-white p-1">
+        <View className="mr-2 flex-1 flex-row rounded-xl border border-slate-200 bg-white p-1" style={field || undefined}>
           {UNIT_OPTIONS.map((option) => {
             const isActive = option.value === unit;
             return (
@@ -69,9 +73,11 @@ export function DurationExpiryInput({
                 disabled={disabled}
                 onPress={() => setUnit(option.value)}
                 className={`flex-1 items-center rounded-lg py-2 ${isActive ? "bg-blue-600" : ""}`}
+                style={o && isActive ? { backgroundColor: o.ink } : undefined}
               >
                 <Text
                   className={`text-xs font-semibold ${isActive ? "text-white" : "text-slate-600"}`}
+                  style={o ? { color: isActive ? o.onInk : o.muted } : undefined}
                 >
                   {option.label}
                   {parsedAmount > 1 ? "s" : ""}
@@ -87,12 +93,13 @@ export function DurationExpiryInput({
           className={`h-11 w-11 items-center justify-center rounded-xl ${
             canApply ? "bg-blue-600 active:bg-blue-700" : "bg-slate-200"
           }`}
+          style={o ? { backgroundColor: canApply ? o.ink : o.pill } : undefined}
         >
-          <Ionicons name="checkmark" size={20} color={canApply ? "white" : "#94A3B8"} />
+          <Ionicons name="checkmark" size={20} color={canApply ? (o?.onInk ?? "white") : (o?.faint ?? "#94A3B8")} />
         </Pressable>
       </View>
 
-      <Text className="mt-1.5 text-xs text-slate-400">
+      <Text className="mt-1.5 text-xs text-slate-400" style={o ? { color: o.faint } : undefined}>
         Sets the expiry date to this long after the purchase date.
       </Text>
     </View>

@@ -13,6 +13,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Tap } from "@/src/components/ui/Tap";
+import { OrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { useFocusEffect, useRouter } from "expo-router";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
@@ -100,6 +103,13 @@ const TAG_STYLE: Record<"Plan" | "Menu" | "Added", { bg: string; text: string }>
   Added: { bg: "bg-slate-100", text: "text-slate-500" },
 };
 
+// The same, in Orbit's colours (light or dark).
+function orbitTag(tag: "Plan" | "Menu" | "Added", o: OrbitColors, dark: boolean) {
+  if (tag === "Plan") return { backgroundColor: o.accentSoft, color: o.accent };
+  if (tag === "Menu") return dark ? { backgroundColor: "rgba(139,92,246,0.18)", color: "#C4B5FD" } : { backgroundColor: "#EDE9FE", color: "#6D28D9" };
+  return { backgroundColor: o.pill, color: o.muted };
+}
+
 export default function GroceryListScreen() {
   return <GroceryList />;
 }
@@ -113,6 +123,16 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
   const addWidth = wide ? { maxWidth: 640 } : undefined;
   const column = wide ? { flex: 1, minWidth: 0 } : undefined;
   const router = useRouter();
+  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
+  // desktop browser keeps the desktop's for now. The fields, dropdowns and
+  // switches in it follow by themselves (OrbitPage).
+  const { colors, dark } = useOrbitTheme();
+  const o = wide ? null : colors;
+  const card = o && { backgroundColor: o.surface, borderColor: o.border };
+  const fieldText = o && { color: o.text };
+  const placeholder = o?.faint ?? "#94A3B8";
+  // Soft tints behind an icon, in either theme.
+  const tint = (light: string, darkTint: string) => (dark ? darkTint : light);
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
@@ -764,6 +784,7 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
         renderLeftActions={() => (
           <Pressable
             className="mb-2.5 w-20 items-center justify-center rounded-2xl bg-red-500 active:bg-red-600"
+            style={o && { borderRadius: 18 }}
             onPress={() => void handleDeleteItem(item._id)}
           >
             <Ionicons name="trash-outline" size={22} color="white" />
@@ -783,14 +804,14 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
             : undefined
         }
       >
-        <View className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4">
+        <View className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4" style={o && { ...card, borderRadius: 18 }}>
           <Pressable
             onPress={() =>
               isPending ? handleTapPendingItem(item) : void handleAdvanceItem(item)
             }
             className="flex-1 flex-row items-center active:opacity-70"
           >
-            <View className={`h-6 w-6 items-center justify-center rounded-full border-2 ${circleClassName}`}>
+            <View className={`h-6 w-6 items-center justify-center rounded-full border-2 ${circleClassName}`} style={o && !isPending && !isCompleted ? { borderColor: o.faint } : undefined}>
               {isCompleted && <Ionicons name="checkmark" size={14} color="white" />}
               {/* Bought, and waiting to be put away. */}
               {isPending && <Ionicons name="basket" size={13} color="white" />}
@@ -801,33 +822,34 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                   className={`mr-1.5 text-base ${
                     isCompleted ? "text-slate-400 line-through" : "font-medium text-slate-900"
                   }`}
+                  style={o && { color: isCompleted ? o.faint : o.text }}
                 >
                   {item.name}
                 </Text>
                 {/* Where it came from: the plan, the menu, or added by hand. */}
                 {!isCompleted &&
                   groceryItemTags(item).map((tag) => (
-                    <View key={tag} className={`mr-1 rounded-full px-1.5 py-px ${TAG_STYLE[tag].bg}`}>
-                      <Text className={`text-[10px] font-bold ${TAG_STYLE[tag].text}`}>{tag}</Text>
+                    <View key={tag} className={`mr-1 rounded-full px-1.5 py-px ${TAG_STYLE[tag].bg}`} style={o && { backgroundColor: orbitTag(tag, o, dark).backgroundColor }}>
+                      <Text className={`text-[10px] font-bold ${TAG_STYLE[tag].text}`} style={o && { color: orbitTag(tag, o, dark).color }}>{tag}</Text>
                     </View>
                   ))}
               </View>
               {isPending ? (
-                <Text className="mt-0.5 text-xs text-amber-600">
+                <Text className="mt-0.5 text-xs text-amber-600" style={o && { color: o.warning }}>
                   {isLinkedToIngredient(item) ? "Tap to log to pantry" : "Tap for more info"}
                 </Text>
               ) : (
                 !isCompleted &&
                 typeof item.ingredient === "object" &&
                 item.ingredient && (
-                  <Text className="mt-0.5 text-xs text-blue-500">
+                  <Text className="mt-0.5 text-xs text-blue-500" style={o && { color: o.accent }}>
                     {item.ingredient.isGeneric ? "Generic ingredient" : "Linked ingredient"}
                   </Text>
                 )
               )}
             </View>
             {(item.quantity != null || item.unit) && (
-              <Text className="ml-2 text-sm text-slate-400">
+              <Text className="ml-2 text-sm text-slate-400" style={o && { color: o.muted }}>
                 {item.quantity ?? ""} {item.unit ?? ""}
               </Text>
             )}
@@ -841,7 +863,7 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
               <Ionicons
                 name={isLinkedToIngredient(item) ? "link" : "link-outline"}
                 size={18}
-                color={isLinkedToIngredient(item) ? "#2563EB" : "#94A3B8"}
+                color={isLinkedToIngredient(item) ? (o?.accent ?? "#2563EB") : placeholder}
               />
             </Pressable>
           )}
@@ -852,15 +874,16 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-3 text-slate-500">Loading grocery list...</Text>
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
+        <Text className="mt-3 text-slate-500" style={o && { color: o.muted }}>Loading grocery list...</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <OrbitPage on={!!o}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -892,28 +915,26 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
           </View>
         )}
 
-        {/* Header (phone) */}
-        <View className="px-4 pb-2 pt-1" style={wide ? { display: "none" } : undefined}>
-          <View className="flex-row items-center" style={inTabs && viewMode !== "shopping" ? { display: "none" } : undefined}>
-            {!inTabs && (
-              <Pressable
-                className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-                onPress={() => router.back()}
-              >
-                <Ionicons name="chevron-back" size={26} color="#0F172A" />
-              </Pressable>
-            )}
-            <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">{inTabs ? "" : "Grocery List"}</Text>
-            {viewMode === "shopping" && (
-              <Pressable
-                className="mr-2 h-11 w-11 items-center justify-center rounded-full bg-blue-50 active:bg-blue-100"
-                onPress={() => setReceiptScannerVisible(true)}
-              >
-                <Ionicons name="camera-outline" size={20} color="#2563EB" />
-              </Pressable>
-            )}
-          </View>
-          <View className="mt-3">
+        {/* Header (phone): the way back (and in shopping mode, the receipt
+            camera) over a large title, on the page itself */}
+        {o && (
+          <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+            <View style={[{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }, inTabs && viewMode !== "shopping" && { display: "none" }]}>
+              {!inTabs && (
+                <Tap onPress={() => (router.canGoBack() ? router.back() : router.replace("/plan"))} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                  <Ionicons name="chevron-back" size={22} color={o.text} />
+                </Tap>
+              )}
+              <View style={{ flex: 1 }} />
+              {viewMode === "shopping" && (
+                <Tap onPress={() => setReceiptScannerVisible(true)} accessibilityLabel="Scan a receipt" style={{ height: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: o.ink }} pressedStyle={{ opacity: 0.8 }}>
+                  <Ionicons name="camera-outline" size={18} color={o.onInk} />
+                  <Text style={{ fontSize: 14, fontWeight: "600", color: o.onInk }}>Scan receipt</Text>
+                </Tap>
+              )}
+            </View>
+            {!inTabs && <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>Grocery list</Text>}
+            <View style={{ marginTop: 12 }}>
             <SegmentedToggle<"list" | "shopping">
               value={viewMode}
               options={[
@@ -924,10 +945,11 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
             />
           </View>
         </View>
+        )}
 
         {/* Add item row */}
-        <View className="mx-5 mt-5 flex-row items-center gap-3" style={addWidth}>
-          <View className="h-12 flex-1 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
+        <View className="mx-5 mt-5 flex-row items-center gap-3" style={[addWidth, o && { marginHorizontal: 16, marginTop: 16 }]}>
+          <View className="h-12 flex-1 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4" style={card}>
             <TextInput
               value={nameInput}
               onChangeText={(value) => {
@@ -940,8 +962,9 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
               onSubmitEditing={() => void handleAddItem()}
               returnKeyType="done"
               placeholder="Search ingredients or add any item…"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={placeholder}
               className="flex-1 text-base text-slate-900"
+              style={fieldText}
             />
             {nameInput.length > 0 && (
               <Pressable
@@ -950,7 +973,7 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                   setSelectedIngredientId("");
                 }}
               >
-                <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                <Ionicons name="close-circle" size={18} color={placeholder} />
               </Pressable>
             )}
           </View>
@@ -960,14 +983,16 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
             className={`h-12 w-12 items-center justify-center rounded-2xl ${
               adding ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
             }`}
+            style={o && { backgroundColor: o.ink, opacity: adding ? 0.5 : 1 }}
+            accessibilityLabel="Add to the list"
           >
-            <Ionicons name="add" size={26} color="white" />
+            <Ionicons name="add" size={26} color={o?.onInk ?? "white"} />
           </Pressable>
         </View>
 
         {/* Ingredient suggestions, right under what's being typed */}
         {grocerySuggestions.length > 0 && (
-          <View className="mx-5 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={addWidth}>
+          <View className="mx-5 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={[addWidth, card, o && { marginHorizontal: 16 }]}>
             {grocerySuggestions.map((ing, idx) => {
               const categoryName = getReferenceName(ing.category);
               return (
@@ -977,20 +1002,21 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                   className={`flex-row items-center px-4 py-3 active:bg-slate-50 ${
                     idx > 0 ? "border-t border-slate-100" : ""
                   }`}
+                  style={o && { borderTopColor: o.border }}
                 >
-                  <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
-                    <Ionicons name="nutrition-outline" size={16} color="#2563EB" />
+                  <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.accentSoft }}>
+                    <Ionicons name="nutrition-outline" size={16} color={o?.accent ?? "#2563EB"} />
                   </View>
                   <View className="ml-3 flex-1">
-                    <Text className="font-medium text-slate-900">{ing.name}</Text>
-                    <Text className="text-xs text-slate-400">
+                    <Text className="font-medium text-slate-900" style={fieldText}>{ing.name}</Text>
+                    <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>
                       {[ing.isGeneric ? "Generic" : null, categoryName || null]
                         .filter(Boolean)
                         .join(" · ")}
                     </Text>
                   </View>
                   {selectedIngredientId === ing._id && (
-                    <Ionicons name="checkmark-circle" size={20} color="#2563EB" />
+                    <Ionicons name="checkmark-circle" size={20} color={o?.accent ?? "#2563EB"} />
                   )}
                 </Pressable>
               );
@@ -1001,11 +1027,12 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
               <Pressable
                 onPress={() => void handleAddItem()}
                 className="flex-row items-center border-t border-slate-100 px-4 py-3 active:bg-slate-50"
+                style={o && { borderTopColor: o.border }}
               >
-                <View className="h-8 w-8 items-center justify-center rounded-full bg-slate-100">
-                  <Ionicons name="add" size={16} color="#475569" />
+                <View className="h-8 w-8 items-center justify-center rounded-full bg-slate-100" style={o && { backgroundColor: o.pill }}>
+                  <Ionicons name="add" size={16} color={o?.onPill ?? "#475569"} />
                 </View>
-                <Text className="ml-3 flex-1 font-medium text-slate-700">
+                <Text className="ml-3 flex-1 font-medium text-slate-700" style={o && { color: o.icon }}>
                   Add &quot;{nameInput.trim()}&quot; as a one-off item
                 </Text>
               </Pressable>
@@ -1014,14 +1041,15 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
         )}
 
         {/* Quantity + unit — optional, applies to the item about to be added */}
-        <View className="mx-5 mt-3 flex-row items-center gap-3" style={[addWidth, { zIndex: 5 }]}>
+        <View className="mx-5 mt-3 flex-row items-center gap-3" style={[addWidth, { zIndex: 5 }, o && { marginHorizontal: 16 }]}>
           <TextInput
             value={quantity}
             onChangeText={setQuantity}
             keyboardType="decimal-pad"
             placeholder="Qty"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={placeholder}
             className="h-12 w-20 rounded-2xl border border-slate-200 bg-white px-3 text-center text-base text-slate-900"
+            style={o && { ...card, ...fieldText }}
           />
           <View className="flex-1">
             <CreatableStringDropdown
@@ -1035,24 +1063,24 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
 
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 60 }}
+          contentContainerStyle={{ paddingHorizontal: o ? 16 : 20, paddingTop: o ? 20 : 16, paddingBottom: 60 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
           {groceryItems.length === 0 ? (
-            <View className="mt-8 items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
-              <Ionicons name="cart-outline" size={42} color="#94A3B8" />
-              <Text className="mt-4 text-lg font-bold text-slate-900">List is empty</Text>
-              <Text className="mt-2 text-center text-slate-500">
+            <View className="mt-8 items-center rounded-2xl border border-slate-200 bg-white px-6 py-16" style={o && { ...card, borderRadius: 18, marginTop: 4 }}>
+              <Ionicons name="cart-outline" size={42} color={o?.faint ?? "#94A3B8"} />
+              <Text className="mt-4 text-lg font-bold text-slate-900" style={fieldText}>List is empty</Text>
+              <Text className="mt-2 text-center text-slate-500" style={o && { color: o.muted }}>
                 Add items above to start your grocery list.
               </Text>
             </View>
           ) : viewMode === "shopping" ? (
             storeGroups.length === 0 ? (
-              <View className="mt-8 items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
-                <Ionicons name="checkmark-circle-outline" size={42} color="#94A3B8" />
-                <Text className="mt-4 text-lg font-bold text-slate-900">Nothing left to shop for</Text>
-                <Text className="mt-2 text-center text-slate-500">
+              <View className="mt-8 items-center rounded-2xl border border-slate-200 bg-white px-6 py-16" style={o && { ...card, borderRadius: 18, marginTop: 4 }}>
+                <Ionicons name="checkmark-circle-outline" size={42} color={o?.faint ?? "#94A3B8"} />
+                <Text className="mt-4 text-lg font-bold text-slate-900" style={fieldText}>Nothing left to shop for</Text>
+                <Text className="mt-2 text-center text-slate-500" style={o && { color: o.muted }}>
                   Everything&apos;s either logged or completed. Scan your receipts above to finish up.
                 </Text>
               </View>
@@ -1060,9 +1088,9 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
               <View style={wide ? { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 20 } : undefined}>
                 {storeGroups.map((group) => (
                   <View key={group.storeId || "unknown"} className="mb-5" style={wide ? { width: 360 } : undefined}>
-                    <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400">
+                    <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400" style={o && { color: o.faint, marginLeft: 4 }}>
                       {group.storeName}{" "}
-                      <Text className="font-semibold text-slate-300">· {group.items.length}</Text>
+                      <Text className="font-semibold text-slate-300" style={o && { color: o.orbit }}>· {group.items.length}</Text>
                     </Text>
                     {group.items.map(renderGroceryRow)}
                   </View>
@@ -1073,8 +1101,8 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
             <View style={wide ? { flexDirection: "row", alignItems: "flex-start", gap: 20 } : undefined}>
               {toBuyItems.length > 0 && (
                 <View className="mb-5" style={column}>
-                  <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400">
-                    To buy <Text className="font-semibold text-slate-300">· {toBuyItems.length}</Text>
+                  <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400" style={o && { color: o.faint, marginLeft: 4 }}>
+                    To buy <Text className="font-semibold text-slate-300" style={o && { color: o.orbit }}>· {toBuyItems.length}</Text>
                   </Text>
                   {toBuyItems.map(renderGroceryRow)}
                 </View>
@@ -1082,9 +1110,9 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
 
               {pendingLogItems.length > 0 && (
                 <View className="mb-5" style={column}>
-                  <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400">
+                  <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400" style={o && { color: o.faint, marginLeft: 4 }}>
                     Pending pantry log{" "}
-                    <Text className="font-semibold text-slate-300">· {pendingLogItems.length}</Text>
+                    <Text className="font-semibold text-slate-300" style={o && { color: o.orbit }}>· {pendingLogItems.length}</Text>
                   </Text>
                   {pendingLogItems.map(renderGroceryRow)}
                 </View>
@@ -1092,16 +1120,17 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
 
               {completedItems.length > 0 && (
                 <View className="mb-5" style={column}>
-                  <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400">
-                    Completed <Text className="font-semibold text-slate-300">· {completedItems.length}</Text>
+                  <Text className="mb-2.5 text-xs font-bold uppercase tracking-widest text-slate-400" style={o && { color: o.faint, marginLeft: 4 }}>
+                    Completed <Text className="font-semibold text-slate-300" style={o && { color: o.orbit }}>· {completedItems.length}</Text>
                   </Text>
                   {completedItems.map(renderGroceryRow)}
 
                   <Pressable
                     onPress={() => void handleClearCompleted()}
                     className="mt-2 items-center rounded-2xl bg-slate-100 py-3 active:bg-slate-200"
+                    style={o && { backgroundColor: o.pill }}
                   >
-                    <Text className="text-sm font-semibold text-slate-500">
+                    <Text className="text-sm font-semibold text-slate-500" style={o && { color: o.onPill }}>
                       Clear completed items
                     </Text>
                   </Pressable>
@@ -1121,9 +1150,9 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
           <View className="flex-1 items-center justify-center bg-black/40 px-6">
             <Pressable className="absolute inset-0" onPress={closeLogModal} />
 
-            <View className="w-full rounded-3xl bg-white p-5" style={{ maxWidth: 560 }}>
-              <Text className="text-lg font-bold text-slate-950">{logTargetIngredientName}</Text>
-              <Text className="mt-0.5 mb-4 text-sm text-slate-400">
+            <View className="w-full rounded-3xl bg-white p-5" style={{ maxWidth: 560, ...(o && { backgroundColor: o.surface }) }}>
+              <Text className="text-lg font-bold text-slate-950" style={fieldText}>{logTargetIngredientName}</Text>
+              <Text className="mt-0.5 mb-4 text-sm text-slate-400" style={o && { color: o.faint }}>
                 {logTargetIngredientName === loggingItem?.name
                   ? "Log to pantry"
                   : `Log to pantry — for "${loggingItem?.name}"`}
@@ -1148,7 +1177,7 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                 }}
               />
               {effectiveLogLocation && !logLocationTouched ? (
-                <Text className="mt-1.5 text-xs leading-4 text-slate-400">
+                <Text className="mt-1.5 text-xs leading-4 text-slate-400" style={o && { color: o.faint }}>
                   Auto-filled from{" "}
                   {loggingFullIngredient?.defaultStorageLocation
                     ? "this ingredient's default"
@@ -1164,6 +1193,8 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                     value={logPurchaseDate}
                     onChangeText={setLogPurchaseDate}
                     className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+                    style={o && { ...card, ...fieldText }}
+                    placeholderTextColor={placeholder}
                   />
                 </View>
                 <View className="flex-1">
@@ -1175,12 +1206,14 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                       setLogExpiryTouched(true);
                     }}
                     className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+                    style={o && { ...card, ...fieldText }}
+                    placeholderTextColor={placeholder}
                   />
                 </View>
               </View>
 
               {effectiveLogExpiryDuration && !logExpiryTouched ? (
-                <Text className="mt-1.5 text-xs leading-4 text-slate-400">
+                <Text className="mt-1.5 text-xs leading-4 text-slate-400" style={o && { color: o.faint }}>
                   Expiry auto-filled from{" "}
                   {loggingFullIngredient?.defaultExpiryDurationAmount != null
                     ? "this ingredient's default"
@@ -1223,7 +1256,7 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                 return (
                   <View className="mt-3" style={{ zIndex: 5 }}>
                     <View className="mb-1.5 flex-row items-center" style={{ zIndex: 6 }}>
-                      <Text className="flex-1 text-xs font-semibold text-slate-500">{piece ? `Each ${piece} you bought, by weight` : several ? "Each pack you bought" : "Amount you bought"}</Text>
+                      <Text className="flex-1 text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>{piece ? `Each ${piece} you bought, by weight` : several ? "Each pack you bought" : "Amount you bought"}</Text>
                       {/* The unit every line is in. */}
                       <View style={{ width: loggingFullIngredient?.defaultPortionUnit ? 96 : 150 }}>
                         {loggingFullIngredient?.defaultPortionUnit ? (
@@ -1236,8 +1269,8 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                     {logPieces.map((amount, index) => (
                       <View key={index} className="mb-2 flex-row items-center">
                         {(piece || several) && (
-                          <View className="mr-2 rounded-full bg-slate-100 px-2.5 py-2">
-                            <Text className="text-xs font-semibold text-slate-500">
+                          <View className="mr-2 rounded-full bg-slate-100 px-2.5 py-2" style={o && { backgroundColor: o.pill }}>
+                            <Text className="text-xs font-semibold text-slate-500" style={o && { color: o.onPill }}>
                               {noun} {index + 1}
                             </Text>
                           </View>
@@ -1247,27 +1280,28 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                           onChangeText={(value) => setLogPieces((prev) => prev.map((w, i) => (i === index ? value.replace(/[^0-9.]/g, "") : w)))}
                           keyboardType="decimal-pad"
                           placeholder={piece ? "Weight" : "Amount"}
-                          placeholderTextColor="#94A3B8"
+                          placeholderTextColor={placeholder}
                           accessibilityLabel={piece ? `Weight of ${piece} ${index + 1}` : several ? `Amount in pack ${index + 1}` : "Amount you bought"}
                           className="h-12 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-900"
+                          style={o && { ...card, ...fieldText }}
                         />
-                        <Text numberOfLines={1} className="ml-2 w-12 text-sm text-slate-500">
+                        <Text numberOfLines={1} className="ml-2 w-12 text-sm text-slate-500" style={o && { color: o.muted }}>
                           {logUnit}
                         </Text>
                         {several && (
                           <Pressable hitSlop={8} onPress={() => setLogPieces((prev) => prev.filter((_, i) => i !== index))} accessibilityLabel={`Remove ${noun} ${index + 1}`}>
-                            <Ionicons name="close-circle" size={22} color="#CBD5E1" />
+                            <Ionicons name="close-circle" size={22} color={o?.orbit ?? "#CBD5E1"} />
                           </Pressable>
                         )}
                       </View>
                     ))}
                     {/* (A new line starts at the last one's amount: quick, when they're the same.) */}
                     <Pressable className="mt-0.5 flex-row items-center self-start active:opacity-60" onPress={() => setLogPieces((prev) => [...prev, prev[prev.length - 1] ?? ""])}>
-                      <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
-                      <Text className="ml-1.5 text-sm font-semibold text-blue-600">Add another {noun}</Text>
+                      <Ionicons name="add-circle-outline" size={18} color={o?.accent ?? "#2563EB"} />
+                      <Text className="ml-1.5 text-sm font-semibold text-blue-600" style={o && { color: o.accent }}>Add another {noun}</Text>
                     </Pressable>
                     {(piece || several) && (
-                      <Text className="mt-1.5 text-xs leading-4 text-slate-400">
+                      <Text className="mt-1.5 text-xs leading-4 text-slate-400" style={o && { color: o.faint }}>
                         {logPieces.length} {noun}
                         {logPieces.length === 1 ? "" : "s"}
                         {logPieces.every((w) => Number(w) > 0) ? ` · ${Math.round(logPieces.reduce((sum, w) => sum + Number(w), 0) * 100) / 100} ${logUnit} in all` : ""}. {piece ? "Each becomes its own pantry entry, so a recipe can use one whole and count it at its real size." : "Each becomes its own pantry entry, with its own date and opened state."}
@@ -1279,7 +1313,7 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
 
               {logShowMoreDetails || logStoreId || logStoreDraft.trim() || logPrice.trim() ? (
                 <>
-                  <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">
+                  <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>
                     Store (optional)
                   </Text>
                   <SearchableObjectDropdown<SelectOption>
@@ -1300,12 +1334,12 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                     }}
                   />
                   {suggestedLogStore && !logStoreTouched ? (
-                    <Text className="mt-1.5 text-xs leading-4 text-slate-400">
+                    <Text className="mt-1.5 text-xs leading-4 text-slate-400" style={o && { color: o.faint }}>
                       Auto-filled from recent purchase history.
                     </Text>
                   ) : null}
 
-                  <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">
+                  <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>
                     Price paid (optional)
                   </Text>
                   <PriceInput value={logPrice} onChangeText={setLogPrice} />
@@ -1315,24 +1349,25 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                   className="mt-3 flex-row items-center self-start active:opacity-60"
                   onPress={() => setLogShowMoreDetails(true)}
                 >
-                  <Ionicons name="add-circle-outline" size={16} color="#2563EB" />
-                  <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+                  <Ionicons name="add-circle-outline" size={16} color={o?.accent ?? "#2563EB"} />
+                  <Text className="ml-1.5 text-sm font-semibold text-blue-600" style={o && { color: o.accent }}>
                     Add store or price
                   </Text>
                 </Pressable>
               )}
 
-              <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">
+              <Text className="mb-1.5 mt-3 text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>
                 Notes (optional)
               </Text>
               <TextInput
                 value={logNotes}
                 onChangeText={setLogNotes}
                 placeholder="e.g. Half-used, keep away from the window"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={placeholder}
                 multiline
                 textAlignVertical="top"
                 className="min-h-20 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
+                style={o && { ...card, ...fieldText }}
               />
 
               <View className="mt-5 flex-row gap-3">
@@ -1340,8 +1375,9 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                   disabled={logSaving}
                   onPress={closeLogModal}
                   className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+                  style={o && { backgroundColor: o.pill }}
                 >
-                  <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+                  <Text className="text-sm font-semibold text-slate-600" style={o && { color: o.onPill }}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   disabled={logSaving}
@@ -1349,8 +1385,9 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                   className={`flex-1 items-center rounded-2xl py-3.5 ${
                     logSaving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
                   }`}
+                  style={o && { backgroundColor: o.ink, opacity: logSaving ? 0.5 : 1 }}
                 >
-                  <Text className="text-sm font-semibold text-white">
+                  <Text className="text-sm font-semibold text-white" style={o && { color: o.onInk }}>
                     {logSaving ? "Adding..." : "Add"}
                   </Text>
                 </Pressable>
@@ -1371,21 +1408,22 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
           <View className="flex-1 items-center justify-center bg-black/40 px-6">
             <Pressable className="absolute inset-0" onPress={closeLinkModal} />
 
-            <View className="max-h-[80%] w-full rounded-3xl bg-white p-5" style={{ maxWidth: 560 }}>
-              <Text className="text-lg font-bold text-slate-950">Link ingredient</Text>
-              <Text className="mt-0.5 mb-4 text-sm text-slate-400">
+            <View className="max-h-[80%] w-full rounded-3xl bg-white p-5" style={{ maxWidth: 560, ...(o && { backgroundColor: o.surface }) }}>
+              <Text className="text-lg font-bold text-slate-950" style={fieldText}>Link ingredient</Text>
+              <Text className="mt-0.5 mb-4 text-sm text-slate-400" style={o && { color: o.faint }}>
                 Match &quot;{linkingItem?.name}&quot; to a catalog ingredient so it can be logged to
                 your pantry.
               </Text>
 
-              <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
-                <Ionicons name="search" size={18} color="#94A3B8" />
+              <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4" style={card}>
+                <Ionicons name="search" size={18} color={placeholder} />
                 <TextInput
                   value={linkQuery}
                   onChangeText={setLinkQuery}
                   placeholder="Search ingredients…"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={placeholder}
                   className="ml-3 flex-1 text-base text-slate-900"
+                  style={fieldText}
                   autoFocus
                 />
               </View>
@@ -1401,18 +1439,19 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                     key={ing._id}
                     onPress={() => void handleLinkIngredient(ing._id)}
                     className="flex-row items-center border-b border-slate-100 px-1 py-3 active:bg-slate-50"
+                    style={o && { borderBottomColor: o.border }}
                   >
-                    <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
-                      <Ionicons name="nutrition-outline" size={16} color="#2563EB" />
+                    <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.accentSoft }}>
+                      <Ionicons name="nutrition-outline" size={16} color={o?.accent ?? "#2563EB"} />
                     </View>
-                    <Text className="ml-3 flex-1 font-medium text-slate-900">{ing.name}</Text>
+                    <Text className="ml-3 flex-1 font-medium text-slate-900" style={fieldText}>{ing.name}</Text>
                     {linkingItemIngredientId === ing._id && (
-                      <Ionicons name="checkmark-circle" size={18} color="#2563EB" />
+                      <Ionicons name="checkmark-circle" size={18} color={o?.accent ?? "#2563EB"} />
                     )}
                   </Pressable>
                 ))}
                 {linkModalOptions.length === 0 && (
-                  <Text className="py-6 text-center text-sm text-slate-400">No matches</Text>
+                  <Text className="py-6 text-center text-sm text-slate-400" style={o && { color: o.faint }}>No matches</Text>
                 )}
               </ScrollView>
 
@@ -1421,15 +1460,17 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                   <Pressable
                     onPress={() => void handleUnlinkIngredient()}
                     className="flex-1 items-center rounded-2xl bg-red-50 py-3.5 active:bg-red-100"
+                    style={o && { backgroundColor: tint("#FEF2F2", "rgba(248,113,113,0.14)") }}
                   >
-                    <Text className="text-sm font-semibold text-red-600">Unlink</Text>
+                    <Text className="text-sm font-semibold text-red-600" style={o && { color: o.danger }}>Unlink</Text>
                   </Pressable>
                 ) : null}
                 <Pressable
                   onPress={closeLinkModal}
                   className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+                  style={o && { backgroundColor: o.pill }}
                 >
-                  <Text className="text-sm font-semibold text-slate-600">Close</Text>
+                  <Text className="text-sm font-semibold text-slate-600" style={o && { color: o.onPill }}>Close</Text>
                 </Pressable>
               </View>
             </View>
@@ -1452,16 +1493,17 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
             onPress={() => setResolvingGenericItem(null)}
           />
 
-          <View className="w-full rounded-3xl bg-white p-5" style={{ maxWidth: 560 }}>
-            <Text className="text-lg font-bold text-slate-950">
+          <View className="w-full rounded-3xl bg-white p-5" style={{ maxWidth: 560, ...(o && { backgroundColor: o.surface }) }}>
+            <Text className="text-lg font-bold text-slate-950" style={fieldText}>
               {resolvingGenericItem?.item.name}
             </Text>
-            <Text className="mt-0.5 mb-4 text-sm text-slate-400">
+            <Text className="mt-0.5 mb-4 text-sm text-slate-400" style={o && { color: o.faint }}>
               Linked to the generic ingredient &quot;{resolvingGenericItem?.generic.name}&quot;
             </Text>
 
             <Pressable
               className="mb-2 flex-row items-center rounded-2xl border border-slate-200 px-4 py-3.5 active:bg-slate-50"
+              style={o && { borderColor: o.border }}
               onPress={() => {
                 if (!resolvingGenericItem) return;
                 const { item, generic } = resolvingGenericItem;
@@ -1469,14 +1511,14 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                 openLogModal(item, generic._id, generic.name);
               }}
             >
-              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="pricetag-outline" size={16} color="#2563EB" />
+              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.accentSoft }}>
+                <Ionicons name="pricetag-outline" size={16} color={o?.accent ?? "#2563EB"} />
               </View>
               <View className="flex-1">
-                <Text className="font-semibold text-slate-900">
+                <Text className="font-semibold text-slate-900" style={fieldText}>
                   Log &quot;{resolvingGenericItem?.generic.name}&quot; directly
                 </Text>
-                <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                <Text className="mt-0.5 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                   No specific brand — logs straight to the generic.
                 </Text>
               </View>
@@ -1485,6 +1527,7 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
             {resolvingGenericItem?.variants.length === 1 && (
               <Pressable
                 className="mb-2 flex-row items-center rounded-2xl border border-slate-200 px-4 py-3.5 active:bg-slate-50"
+              style={o && { borderColor: o.border }}
                 onPress={() => {
                   if (!resolvingGenericItem) return;
                   const { item, variants } = resolvingGenericItem;
@@ -1493,14 +1536,14 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                   openLogModal(item, existing._id, existing.name);
                 }}
               >
-                <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-emerald-50">
-                  <Ionicons name="checkmark-circle-outline" size={16} color="#059669" />
+                <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-emerald-50" style={o && { backgroundColor: tint("#ECFDF5", "rgba(52,211,153,0.14)") }}>
+                  <Ionicons name="checkmark-circle-outline" size={16} color={o?.success ?? "#059669"} />
                 </View>
                 <View className="flex-1">
-                  <Text className="font-semibold text-slate-900">
+                  <Text className="font-semibold text-slate-900" style={fieldText}>
                     Log &quot;{resolvingGenericItem.variants[0].name}&quot;
                   </Text>
-                  <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                  <Text className="mt-0.5 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                     The specific product you already have cataloged.
                   </Text>
                 </View>
@@ -1509,6 +1552,7 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
 
             <Pressable
               className="mb-2 flex-row items-center rounded-2xl border border-slate-200 px-4 py-3.5 active:bg-slate-50"
+              style={o && { borderColor: o.border }}
               onPress={() => {
                 if (!resolvingGenericItem) return;
                 const { item, generic } = resolvingGenericItem;
@@ -1524,16 +1568,16 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                 });
               }}
             >
-              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-violet-50">
-                <Ionicons name="add-circle-outline" size={16} color="#7C3AED" />
+              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-violet-50" style={o && { backgroundColor: tint("#F5F3FF", "rgba(139,92,246,0.18)") }}>
+                <Ionicons name="add-circle-outline" size={16} color={dark && o ? "#C4B5FD" : "#7C3AED"} />
               </View>
               <View className="flex-1">
-                <Text className="font-semibold text-slate-900">
+                <Text className="font-semibold text-slate-900" style={fieldText}>
                   {resolvingGenericItem && resolvingGenericItem.variants.length > 0
                     ? "Choose or add a specific product"
                     : "Add a specific product"}
                 </Text>
-                <Text className="mt-0.5 text-xs leading-4 text-slate-500">
+                <Text className="mt-0.5 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                   {resolvingGenericItem && resolvingGenericItem.variants.length > 1
                     ? `Search ${resolvingGenericItem.variants.length} existing products, or create a new one.`
                     : "Create a new branded ingredient under this generic."}
@@ -1543,9 +1587,10 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
 
             <Pressable
               className="mt-1 items-center rounded-2xl bg-slate-100 py-3"
+              style={o && { backgroundColor: o.pill }}
               onPress={() => setResolvingGenericItem(null)}
             >
-              <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+              <Text className="text-sm font-semibold text-slate-600" style={o && { color: o.onPill }}>Cancel</Text>
             </Pressable>
           </View>
         </View>
@@ -1585,14 +1630,15 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
 
       <Modal visible={parsingReceipt} transparent animationType="fade">
         <View className="flex-1 items-center justify-center bg-black/50">
-          <View className="items-center rounded-3xl bg-white px-8 py-6">
-            <ActivityIndicator size="large" />
-            <Text className="mt-3 text-base font-semibold text-slate-700">
+          <View className="items-center rounded-3xl bg-white px-8 py-6" style={o && { backgroundColor: o.surface }}>
+            <ActivityIndicator size="large" color={o?.muted} />
+            <Text className="mt-3 text-base font-semibold text-slate-700" style={fieldText}>
               Reading receipt...
             </Text>
           </View>
         </View>
       </Modal>
     </SafeAreaView>
+    </OrbitPage>
   );
 }

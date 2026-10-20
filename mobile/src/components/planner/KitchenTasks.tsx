@@ -10,6 +10,7 @@ import { API_BASE_URL } from "@/src/config/api";
 import { getStorageLocations, type SelectOption } from "@/src/services/optionsApi";
 import { setMealPlanEntryPieces } from "@/src/services/mealPlanApi";
 import { getMoveSuggestion, takeOutPantryItem } from "@/src/services/pantryApi";
+import { useOrbitPage } from "@/src/theme/orbit";
 import type { KitchenIssue, KitchenTask } from "@/src/utils/planNeeds";
 
 // What the kitchen needs doing: the tasks worked out from the plan (see
@@ -52,6 +53,8 @@ export function KitchenTasks({
   onChanged?: () => void;
 }) {
   const router = useRouter();
+  // (On an Orbit page, in its colours.)
+  const o = useOrbitPage();
   const { today } = plan;
   const [locations, setLocations] = useState<SelectOption[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -127,7 +130,7 @@ export function KitchenTasks({
   const tasks = plan.tasks.filter((t) => t.date <= until && !done.includes(t.id));
   if (!plan.ready) return <View style={{ height: 12 }} />;
   if (!tasks.length) {
-    return <Text className="px-[18px] pb-4 text-sm text-slate-500">Nothing to do {days === 0 ? "today" : days === 1 ? "today or tomorrow" : "in the days ahead"}.</Text>;
+    return <Text className="px-[18px] pb-4 text-sm text-slate-500" style={o ? { color: o.muted } : undefined}>Nothing to do {days === 0 ? "today" : days === 1 ? "today or tomorrow" : "in the days ahead"}.</Text>;
   }
 
   // Over several days, a short heading for each, and the days after today
@@ -147,15 +150,15 @@ export function KitchenTasks({
       {tasks.map((task, index) => (
         <View key={task.id} style={grouped && dayOf(task) !== today ? { opacity: 0.6 } : undefined}>
           {grouped && (index === 0 || dayOf(tasks[index - 1]) !== dayOf(task)) && (
-            <View className={`mx-[18px] mb-1 pb-1 ${index === 0 ? "" : "mt-3 border-t border-slate-200 pt-3"}`}>
-              <Text className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{dayLabel(dayOf(task))}</Text>
+            <View className={`mx-[18px] mb-1 pb-1 ${index === 0 ? "" : "mt-3 border-t border-slate-200 pt-3"}`} style={o ? { borderTopColor: o.border } : undefined}>
+              <Text className="text-[11px] font-bold uppercase tracking-wider text-slate-500" style={o ? { color: o.faint } : undefined}>{dayLabel(dayOf(task))}</Text>
             </View>
           )}
           <View className="flex-row px-[18px] py-2">
-            <Ionicons name={ICONS[task.kind]} size={17} color={task.late ? "#DC2626" : "#2563EB"} style={{ marginTop: 2 }} />
+            <Ionicons name={ICONS[task.kind]} size={17} color={task.late ? (o?.danger ?? "#DC2626") : (o?.accent ?? "#2563EB")} style={{ marginTop: 2 }} />
             <View className="ml-2.5 flex-1">
-              <Text className="text-sm font-semibold text-slate-900">{task.title}</Text>
-              <Text className={`mt-0.5 text-xs ${task.late ? "text-red-600" : "text-slate-500"}`}>
+              <Text className="text-sm font-semibold text-slate-900" style={o ? { color: o.text } : undefined}>{task.title}</Text>
+              <Text className={`mt-0.5 text-xs ${task.late ? "text-red-600" : "text-slate-500"}`} style={o ? { color: task.late ? o.danger : o.muted } : undefined}>
                 {when(task)}
                 {task.late ? "should be out by now: sealed in cold water thaws it in about an hour · " : ""}
                 {task.detail}
@@ -202,14 +205,15 @@ export function KitchenTasks({
 
 // What's wrong with the plan as it stands. (`onPress`: where the detail is.)
 export function KitchenIssues({ issues, onPress }: { issues: KitchenIssue[]; onPress?: () => void }) {
+  const o = useOrbitPage();
   return (
     <View className="pb-2">
       {issues.map((issue) => (
         <Pressable key={issue.id} onPress={onPress} disabled={!onPress} className="flex-row px-[18px] py-2 active:opacity-60">
-          <Ionicons name="alert-circle-outline" size={17} color={issue.kind === "past-date" ? "#D97706" : "#DC2626"} style={{ marginTop: 2 }} />
+          <Ionicons name="alert-circle-outline" size={17} color={issue.kind === "past-date" ? (o?.warning ?? "#D97706") : (o?.danger ?? "#DC2626")} style={{ marginTop: 2 }} />
           <View className="ml-2.5 flex-1">
-            <Text className="text-sm font-semibold text-slate-900">{issue.title}</Text>
-            <Text numberOfLines={2} className="mt-0.5 text-xs text-slate-500">
+            <Text className="text-sm font-semibold text-slate-900" style={o ? { color: o.text } : undefined}>{issue.title}</Text>
+            <Text numberOfLines={2} className="mt-0.5 text-xs text-slate-500" style={o ? { color: o.muted } : undefined}>
               {issue.detail}
             </Text>
           </View>
@@ -220,9 +224,11 @@ export function KitchenIssues({ issues, onPress }: { issues: KitchenIssue[]; onP
 }
 
 function Action({ label, onPress, primary }: { label: string; onPress: () => void; primary?: boolean }) {
+  // (On an Orbit page: the main one in ink, the rest as pills.)
+  const o = useOrbitPage();
   return (
-    <Pressable onPress={onPress} accessibilityLabel={label} className={`rounded-lg px-2.5 py-1 ${primary ? "bg-blue-600 active:bg-blue-700" : "bg-slate-100 active:bg-slate-200"}`}>
-      <Text className={`text-xs font-semibold ${primary ? "text-white" : "text-slate-700"}`}>{label}</Text>
+    <Pressable onPress={onPress} accessibilityLabel={label} className={`rounded-lg px-2.5 py-1 ${primary ? "bg-blue-600 active:bg-blue-700" : "bg-slate-100 active:bg-slate-200"}`} style={o ? { backgroundColor: primary ? o.ink : o.pill, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 } : undefined}>
+      <Text className={`text-xs font-semibold ${primary ? "text-white" : "text-slate-700"}`} style={o ? { color: primary ? o.onInk : o.onPill } : undefined}>{label}</Text>
     </Pressable>
   );
 }

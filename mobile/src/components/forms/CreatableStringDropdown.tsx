@@ -9,6 +9,8 @@ import {
   View,
 } from "react-native";
 
+import { useOrbitPage } from "@/src/theme/orbit";
+
 interface CreatableStringDropdownProps {
   options?: string[];
   selectedValue?: string;
@@ -131,11 +133,13 @@ export function CreatableStringDropdown({
     onSelect(value);
   }
 
+  // (On an Orbit page, in its colours.)
+  const o = useOrbitPage();
   return (
     <View ref={anchorRef} collapsable={false}>
       <Pressable
         disabled={disabled}
-        style={height ? { height } : undefined}
+        style={[height ? { height } : undefined, o && { backgroundColor: o.surface, borderColor: open ? o.accent : o.border }]}
         className={`flex-row items-center border bg-white ${
           compact ? "h-10 rounded-xl px-2" : "h-[52px] rounded-2xl px-4"
         } ${
@@ -154,6 +158,7 @@ export function CreatableStringDropdown({
               ? "text-slate-950"
               : "text-slate-400"
           }`}
+          style={o ? { color: safeSelectedValue ? o.text : o.faint } : undefined}
         >
           {safeSelectedValue || placeholder}
         </Text>
@@ -180,6 +185,7 @@ export function CreatableStringDropdown({
           <View
             className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
             style={{
+              ...(o && { backgroundColor: o.surface, borderColor: o.border }),
               position: "absolute",
               top: dropdownPosition.top,
               left: dropdownPosition.left,
@@ -189,7 +195,7 @@ export function CreatableStringDropdown({
               elevation: 20,
             }}
           >
-            <View className="flex-row items-center border-b border-slate-200 px-4">
+            <View className="flex-row items-center border-b border-slate-200 px-4" style={o ? { borderBottomColor: o.border } : undefined}>
               <Ionicons
                 name="search-outline"
                 size={19}
@@ -200,13 +206,13 @@ export function CreatableStringDropdown({
                 ref={inputRef}
                 value={query}
                 placeholder={placeholder}
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 autoCapitalize="none"
                 autoCorrect={false}
                 className="h-[52px] flex-1 px-3 text-base text-slate-950"
                 // (On the web a text box is wider than this unless told it
                 // may shrink, and focusing it then scrolls the list sideways.)
-                style={{ minWidth: 0 }}
+                style={{ minWidth: 0, ...(o && { color: o.text }) }}
                 onChangeText={handleTextChange}
                 onSubmitEditing={closeDropdown}
               />
@@ -243,9 +249,10 @@ export function CreatableStringDropdown({
                   <Pressable
                     key={option}
                     className="flex-row items-center border-b border-slate-100 px-4 py-4 active:bg-slate-50"
+                    style={o ? { borderBottomColor: o.border } : undefined}
                     onPress={() => handleSelect(option)}
                   >
-                    <Text className="flex-1 text-base text-slate-900">
+                    <Text className="flex-1 text-base text-slate-900" style={o ? { color: o.text } : undefined}>
                       {option}
                     </Text>
 
@@ -253,7 +260,7 @@ export function CreatableStringDropdown({
                       <Ionicons
                         name="checkmark"
                         size={19}
-                        color="#2563EB"
+                        color={o?.accent ?? "#2563EB"}
                       />
                     )}
                   </Pressable>
@@ -262,7 +269,7 @@ export function CreatableStringDropdown({
 
               {filteredOptions.length === 0 && (
                 <View className="px-4 py-5">
-                  <Text className="text-center text-sm text-slate-500">
+                  <Text className="text-center text-sm text-slate-500" style={o ? { color: o.muted } : undefined}>
                     No matching options
                   </Text>
                 </View>

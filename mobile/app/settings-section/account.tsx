@@ -7,7 +7,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAccount } from "@/src/components/auth/AuthGate";
 import { PrivacyPolicyModal } from "@/src/components/legal/PrivacyPolicy";
 import { useOrbitTheme, type Appearance } from "@/src/theme/orbit";
-import { useWideWeb } from "@/src/utils/useWideWeb";
 import { Button, Card, confirm, errorText, Heading, Input, when } from "@/src/components/settings/AccountParts";
 import {
   changePassword,
@@ -27,8 +26,8 @@ import {
 export default function AccountSettingsScreen() {
   const { account, setAccount, signOut } = useAccount();
   const { appearance, setAppearance } = useOrbitTheme();
-  // (The desktop has its own light/dark switch, in the side bar.)
-  const wide = useWideWeb();
+  // (In a browser the web's own light/dark switch does this — the sidebar's.)
+  const phone = Platform.OS !== "web";
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -174,7 +173,7 @@ export default function AccountSettingsScreen() {
         </Card>
 
         {/* Appearance, on the phone */}
-        {!wide && (
+        {phone && (
           <>
             <Heading>Appearance</Heading>
             <Card>

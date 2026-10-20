@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRef, useState } from "react";
 import { Dimensions, Modal, Pressable, ScrollView, Text, View } from "react-native";
 
+import { useOrbitPage } from "@/src/theme/orbit";
+
 interface UnitFamilyDropdownProps {
   unit: string;
   options: string[];
@@ -54,17 +56,19 @@ export function UnitFamilyDropdown({
     setOpen(false);
   }
 
+  // (On an Orbit page, in its colours.)
+  const o = useOrbitPage();
   return (
     <View ref={anchorRef} collapsable={false}>
       <Pressable
         disabled={disabled}
-        style={height ? { height } : undefined}
+        style={[height ? { height } : undefined, o && { backgroundColor: o.surface, borderColor: open ? o.accent : o.border }]}
         className={`${height ? "px-4" : "h-12 px-3"} flex-row items-center rounded-2xl border bg-white ${
           disabled ? "border-slate-100 opacity-60" : open ? "border-blue-500" : "border-slate-200"
         }`}
         onPress={openDropdown}
       >
-        <Text className={height ? "flex-1 text-base text-slate-950" : "mr-1 text-sm text-slate-800"}>{unit}</Text>
+        <Text className={height ? "flex-1 text-base text-slate-950" : "mr-1 text-sm text-slate-800"} style={o ? { color: o.text } : undefined}>{unit}</Text>
         <Ionicons name={open ? "chevron-up" : "chevron-down"} size={16} color="#64748B" />
       </Pressable>
 
@@ -75,6 +79,7 @@ export function UnitFamilyDropdown({
           <View
             className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
             style={{
+              ...(o && { backgroundColor: o.surface, borderColor: o.border }),
               position: "absolute",
               top: position.top,
               right: position.right,
@@ -89,13 +94,14 @@ export function UnitFamilyDropdown({
                 <Pressable
                   key={option}
                   className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3"
+                  style={o ? { borderBottomColor: o.border } : undefined}
                   onPress={() => {
                     onSelect(option);
                     closeDropdown();
                   }}
                 >
-                  <Text className="text-base text-slate-800">{option}</Text>
-                  {option === unit && <Ionicons name="checkmark" size={16} color="#2563EB" />}
+                  <Text className="text-base text-slate-800" style={o ? { color: o.text } : undefined}>{option}</Text>
+                  {option === unit && <Ionicons name="checkmark" size={16} color={o?.accent ?? "#2563EB"} />}
                 </Pressable>
               ))}
             </ScrollView>

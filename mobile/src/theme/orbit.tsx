@@ -1,12 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useColorScheme } from "react-native";
+import { Platform, useColorScheme } from "react-native";
 
 // Orbit's look: the colours every redesigned screen takes, in light and
 // dark — first worked out on the phone's home screen (components/home), the
 // reference for the rest. Which one shows is the person's choice in
 // Settings → Account → Appearance: Automatic (as the phone is set), Light
 // or Dark; kept on the device.
+//
+// In a browser it's always the light colours: the web has its own dark mode
+// (components/web/theme), which turns every colour on the page dark as it's
+// drawn — given dark colours, it would turn them again.
 //
 // Use: const { colors, dark } = useOrbitTheme();
 
@@ -119,8 +123,21 @@ export function OrbitThemeProvider({ children }: { children: ReactNode }) {
     void AsyncStorage.setItem(KEY, next).catch(() => {});
   }, []);
   const value = useMemo(() => {
-    const dark = appearance === "dark" || (appearance === "system" && system === "dark");
+    const dark = Platform.OS !== "web" && (appearance === "dark" || (appearance === "system" && system === "dark"));
     return { appearance, setAppearance, dark, colors: dark ? DARK : LIGHT };
   }, [appearance, system, setAppearance]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+// A page redesigned in Orbit's look: the shared pieces drawn on it — cards,
+// switches, fields, dropdowns — take its colours from here. Anywhere else
+// useOrbitPage() is null and they keep the app's older look, until their
+// page is redesigned too. (`on`: false leaves the older look, e.g. for a
+// page whose desktop layout isn't redesigned yet.)
+const PageContext = createContext<OrbitColors | null>(null);
+export const useOrbitPage = () => useContext(PageContext);
+
+export function OrbitPage({ on = true, children }: { on?: boolean; children: ReactNode }) {
+  const { colors } = useOrbitTheme();
+  return <PageContext.Provider value={on ? colors : null}>{children}</PageContext.Provider>;
 }

@@ -9,11 +9,12 @@ import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { compactDate } from "@/src/components/web/fields";
 import { KitchenPage } from "@/src/components/planner/KitchenPage";
-import { Button, Card, CardLink, Empty, WEB } from "@/src/components/web/ui";
+import { Button, Card, CardLink, Empty, hoverable, WEB } from "@/src/components/web/ui";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { parseLocalDate } from "@/src/utils/mealPlan";
 import { needAmountLabel, type BuyNeed, type KitchenSession, type NeedSource, type PrepNeed } from "@/src/utils/planNeeds";
+import { useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // What the plan needs made ahead and bought, in full: every item, the prep
 // session or shopping trip it falls to, what it's for, and what's wrong.
@@ -22,13 +23,28 @@ import { needAmountLabel, type BuyNeed, type KitchenSession, type NeedSource, ty
 
 type Plan = ReturnType<typeof usePlanNeeds>;
 
-// (`inTabs`: in the phone Kitchen's Plan tab — no title or way back, and
-// first, the kitchen's tasks for the week, from what was its Overview.)
+// The colours its rows are drawn in: Orbit's on the phone (an Orbit page),
+// the desktop's otherwise.
+function lookOf(o: OrbitColors | null, dark: boolean) {
+  return o
+    ? { text: o.text, body: o.icon, muted: o.muted, faint: o.faint, red: o.danger, amber: o.warning, green: o.success, hover: o.pill, band: o.pill, redBand: dark ? "rgba(248,113,113,0.12)" : "#FEF2F2", amberBand: dark ? "rgba(251,191,36,0.12)" : "#FFFBEB" }
+    : { text: WEB.text, body: WEB.body, muted: WEB.muted, faint: WEB.faint, red: WEB.red, amber: WEB.amber, green: WEB.green, hover: "#F8FAFC", band: "#F8FAFC", redBand: "#FEF2F2", amberBand: "#FFFBEB" };
+}
+function useLook() {
+  return lookOf(useOrbitPage(), useOrbitTheme().dark);
+}
+
+// (`inTabs`: in a tab of its own — no title or way back. On a phone, first,
+// the kitchen's tasks for the week, from what was its Overview: the desktop
+// keeps them on the Kitchen's Overview.)
 export function WebPrepShoppingScreen({ inTabs = false }: { inTabs?: boolean } = {}) {
   const router = useRouter();
   const plan = usePlanNeeds();
   const { today } = plan;
   const wide = useWideWeb();
+  // (The page itself is drawn in Orbit's look on a phone: see KitchenPage.)
+  const { colors, dark } = useOrbitTheme();
+  const look = lookOf(wide ? null : colors, dark);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   useFocusEffect(
     useCallback(() => {
@@ -78,8 +94,8 @@ export function WebPrepShoppingScreen({ inTabs = false }: { inTabs?: boolean } =
 
 
   return (
-    <KitchenPage title="Prep & shopping" subtitle="Worked out from the meals you've planned, the pantry and your booked sessions. Nothing here is saved: change the plan and it changes." right={wide ? <Button label="Week plan" onPress={() => router.push("/planner")} /> : undefined} back={!inTabs} bare={inTabs}>
-      {inTabs && (
+    <KitchenPage title="Prep & shopping" subtitle="Worked out from the meals you've planned, the pantry and your booked sessions. Nothing here is saved: change the plan and it changes." right={wide ? <Button label="Week plan" onPress={() => router.push("/planner")} /> : undefined} back={!inTabs} bare={inTabs} orbit>
+      {(inTabs || !wide) && (
         <Card title="Kitchen tasks" subtitle="The next seven days" padded={false} style={{ marginBottom: 16 }}>
           <KitchenTasks plan={plan} days={7} />
         </Card>
@@ -102,7 +118,7 @@ export function WebPrepShoppingScreen({ inTabs = false }: { inTabs?: boolean } =
       {sessionGroups("prep", plan.prep).map((group) => (
         <View key={group.session?.id ?? "none"}>
           <SessionHeading session={group.session} today={today} anySessions={plan.sessions.some((s) => s.kind === "prep")} missing="No prep session in time" load={group.rows.length ? prepLoad(group.rows) : undefined} />
-          {group.rows.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 8, fontSize: 12, color: WEB.faint }}>Nothing falls to this one yet</Text>}
+          {group.rows.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 8, fontSize: 12, color: look.faint }}>Nothing falls to this one yet</Text>}
           {group.rows.map((need) => (
             <NeedRow
               key={need.ingredientId}
@@ -140,7 +156,7 @@ export function WebPrepShoppingScreen({ inTabs = false }: { inTabs?: boolean } =
       {sessionGroups("shop", plan.buy).map((group) => (
         <View key={group.session?.id ?? "none"}>
           <SessionHeading session={group.session} today={today} anySessions={plan.sessions.some((s) => s.kind === "shop")} missing="No shopping trip in time" />
-          {group.rows.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 8, fontSize: 12, color: WEB.faint }}>Nothing to get on this one yet</Text>}
+          {group.rows.length === 0 && <Text style={{ paddingHorizontal: 18, paddingBottom: 8, fontSize: 12, color: look.faint }}>Nothing to get on this one yet</Text>}
           {/* A meal at a time — what it is and when, then (opened) what it needs. */}
           {mealsOf(group.rows).map((meal) => {
             const key = `${group.session?.id ?? "none"}|${meal.date}|${meal.label}`;
@@ -150,14 +166,14 @@ export function WebPrepShoppingScreen({ inTabs = false }: { inTabs?: boolean } =
               <View key={key}>
                 <Pressable
                   onPress={() => setOpenMeals((prev) => (open ? prev.filter((k) => k !== key) : [...prev, key]))}
-                  style={({ hovered }: { hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 10, backgroundColor: hovered ? "#F8FAFC" : "transparent" })}
+                  style={hoverable(({ hovered }: { hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 10, backgroundColor: hovered ? look.hover : "transparent" }))}
                 >
-                  <Ionicons name={open ? "chevron-down" : "chevron-forward"} size={14} color={WEB.muted} />
+                  <Ionicons name={open ? "chevron-down" : "chevron-forward"} size={14} color={look.muted} />
                   <View style={{ flex: 1, marginLeft: 8 }}>
-                    <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: WEB.text }}>
+                    <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: look.text }}>
                       {meal.label}
                     </Text>
-                    <Text style={{ marginTop: 1, fontSize: 12, color: WEB.muted }}>
+                    <Text style={{ marginTop: 1, fontSize: 12, color: look.muted }}>
                       {meal.menu ? "On the menu" : dayLabel(meal.date, today)} · {meal.needs.length} thing{meal.needs.length === 1 ? "" : "s"} to buy
                     </Text>
                   </View>
@@ -170,16 +186,16 @@ export function WebPrepShoppingScreen({ inTabs = false }: { inTabs?: boolean } =
                     return (
                       <View key={`${need.ingredientId}-${need.unit}-${need.pieces}`} style={{ flexDirection: "row", alignItems: "center", paddingLeft: 40, paddingRight: 18, paddingVertical: 6 }}>
                         <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 13, color: WEB.text }}>
-                            {need.name} <Text style={{ color: WEB.muted }}>· {needAmountLabel(need.amount, need.unit)}</Text>
+                          <Text style={{ fontSize: 13, color: look.text }}>
+                            {need.name} <Text style={{ color: look.muted }}>· {needAmountLabel(need.amount, need.unit)}</Text>
                           </Text>
                           {others.length > 0 && (
-                            <Text numberOfLines={1} style={{ fontSize: 11, color: WEB.faint }}>
+                            <Text numberOfLines={1} style={{ fontSize: 11, color: look.faint }}>
                               together with {others.join(", ")}
                             </Text>
                           )}
                         </View>
-                        {!plan.onList(need) && <Text style={{ fontSize: 11, color: WEB.faint }}>later trip</Text>}
+                        {!plan.onList(need) && <Text style={{ fontSize: 11, color: look.faint }}>later trip</Text>}
                       </View>
                     );
                   })}
@@ -191,9 +207,9 @@ export function WebPrepShoppingScreen({ inTabs = false }: { inTabs?: boolean } =
       {/* Stock the plan is counting on that will be past its date by then. */}
       {plan.checks.length > 0 && (
         <View>
-          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, paddingHorizontal: 18, paddingVertical: 6, backgroundColor: "#FFFBEB" }}>
-            <Ionicons name="help-circle-outline" size={13} color={WEB.amber} />
-            <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: "700", color: WEB.amber }}>In the pantry, but check: past its date</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, paddingHorizontal: 18, paddingVertical: 6, backgroundColor: look.amberBand }}>
+            <Ionicons name="help-circle-outline" size={13} color={look.amber} />
+            <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: "700", color: look.amber }}>In the pantry, but check: past its date</Text>
           </View>
           {plan.checks.map((check) => (
             <NeedRow key={check.ingredientId} title={check.name} detail={`dated ${compactDate(check.expired)}`} by={check.neededBy} today={today} uses={check.for} />
@@ -269,13 +285,14 @@ function SessionHeading({
   // For a prep session: about how long what falls to it takes, and how many of its recipes have no times set.
   load?: { minutes: number; untimed: number };
 }) {
+  const look = useLook();
   // With no sessions at all there's nothing to group under.
   if (!session && !anySessions) return null;
   const d = session ? parseLocalDate(session.date) : null;
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, paddingHorizontal: 18, paddingVertical: 6, backgroundColor: session ? "#F8FAFC" : "#FEF2F2" }}>
-      <Ionicons name={session ? "calendar-outline" : "alert-circle-outline"} size={13} color={session ? WEB.muted : WEB.red} />
-      <Text numberOfLines={1} style={{ marginLeft: 6, fontSize: 12, fontWeight: "700", color: session ? WEB.body : WEB.red }}>
+    <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, paddingHorizontal: 18, paddingVertical: 6, backgroundColor: session ? look.band : look.redBand }}>
+      <Ionicons name={session ? "calendar-outline" : "alert-circle-outline"} size={13} color={session ? look.muted : look.red} />
+      <Text numberOfLines={1} style={{ marginLeft: 6, fontSize: 12, fontWeight: "700", color: session ? look.body : look.red }}>
         {session && d ? `${session.date === today ? "Today" : `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`} · ${minutesLabel(session.startMinutes)}–${minutesLabel(session.endMinutes)}` : missing}
       </Text>
       {!!load &&
@@ -284,7 +301,7 @@ function SessionHeading({
           const length = session ? session.endMinutes - session.startMinutes : null;
           const over = length != null && load.minutes > length;
           return (
-            <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, textAlign: "right", fontSize: 11, fontWeight: over ? "700" : "400", color: over ? WEB.red : WEB.muted }}>
+            <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, textAlign: "right", fontSize: 11, fontWeight: over ? "700" : "400", color: over ? look.red : look.muted }}>
               {load.minutes > 0 ? `about ${durationLabel(load.minutes)}${over ? `, over its ${durationLabel(length!)}` : ""}` : ""}
               {load.untimed > 0 ? `${load.minutes > 0 ? " · " : ""}${load.untimed} with no times set` : ""}
             </Text>
@@ -297,15 +314,17 @@ function SessionHeading({
 // One thing to prep or buy: what, how much, by when, and for which meals.
 // Whether a thing to buy is on the grocery list (or only some of it).
 function ListMark({ text, partial }: { text: string; partial?: boolean }) {
+  const look = useLook();
   return (
     <View style={{ flexDirection: "row", alignItems: "center" }}>
-      <Ionicons name={partial ? "ellipse-outline" : "checkmark-circle"} size={13} color={partial ? WEB.muted : WEB.green} />
-      <Text style={{ marginLeft: 4, fontSize: 12, color: partial ? WEB.muted : WEB.green }}>{text}</Text>
+      <Ionicons name={partial ? "ellipse-outline" : "checkmark-circle"} size={13} color={partial ? look.muted : look.green} />
+      <Text style={{ marginLeft: 4, fontSize: 12, color: partial ? look.muted : look.green }}>{text}</Text>
     </View>
   );
 }
 
 function NeedRow({ title, detail, by, today, uses, onPress, warning, right }: { title: string; detail: string; by: string; today: string; uses: NeedSource[]; onPress?: () => void; warning?: string; right?: React.ReactNode }) {
+  const look = useLook();
   const d = parseLocalDate(by);
   const when = by === today ? "today" : `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()}`;
   const meals = [...new Set(uses.map((u) => u.label))];
@@ -313,28 +332,28 @@ function NeedRow({ title, detail, by, today, uses, onPress, warning, right }: { 
     <Pressable
       onPress={onPress}
       disabled={!onPress}
-      style={({ hovered }: { hovered?: boolean }) => ({ paddingHorizontal: 18, paddingVertical: 8, backgroundColor: hovered && onPress ? "#F8FAFC" : "transparent" })}
+      style={hoverable(({ hovered }: { hovered?: boolean }) => ({ paddingHorizontal: 18, paddingVertical: 8, backgroundColor: hovered && onPress ? look.hover : "transparent" }))}
     >
       <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: "600", color: WEB.text }}>
+        <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: "600", color: look.text }}>
           {title}
         </Text>
-        <Text style={{ marginLeft: 8, fontSize: 12, fontWeight: by === today ? "700" : "500", color: by === today ? WEB.red : WEB.muted }}>by {when}</Text>
-        {!!onPress && <Ionicons name="chevron-forward" size={13} color={WEB.faint} style={{ marginLeft: 4 }} />}
+        <Text style={{ marginLeft: 8, fontSize: 12, fontWeight: by === today ? "700" : "500", color: by === today ? look.red : look.muted }}>by {when}</Text>
+        {!!onPress && <Ionicons name="chevron-forward" size={13} color={look.faint} style={{ marginLeft: 4 }} />}
       </View>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <Text numberOfLines={1} style={{ flex: 1, marginTop: 1, fontSize: 12, color: WEB.muted }}>
+        <Text numberOfLines={1} style={{ flex: 1, marginTop: 1, fontSize: 12, color: look.muted }}>
           {detail}
         </Text>
         {right}
       </View>
-      <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 11, color: WEB.faint }}>
+      <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 11, color: look.faint }}>
         for {meals.slice(0, 2).join(", ")}
         {meals.length > 2 ? ` +${meals.length - 2} more` : ""}
       </Text>
       {!!warning && (
-        <Text numberOfLines={2} style={{ marginTop: 2, fontSize: 11, lineHeight: 15, color: WEB.red }}>
-          <Ionicons name="alert-circle-outline" size={11} color={WEB.red} /> {warning}
+        <Text numberOfLines={2} style={{ marginTop: 2, fontSize: 11, lineHeight: 15, color: look.red }}>
+          <Ionicons name="alert-circle-outline" size={11} color={look.red} /> {warning}
         </Text>
       )}
     </Pressable>

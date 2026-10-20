@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
+import { useOrbitPage } from "@/src/theme/orbit";
+
 import { keepFocus } from "./keepFocus";
 
 // Inline mode lists at most this many matches; the rest are reached by
@@ -147,6 +149,10 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
     }
   }
 
+  // (On an Orbit page, in its colours.)
+  const o = useOrbitPage();
+  const menu = o ? { backgroundColor: o.surface, borderColor: o.border } : null;
+
   function renderOptions(visible: T[]) {
     return (
       <>
@@ -157,17 +163,18 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
             <Pressable
               key={option._id}
               className="flex-row items-center border-b border-slate-100 px-4 py-4 active:bg-slate-50"
+              style={o ? { borderBottomColor: o.border } : undefined}
               onPress={() => handleSelect(option)}
             >
               <View className="flex-1">
-                <Text className="text-base text-slate-900">
+                <Text className="text-base text-slate-900" style={o ? { color: o.text } : undefined}>
                   {option.name}
                 </Text>
                 {renderSubtitle?.(option)}
               </View>
 
               {isSelected && (
-                <Ionicons name="checkmark" size={20} color="#2563EB" />
+                <Ionicons name="checkmark" size={20} color={o?.accent ?? "#2563EB"} />
               )}
             </Pressable>
           );
@@ -182,14 +189,14 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
                 onCreateNew(query.trim());
               }}
             >
-              <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
-              <Text className="ml-2 text-base font-semibold text-blue-600">
+              <Ionicons name="add-circle-outline" size={20} color={o?.accent ?? "#2563EB"} />
+              <Text className="ml-2 text-base font-semibold text-blue-600" style={o ? { color: o.accent } : undefined}>
                 Create &quot;{query.trim()}&quot;
               </Text>
             </Pressable>
           ) : (
             <View className="px-4 py-5">
-              <Text className="text-center text-sm text-slate-500">
+              <Text className="text-center text-sm text-slate-500" style={o ? { color: o.muted } : undefined}>
                 No matching options
               </Text>
             </View>
@@ -208,7 +215,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
       }}
     >
       <View
-        style={{ height: bare ? 26 : compact ? 44 : 56 }}
+        style={[{ height: bare ? 26 : compact ? 44 : 56 }, !bare && o && { backgroundColor: o.surface, borderColor: open ? o.accent : o.border }]}
         className={
           bare
             ? `flex-row items-center ${disabled ? "opacity-60" : ""}`
@@ -227,10 +234,11 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
           value={query}
           editable={!disabled}
           placeholder={placeholder}
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor={o?.faint ?? "#94A3B8"}
           autoCapitalize="words"
           autoCorrect={false}
           className={`flex-1 text-slate-950 ${bare ? "text-base" : compact ? "ml-2 text-sm" : "ml-3 text-base"}`}
+          style={o ? { color: o.text } : undefined}
           onFocus={openDropdown}
           onChangeText={handleTextChange}
           onSubmitEditing={closeDropdown}
@@ -267,6 +275,7 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
           {...keepFocus}
           className="absolute left-0 right-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
           style={{
+            ...menu,
             top: bare ? 34 : compact ? 48 : 60,
             maxHeight: 260,
             zIndex: 1001,
@@ -284,10 +293,10 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
       )}
 
       {open && !disabled && inline && (
-        <View {...keepFocus} className="mt-1 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <View {...keepFocus} className="mt-1 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={menu ?? undefined}>
           {renderOptions(filteredOptions.slice(0, inlineLimit))}
           {filteredOptions.length > inlineLimit && (
-            <Text className="px-4 py-3 text-center text-xs text-slate-400">
+            <Text className="px-4 py-3 text-center text-xs text-slate-400" style={o ? { color: o.faint } : undefined}>
               {filteredOptions.length - inlineLimit} more — keep typing to narrow it down
             </Text>
           )}

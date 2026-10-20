@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState, type ReactNode } from "react";
 import { Platform, Pressable, ScrollView, Text, View, type DimensionValue, type StyleProp, type ViewStyle } from "react-native";
 
+import { useOrbitPage } from "@/src/theme/orbit";
+
 import { themeColor } from "./theme";
 
 // Building blocks for the desktop pages, in the app's own look: white cards
@@ -74,13 +76,15 @@ export function Card({
   style?: StyleProp<ViewStyle>;
   padded?: boolean;
 }) {
+  // (On an Orbit page — see theme/orbit.tsx — in its colours.)
+  const o = useOrbitPage();
   return (
-    <View style={[{ backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, borderRadius: 16, overflow: "hidden" }, style]}>
+    <View style={[{ backgroundColor: o?.surface ?? WEB.card, borderWidth: 1, borderColor: o?.border ?? WEB.border, borderRadius: o ? 18 : 16, overflow: "hidden" }, style]}>
       {(title || action) && (
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10 }}>
           <View style={{ flex: 1 }}>
-            {!!title && <Text style={{ fontSize: 15, fontWeight: "700", color: WEB.text }}>{title}</Text>}
-            {!!subtitle && <Text style={{ marginTop: 1, fontSize: 12, color: WEB.muted }}>{subtitle}</Text>}
+            {!!title && <Text style={{ fontSize: o ? 16 : 15, fontWeight: "700", color: o?.text ?? WEB.text }}>{title}</Text>}
+            {!!subtitle && <Text style={{ marginTop: 1, fontSize: 12, color: o?.muted ?? WEB.muted }}>{subtitle}</Text>}
           </View>
           {action}
         </View>
@@ -93,10 +97,11 @@ export function Card({
 
 // "Open calendar ›" in a card's corner.
 export function CardLink({ label, onPress }: { label: string; onPress: () => void }) {
+  const o = useOrbitPage();
   return (
-    <Pressable onPress={onPress} style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", opacity: hovered ? 0.7 : 1 })}>
-      <Text style={{ fontSize: 13, fontWeight: "600", color: WEB.blue }}>{label}</Text>
-      <Ionicons name="chevron-forward" size={13} color={WEB.blue} style={{ marginLeft: 2 }} />
+    <Pressable onPress={onPress} style={hoverable(({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", opacity: hovered ? 0.7 : 1 }))}>
+      <Text style={{ fontSize: 13, fontWeight: "600", color: o?.accent ?? WEB.blue }}>{label}</Text>
+      <Ionicons name="chevron-forward" size={13} color={o?.accent ?? WEB.blue} style={{ marginLeft: 2 }} />
     </Pressable>
   );
 }
@@ -445,10 +450,11 @@ export function Row({ children, gap = 16, style }: { children: ReactNode; gap?: 
 }
 
 export function Empty({ icon, text }: { icon: IconName; text: string }) {
+  const o = useOrbitPage();
   return (
     <View style={{ alignItems: "center", paddingVertical: 22 }}>
-      <Ionicons name={icon} size={24} color="#CBD5E1" />
-      <Text style={{ marginTop: 6, fontSize: 13, color: WEB.faint }}>{text}</Text>
+      <Ionicons name={icon} size={24} color={o?.orbit ?? "#CBD5E1"} />
+      <Text style={{ marginTop: 6, fontSize: 13, color: o?.faint ?? WEB.faint }}>{text}</Text>
     </View>
   );
 }
