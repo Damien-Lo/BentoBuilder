@@ -233,6 +233,8 @@ From Damien:
 
 Decided (Oct 19): the app becomes **Orbit** ("everything in its orbit": a centre — the assistant — with your day's things on their paths around it; inner ring today, outer later). Home-screen concepts are being drawn with Claude Design from a brief; then rename everywhere (app name, icon, sign-in page, privacy policy, invite message, web title) in one go, before the next iPhone build. Also: develop the Health section into its own (Today, Body/weight, Nutrients, Goals, Weekly report; activity later). For loading (1), recipes and the grocery list feel slow too.
 
+Kitchen tabs rearranged (Oct 19): **Log · Recipes · (orb) · Pantry · Plan** — at most 4 tabs a section, two either side of the orb (decided with Damien: keep the centre orb, even tab counts). Log = the old Planner; Plan = Grocery list + Prep & shopping (a switch at its top; the old Overview's kitchen tasks lead Prep & shopping); the Overview tab hidden (route kept). The orb replaced the blue centre button on every tab bar (tap: home; hold: quick actions; the old radial menu only led to "coming soon"). The white header band at the top of Log, the grocery list and Prep & shopping is gone (header part of the page). A first attempt (pill tabs at the top + a floating orb in a reserved strip) was rejected as looking like thick bezels — it's in `git stash` ("Kitchen pilot stage 1"). Next: restyle the bar itself (theme, light/dark), then each page.
+
 Suggested:
 5. **Settings on the phone as a list** (like iOS Settings: one row per area) instead of a tab bar — would also settle 2.
 6. **Web app on phones:** an "Add to Home Screen" icon and full-screen app (a web manifest), and a proper preview card when bentobuilder.pages.dev is pasted into Messages (title, description, icon).

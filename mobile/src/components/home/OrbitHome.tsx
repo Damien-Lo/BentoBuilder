@@ -1,13 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { requireOptionalNativeModule } from "expo";
 import { useRouter, type Href } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import { Modal, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
-import Animated, { Easing, FadeIn, FadeInDown, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming, type SharedValue } from "react-native-reanimated";
+import { useRef, useState } from "react";
+import { Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import Animated, { Easing, FadeIn, FadeInDown, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
 import { useAccount } from "@/src/components/auth/AuthGate";
+import { OrbSphere } from "@/src/components/ui/OrbSphere";
+import { QuickActions } from "@/src/components/ui/QuickActions";
 import { Tap } from "@/src/components/ui/Tap";
 import { minutesLabel } from "@/src/components/calendar/calendarUtils";
 import { mealLine } from "@/src/components/calendar/mealFood";
@@ -43,13 +45,6 @@ const ORBIT: Section[] = [
 ];
 const STEP = 360 / ORBIT.length;
 
-const QUICK: { label: string; icon: keyof typeof Ionicons.glyphMap; route: Href }[] = [
-  { label: "Plan a meal", icon: "restaurant-outline", route: "/planner" },
-  { label: "Add to the grocery list", icon: "cart-outline", route: "/grocery-list" },
-  { label: "New event", icon: "calendar-outline", route: "/calendar/edit" },
-  { label: "New task", icon: "checkbox-outline", route: "/lists" },
-  { label: "Log weight", icon: "scale-outline", route: "/health/weight" },
-];
 
 // (A light tap felt when the orbit turns — where the app has it.)
 function tick() {
@@ -107,64 +102,7 @@ function glance(id: SectionId, t: Today): { value: string; ring: number; caption
   }
 }
 
-// --- The orb -------------------------------------------------------------
-
-// A soft sphere, lit from the top left: in a browser a real gradient; on
-// the phone (no gradient drawing in the app) many thin circles, each a
-// shade lighter and a little further towards the light, which blend into
-// one. It breathes slowly (unless motion is turned down).
-// (The same light as the browser's gradient: from the edge, deep blue, to
-// the bright spot at 36% across, 30% down.)
-const STOPS: [number, string][] = [
-  [0, "#EFF6FF"],
-  [0.2, "#93C5FD"],
-  [0.52, "#3B82F6"],
-  [1, "#1E3A8A"],
-];
-// (A browser's gradient reaches to the far corner, so the near edge stays
-// light: the same here.)
-const REACH = 0.78;
-function shade(r: number) {
-  const i = Math.max(1, STOPS.findIndex(([at]) => at >= r));
-  const [a, from] = STOPS[i - 1];
-  const [b, to] = STOPS[i];
-  const local = Math.max(0, Math.min(1, (r - a) / (b - a)));
-  const mix = (j: number) => Math.round(parseInt(from.slice(j, j + 2), 16) * (1 - local) + parseInt(to.slice(j, j + 2), 16) * local);
-  return `rgb(${mix(1)}, ${mix(3)}, ${mix(5)})`;
-}
-function Orb({ size, onPress, colors, dark }: { size: number; onPress: () => void; colors: OrbitColors; dark: boolean }) {
-  const still = useReducedMotion();
-  const breath = useSharedValue(1);
-  useEffect(() => {
-    if (!still) breath.value = withRepeat(withTiming(1.035, { duration: 2600, easing: Easing.inOut(Easing.sin) }), -1, true);
-  }, [still, breath]);
-  const breathing = useAnimatedStyle(() => ({ transform: [{ scale: breath.value }] }));
-  const layers = 40;
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Ask or add something">
-      <Animated.View
-        style={[
-          { width: size, height: size, borderRadius: size / 2, backgroundColor: shade(REACH), overflow: "hidden" },
-          Platform.OS === "web"
-            ? ({ boxShadow: `0 18px ${dark ? 70 : 50}px ${colors.orbGlow}`, backgroundImage: "radial-gradient(circle at 36% 30%, #EFF6FF 0%, #93C5FD 20%, #3B82F6 52%, #1E3A8A 100%)" } as object)
-            : { shadowColor: dark ? "#3B82F6" : "#2563EB", shadowOpacity: dark ? 0.75 : 0.5, shadowRadius: dark ? 34 : 26, shadowOffset: { width: 0, height: 12 } },
-          breathing,
-        ]}
-      >
-        {Platform.OS !== "web" &&
-          Array.from({ length: layers }, (_, k) => {
-            // From the outside in: each circle smaller, its centre nearer
-            // the bright spot, its colour the gradient's at that distance.
-            const r = 1 - k / layers;
-            const d = size * r;
-            const cx = size * (0.5 + (0.36 - 0.5) * (1 - r));
-            const cy = size * (0.5 + (0.3 - 0.5) * (1 - r));
-            return <View key={k} style={{ position: "absolute", width: d, height: d, borderRadius: d / 2, left: cx - d / 2, top: cy - d / 2, backgroundColor: shade(r * REACH) }} />;
-          })}
-      </Animated.View>
-    </Pressable>
-  );
-}
+// --- The orb's ring ---
 
 // The selected section's progress, as a ring of short marks.
 function Ring({ size, value, colors }: { size: number; value: number; colors: OrbitColors }) {
@@ -460,7 +398,7 @@ export function OrbitHome() {
           <View pointerEvents="none" style={{ position: "absolute", left: centre - radius, top: centre - radius, width: radius * 2, height: radius * 2, borderRadius: radius, borderWidth: 1.5, borderStyle: "dotted", borderColor: colors.orbit }} />
           <View style={{ position: "absolute", left: centre - ring / 2, top: centre - ring / 2, width: ring, height: ring, alignItems: "center", justifyContent: "center" }}>
             <Ring size={ring} value={focus.ring} colors={colors} />
-            <Orb size={orb} onPress={() => setAsking(true)} colors={colors} dark={dark} />
+            <OrbSphere size={orb} onPress={() => setAsking(true)} colors={colors} dark={dark} />
           </View>
           {ORBIT.map((section, index) => (
             <Node
@@ -486,32 +424,7 @@ export function OrbitHome() {
       </ScrollView>
 
       {/* The orb's quick actions (later: the voice assistant) */}
-      <Modal visible={asking} transparent animationType="fade" onRequestClose={() => setAsking(false)}>
-        <Pressable style={{ flex: 1, justifyContent: "flex-end", backgroundColor: colors.scrim }} onPress={() => setAsking(false)}>
-          <Pressable style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.surface, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 }} onPress={() => {}}>
-            <View style={{ marginBottom: 12, height: 4, width: 40, alignSelf: "center", borderRadius: 2, backgroundColor: colors.track }} />
-            <Text style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>What would you like to do?</Text>
-            <Text style={{ marginTop: 2, marginBottom: 12, fontSize: 14, color: colors.muted }}>Soon you&apos;ll be able to just ask.</Text>
-            {QUICK.map((q) => (
-              <Tap
-                key={q.label}
-                onPress={() => {
-                  setAsking(false);
-                  go(q.route);
-                }}
-                style={{ flexDirection: "row", alignItems: "center", borderRadius: 16, paddingHorizontal: 8, paddingVertical: 12 }}
-                pressedStyle={{ backgroundColor: colors.pill }}
-              >
-                <View style={{ height: 36, width: 36, alignItems: "center", justifyContent: "center", borderRadius: 18, backgroundColor: colors.accentSoft }}>
-                  <Ionicons name={q.icon} size={18} color={colors.accent} />
-                </View>
-                <Text style={{ marginLeft: 12, flex: 1, fontSize: 15, fontWeight: "600", color: colors.text }}>{q.label}</Text>
-                <Ionicons name="chevron-forward" size={16} color={colors.faint} />
-              </Tap>
-            ))}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <QuickActions visible={asking} onClose={() => setAsking(false)} />
     </SafeAreaView>
   );
 }

@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { durationLabel, minutesLabel, MONTHS_SHORT, WEEKDAYS_SHORT } from "@/src/components/calendar/calendarUtils";
-import { KitchenIssues } from "@/src/components/planner/KitchenTasks";
+import { KitchenIssues, KitchenTasks } from "@/src/components/planner/KitchenTasks";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { compactDate } from "@/src/components/web/fields";
@@ -22,7 +22,9 @@ import { needAmountLabel, type BuyNeed, type KitchenSession, type NeedSource, ty
 
 type Plan = ReturnType<typeof usePlanNeeds>;
 
-export function WebPrepShoppingScreen() {
+// (`inTabs`: in the phone Kitchen's Plan tab — no title or way back, and
+// first, the kitchen's tasks for the week, from what was its Overview.)
+export function WebPrepShoppingScreen({ inTabs = false }: { inTabs?: boolean } = {}) {
   const router = useRouter();
   const plan = usePlanNeeds();
   const { today } = plan;
@@ -76,7 +78,12 @@ export function WebPrepShoppingScreen() {
 
 
   return (
-    <KitchenPage title="Prep & shopping" subtitle="Worked out from the meals you've planned, the pantry and your booked sessions. Nothing here is saved: change the plan and it changes." right={wide ? <Button label="Week plan" onPress={() => router.push("/planner")} /> : undefined}>
+    <KitchenPage title="Prep & shopping" subtitle="Worked out from the meals you've planned, the pantry and your booked sessions. Nothing here is saved: change the plan and it changes." right={wide ? <Button label="Week plan" onPress={() => router.push("/planner")} /> : undefined} back={!inTabs} bare={inTabs}>
+      {inTabs && (
+        <Card title="Kitchen tasks" subtitle="The next seven days" padded={false} style={{ marginBottom: 16 }}>
+          <KitchenTasks plan={plan} days={7} />
+        </Card>
+      )}
       {plan.issues.length > 0 && (
         <Card title="Needs attention" padded={false} style={{ marginBottom: 16 }}>
           <KitchenIssues issues={plan.issues} />

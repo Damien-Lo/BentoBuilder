@@ -101,6 +101,12 @@ const TAG_STYLE: Record<"Plan" | "Menu" | "Added", { bg: string; text: string }>
 };
 
 export default function GroceryListScreen() {
+  return <GroceryList />;
+}
+
+// (`inTabs`: in the Kitchen's Plan tab — no way back, and the tab says what
+// it is.)
+export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
   // A desktop browser gets the same screen laid out wider: the three lists
   // side by side under a page heading (see the styles just before the return).
   const wide = useWideWeb();
@@ -887,15 +893,17 @@ export default function GroceryListScreen() {
         )}
 
         {/* Header (phone) */}
-        <View className="border-b border-slate-200 bg-white px-4 py-3" style={wide ? { display: "none" } : undefined}>
-          <View className="flex-row items-center">
-            <Pressable
-              className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-              onPress={() => router.back()}
-            >
-              <Ionicons name="chevron-back" size={26} color="#0F172A" />
-            </Pressable>
-            <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Grocery List</Text>
+        <View className="px-4 pb-2 pt-1" style={wide ? { display: "none" } : undefined}>
+          <View className="flex-row items-center" style={inTabs && viewMode !== "shopping" ? { display: "none" } : undefined}>
+            {!inTabs && (
+              <Pressable
+                className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
+                onPress={() => router.back()}
+              >
+                <Ionicons name="chevron-back" size={26} color="#0F172A" />
+              </Pressable>
+            )}
+            <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">{inTabs ? "" : "Grocery List"}</Text>
             {viewMode === "shopping" && (
               <Pressable
                 className="mr-2 h-11 w-11 items-center justify-center rounded-full bg-blue-50 active:bg-blue-100"

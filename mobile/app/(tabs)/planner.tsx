@@ -2138,10 +2138,10 @@ function PhonePlannerScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
-      {/* ── Top strip (non-scrolling) ── */}
-      <View className="bg-white pb-3 shadow-sm">
+      {/* ── Top strip (non-scrolling): part of the page, not a band of its own ── */}
+      <View className="pb-1">
         {/* Month header */}
-        <View className="flex-row items-center justify-between px-5 pb-3 pt-4">
+        <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
           {fromCalendar && (
             <Pressable
               onPress={() => router.back()}
@@ -2199,7 +2199,7 @@ function PhonePlannerScreen() {
       {/* ── Main scrollable content ── */}
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 120 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Day label */}
