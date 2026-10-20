@@ -6,6 +6,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAccount } from "@/src/components/auth/AuthGate";
 import { PrivacyPolicyModal } from "@/src/components/legal/PrivacyPolicy";
+import { useOrbitTheme, type Appearance } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { Button, Card, confirm, errorText, Heading, Input, when } from "@/src/components/settings/AccountParts";
 import {
   changePassword,
@@ -24,6 +26,9 @@ import {
 
 export default function AccountSettingsScreen() {
   const { account, setAccount, signOut } = useAccount();
+  const { appearance, setAppearance } = useOrbitTheme();
+  // (The desktop has its own light/dark switch, in the side bar.)
+  const wide = useWideWeb();
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -167,6 +172,41 @@ export default function AccountSettingsScreen() {
             )}
           </View>
         </Card>
+
+        {/* Appearance, on the phone */}
+        {!wide && (
+          <>
+            <Heading>Appearance</Heading>
+            <Card>
+              <View className="px-4 py-3">
+                <View className="flex-row rounded-xl bg-slate-100 p-1">
+                  {(
+                    [
+                      ["system", "Automatic", "phone-portrait-outline"],
+                      ["light", "Light", "sunny-outline"],
+                      ["dark", "Dark", "moon-outline"],
+                    ] as [Appearance, string, keyof typeof Ionicons.glyphMap][]
+                  ).map(([value, label, icon]) => {
+                    const on = appearance === value;
+                    return (
+                      <Pressable
+                        key={value}
+                        onPress={() => setAppearance(value)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: on }}
+                        className={`flex-1 flex-row items-center justify-center rounded-lg py-2 ${on ? "bg-white" : ""}`}
+                      >
+                        <Ionicons name={icon} size={15} color={on ? "#0F172A" : "#64748B"} />
+                        <Text className={`ml-1.5 text-sm font-semibold ${on ? "text-slate-900" : "text-slate-500"}`}>{label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Text className="mt-2 text-xs text-slate-400">Automatic follows your phone. For now only the home screen changes — the rest of the app is being redesigned to match.</Text>
+              </View>
+            </Card>
+          </>
+        )}
 
         {/* Password */}
         <Heading>Password</Heading>

@@ -5,11 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import Animated, { Easing, FadeIn, FadeInDown, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming, type SharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
 
 import { useAccount } from "@/src/components/auth/AuthGate";
+import { Tap } from "@/src/components/ui/Tap";
 import { minutesLabel } from "@/src/components/calendar/calendarUtils";
 import { mealLine } from "@/src/components/calendar/mealFood";
 import { updateTodoTask } from "@/src/services/todoApi";
+import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 import { useToday, type Today } from "./useToday";
 
@@ -129,7 +132,7 @@ function shade(r: number) {
   const mix = (j: number) => Math.round(parseInt(from.slice(j, j + 2), 16) * (1 - local) + parseInt(to.slice(j, j + 2), 16) * local);
   return `rgb(${mix(1)}, ${mix(3)}, ${mix(5)})`;
 }
-function Orb({ size, onPress }: { size: number; onPress: () => void }) {
+function Orb({ size, onPress, colors, dark }: { size: number; onPress: () => void; colors: OrbitColors; dark: boolean }) {
   const still = useReducedMotion();
   const breath = useSharedValue(1);
   useEffect(() => {
@@ -143,8 +146,8 @@ function Orb({ size, onPress }: { size: number; onPress: () => void }) {
         style={[
           { width: size, height: size, borderRadius: size / 2, backgroundColor: shade(REACH), overflow: "hidden" },
           Platform.OS === "web"
-            ? ({ boxShadow: "0 18px 50px rgba(37, 99, 235, 0.45)", backgroundImage: "radial-gradient(circle at 36% 30%, #EFF6FF 0%, #93C5FD 20%, #3B82F6 52%, #1E3A8A 100%)" } as object)
-            : { shadowColor: "#2563EB", shadowOpacity: 0.5, shadowRadius: 26, shadowOffset: { width: 0, height: 12 } },
+            ? ({ boxShadow: `0 18px ${dark ? 70 : 50}px ${colors.orbGlow}`, backgroundImage: "radial-gradient(circle at 36% 30%, #EFF6FF 0%, #93C5FD 20%, #3B82F6 52%, #1E3A8A 100%)" } as object)
+            : { shadowColor: dark ? "#3B82F6" : "#2563EB", shadowOpacity: dark ? 0.75 : 0.5, shadowRadius: dark ? 34 : 26, shadowOffset: { width: 0, height: 12 } },
           breathing,
         ]}
       >
@@ -164,7 +167,7 @@ function Orb({ size, onPress }: { size: number; onPress: () => void }) {
 }
 
 // The selected section's progress, as a ring of short marks.
-function Ring({ size, value }: { size: number; value: number }) {
+function Ring({ size, value, colors }: { size: number; value: number; colors: OrbitColors }) {
   const marks = 48;
   const filled = Math.round(Math.max(0, Math.min(1, value)) * marks);
   return (
@@ -179,7 +182,7 @@ function Ring({ size, value }: { size: number; value: number }) {
             width: 2.5,
             height: 8,
             borderRadius: 1.25,
-            backgroundColor: i < filled ? "#0F172A" : "#DDE3EA",
+            backgroundColor: i < filled ? colors.fill : colors.track,
             transform: [{ rotate: `${i * (360 / marks)}deg` }, { translateY: -size / 2 + 4 }],
           }}
         />
@@ -190,7 +193,7 @@ function Ring({ size, value }: { size: number; value: number }) {
 
 // --- The orbit -----------------------------------------------------------
 
-function Node({ section, index, turn, centre, radius, selected, value, onPress }: { section: Section; index: number; turn: SharedValue<number>; centre: number; radius: number; selected: boolean; value: string; onPress: () => void }) {
+function Node({ section, index, turn, centre, radius, selected, value, onPress, colors }: { section: Section; index: number; turn: SharedValue<number>; centre: number; radius: number; selected: boolean; value: string; onPress: () => void; colors: OrbitColors }) {
   const box = 96;
   const dot = selected ? 62 : 54;
   const place = useAnimatedStyle(() => {
@@ -210,17 +213,17 @@ function Node({ section, index, turn, centre, radius, selected, value, onPress }
           borderRadius: dot / 2,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: selected ? "#0F172A" : section.soon ? "#F1F5F9" : "#FFFFFF",
+          backgroundColor: selected ? colors.ink : section.soon ? colors.nodeSoon : colors.node,
           borderWidth: selected ? 3 : 1,
-          borderColor: selected ? "#93C5FD" : "#E2E8F0",
+          borderColor: selected ? colors.selectedRing : colors.nodeBorder,
         }}
       >
-        <Ionicons name={section.icon} size={selected ? 24 : 21} color={selected ? "#FFFFFF" : section.soon ? "#94A3B8" : "#334155"} />
+        <Ionicons name={section.icon} size={selected ? 24 : 21} color={selected ? colors.onInk : section.soon ? colors.faint : colors.icon} />
       </Pressable>
-      <Text numberOfLines={1} style={{ marginTop: 5, fontSize: 12, fontWeight: "600", color: section.soon ? "#94A3B8" : "#0F172A" }}>
+      <Text numberOfLines={1} style={{ marginTop: 5, fontSize: 12, fontWeight: "600", color: section.soon ? colors.faint : colors.text }}>
         {section.label}
       </Text>
-      <Text numberOfLines={1} style={{ fontSize: 11, color: "#64748B", maxWidth: box }}>
+      <Text numberOfLines={1} style={{ fontSize: 11, color: colors.muted, maxWidth: box }}>
         {value}
       </Text>
     </Animated.View>
@@ -229,89 +232,97 @@ function Node({ section, index, turn, centre, radius, selected, value, onPress }
 
 // --- The panel for the selected section -----------------------------------
 
-function Row({ icon, iconColor = "#64748B", title, detail, right, onPress }: { icon: keyof typeof Ionicons.glyphMap; iconColor?: string; title: string; detail?: string; right?: React.ReactNode; onPress?: () => void }) {
+function Row({ icon, iconColor, title, detail, right, onPress, colors }: { icon: keyof typeof Ionicons.glyphMap; iconColor?: string; title: string; detail?: string; right?: React.ReactNode; onPress?: () => void; colors: OrbitColors }) {
   return (
-    <Pressable onPress={onPress} disabled={!onPress} className="flex-row items-center py-2.5 active:opacity-70">
-      <Ionicons name={icon} size={18} color={iconColor} />
-      <View className="ml-3 flex-1">
-        <Text numberOfLines={1} className="text-[15px] font-semibold text-slate-900">
+    <Tap onPress={onPress} disabled={!onPress} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 10 }} pressedStyle={{ opacity: 0.6 }}>
+      <Ionicons name={icon} size={18} color={iconColor ?? colors.muted} />
+      <View style={{ marginLeft: 12, flex: 1 }}>
+        <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: "600", color: colors.text }}>
           {title}
         </Text>
         {!!detail && (
-          <Text numberOfLines={1} className="text-xs text-slate-500">
+          <Text numberOfLines={1} style={{ fontSize: 12, color: colors.muted }}>
             {detail}
           </Text>
         )}
       </View>
       {right}
-    </Pressable>
+    </Tap>
   );
 }
 
-function Action({ label, icon, onPress, primary }: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void; primary?: boolean }) {
+function Action({ label, icon, onPress, primary, colors }: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void; primary?: boolean; colors: OrbitColors }) {
   return (
-    <Pressable onPress={onPress} className={`flex-row items-center rounded-full px-3.5 py-2 ${primary ? "bg-slate-900 active:bg-slate-700" : "bg-slate-100 active:bg-slate-200"}`}>
-      <Ionicons name={icon} size={15} color={primary ? "#FFFFFF" : "#334155"} />
-      <Text className={`ml-1.5 text-[13px] font-semibold ${primary ? "text-white" : "text-slate-700"}`}>{label}</Text>
-    </Pressable>
+    <Tap
+      onPress={onPress}
+      style={{ flexDirection: "row", alignItems: "center", borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: primary ? colors.ink : colors.pill }}
+      pressedStyle={{ opacity: 0.75 }}
+    >
+      <Ionicons name={icon} size={15} color={primary ? colors.onInk : colors.onPill} />
+      <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: "600", color: primary ? colors.onInk : colors.onPill }}>{label}</Text>
+    </Tap>
   );
 }
 
-function Panel({ section, t, go, onDone }: { section: Section; t: Today; go: (route: Href) => void; onDone: () => void }) {
-  const open = section.route ? <Action label={`Open ${section.label}`} icon="arrow-forward" primary onPress={() => go(section.route!)} /> : null;
+function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today; go: (route: Href) => void; onDone: () => void; colors: OrbitColors }) {
+  const open = section.route ? <Action label={`Open ${section.label}`} icon="arrow-forward" primary onPress={() => go(section.route!)} colors={colors} /> : null;
+  const quiet = (text: string) => <Text style={{ paddingVertical: 8, fontSize: 14, color: colors.muted }}>{text}</Text>;
   let body: React.ReactNode = null;
   let actions: React.ReactNode = null;
 
   if (section.id === "calendar") {
     const shown = t.later.slice(0, 4);
-    body = shown.length ? (
-      shown.map((e) => (
-        <Row
-          key={`${e._id}-${e.occurrenceDate}`}
-          icon={e.meal ? "restaurant-outline" : "time-outline"}
-          iconColor={e === t.happening ? "#2563EB" : "#64748B"}
-          title={e.title}
-          detail={`${e === t.happening ? "Now" : minutesLabel(e.startMinutes)} – ${minutesLabel(e.endMinutes)}${e.meal ? ` · ${mealLine(e)}` : ""}`}
-        />
-      ))
-    ) : (
-      <Text className="py-2 text-sm text-slate-500">Nothing else today.</Text>
-    );
-    actions = <Action label="New event" icon="add" onPress={() => go("/calendar/edit")} />;
+    body = shown.length
+      ? shown.map((e) => (
+          <Row
+            key={`${e._id}-${e.occurrenceDate}`}
+            icon={e.meal ? "restaurant-outline" : "time-outline"}
+            iconColor={e === t.happening ? colors.accent : colors.muted}
+            title={e.title}
+            detail={`${e === t.happening ? "Now" : minutesLabel(e.startMinutes)} – ${minutesLabel(e.endMinutes)}${e.meal ? ` · ${mealLine(e)}` : ""}`}
+            colors={colors}
+          />
+        ))
+      : quiet("Nothing else today.");
+    actions = <Action label="New event" icon="add" onPress={() => go("/calendar/edit")} colors={colors} />;
   } else if (section.id === "kitchen") {
     const meals = t.meals.filter((e) => e.endMinutes > t.now).slice(0, 2);
     body = (
       <>
         {meals.map((e) => (
-          <Row key={`${e._id}-${e.occurrenceDate}`} icon="restaurant-outline" iconColor="#10B981" title={`${e.title} · ${minutesLabel(e.startMinutes)}`} detail={mealLine(e)} />
+          <Row key={`${e._id}-${e.occurrenceDate}`} icon="restaurant-outline" iconColor={colors.success} title={`${e.title} · ${minutesLabel(e.startMinutes)}`} detail={mealLine(e)} colors={colors} />
         ))}
-        {t.expiring.slice(0, 2).map((p) => (
-          <Row
-            key={p._id}
-            icon="hourglass-outline"
-            iconColor="#B45309"
-            title={`${p.ingredient?.name ?? "Something"} ${(p.expiryDate ?? "").slice(0, 10) < t.today ? "is past its date" : `expires ${(p.expiryDate ?? "").slice(0, 10) === t.today ? "today" : (p.expiryDate ?? "").slice(5, 10).split("-").reverse().join("/")}`}`}
-            onPress={() => go("/PantryMainPage")}
-          />
-        ))}
-        {!meals.length && !t.expiring.length && <Text className="py-2 text-sm text-slate-500">No more meals planned today.</Text>}
+        {t.expiring.slice(0, 2).map((p) => {
+          const day = (p.expiryDate ?? "").slice(0, 10);
+          return (
+            <Row
+              key={p._id}
+              icon="hourglass-outline"
+              iconColor={colors.warning}
+              title={`${p.ingredient?.name ?? "Something"} ${day < t.today ? "is past its date" : `expires ${day === t.today ? "today" : day.slice(5).split("-").reverse().join("/")}`}`}
+              onPress={() => go("/PantryMainPage")}
+              colors={colors}
+            />
+          );
+        })}
+        {!meals.length && !t.expiring.length && quiet("No more meals planned today.")}
       </>
     );
-    actions = <Action label="Grocery list" icon="cart-outline" onPress={() => go("/grocery-list")} />;
+    actions = <Action label="Grocery list" icon="cart-outline" onPress={() => go("/grocery-list")} colors={colors} />;
   } else if (section.id === "nutrition") {
     const bar = (label: string, value: number | null | undefined, limit: number | null, color: string) => {
       const share = limit ? Math.min(1, (value ?? 0) / limit) : 0;
       return (
-        <View key={label} className="mt-2.5">
-          <View className="flex-row justify-between">
-            <Text className="text-xs font-semibold text-slate-600">{label}</Text>
-            <Text className="text-xs text-slate-500">
+        <View key={label} style={{ marginTop: 10 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <Text style={{ fontSize: 12, fontWeight: "600", color: colors.onPill }}>{label}</Text>
+            <Text style={{ fontSize: 12, color: colors.muted }}>
               {Math.round(value ?? 0)}
               {limit ? ` / ${limit}` : ""} g
             </Text>
           </View>
-          <View className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
-            <View style={{ width: `${share * 100}%`, backgroundColor: color }} className="h-full rounded-full" />
+          <View style={{ marginTop: 4, height: 6, borderRadius: 3, overflow: "hidden", backgroundColor: colors.track }}>
+            <View style={{ width: `${share * 100}%`, height: "100%", borderRadius: 3, backgroundColor: color }} />
           </View>
         </View>
       );
@@ -319,10 +330,10 @@ function Panel({ section, t, go, onDone }: { section: Section; t: Today; go: (ro
     const left = t.goal - Math.round(t.eaten.calories ?? 0);
     body = (
       <>
-        <Text className="text-2xl font-bold text-slate-900">
-          {Math.max(0, left).toLocaleString()} <Text className="text-sm font-normal text-slate-500">kcal {left >= 0 ? "left" : "over"}</Text>
+        <Text style={{ fontSize: 24, fontWeight: "700", color: colors.text }}>
+          {Math.max(0, left).toLocaleString()} <Text style={{ fontSize: 14, fontWeight: "400", color: colors.muted }}>kcal {left >= 0 ? "left" : "over"}</Text>
         </Text>
-        {bar("Protein", t.eaten.protein, t.settings.dailyProteinLimit, "#2563EB")}
+        {bar("Protein", t.eaten.protein, t.settings.dailyProteinLimit, "#3B82F6")}
         {bar("Carbs", t.eaten.carbs, t.settings.dailyCarbsLimit, "#F59E0B")}
         {bar("Fat", t.eaten.fats, t.settings.dailyFatsLimit, "#EC4899")}
       </>
@@ -333,41 +344,41 @@ function Panel({ section, t, go, onDone }: { section: Section; t: Today; go: (ro
         icon="scale-outline"
         title={`${t.latestWeight.weight} lbs`}
         detail={`${t.weightChange == null ? "Weighed" : `${t.weightChange > 0 ? "+" : ""}${t.weightChange} lbs this week · weighed`} ${t.latestWeight.date === t.today ? "today" : t.latestWeight.date}${t.settings.goalWeight ? ` · goal ${t.settings.goalWeight} lbs` : ""}`}
+        colors={colors}
       />
     ) : (
-      <Text className="py-2 text-sm text-slate-500">No weigh-ins yet.</Text>
+      quiet("No weigh-ins yet.")
     );
-    actions = <Action label="Log weight" icon="add" onPress={() => go("/health/weight")} />;
+    actions = <Action label="Log weight" icon="add" onPress={() => go("/health/weight")} colors={colors} />;
   } else if (section.id === "tasks") {
-    body = t.tasks.length ? (
-      t.tasks.slice(0, 4).map(({ task, late }) => (
-        <Row
-          key={task._id}
-          icon="ellipse-outline"
-          iconColor={late ? "#DC2626" : "#94A3B8"}
-          title={task.title}
-          detail={late ? "Overdue" : task.list?.name}
-          onPress={() => void updateTodoTask(task._id, { completed: true }).then(onDone, () => {})}
-          right={<Text className="text-xs text-slate-400">Done</Text>}
-        />
-      ))
-    ) : (
-      <Text className="py-2 text-sm text-slate-500">Nothing due — nice.</Text>
-    );
-    actions = <Action label="New task" icon="add" onPress={() => go("/lists")} />;
+    body = t.tasks.length
+      ? t.tasks.slice(0, 4).map(({ task, late }) => (
+          <Row
+            key={task._id}
+            icon="ellipse-outline"
+            iconColor={late ? colors.danger : colors.faint}
+            title={task.title}
+            detail={late ? "Overdue" : task.list?.name}
+            onPress={() => void updateTodoTask(task._id, { completed: true }).then(onDone, () => {})}
+            right={<Text style={{ fontSize: 12, color: colors.faint }}>Done</Text>}
+            colors={colors}
+          />
+        ))
+      : quiet("Nothing due — nice.");
+    actions = <Action label="New task" icon="add" onPress={() => go("/lists")} colors={colors} />;
   } else {
-    body = <Text className="py-2 text-sm text-slate-500">Home planning — tasks and projects for the house — is on its way.</Text>;
+    body = quiet("Home planning — tasks and projects for the house — is on its way.");
   }
 
   return (
-    <Animated.View key={section.id} entering={FadeInDown.duration(260)} className="rounded-3xl border border-slate-200 bg-white px-5 pb-4 pt-4">
-      <View className="mb-1 flex-row items-center">
-        <Ionicons name={section.icon} size={16} color="#64748B" />
-        <Text className="ml-2 text-xs font-bold uppercase tracking-wider text-slate-400">{section.label}</Text>
+    <Animated.View key={section.id} entering={FadeInDown.duration(260)} style={{ borderRadius: 24, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 }}>
+      <View style={{ marginBottom: 4, flexDirection: "row", alignItems: "center" }}>
+        <Ionicons name={section.icon} size={16} color={colors.muted} />
+        <Text style={{ marginLeft: 8, fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase", color: colors.faint }}>{section.label}</Text>
       </View>
       {body}
       {(actions || open) && (
-        <View className="mt-3 flex-row flex-wrap gap-2">
+        <View style={{ marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {actions}
           {open}
         </View>
@@ -381,6 +392,7 @@ function Panel({ section, t, go, onDone }: { section: Section; t: Today; go: (ro
 export function OrbitHome() {
   const router = useRouter();
   const { account } = useAccount();
+  const { colors, dark } = useOrbitTheme();
   const t = useToday();
   const { width } = useWindowDimensions();
   const [selected, setSelected] = useState<SectionId>("calendar");
@@ -417,38 +429,38 @@ export function OrbitHome() {
   const name = account?.name.split(" ")[0] ?? "";
   const date = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }).toUpperCase();
   const isAdmin = account?.role === "admin";
+  const corner = (icon: keyof typeof Ionicons.glyphMap, label: string, route: Href) => (
+    <Tap onPress={() => go(route)} hitSlop={6} accessibilityLabel={label} style={{ height: 40, width: 40, alignItems: "center", justifyContent: "center", borderRadius: 20 }} pressedStyle={{ backgroundColor: colors.pill }}>
+      <Ionicons name={icon} size={21} color={colors.muted} />
+    </Tap>
+  );
 
   return (
-    <SafeAreaView className="flex-1 bg-[#F4F3F0]" edges={["top", "left", "right"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>
+      <StatusBar style={dark ? "light" : "dark"} />
       <ScrollView contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
         {/* The top: the time, and what's on */}
-        <View className="flex-row items-start px-5 pt-3">
-          <View className="flex-1">
-            <Text className="text-xs font-semibold tracking-widest text-slate-500">
+        <View style={{ flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 12 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 12, fontWeight: "600", letterSpacing: 1.5, color: colors.muted }}>
               {date} · {minutesLabel(t.now)}
             </Text>
-            <Animated.Text key={headline(t, name)} entering={FadeIn.duration(300)} className="mt-1 text-[28px] font-bold leading-9 text-slate-950">
+            <Animated.Text key={headline(t, name)} entering={FadeIn.duration(300)} style={{ marginTop: 4, fontSize: 28, lineHeight: 36, fontWeight: "700", color: colors.text }}>
               {headline(t, name)}
             </Animated.Text>
           </View>
-          <View className="ml-3 flex-row gap-1">
-            {isAdmin && (
-              <Pressable onPress={() => go("/developer/home")} hitSlop={6} className="h-10 w-10 items-center justify-center rounded-full active:bg-black/5" accessibilityLabel="Developer">
-                <Ionicons name="construct-outline" size={20} color="#475569" />
-              </Pressable>
-            )}
-            <Pressable onPress={() => go("/settings-section/kitchen")} hitSlop={6} className="h-10 w-10 items-center justify-center rounded-full active:bg-black/5" accessibilityLabel="Settings">
-              <Ionicons name="settings-outline" size={21} color="#475569" />
-            </Pressable>
+          <View style={{ marginLeft: 12, flexDirection: "row", gap: 4 }}>
+            {isAdmin && corner("construct-outline", "Developer", "/developer/home")}
+            {corner("settings-outline", "Settings", "/settings-section/kitchen")}
           </View>
         </View>
 
         {/* The orbit */}
         <View style={{ width: size, height: centre + radius + 72, alignSelf: "center", marginTop: 8 }}>
-          <View pointerEvents="none" style={{ position: "absolute", left: centre - radius, top: centre - radius, width: radius * 2, height: radius * 2, borderRadius: radius, borderWidth: 1.5, borderStyle: "dotted", borderColor: "#CBD5E1" }} />
+          <View pointerEvents="none" style={{ position: "absolute", left: centre - radius, top: centre - radius, width: radius * 2, height: radius * 2, borderRadius: radius, borderWidth: 1.5, borderStyle: "dotted", borderColor: colors.orbit }} />
           <View style={{ position: "absolute", left: centre - ring / 2, top: centre - ring / 2, width: ring, height: ring, alignItems: "center", justifyContent: "center" }}>
-            <Ring size={ring} value={focus.ring} />
-            <Orb size={orb} onPress={() => setAsking(true)} />
+            <Ring size={ring} value={focus.ring} colors={colors} />
+            <Orb size={orb} onPress={() => setAsking(true)} colors={colors} dark={dark} />
           </View>
           {ORBIT.map((section, index) => (
             <Node
@@ -461,39 +473,41 @@ export function OrbitHome() {
               selected={section.id === selected}
               value={glance(section.id, t).value}
               onPress={() => select(section)}
+              colors={colors}
             />
           ))}
         </View>
-        <Text className="text-center text-xs text-slate-500">{focus.caption}</Text>
+        <Text style={{ textAlign: "center", fontSize: 12, color: colors.muted }}>{focus.caption}</Text>
 
         {/* What matters in the selected section */}
-        <View className="mt-4 px-4">
-          <Panel section={current} t={t} go={go} onDone={t.reload} />
+        <View style={{ marginTop: 16, paddingHorizontal: 16 }}>
+          <Panel section={current} t={t} go={go} onDone={t.reload} colors={colors} />
         </View>
       </ScrollView>
 
       {/* The orb's quick actions (later: the voice assistant) */}
       <Modal visible={asking} transparent animationType="fade" onRequestClose={() => setAsking(false)}>
-        <Pressable className="flex-1 justify-end bg-black/30" onPress={() => setAsking(false)}>
-          <Pressable className="rounded-t-3xl bg-white px-5 pb-10 pt-5" onPress={() => {}}>
-            <View className="mb-3 h-1 w-10 self-center rounded-full bg-slate-200" />
-            <Text className="text-lg font-bold text-slate-900">What would you like to do?</Text>
-            <Text className="mb-3 mt-0.5 text-sm text-slate-500">Soon you&apos;ll be able to just ask.</Text>
+        <Pressable style={{ flex: 1, justifyContent: "flex-end", backgroundColor: colors.scrim }} onPress={() => setAsking(false)}>
+          <Pressable style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.surface, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 40 }} onPress={() => {}}>
+            <View style={{ marginBottom: 12, height: 4, width: 40, alignSelf: "center", borderRadius: 2, backgroundColor: colors.track }} />
+            <Text style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>What would you like to do?</Text>
+            <Text style={{ marginTop: 2, marginBottom: 12, fontSize: 14, color: colors.muted }}>Soon you&apos;ll be able to just ask.</Text>
             {QUICK.map((q) => (
-              <Pressable
+              <Tap
                 key={q.label}
                 onPress={() => {
                   setAsking(false);
                   go(q.route);
                 }}
-                className="flex-row items-center rounded-2xl px-2 py-3 active:bg-slate-50"
+                style={{ flexDirection: "row", alignItems: "center", borderRadius: 16, paddingHorizontal: 8, paddingVertical: 12 }}
+                pressedStyle={{ backgroundColor: colors.pill }}
               >
-                <View className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
-                  <Ionicons name={q.icon} size={18} color="#2563EB" />
+                <View style={{ height: 36, width: 36, alignItems: "center", justifyContent: "center", borderRadius: 18, backgroundColor: colors.accentSoft }}>
+                  <Ionicons name={q.icon} size={18} color={colors.accent} />
                 </View>
-                <Text className="ml-3 flex-1 text-[15px] font-semibold text-slate-800">{q.label}</Text>
-                <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
-              </Pressable>
+                <Text style={{ marginLeft: 12, flex: 1, fontSize: 15, fontWeight: "600", color: colors.text }}>{q.label}</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+              </Tap>
             ))}
           </Pressable>
         </Pressable>
