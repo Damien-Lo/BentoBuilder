@@ -84,6 +84,21 @@ app.use((req, res, next) => {
 });
 
 app.get("/api/health", (req, res) => {
+  // (Temporary, ?ip=1: the caller's own address as the server sees it, and
+  // the proxy headers that came with their request — to set up the sign-in
+  // limiter behind Render and Cloudflare. Nothing anyone can't see about
+  // themselves.)
+  if (req.query.ip === "1") {
+    return res.json({
+      ip: req.ip,
+      ips: req.ips,
+      remote: req.socket.remoteAddress,
+      forwardedFor: req.get("x-forwarded-for") ?? null,
+      cfConnectingIp: req.get("cf-connecting-ip") ?? null,
+      trueClientIp: req.get("true-client-ip") ?? null,
+      realIp: req.get("x-real-ip") ?? null,
+    });
+  }
   return res.status(200).json({
     success: true,
     message: "BentoBuilder API is running",

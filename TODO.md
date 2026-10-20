@@ -242,7 +242,7 @@ Built: sign-in (own email + password), invite-only accounts, per-person data, a 
 
 **Later:**
 - Step E: devices found through the account (drop the QR pairing), then push notifications.
-- Email (a sending service + domain): verification and self-service "forgot password" — needed before any public sign-up.
+- Email (a sending service + domain): verification on joining, self-service "forgot password", maybe a code on a new device — needed before any public sign-up. **On hold (Oct 19):** Damien may rename the app, and the domain or Gmail sender would follow the name. Options weighed: own domain + Resend (recommended) vs a separate Gmail account with an app password.
 - Two-step sign-in for the admin.
 - C2: an invited person's edit to a shared item becomes their own version everywhere in their account (for now they make a copy); hiding shared items from your own lists.
 
