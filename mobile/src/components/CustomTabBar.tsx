@@ -1,6 +1,6 @@
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useRouter } from "expo-router";
-import { useState, type ReactNode } from "react";
+import { cloneElement, isValidElement, useState, type ReactElement, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -16,18 +16,19 @@ const TAB_H    = 56;   // tab row height
 // sit above it.
 export const HOME_BAR_HEIGHT = TAB_H;
 const ORB_D    = 48;   // the orb's diameter
-const TINT     = "#2563EB";
-const INACTIVE = "#94A3B8";
 
 // A section's tabs at the bottom of the phone screen — at most four, two
 // either side of the orb, Orbit's mascot: tap it to go home, hold it for
-// the quick actions (the same as the home screen's orb).
+// the quick actions (the same as the home screen's orb). In Orbit's look,
+// light and dark: the open tab in ink with its icon filled in, the others
+// quiet; blue is the orb's alone.
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   // The desktop layout's sidebar does this job.
   const wideWeb = useWideWeb();
+  const { colors } = useOrbitTheme();
   // (A screen given `href: null` is in the group but not on the bar —
   // expo-router passes that on as a hidden item style.)
   const visible     = state.routes.filter((route) => StyleSheet.flatten(descriptors[route.key].options.tabBarItemStyle)?.display !== "none");
@@ -38,7 +39,12 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   function renderTab(route: (typeof state.routes)[0]) {
     const focused = state.index === state.routes.indexOf(route);
     const desc    = descriptors[route.key];
-    const color   = focused ? TINT : INACTIVE;
+    const color   = focused ? colors.text : colors.faint;
+    // (The open tab's icon filled in: the "-outline" icon's solid twin.)
+    const icon = desc.options.tabBarIcon?.({ focused, color, size: 24 });
+    const shown = isValidElement(icon) && typeof (icon.props as { name?: unknown }).name === "string"
+      ? cloneElement(icon as ReactElement<{ name: string; size: number }>, { name: focused ? (icon.props as { name: string }).name.replace(/-outline$/, "") : (icon.props as { name: string }).name, size: 23 })
+      : icon;
 
     return (
       <Pressable
@@ -51,15 +57,17 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
           });
           if (!focused && !evt.defaultPrevented) navigation.navigate(route.name);
         }}
-        style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 6 }}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: focused }}
+        style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 4 }}
       >
-        {desc.options.tabBarIcon?.({ focused, color, size: 24 })}
+        {shown}
         <Text
           style={{
-            fontSize: 10,
+            fontSize: 10.5,
             color,
             marginTop: 3,
-            fontWeight: focused ? "600" : "400",
+            fontWeight: focused ? "700" : "500",
           }}
         >
           {desc.options.title ?? route.name}
@@ -79,7 +87,8 @@ export function FloatingHomeButton() {
   return <TabBarFrame floating left={null} right={null} />;
 }
 
-// The bar itself: white strip, tabs either side of the orb.
+// The bar itself: the card colour, a hairline above, tabs either side of
+// the orb.
 function TabBarFrame({
   left,
   right,
@@ -103,15 +112,10 @@ function TabBarFrame({
           floating
             ? { position: "absolute", left: 0, right: 0, bottom: 0, paddingBottom: insets.bottom }
             : {
-                backgroundColor: "#fff",
-                borderTopWidth: 1,
-                borderTopColor: "#F1F5F9",
+                backgroundColor: colors.surface,
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: colors.border,
                 paddingBottom: insets.bottom,
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: -2 },
-                shadowOpacity: 0.06,
-                shadowRadius: 6,
-                elevation: 8,
               }
         }
       >
