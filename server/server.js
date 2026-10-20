@@ -59,9 +59,12 @@ function allowedOrigin(origin) {
   }
 }
 app.use(cors({ origin: (origin, done) => done(null, allowedOrigin(origin)) }));
-// (Render sits in front of the server: the caller's address is the one it
-// passes on, which the sign-in limiter goes by.)
-app.set("trust proxy", 1);
+// The caller's real address, which the sign-in limiter goes by. On Render a
+// request comes through three proxies — Cloudflare, Render's load
+// balancer, and one on the machine itself (seen Oct 19, 2026) — so the
+// address three hops back is the caller's; anything a caller puts in front
+// of that is ignored. TRUST_PROXY_HOPS overrides it if Render changes.
+app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS) || (process.env.RENDER ? 3 : 1));
 // Who each request is from, when it carries a session token (req.user),
 // and so whose records it reads and writes (see services/ownership.js).
 // Without a session it's the admin's until sign-in is required — which it
@@ -84,21 +87,6 @@ app.use((req, res, next) => {
 });
 
 app.get("/api/health", (req, res) => {
-  // (Temporary, ?ip=1: the caller's own address as the server sees it, and
-  // the proxy headers that came with their request — to set up the sign-in
-  // limiter behind Render and Cloudflare. Nothing anyone can't see about
-  // themselves.)
-  if (req.query.ip === "1") {
-    return res.json({
-      ip: req.ip,
-      ips: req.ips,
-      remote: req.socket.remoteAddress,
-      forwardedFor: req.get("x-forwarded-for") ?? null,
-      cfConnectingIp: req.get("cf-connecting-ip") ?? null,
-      trueClientIp: req.get("true-client-ip") ?? null,
-      realIp: req.get("x-real-ip") ?? null,
-    });
-  }
   return res.status(200).json({
     success: true,
     message: "BentoBuilder API is running",

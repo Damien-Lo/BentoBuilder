@@ -232,7 +232,7 @@ Built: sign-in (own email + password), invite-only accounts, per-person data, a 
 
 **Right after deploying:**
 - Rerun `node manual_controls/scripts/assign_owners.js --apply` (gives photos owners and keys, updates recipe photo addresses).
-- Check the sign-in limiter sees real addresses behind Render's proxy (`trust proxy` is 1): a few wrong passwords from one place shouldn't hold off sign-in from another.
+- ~~Check the sign-in limiter sees real addresses behind Render's proxy~~ — done Oct 19: it was counting Render's internal machines (3 proxies in front: Cloudflare, Render's load balancer, a local one), now `trust proxy` 3 on Render (`TRUST_PROXY_HOPS` overrides).
 
 **Soon:**
 - **Web app hosted on Cloudflare Pages** (Oct 18) at https://bentobuilder.pages.dev: production branch `WorkingSave`, root `mobile`, build command `npm run build:web` (export, then `scripts/fix-web-export.mjs` moves package files out of `assets/node_modules/`, which Pages won't upload — without it every icon is a square), output `dist`, `NODE_VERSION=22`. Headers (security policy, caching) are in `mobile/public/_headers` — if the server's address changes, change it there too. Still to do: set `WEB_ORIGINS=https://bentobuilder.pages.dev` on Render, and put the address in Developer → People → Invite links.
