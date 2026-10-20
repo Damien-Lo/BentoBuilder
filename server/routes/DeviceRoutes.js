@@ -2,21 +2,28 @@ import crypto from "crypto";
 import express from "express";
 import Device from "../models/Device.js";
 
+// The phones and computers someone uses BentoBuilder on (see
+// models/Device.js). A device registers itself once, under the account
+// it's signed in to, and keeps its id and secret; from then on it's one of
+// that account's devices — so a computer can ask "my phone" for a photo
+// with nothing to pair.
 const router = express.Router();
 
-// Pairing codes last this long once shown.
-const PAIR_CODE_MINUTES = 10;
-
 // The device a request comes from, by the id and secret it keeps (headers
-// x-device-id and x-device-secret). Sets req.device, or answers 401.
+// x-device-id and x-device-secret), among the account's devices. Sets
+// req.device. One it doesn't know — never registered, registered under
+// another account, or forgotten — is answered 404 with code
+// "unknown-device", so the app registers it again. (Not 401: that's the
+// account's session, and would sign the person out.)
 export async function deviceAuth(req, res, next) {
   try {
+    const unknown = () => res.status(404).json({ success: false, code: "unknown-device", message: "This device isn't registered." });
     const id = req.get("x-device-id");
     const secret = req.get("x-device-secret") ?? "";
-    if (!id || !/^[a-f0-9]{24}$/.test(id)) return res.status(401).json({ success: false, message: "This device isn't registered." });
+    if (!id || !/^[a-f0-9]{24}$/.test(id)) return unknown();
     const device = await Device.findById(id).select("+secret");
     const ok = device && device.secret.length === secret.length && crypto.timingSafeEqual(Buffer.from(device.secret), Buffer.from(secret));
-    if (!ok) return res.status(401).json({ success: false, message: "This device isn't registered." });
+    if (!ok) return unknown();
     // (Last seen, at most once a minute.)
     if (Date.now() - (device.lastSeenAt?.getTime() ?? 0) > 60_000) await Device.updateOne({ _id: device._id }, { lastSeenAt: new Date() });
     req.device = device;
@@ -30,8 +37,8 @@ const shown = (device) => ({ _id: device._id, kind: device.kind, name: device.na
 
 /**
  * POST /api/devices  { kind: "phone" | "computer", name? }
- * Registers this device. The secret is only ever returned here: the device
- * keeps it and sends it with its requests.
+ * Registers this device, as one of the account's. The secret is only ever
+ * returned here: the device keeps it and sends it with its requests.
  */
 router.post("/", async (req, res) => {
   try {
@@ -45,11 +52,12 @@ router.post("/", async (req, res) => {
 });
 
 /**
- * GET /api/devices/me — this device and the ones it's paired with.
+ * GET /api/devices/me — this device, and the account's others.
  */
 router.get("/me", deviceAuth, async (req, res) => {
-  const paired = await Device.find({ _id: { $in: req.device.pairedWith } }).lean();
-  return res.json({ success: true, data: { ...shown(req.device), paired: paired.map(shown) } });
+  const others = await Device.find({ _id: { $ne: req.device._id } }).sort({ lastSeenAt: -1 }).lean();
+  // (`paired` too, the same list: what app builds from before accounts read.)
+  return res.json({ success: true, data: { ...shown(req.device), others: others.map(shown), paired: others.map(shown) } });
 });
 
 /**
@@ -62,42 +70,14 @@ router.patch("/me", deviceAuth, async (req, res) => {
 });
 
 /**
- * POST /api/devices/pair-code — a computer's one-time code for a phone to
- * scan (shown as a QR code). Valid for a few minutes; a new one replaces it.
+ * DELETE /api/devices/:id — forgets another of the account's devices (one
+ * no longer used). If it's used again, it registers afresh.
  */
-router.post("/pair-code", deviceAuth, async (req, res) => {
-  if (req.device.kind !== "computer") return res.status(400).json({ success: false, message: "Only a computer shows a pairing code." });
-  const code = crypto.randomBytes(16).toString("base64url");
-  const expiresAt = new Date(Date.now() + PAIR_CODE_MINUTES * 60_000);
-  await Device.updateOne({ _id: req.device._id }, { pairCode: code, pairCodeExpiresAt: expiresAt });
-  return res.json({ success: true, data: { code, expiresAt } });
-});
-
-/**
- * POST /api/devices/pair  { code } — a phone pairing with the computer that
- * showed this code. The code is used up.
- */
-router.post("/pair", deviceAuth, async (req, res) => {
+router.delete("/:id", deviceAuth, async (req, res) => {
   try {
-    if (req.device.kind !== "phone") return res.status(400).json({ success: false, message: "Only a phone pairs by scanning a code." });
-    const code = String(req.body.code ?? "");
-    const computer = code ? await Device.findOne({ pairCode: code, pairCodeExpiresAt: { $gt: new Date() } }) : null;
-    if (!computer) return res.status(404).json({ success: false, message: "That code has expired or was already used. Show a new one on the computer." });
-    await Device.updateOne({ _id: computer._id }, { $addToSet: { pairedWith: req.device._id }, pairCode: null, pairCodeExpiresAt: null });
-    await Device.updateOne({ _id: req.device._id }, { $addToSet: { pairedWith: computer._id } });
-    return res.json({ success: true, data: shown(computer) });
-  } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-/**
- * DELETE /api/devices/paired/:id — unpairs, on both sides.
- */
-router.delete("/paired/:id", deviceAuth, async (req, res) => {
-  try {
-    await Device.updateOne({ _id: req.device._id }, { $pull: { pairedWith: req.params.id } });
-    await Device.updateOne({ _id: req.params.id }, { $pull: { pairedWith: req.device._id } });
+    if (String(req.params.id) === String(req.device._id)) return res.status(400).json({ success: false, message: "That's this device." });
+    const gone = await Device.deleteOne({ _id: req.params.id });
+    if (!gone.deletedCount) return res.status(404).json({ success: false, message: "That device isn't there." });
     return res.json({ success: true });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });

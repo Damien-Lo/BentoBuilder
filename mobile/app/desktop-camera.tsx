@@ -20,9 +20,9 @@ import {
 } from "@/src/services/deviceApi";
 import { preparePhoto } from "@/src/utils/photos";
 
-// On the phone: this phone as a paired computer's camera. While it's open
-// it checks every couple of seconds for a request from the computer — a
-// barcode, a nutrition label, a receipt — and opens the right camera at
+// On the phone: this phone as the camera of the account's computers. While
+// it's open it checks every couple of seconds for a request from one of them
+// — a barcode, a nutrition label, a receipt — and opens the right camera at
 // once; what's taken goes back to the computer, which fills it in. The
 // screen stays on meanwhile. (Later a notification will open this by
 // itself; for now it has to be open — Settings → Devices.)
@@ -113,7 +113,7 @@ export default function DesktopCameraScreen() {
     });
   }
 
-  const computers = me?.paired.filter((d) => d.kind === "computer") ?? [];
+  const computers = me?.others.filter((d) => d.kind === "computer") ?? [];
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
       <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
@@ -126,14 +126,6 @@ export default function DesktopCameraScreen() {
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         {Platform.OS === "web" ? (
           <Text className="text-center text-slate-500">Open this on your phone, in the BentoBuilder app.</Text>
-        ) : me && computers.length === 0 ? (
-          <View className="items-center py-10">
-            <Ionicons name="link-outline" size={40} color="#94A3B8" />
-            <Text className="mt-3 text-center text-base text-slate-600">This phone isn&apos;t paired with a computer yet.</Text>
-            <Pressable onPress={() => router.push("/settings-section/devices")} className="mt-4 rounded-xl bg-blue-600 px-5 py-3 active:bg-blue-700">
-              <Text className="font-semibold text-white">Pair in Settings → Devices</Text>
-            </Pressable>
-          </View>
         ) : (
           <>
             <View className="items-center rounded-3xl border border-slate-200 bg-white px-6 py-10">
@@ -142,8 +134,8 @@ export default function DesktopCameraScreen() {
               </View>
               <Text className="mt-4 text-lg font-bold text-slate-900">{sending ? "Sending…" : "Ready"}</Text>
               <Text className="mt-1 text-center text-sm text-slate-500">
-                {computers.length ? `Waiting for ${computers.map((c) => c.name).join(" or ")}.` : "Waiting…"} When it asks for a barcode, a label or a receipt, the camera opens here by
-                itself. Keep this screen open while you review.
+                {computers.length ? `Waiting for ${computers.map((c) => c.name).join(" or ")}.` : "Waiting for your computer — open BentoBuilder on it, signed in to this account."} When it asks for a
+                barcode, a label or a receipt, the camera opens here by itself. Keep this screen open while you review.
               </Text>
             </View>
 

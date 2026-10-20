@@ -5,9 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, Text, View } from "react-native";
 
 import { compactDate } from "@/src/components/web/fields";
-import { PairPhoneCard } from "@/src/components/devices/PairPhoneCard";
+import { NoPhoneYet } from "@/src/components/devices/NoPhoneYet";
 import { WebcamModal, type WebPhoto } from "@/src/components/web/WebcamModal";
-import { getThisDevice, requestCapture, watchCapture } from "@/src/services/deviceApi";
+import { hasPhone, requestCapture, watchCapture } from "@/src/services/deviceApi";
 import { createReceiptDraftFrom, finishReceiptDraft, getReceiptDrafts, type ReceiptDraftSummary } from "@/src/services/receiptApi";
 import { photoUri } from "@/src/utils/photos";
 
@@ -81,8 +81,7 @@ export function WebReceiptsScreen() {
     }
   }
   async function withPhone() {
-    const me = await getThisDevice().catch(() => null);
-    if (!me?.paired.length) {
+    if (!(await hasPhone().catch(() => false))) {
       setPairing(true);
       return;
     }
@@ -217,17 +216,17 @@ export function WebReceiptsScreen() {
         </View>
       </Modal>
 
-      {/* Pairing a phone first */}
+      {/* No phone on the account yet */}
       <Modal visible={pairing} transparent animationType="fade" onRequestClose={() => setPairing(false)}>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: "rgba(15,23,42,0.45)" }}>
           <View style={{ width: "100%", maxWidth: 680, padding: 24, borderRadius: 20, backgroundColor: WEB.card }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
-              <Text style={{ flex: 1, fontSize: 17, fontWeight: "700", color: WEB.text }}>Pair your phone</Text>
+              <Text style={{ flex: 1, fontSize: 17, fontWeight: "700", color: WEB.text }}>Use your phone&apos;s camera</Text>
               <Pressable onPress={() => setPairing(false)} accessibilityLabel="Close">
                 <Ionicons name="close" size={22} color={WEB.muted} />
               </Pressable>
             </View>
-            {pairing && <PairPhoneCard onPaired={() => setTimeout(() => setPairing(false), 1800)} />}
+            {pairing && <NoPhoneYet onFound={() => setPairing(false)} />}
           </View>
         </View>
       </Modal>

@@ -1,5 +1,6 @@
 import express from "express";
 import CaptureRequest from "../models/CaptureRequest.js";
+import Device from "../models/Device.js";
 import Photo from "../models/Photo.js";
 import { parseNutritionLabel } from "../services/nutritionLabelParsing.js";
 import { deviceAuth } from "./DeviceRoutes.js";
@@ -25,15 +26,18 @@ async function current(request) {
   return request;
 }
 
-const mine = (req, request) => request && (String(request.computer) === String(req.device._id) || (request.phone && String(request.phone) === String(req.device._id)) || req.device.pairedWith.some((id) => String(id) === String(request.computer)));
+// (Requests are the account's — every query here sees only its own — so any
+// of its devices may look at one.)
+const mine = (req, request) => !!request;
 
 /**
- * POST /api/capture  { kind, label? } — from a computer with a paired phone.
+ * POST /api/capture  { kind, label? } — from a computer; any of the
+ * account's phones can answer it.
  */
 router.post("/", async (req, res) => {
   try {
     if (req.device.kind !== "computer") return res.status(400).json({ success: false, message: "Only a computer asks for a photo." });
-    if (!req.device.pairedWith.length) return res.status(400).json({ success: false, message: "Pair a phone first." });
+    if (!(await Device.exists({ kind: "phone" }))) return res.status(400).json({ success: false, code: "no-phone", message: "No phone yet: open BentoBuilder on your phone, signed in to this account." });
     if (!["barcode", "label", "receipt"].includes(req.body.kind)) return res.status(400).json({ success: false, message: "Unknown kind of photo." });
     // (One at a time: anything still open from this computer is dropped.)
     await CaptureRequest.updateMany({ computer: req.device._id, status: { $in: ["waiting", "capturing"] } }, { status: "cancelled" });
@@ -45,13 +49,13 @@ router.post("/", async (req, res) => {
 });
 
 /**
- * GET /api/capture/next — for a phone: the oldest request waiting from a
- * computer it's paired with (null if none).
+ * GET /api/capture/next — for a phone: the account's oldest request still
+ * waiting (null if none).
  */
 router.get("/next", async (req, res) => {
   try {
     if (req.device.kind !== "phone") return res.status(400).json({ success: false, message: "Only a phone answers requests." });
-    const waiting = await CaptureRequest.find({ computer: { $in: req.device.pairedWith }, status: "waiting" }).sort({ createdAt: 1 });
+    const waiting = await CaptureRequest.find({ status: "waiting" }).sort({ createdAt: 1 });
     for (const request of waiting) {
       if ((await current(request)).status === "waiting") return res.json({ success: true, data: request });
     }

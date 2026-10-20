@@ -26,9 +26,9 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { BarcodeScannerModal, lookupBarcode, type ScannedProduct } from "@/src/components/BarcodeScannerModal";
-import { PairPhoneCard } from "@/src/components/devices/PairPhoneCard";
+import { NoPhoneYet } from "@/src/components/devices/NoPhoneYet";
 import { WebcamModal } from "@/src/components/web/WebcamModal";
-import { getThisDevice, requestCapture, watchCapture } from "@/src/services/deviceApi";
+import { hasPhone, requestCapture, watchCapture } from "@/src/services/deviceApi";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { countReadNutrients, labelNutrition, labelServing } from "@/src/utils/nutritionLabel";
 import {
@@ -1432,7 +1432,7 @@ export default function ReceiptReviewPage() {
     }
   });
   const usePhone = Platform.OS === "web" && cameraMode === "phone";
-  const [showPair, setShowPair] = useState(false);
+  const [noPhone, setNoPhone] = useState(false);
   function setCameraMode(mode: "computer" | "phone") {
     setCameraModeState(mode);
     try {
@@ -1440,8 +1440,8 @@ export default function ReceiptReviewPage() {
     } catch {
       // (Not remembered, but used.)
     }
-    // (No phone yet: pair one now.)
-    if (mode === "phone") void getThisDevice().then((me) => !me.paired.length && setShowPair(true), () => {});
+    // (No phone on the account yet: how to get one.)
+    if (mode === "phone") void hasPhone().then((found) => !found && setNoPhone(true), () => {});
   }
   // A barcode or label being taken with this computer's webcam (in a
   // browser, with "This computer" chosen), for which line.
@@ -1831,7 +1831,7 @@ export default function ReceiptReviewPage() {
       request = await requestCapture(kind, rowName);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Something went wrong.";
-      if (/pair a phone/i.test(message)) setShowPair(true);
+      if ((error as { code?: string }).code === "no-phone") setNoPhone(true);
       else setPhoneJob({ id: "", kind, rowName, status: "failed", message });
       return;
     }
@@ -3077,17 +3077,17 @@ export default function ReceiptReviewPage() {
         onPhoto={(photo) => webcam && void fromWebcam("label", webcam.rowKey, () => readLabelInto(webcam.rowKey, () => parseNutritionLabelImage(photo.base64), false))}
       />
 
-      {/* Pairing a phone, the first time "My phone" is chosen. */}
-      <Modal visible={showPair} transparent animationType="fade" onRequestClose={() => setShowPair(false)}>
+      {/* No phone on the account yet, when "My phone" is chosen. */}
+      <Modal visible={noPhone} transparent animationType="fade" onRequestClose={() => setNoPhone(false)}>
         <View className="flex-1 items-center justify-center bg-black/40 px-6">
           <View className="w-full rounded-3xl bg-white p-6" style={{ maxWidth: 680 }}>
             <View className="mb-4 flex-row items-center">
-              <Text className="flex-1 text-lg font-bold text-slate-900">Pair your phone</Text>
-              <Pressable onPress={() => setShowPair(false)} hitSlop={10} accessibilityLabel="Close">
+              <Text className="flex-1 text-lg font-bold text-slate-900">Use your phone&apos;s camera</Text>
+              <Pressable onPress={() => setNoPhone(false)} hitSlop={10} accessibilityLabel="Close">
                 <Ionicons name="close" size={22} color="#64748B" />
               </Pressable>
             </View>
-            {showPair && <PairPhoneCard onPaired={() => setTimeout(() => setShowPair(false), 1800)} />}
+            {noPhone && <NoPhoneYet onFound={() => setNoPhone(false)} />}
           </View>
         </View>
       </Modal>

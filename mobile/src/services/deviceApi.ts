@@ -4,13 +4,12 @@ import { Platform } from "react-native";
 import { API_BASE_URL } from "@/src/config/api";
 import type { NutritionLabelScan } from "@/src/services/ingredientApi";
 
-// This device, as the server knows it (see server/models/Device.js): a
-// computer and a phone are paired once — the phone scans a QR code the
-// computer shows — and from then on the computer can ask the phone to take
-// a photo (a barcode, a nutrition label, a receipt) without asking again.
-// The id and secret are kept here (localStorage in a browser) and sent with
-// each request. Later, with accounts, devices will belong to the account
-// instead of being paired; nothing else here changes.
+// This device, as the server knows it (see server/models/Device.js): one of
+// the devices of the account signed in on it, so a computer can ask "my
+// phone" to take a photo (a barcode, a nutrition label, a receipt) with
+// nothing to pair. The device's id and secret are kept here (localStorage in
+// a browser) and sent with each request; signing out forgets them, so the
+// next account to sign in registers the device as its own.
 
 export interface DeviceInfo {
   _id: string;
@@ -19,7 +18,8 @@ export interface DeviceInfo {
   lastSeenAt?: string;
 }
 export interface ThisDevice extends DeviceInfo {
-  paired: DeviceInfo[];
+  // The account's other phones and computers.
+  others: DeviceInfo[];
 }
 interface Identity {
   _id: string;
@@ -39,10 +39,11 @@ function defaultName(): string {
 }
 
 async function parse<T>(response: Response): Promise<T> {
-  const data = (await response.json().catch(() => null)) as { success?: boolean; data?: T; message?: string } | null;
+  const data = (await response.json().catch(() => null)) as { success?: boolean; data?: T; message?: string; code?: string } | null;
   if (!response.ok || !data?.success) {
-    const error = new Error(data?.message ?? `Request failed (${response.status})`) as Error & { status?: number };
+    const error = new Error(data?.message ?? `Request failed (${response.status})`) as Error & { status?: number; code?: string };
     error.status = response.status;
+    error.code = data?.code;
     throw error;
   }
   return data.data as T;
@@ -66,32 +67,31 @@ function getIdentity(): Promise<Identity> {
   return identity;
 }
 
-// A request as this device. A server that no longer knows it (a fresh
-// database) means registering again, once.
+// A request as this device. A server that doesn't know it (forgotten, a
+// fresh database, another account's) means registering again, once.
 async function call<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
   const me = await getIdentity();
   const response = await fetch(`${API_BASE_URL}/api${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", "x-device-id": me._id, "x-device-secret": me.secret, ...(init.headers ?? {}) },
   });
-  if (response.status === 401 && !retried) {
-    identity = null;
-    await AsyncStorage.removeItem(KEY).catch(() => {});
-    return call<T>(path, init, true);
+  if (response.status === 404 && !retried) {
+    const body = (await response.clone().json().catch(() => null)) as { code?: string } | null;
+    if (body?.code === "unknown-device") {
+      identity = null;
+      await AsyncStorage.removeItem(KEY).catch(() => {});
+      return call<T>(path, init, true);
+    }
   }
   return parse<T>(response);
 }
 
 export const getThisDevice = () => call<ThisDevice>("/devices/me");
 export const renameThisDevice = (name: string) => call<void>("/devices/me", { method: "PATCH", body: JSON.stringify({ name }) });
-export const unpairDevice = (id: string) => call<void>(`/devices/paired/${id}`, { method: "DELETE" });
-
-// A computer's one-time code for a phone to scan; and what the QR code holds.
-export const makePairCode = () => call<{ code: string; expiresAt: string }>("/devices/pair-code", { method: "POST" });
-export const pairLink = (code: string) => `bentobuilder-pair:${code}`;
-// The code in a scanned QR code (or a pasted one), if it's a pairing code.
-export const codeFromScan = (text: string) => (text.startsWith("bentobuilder-pair:") ? text.slice("bentobuilder-pair:".length) : /^[A-Za-z0-9_-]{16,}$/.test(text) ? text : null);
-export const pairWithCode = (code: string) => call<DeviceInfo>("/devices/pair", { method: "POST", body: JSON.stringify({ code }) });
+// Forgets another of the account's devices (one no longer used).
+export const forgetDevice = (id: string) => call<void>(`/devices/${id}`, { method: "DELETE" });
+// Whether the account has a phone to ask (none: open the app on one).
+export const hasPhone = async () => (await getThisDevice()).others.some((d) => d.kind === "phone") || thisKind === "phone";
 
 // --- Camera requests: a computer asking its phone for a photo ------------
 

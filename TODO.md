@@ -241,7 +241,7 @@ Built: sign-in (own email + password), invite-only accounts, per-person data, a 
 - Two of the three UserProfile records are unused duplicates — remove them.
 
 **Later:**
-- Step E: devices found through the account (drop the QR pairing), then push notifications.
+- ~~Step E: devices found through the account (drop the QR pairing)~~ — done Oct 19: a device is one of the account it's signed in to; a computer's photo request goes to any of the account's phones; Settings → Devices lists your devices; QR pairing removed (the server still sends the old `paired` list for app builds from before — drop it after the next iPhone build). **Next:** push notifications, so the phone's camera opens without the camera screen already open.
 - Email (a sending service + domain): verification on joining, self-service "forgot password", maybe a code on a new device — needed before any public sign-up. **On hold (Oct 19):** Damien may rename the app, and the domain or Gmail sender would follow the name. Options weighed: own domain + Resend (recommended) vs a separate Gmail account with an app password.
 - Two-step sign-in for the admin.
 - C2: an invited person's edit to a shared item becomes their own version everywhere in their account (for now they make a copy); hiding shared items from your own lists.
