@@ -1,5 +1,6 @@
 import express from "express";
 import mongoose from "mongoose";
+import compression from "compression";
 import cors from "cors";
 import dotenv from "dotenv";
 
@@ -59,6 +60,9 @@ function allowedOrigin(origin) {
   }
 }
 app.use(cors({ origin: (origin, done) => done(null, allowedOrigin(origin)) }));
+// Answers compressed (the ingredient list: 760 KB → 66 KB). Photos are
+// already compressed and are left as they are.
+app.use(compression());
 // The caller's real address, which the sign-in limiter goes by. On Render a
 // request comes through three proxies — Cloudflare, Render's load
 // balancer, and one on the machine itself (seen Oct 19, 2026) — so the

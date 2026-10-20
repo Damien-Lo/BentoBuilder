@@ -3,6 +3,7 @@ import { requireOptionalNativeModule } from "expo";
 import { Platform } from "react-native";
 
 import { API_BASE_URL } from "@/src/config/api";
+import { forgetAnswers, remembered, rememberedFetch, setPreloadFetcher } from "@/src/services/apiCache";
 
 // Signing in (see server/routes/AuthRoutes.js). The server hands this
 // device a session token when it signs in; it's kept here — in the phone's
@@ -95,11 +96,13 @@ export async function loadToken(): Promise<string | null> {
   return token;
 }
 async function keepToken(next: string) {
+  forgetAnswers();
   token = next;
   loaded = true;
   await stored("set", next);
 }
 async function forgetToken() {
+  forgetAnswers();
   token = null;
   loaded = true;
   await stored("delete");
@@ -118,26 +121,45 @@ export function onSessionEnded(listener: Listener) {
 
 let installed = false;
 // Wraps fetch once, at start-up: requests to our server get the token, and
-// one turned away for want of a session (401) signs this device out.
+// one turned away for want of a session (401) signs this device out. Lists
+// and records are shared and kept a short while (services/apiCache.ts); any
+// change sent forgets them.
 export function installAuthFetch() {
   if (installed) return;
   installed = true;
   const original = globalThis.fetch.bind(globalThis);
-  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (!url.startsWith(API_BASE_URL) || !token) return original(input, init);
+
+  async function send(input: RequestInfo | URL, init: RequestInit | undefined, url: string) {
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-    if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+    if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
     const sent = token;
     const response = await original(input, { ...init, headers });
     // (Not for signing in itself, where a 401 is a wrong password.)
-    if (response.status === 401 && token === sent && !url.includes("/api/auth/sign") && !url.includes("/api/auth/reset")) {
+    if (response.status === 401 && sent && token === sent && !url.includes("/api/auth/sign") && !url.includes("/api/auth/reset")) {
       const body = (await response.clone().json().catch(() => null)) as { message?: string } | null;
       await forgetToken();
       listeners.forEach((listener) => listener(body?.message ?? "Your session has ended. Sign in again."));
     }
     return response;
+  }
+
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (!url.startsWith(API_BASE_URL) || !token) return original(input, init);
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    const path = url.slice(API_BASE_URL.length);
+    if (method === "GET" && remembered(path)) return rememberedFetch(path, () => send(input, init, url));
+    if (method === "GET") return send(input, init, url);
+    // A change: nothing kept from before it (or from while it was on its way).
+    forgetAnswers();
+    try {
+      return await send(input, init, url);
+    } finally {
+      forgetAnswers();
+    }
   };
+
+  setPreloadFetcher((path, keepFor) => rememberedFetch(path, () => send(`${API_BASE_URL}${path}`, undefined, `${API_BASE_URL}${path}`), keepFor));
 }
 
 // --- Calls ---------------------------------------------------------------

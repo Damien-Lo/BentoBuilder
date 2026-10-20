@@ -223,6 +223,25 @@ Planning a whole project — phases, deliverables, a timeline — without a new 
 - **Checked:** with a temporary trip and session (deleted after): the week plan grouping, the booking dialog creating a session, the desktop preview and the phone event page each listing the sea bass prep; rice no longer listed as prep. **Not checked:** repeating sessions, a session edited through the event card, several sessions splitting the needs between them, the Made ahead switch by tap.
 - **Known rough edges:** a generic ingredient and its branded variants are claimed from separate pools; the buy list is read-only (the grocery list's own "add missing" is still per meal); sessions can only be booked from the desktop week plan (the phone shows them but has no button to make one, and the event forms have no kind picker); ticking a prep off isn't on the list itself — you open the recipe and cook from there; confirming a prep recipe in the planner still counts it as a meal.
 
+## Polish round (branch `Polish`, started Oct 19) — preliminary list
+
+From Damien:
+1. ~~**Loading.**~~ Done Oct 19: the server compresses answers (ingredients 760 KB → 53 KB); the app shares identical requests and keeps lists ~20 s, forgetting them on any change (`mobile/src/services/apiCache.ts`); and after signing in it fetches what this device usually needs up front — learned per device, dates relative to today — behind a "Getting your day ready…" cover (at most 6 s). Start-up went from ~30 requests with duplicates to 18 different ones. The ingredient list itself still takes ~0.7 s to build on the server (lean() would be ~0.6 s but drops defaults the app reads — left as is). Originally: after signing in, or opening the app already signed in, screens show nothing for a while. Want: a loading screen that fetches what matters — last, this and next week (meal plan, calendar, tasks), the pantry, the profile — and then shows the app with it already there. (Part of the wait is the free Render server waking up; that part only goes with the paid plan.)
+2. **Settings tab bar on the phone.** Six tabs plus the middle button: the labels run into each other (Home Planning / Devices / Documents / Account).
+3. **Health section on the phone** shows the Kitchen's tab bar (Overview, Planner, Recipes, Pantry) instead of its own.
+4. **Redesign the section home page**, especially on the phone: it's a grid of section cards, two of them "Coming soon".
+
+Decided (Oct 19): the app becomes **Orbit** ("everything in its orbit": a centre — the assistant — with your day's things on their paths around it; inner ring today, outer later). Home-screen concepts are being drawn with Claude Design from a brief; then rename everywhere (app name, icon, sign-in page, privacy policy, invite message, web title) in one go, before the next iPhone build. Also: develop the Health section into its own (Today, Body/weight, Nutrients, Goals, Weekly report; activity later). For loading (1), recipes and the grocery list feel slow too.
+
+Suggested:
+5. **Settings on the phone as a list** (like iOS Settings: one row per area) instead of a tab bar — would also settle 2.
+6. **Web app on phones:** an "Add to Home Screen" icon and full-screen app (a web manifest), and a proper preview card when bentobuilder.pages.dev is pasted into Messages (title, description, icon).
+7. **First run for someone new:** empty pantry, plan and lists with nothing to say what to do — a short "getting started" (set goals, add to the pantry, plan a meal).
+8. **Phone home greeting** says "BentoBuilder"; the web greets by name.
+9. **Sign-in page** uses a generic grid icon — use the app's own icon.
+10. **Settings → Account "Signed in on" and Settings → Devices** overlap — one list of your devices.
+11. Small: remove the two unused profile records; drop the server's old `paired` device list after the next iPhone build.
+
 ## Accounts (branch `Accounts`, started Oct 18)
 
 Built: sign-in (own email + password), invite-only accounts, per-person data, a shared food catalog with private additions and per-person settings, Settings → Account (incl. deleting your account), Developer → People (invites with a ready message, reset codes, turn off / remove), privacy policy, and the security fixes from the pre-deploy review. Real data migrated Oct 18 (backup in `server/tmp/backup-real-…`). How to invite people: `INVITING.local.md` (local only, not in git).
