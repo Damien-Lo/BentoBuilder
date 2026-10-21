@@ -31,7 +31,7 @@ export function NoPhoneYet({ onFound }: { onFound: () => void }) {
         </View>
         <View className="ml-3 flex-1">
           <Text className="text-[15px] leading-6 text-slate-700">
-            1. Open BentoBuilder on your phone, signed in as <Text className="font-semibold text-slate-900">{account?.email ?? "you"}</Text>.
+            1. Open Orbit on your phone, signed in as <Text className="font-semibold text-slate-900">{account?.email ?? "you"}</Text>.
           </Text>
           <Text className="mt-1 text-[15px] leading-6 text-slate-700">
             2. On the phone, go to <Text className="font-semibold text-slate-900">Settings → Devices → Be my computer&apos;s camera</Text> and keep that screen open.

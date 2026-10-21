@@ -2,13 +2,15 @@ const IS_DEV = process.env.APP_VARIANT === "development";
 
 module.exports = {
   expo: {
-    name: IS_DEV ? "BentoBuilder Beta" : "BentoBuilder",
+    // The app is Orbit (renamed from BentoBuilder, Oct 2026). Only what people
+    // see changed: the bundle IDs, slug and EAS project below stay, so it's
+    // still the same app on phones that have it.
+    name: IS_DEV ? "Orbit Beta" : "Orbit",
     slug: "mobile",
     version: "1.0.0",
     orientation: "portrait",
-    icon: IS_DEV
-      ? "./assets/images/BentoBox_Beta_App_Icon.png"
-      : "./assets/images/BentoBox_App_Icon.png",
+    // The tilted orbit (design/Orbit app icons.pdf).
+    icon: IS_DEV ? "./assets/images/orbit-icon-beta.png" : "./assets/images/orbit-icon-light.png",
     scheme: "mobile",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
@@ -20,6 +22,11 @@ module.exports = {
       bundleIdentifier: IS_DEV
         ? "com.damienlo.bentobuilder.dev"
         : "com.damienlo.bentobuilder",
+      // On a light home screen the light icon, on a dark one the dark (the
+      // beta build has the one, marked BETA).
+      icon: IS_DEV
+        ? "./assets/images/orbit-icon-beta.png"
+        : { light: "./assets/images/orbit-icon-light.png", dark: "./assets/images/orbit-icon-dark.png" },
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
       },
@@ -41,19 +48,21 @@ module.exports = {
       // Metro, like the phone builds; one page app (no server rendering).
       bundler: "metro",
       output: "single",
-      favicon: "./assets/images/favicon.png",
+      favicon: "./assets/images/favicon-orbit.png",
     },
     plugins: [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          image: "./assets/images/splash-icon.png",
-          imageWidth: 200,
+          // The icon, on Orbit's page colour (light or dark).
+          image: "./assets/images/orbit-splash-light.png",
+          imageWidth: 160,
           resizeMode: "contain",
-          backgroundColor: "#ffffff",
+          backgroundColor: "#F4F3F0",
           dark: {
-            backgroundColor: "#000000",
+            image: "./assets/images/orbit-splash-dark.png",
+            backgroundColor: "#0D0F14",
           },
         },
       ],
@@ -61,8 +70,8 @@ module.exports = {
       [
         "expo-image-picker",
         {
-          photosPermission: "BentoBuilder uses your photos to add pictures to your recipes.",
-          cameraPermission: "BentoBuilder uses the camera to take pictures of your recipes and scan labels and receipts.",
+          photosPermission: "Orbit uses your photos to add pictures to your recipes.",
+          cameraPermission: "Orbit uses the camera to take pictures of your recipes and scan labels and receipts.",
         },
       ],
     ],

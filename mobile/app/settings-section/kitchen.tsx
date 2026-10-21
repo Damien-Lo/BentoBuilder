@@ -159,7 +159,7 @@ export default function SettingsScreen() {
         {/* Header */}
         <View className="border-b border-slate-200 bg-white px-5 py-4">
           <Text className="text-3xl font-bold text-slate-950">Settings</Text>
-          <Text className="mt-1 text-base text-slate-500">Personalise your BentoBuilder experience</Text>
+          <Text className="mt-1 text-base text-slate-500">Personalise your Orbit experience</Text>
         </View>
 
         <ScrollView
@@ -347,7 +347,7 @@ export default function SettingsScreen() {
           <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <View className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3.5">
               <Text className="text-base text-slate-700">App</Text>
-              <Text className="text-base text-slate-400">BentoBuilder</Text>
+              <Text className="text-base text-slate-400">Orbit</Text>
             </View>
             <View className="flex-row items-center justify-between px-4 py-3.5">
               <Text className="text-base text-slate-700">Version</Text>

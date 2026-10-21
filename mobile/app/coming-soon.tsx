@@ -30,7 +30,7 @@ export default function ComingSoonScreen() {
         </View>
         <Text className="mt-6 text-2xl font-bold text-slate-950">{featureName}</Text>
         <Text className="mt-2 text-center text-base leading-6 text-slate-500">
-          {featureName} is coming to a future version of BentoBuilder — it isn&apos;t built yet.
+          {featureName} is coming to a future version of Orbit — it isn&apos;t built yet.
         </Text>
       </View>
     </SafeAreaView>

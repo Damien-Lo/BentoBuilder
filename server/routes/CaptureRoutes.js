@@ -37,7 +37,7 @@ const mine = (req, request) => !!request;
 router.post("/", async (req, res) => {
   try {
     if (req.device.kind !== "computer") return res.status(400).json({ success: false, message: "Only a computer asks for a photo." });
-    if (!(await Device.exists({ kind: "phone" }))) return res.status(400).json({ success: false, code: "no-phone", message: "No phone yet: open BentoBuilder on your phone, signed in to this account." });
+    if (!(await Device.exists({ kind: "phone" }))) return res.status(400).json({ success: false, code: "no-phone", message: "No phone yet: open Orbit on your phone, signed in to this account." });
     if (!["barcode", "label", "receipt"].includes(req.body.kind)) return res.status(400).json({ success: false, message: "Unknown kind of photo." });
     // (One at a time: anything still open from this computer is dropped.)
     await CaptureRequest.updateMany({ computer: req.device._id, status: { $in: ["waiting", "capturing"] } }, { status: "cancelled" });

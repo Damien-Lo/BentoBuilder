@@ -125,7 +125,7 @@ export default function DesktopCameraScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         {Platform.OS === "web" ? (
-          <Text className="text-center text-slate-500">Open this on your phone, in the BentoBuilder app.</Text>
+          <Text className="text-center text-slate-500">Open this on your phone, in the Orbit app.</Text>
         ) : (
           <>
             <View className="items-center rounded-3xl border border-slate-200 bg-white px-6 py-10">
@@ -134,7 +134,7 @@ export default function DesktopCameraScreen() {
               </View>
               <Text className="mt-4 text-lg font-bold text-slate-900">{sending ? "Sending…" : "Ready"}</Text>
               <Text className="mt-1 text-center text-sm text-slate-500">
-                {computers.length ? `Waiting for ${computers.map((c) => c.name).join(" or ")}.` : "Waiting for your computer — open BentoBuilder on it, signed in to this account."} When it asks for a
+                {computers.length ? `Waiting for ${computers.map((c) => c.name).join(" or ")}.` : "Waiting for your computer — open Orbit on it, signed in to this account."} When it asks for a
                 barcode, a label or a receipt, the camera opens here by itself. Keep this screen open while you review.
               </Text>
             </View>

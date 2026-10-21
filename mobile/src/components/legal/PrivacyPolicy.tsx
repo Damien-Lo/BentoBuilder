@@ -14,11 +14,11 @@ const SECTIONS: { title: string; body: string[] }[] = [
   {
     title: "Who we are",
     body: [
-      `BentoBuilder is a personal meal-planning and kitchen app run by Damien Lo, shared with friends and family by invitation. Questions, or a request about your data: ${CONTACT}.`,
+      `Orbit is a personal assistant app — for your kitchen, calendar and tasks — run by Damien Lo, shared with friends and family by invitation. Questions, or a request about your data: ${CONTACT}.`,
     ],
   },
   {
-    title: "What BentoBuilder keeps",
+    title: "What Orbit keeps",
     body: [
       "Your account: your name, your email address, and your password — kept only in a scrambled form (a hash) that can't be turned back into the password.",
       "What you put in: your pantry, grocery list, meal plans and what you've eaten, recipes and ingredients you add, ratings and notes, nutrition goals, weight entries, calendar events, tasks and lists, receipts you scan, and photos you add (recipes, receipts, nutrition labels, meals).",
@@ -28,23 +28,23 @@ const SECTIONS: { title: string; body: string[] }[] = [
   {
     title: "Where it's kept",
     body: [
-      "On BentoBuilder's server (hosted by Render) and in its database (MongoDB Atlas). Connections to the server are encrypted. On your phone, your sign-in is kept in the phone's secure keychain.",
+      "On Orbit's server (hosted by Render) and in its database (MongoDB Atlas). Connections to the server are encrypted. On your phone, your sign-in is kept in the phone's secure keychain.",
     ],
   },
   {
     title: "Who can see it",
     body: [
-      "Your own records — your pantry, plans, meals, weight, lists, receipts and photos — are yours: other people with BentoBuilder accounts can't see them.",
+      "Your own records — your pantry, plans, meals, weight, lists, receipts and photos — are yours: other people with Orbit accounts can't see them.",
       "The food catalog (ingredients, recipes, brands and categories) is shared between everyone; ingredients and recipes you add yourself are only yours. Your ratings, notes and kitchen settings for shared items are only yours.",
-      "As the person who runs BentoBuilder, Damien can technically reach the database to keep it running and fix problems. He won't look at your records except to help you or keep the app working.",
+      "As the person who runs Orbit, Damien can technically reach the database to keep it running and fix problems. He won't look at your records except to help you or keep the app working.",
     ],
   },
   {
     title: "What's sent to other services",
     body: [
-      "Photos you ask BentoBuilder to read — a receipt, a nutrition label, a meal — are sent to Google's Gemini AI service to read them. Only the photo (and, for a receipt, the list of ingredient names it may match) is sent, not your account.",
+      "Photos you ask Orbit to read — a receipt, a nutrition label, a meal — are sent to Google's Gemini AI service to read them. Only the photo (and, for a receipt, the list of ingredient names it may match) is sent, not your account.",
       "Barcodes you scan are looked up in Open Food Facts, a public product database. Only the barcode number is sent.",
-      "BentoBuilder has no advertising and no tracking or analytics, and your information is never sold or shared for marketing.",
+      "Orbit has no advertising and no tracking or analytics, and your information is never sold or shared for marketing.",
     ],
   },
   {

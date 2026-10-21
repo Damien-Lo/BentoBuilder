@@ -3253,7 +3253,7 @@ function ReceiptReview() {
                   <Text className="mt-4 text-center text-lg font-bold text-slate-900">{title}</Text>
                   <Text className="mt-1 text-center text-sm text-slate-500">
                     {phoneJob.status === "waiting"
-                      ? `Scan the ${what}${phoneJob.rowName ? ` for ${phoneJob.rowName}` : ""} on your phone. On it, keep BentoBuilder open at Settings → Devices → Be my computer's camera: the camera opens by itself.`
+                      ? `Scan the ${what}${phoneJob.rowName ? ` for ${phoneJob.rowName}` : ""} on your phone. On it, keep Orbit open at Settings → Devices → Be my computer's camera: the camera opens by itself.`
                       : phoneJob.status === "capturing"
                         ? `Take the ${what}${phoneJob.rowName ? ` for ${phoneJob.rowName}` : ""}. It's filled in here as soon as it arrives.`
                         : phoneJob.message ?? ""}

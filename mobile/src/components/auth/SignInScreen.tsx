@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState, type ComponentProps } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PrivacyPolicyModal } from "@/src/components/legal/PrivacyPolicy";
@@ -20,7 +20,7 @@ type Mode = "signin" | "join" | "reset";
 
 const COPY: Record<Mode, { title: string; lead: string; button: string }> = {
   signin: { title: "Sign in", lead: "Welcome back.", button: "Sign in" },
-  join: { title: "Join BentoBuilder", lead: "Enter the invite code you were given, and choose a password.", button: "Create my account" },
+  join: { title: "Join Orbit", lead: "Enter the invite code you were given, and choose a password.", button: "Create my account" },
   reset: { title: "Set a new password", lead: "Enter the reset code you were given, and a new password.", button: "Set password and sign in" },
 };
 
@@ -104,10 +104,9 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20 }} keyboardShouldPersistTaps="handled">
           <View style={{ width: "100%", maxWidth: 420, alignSelf: "center" }}>
             <View className="mb-6 items-center">
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-blue-600">
-                <Ionicons name="grid" size={26} color="white" />
-              </View>
-              <Text className="mt-3 text-lg font-bold text-slate-900">BentoBuilder</Text>
+              {/* The app's icon */}
+              <Image source={require("@/assets/images/orbit-splash-light.png")} style={{ width: 64, height: 64 }} accessibilityIgnoresInvertColors />
+              <Text className="mt-3 text-lg font-bold text-slate-900">Orbit</Text>
             </View>
 
             <View className="rounded-3xl border border-slate-200 bg-white p-6">
@@ -177,7 +176,7 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
                       Forgot your password? <Text className="font-semibold text-blue-600">Use a reset code</Text>
                     </Text>
                   </Pressable>
-                  <Text className="px-6 text-center text-xs text-slate-400">No reset code? Ask whoever runs your BentoBuilder for one.</Text>
+                  <Text className="px-6 text-center text-xs text-slate-400">No reset code? Ask whoever runs your Orbit for one.</Text>
                 </>
               ) : (
                 <Pressable onPress={() => switchTo("signin")} hitSlop={6}>

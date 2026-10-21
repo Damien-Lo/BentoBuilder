@@ -201,7 +201,7 @@ export function WebReceiptsScreen() {
                   </Text>
                   <Text style={{ marginTop: 6, textAlign: "center", fontSize: 13, lineHeight: 19, color: WEB.muted }}>
                     {phone.status === "waiting"
-                      ? "On your phone, keep BentoBuilder open at Settings → Devices → Be my computer's camera: the camera opens by itself."
+                      ? "On your phone, keep Orbit open at Settings → Devices → Be my computer's camera: the camera opens by itself."
                       : phone.status === "capturing"
                         ? "Take the receipt. It appears here as soon as it arrives, and is read in the background."
                         : phone.message}

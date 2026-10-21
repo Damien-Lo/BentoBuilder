@@ -118,7 +118,7 @@ export async function authenticate(req, res, next) {
   }
 }
 
-export const BLOCKED = "This account has been turned off. Ask whoever runs your BentoBuilder.";
+export const BLOCKED = "This account has been turned off. Ask whoever runs your Orbit.";
 
 export function requireUser(req, res, next) {
   if (!req.user) return res.status(401).json({ success: false, message: req.authProblem ?? "Sign in first." });

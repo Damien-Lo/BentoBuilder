@@ -38,7 +38,7 @@ function inviteMessage(invite: AccessCodeInfo, links: InviteLinks, from: string)
   if (links.install) iphone.push(`Install the app:\n${links.install}`);
   if (iphone.length) ways.push(`${links.web ? "Or as" : "As"} an iPhone app:\n${iphone.map((step, i) => (iphone.length > 1 ? `${i + 1}. ${step}` : step)).join("\n")}`);
   return [
-    `${from ? `${from} has invited you` : "You're invited"} to BentoBuilder, a meal-planning and kitchen app.`,
+    `${from ? `${from} has invited you` : "You're invited"} to Orbit, a personal assistant for your kitchen, calendar and tasks.`,
     ...ways,
     `To join, tap “Have an invite code? Join” and enter this code:\n${invite.code}${invite.email ? `\nwith this email address: ${invite.email}` : ""}`,
     `The code works once, until ${new Date(invite.expiresAt).toLocaleDateString(undefined, { dateStyle: "medium" })}.`,
@@ -88,7 +88,7 @@ function InviteReady({ invite, links, from, onDone }: { invite: AccessCodeInfo; 
 
 // A reset code just made, for someone who forgot their password.
 function ResetReady({ info, person, onDone }: { info: AccessCodeInfo; person: string; onDone: () => void }) {
-  const message = `Here's a code to set a new BentoBuilder password: on the sign-in page, tap “Forgot your password? Use a reset code”, and enter it with your email.\n\n${info.code}\n\nIt works once, until ${when(info.expiresAt)}.`;
+  const message = `Here's a code to set a new Orbit password: on the sign-in page, tap “Forgot your password? Use a reset code”, and enter it with your email.\n\n${info.code}\n\nIt works once, until ${when(info.expiresAt)}.`;
   const [copied, setCopied] = useState(false);
   return (
     <View className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-4">

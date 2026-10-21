@@ -63,7 +63,7 @@ export function WebShell({ children }: { children: ReactNode }) {
       <View style={{ width: WEB_RAIL_WIDTH, alignItems: "center", backgroundColor: "#FFFFFF", borderRightWidth: 1, borderRightColor: "#E2E8F0", paddingVertical: 12, zIndex: sizing || theming ? 40 : 1 }}>
         <Pressable
           onPress={() => go("/")}
-          accessibilityLabel="BentoBuilder home"
+          accessibilityLabel="Orbit home"
           style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#2563EB", alignItems: "center", justifyContent: "center", marginBottom: 14 }}
         >
           <Ionicons name="grid-outline" size={20} color="#FFFFFF" />

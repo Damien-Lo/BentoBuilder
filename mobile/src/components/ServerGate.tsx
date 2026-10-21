@@ -1,6 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, AppState, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Image, Pressable, Text, View } from "react-native";
 
 import { API_BASE_URL } from "@/src/config/api";
 
@@ -89,10 +88,9 @@ export function ServerGate({ children }: { children: ReactNode }) {
           className="items-center justify-center bg-slate-50 px-10"
           style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
         >
-          <View className="h-16 w-16 items-center justify-center rounded-3xl bg-blue-600">
-            <Ionicons name="grid-outline" size={30} color="#FFFFFF" />
-          </View>
-          <Text className="mt-5 text-3xl font-bold text-slate-900">BentoBuilder</Text>
+          {/* The app's icon */}
+          <Image source={require("@/assets/images/orbit-splash-light.png")} style={{ width: 72, height: 72 }} accessibilityIgnoresInvertColors />
+          <Text className="mt-5 text-3xl font-bold text-slate-900">Orbit</Text>
           <ActivityIndicator className="mt-8" color="#2563EB" />
           <Text className="mt-3 text-center text-sm text-slate-500">
             {slow ? "Still waking the server. This can take up to a minute." : "Getting things ready…"}
