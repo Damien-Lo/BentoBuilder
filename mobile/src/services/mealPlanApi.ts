@@ -92,6 +92,8 @@ export interface MealPlanEntry {
   suggested?: boolean;
   // While planned: the pantry entries taken out for this meal (ids).
   pieces?: string[];
+  // While planned: a whole piece's size typed in instead (MealPlanEntry.pieceSizes).
+  pieceSizes?: PieceSizeInput[];
   // Put on this day from the menu (a menu item's id).
   menuItem?: string | null;
   // Never stored: what to call it in a list, in place of its recipe's or
@@ -125,6 +127,8 @@ export interface CreateMealPlanEntryInput {
   suggested?: boolean;
   // The pantry pieces kept for it (MealPlanEntry.pieces).
   pieces?: string[];
+  // Or the size of a piece, typed in (MealPlanEntry.pieceSizes).
+  pieceSizes?: PieceSizeInput[];
   // Placed from the menu: its servings count towards that item.
   menuItem?: string;
 }
@@ -202,8 +206,18 @@ export async function moveMealPlanEntry(id: string, date: string, slot: MealSlot
 }
 
 // The pantry entries taken out for a planned meal: the piece it'll be.
-export async function setMealPlanEntryPieces(id: string, pieces: string[]): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pieces }) });
+// A whole piece's size for a planned meal, typed in rather than a pantry
+// entry chosen: by the piece's ingredient (a 280 g filet mignon).
+export interface PieceSizeInput {
+  ingredient: string;
+  amount: number;
+  unit: string;
+}
+
+// The pantry pieces kept for a planned meal, and any sizes typed in instead
+// (left as they are when not given).
+export async function setMealPlanEntryPieces(id: string, pieces: string[], pieceSizes?: PieceSizeInput[]): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/meal-plan/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pieceSizes ? { pieces, pieceSizes } : { pieces }) });
   await parseResponse<{ success: boolean }>(res);
 }
 

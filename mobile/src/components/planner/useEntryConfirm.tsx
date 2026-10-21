@@ -42,6 +42,7 @@ export function useEntryConfirm({
   ready,
   onStart,
   onConfirmed,
+  onCancelled,
   sized,
 }: {
   allRecipes: Recipe[];
@@ -54,6 +55,9 @@ export function useEntryConfirm({
   onStart?: (entry: MealPlanEntry) => void;
   // The entry as the server now has it, confirmed.
   onConfirmed: (updated: MealPlanEntry) => void;
+  // Confirming it was cancelled at "Confirm what you used": nothing was
+  // eaten after all (one just added as eaten is then taken off again).
+  onCancelled?: (entry: MealPlanEntry) => void;
   // Planned meals with the pantry pieces they're counted at (usePlanNeeds'
   // `sized`): what's eaten is taken from those.
   sized?: (entries: MealPlanEntry[]) => MealPlanEntry[];
@@ -360,10 +364,12 @@ export function useEntryConfirm({
         requirements={ambiguousRequirements}
         saving={resolvingSaving}
         onCancel={() => {
+          const entry = pendingConfirmEntry;
           setShowResolveModal(false);
           setPendingConfirmEntry(null);
           setPendingRequirements([]);
           setPendingRateFirst(false);
+          if (entry) onCancelled?.(entry);
         }}
         onConfirm={(selections, manualPieceEntries, amountOverrides) =>
           void handleResolvedConfirm(selections, manualPieceEntries, amountOverrides)

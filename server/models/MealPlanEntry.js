@@ -110,6 +110,19 @@ const mealPlanEntrySchema = new mongoose.Schema(
     // choice. Without any, the piece is worked out (mobile's pieceSizing.ts).
     pieces: [{ type: mongoose.Schema.Types.ObjectId, ref: "PantryItem" }],
 
+    // While planned: a whole piece's size typed in instead (a 280 g filet —
+    // not bought yet, or one in the pantry not to be used): one for each
+    // piece the recipe takes, by that piece's ingredient. Counts like a piece
+    // of that weight until it's eaten, when the real one is logged.
+    pieceSizes: [
+      {
+        _id: false,
+        ingredient: { type: mongoose.Schema.Types.ObjectId, ref: "Ingredient" },
+        amount: { type: Number, min: 0 },
+        unit: { type: String, trim: true },
+      },
+    ],
+
     // The ingredients logging it noted a thaw figure for (see
     // services/shelfLife.js noteThawLeads), taken back if it's un-logged.
     thawNoted: [{ type: mongoose.Schema.Types.ObjectId, ref: "Ingredient" }],

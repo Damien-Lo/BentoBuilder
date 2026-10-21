@@ -53,10 +53,10 @@ import {
   type LastUsedMap,
   type MealPlanEntry,
   type MealPlanEntryStatus,
+  type PieceSizeInput,
   type MealSlot,
   type RestaurantDishSelection,
 } from "@/src/services/mealPlanApi";
-import { shortDateLabel } from "@/src/components/calendar/calendarUtils";
 import { sortAlphabetically, sortByLastUsed } from "@/src/utils/lastUsedSort";
 import { referenceId } from "@/src/utils/pantryDefaults";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
@@ -64,13 +64,14 @@ import { DishQuantityStepper } from "@/src/components/planner/DishQuantitySteppe
 import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { MealSuggestion, SuggestionsToggle, useSuggestionsToggle } from "@/src/components/planner/MealSuggestion";
 import { RecipeThumb } from "@/src/components/recipes/RecipeThumb";
-import { pieceGroups, usePlanNeeds, withPiece, type PieceChoice } from "@/src/components/planner/usePlanNeeds";
+import { usePlanNeeds, type PieceChoice } from "@/src/components/planner/usePlanNeeds";
 import { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch";
 import { WebWeekPlanScreen } from "@/src/components/planner/web/WebWeekPlanScreen";
 import { addToMenu, menuLeft, menuName } from "@/src/services/menuApi";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { type NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
 import { NutritionRings } from "@/src/components/planner/NutritionRings";
+import { PieceSizePicker } from "@/src/components/planner/PieceSizePicker";
 import { Tap } from "@/src/components/ui/Tap";
 import { OrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { NutritionDetailOverlay, type NutritionDetailPage } from "@/src/components/planner/NutritionDetailOverlay";
@@ -190,6 +191,9 @@ function PhonePlannerScreen() {
   // An entry the calendar's "Add food" added as already eaten: go back to
   // the calendar once its confirm (pantry, rating) has finished.
   const returnAfterConfirm = useRef<string | null>(null);
+  // Meals just added as eaten, until they're confirmed: cancelling at
+  // "Confirm what you used" takes one off again — nothing was added.
+  const justAdded = useRef(new Set<string>());
   useEffect(() => {
     if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return;
     setSelectedDate(dateParam);
@@ -243,30 +247,10 @@ function PhonePlannerScreen() {
   // Ingredient quantity-entry step — set once a user picks an ingredient,
   // cleared to go back to the ingredients list.
   const [pendingIngredient, setPendingIngredient] = useState<Ingredient | null>(null);
-  // A recipe waiting on which piece it's to be made with.
-  // Whether the meal sheet shows every piece to choose from, and which
-  // pieces' options are unfolded (in the sheet and the add step).
-  const [showPieces, setShowPieces] = useState(false);
-  const [openPieces, setOpenPieces] = useState<string[]>([]);
-  const togglePieceGroup = (group: string) => setOpenPieces((prev) => (prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]));
-  // A piece's heading, folding its options to what it's set to; "Not
-  // chosen" while it's the planner's to choose.
-  // (`orbit`: in a sheet redesigned in Orbit's look.)
-  const pieceHeading = (group: string, expanded: boolean, now: string | undefined, chosen: boolean, orbit = false) => (
-    <Pressable onPress={() => togglePieceGroup(group)} className="mb-1 flex-row items-center py-1 active:opacity-60" style={orbit ? { paddingHorizontal: 4 } : undefined}>
-      <Ionicons name={expanded ? "chevron-down" : "chevron-forward"} size={14} color={orbit ? oc.faint : "#94A3B8"} />
-      <View className="ml-1.5 flex-1">
-        <Text className="text-xs font-bold uppercase tracking-wide text-slate-400" style={orbit ? { color: oc.faint } : undefined}>{group}</Text>
-        {!expanded && !!now && <Text className="text-sm text-slate-700" numberOfLines={1} style={orbit ? { color: oc.icon } : undefined}>{now}</Text>}
-      </View>
-      {!chosen && (
-        <View className="rounded-full bg-amber-100 px-2 py-0.5" style={orbit ? { backgroundColor: amberSoft } : undefined}>
-          <Text className="text-[11px] font-bold text-amber-700" style={orbit ? { color: oc.warning } : undefined}>Not chosen</Text>
-        </View>
-      )}
-    </Pressable>
-  );
-  const [pendingPieces, setPendingPieces] = useState<{ recipe: Recipe; servings: number; options: PieceChoice[]; picked: string[]; menuItem?: string } | null>(null);
+  // "How big?" on a planned meal's sheet, while it's being changed.
+  const [pieceDraft, setPieceDraft] = useState<{ picked: string[]; sizes: PieceSizeInput[] } | null>(null);
+  // A recipe waiting on how big its piece is to be (see handleAddRecipeEntry).
+  const [pendingPieces, setPendingPieces] = useState<{ recipe: Recipe; servings: number; options: PieceChoice[]; picked: string[]; sizes: PieceSizeInput[]; menuItem?: string } | null>(null);
   const [pendingQuantity, setPendingQuantity] = useState("1");
   const [pendingUnit, setPendingUnit] = useState("");
 
@@ -360,7 +344,21 @@ function PhonePlannerScreen() {
     ready: kitchenReady && !!appSettings,
     onStart: entry => swipeableRefs.get(entry._id)?.current?.close(),
     sized: kitchenPlan.sized,
+    onCancelled: entry => {
+      if (!justAdded.current.delete(entry._id)) return;
+      setEntries(prev => prev.filter(e => e._id !== entry._id));
+      void deleteMealPlanEntry(entry._id).then(
+        () => kitchenPlan.reload(),
+        (err) => Alert.alert("Couldn't take it off", err instanceof Error ? err.message : "It's still on the plan."),
+      );
+      // (Added from the calendar: back there, as a confirm would have.)
+      if (returnAfterConfirm.current === entry._id) {
+        returnAfterConfirm.current = null;
+        leaveAddFlow();
+      }
+    },
     onConfirmed: updated => {
+      justAdded.current.delete(updated._id);
       setEntries(prev => prev.map(e => (e._id === updated._id ? updated : e)));
       if (returnAfterConfirm.current === updated._id) {
         returnAfterConfirm.current = null;
@@ -705,7 +703,10 @@ function PhonePlannerScreen() {
     // gesture prompting for it), so ask here, after any piece-size
     // resolution and before the pantry actually gets touched. Skippable —
     // see RateAndConfirmModal's onSkip.
-    if (wantsConfirmed) handleConfirmEntry(entry, true);
+    if (wantsConfirmed) {
+      justAdded.current.add(entry._id);
+      handleConfirmEntry(entry, true);
+    }
     return entry;
   }
 
@@ -738,17 +739,17 @@ function PhonePlannerScreen() {
     });
   }
 
-  // A recipe made with one of several pieces (a bag from a particular
-  // steak), planned ahead: which one is asked first — what the meal comes
-  // to with each, or the planner's choice. (`pieces` is the answer; eaten
-  // now, the piece is asked for as it's logged.)
-  async function handleAddRecipeEntry(recipe: Recipe, servings: number, pieces?: string[], menuItem?: string) {
+  // A recipe that takes a whole piece (a steak, or a bag made from one),
+  // planned ahead: how big is asked first — one of those in the pantry,
+  // the planner's choice, or a weight typed in (see PieceSizePicker). Always
+  // asked, so the size is never silently assumed. (`pieces` / `sizes` are
+  // the answer; eaten now, the piece is asked for as it's logged.)
+  async function handleAddRecipeEntry(recipe: Recipe, servings: number, pieces?: string[], menuItem?: string, sizes?: PieceSizeInput[]) {
     if (saving) return;
     if (!pieces && addStatus === "planned") {
-      const options = kitchenPlan.pieceChoices({ _id: "", date: selectedDate, slot: addSlot, status: "planned", recipe, recipeServings: servings });
-      if (pieceGroups(options).some((g) => g.choices.length > 1)) {
-        setOpenPieces([]);
-        setPendingPieces({ recipe, servings, options, picked: [], menuItem });
+      const draft: MealPlanEntry = { _id: "", date: selectedDate, slot: addSlot, status: "planned", recipe, recipeServings: servings };
+      if (kitchenPlan.pieceSlots(draft).length) {
+        setPendingPieces({ recipe, servings, options: kitchenPlan.pieceChoices(draft), picked: [], sizes: [], menuItem });
         return;
       }
     }
@@ -761,6 +762,7 @@ function PhonePlannerScreen() {
         recipe: recipe._id,
         recipeServings: servings,
         ...(pieces?.length ? { pieces } : {}),
+        ...(sizes?.length ? { pieceSizes: sizes } : {}),
         ...(menuItem ? { menuItem } : {}),
       });
       setPendingPieces(null);
@@ -1123,8 +1125,7 @@ function PhonePlannerScreen() {
   );
 
   function handleOpenEntry(entry: MealPlanEntry) {
-    setShowPieces(false);
-    setOpenPieces([]);
+    setPieceDraft(null);
     if (entry.recipe) {
       setEditEntry(entry);
       setEditQuantity(String(entry.recipeServings ?? 1));
@@ -1650,10 +1651,10 @@ function PhonePlannerScreen() {
 
   // Keeps a pantry piece for a planned meal (or, with none, lets it be
   // chosen again).
-  async function choosePiece(entry: MealPlanEntry, pieces: string[]) {
+  async function choosePiece(entry: MealPlanEntry, pieces: string[], sizes?: PieceSizeInput[]) {
     try {
-      await setMealPlanEntryPieces(entry._id, pieces);
-      setEditEntry({ ...entry, pieces });
+      await setMealPlanEntryPieces(entry._id, pieces, sizes);
+      setEditEntry({ ...entry, pieces, ...(sizes ? { pieceSizes: sizes } : {}) });
       kitchenPlan.reload();
     } catch (error) {
       Alert.alert("Couldn't change that", error instanceof Error ? error.message : "Something went wrong.");
@@ -1992,29 +1993,30 @@ function PhonePlannerScreen() {
               </>
             ) : (
               <>
-                {/* Still to come, and made with one of several pieces (a bag
-                    from a particular steak; a fillet and a steak): which. */}
+                {/* Still to come, and takes a whole piece (a steak, or a bag
+                    made from one): how big — folded to what it's counted at. */}
                 {(() => {
+                  const slots = kitchenPlan.pieceSlots(editEntry);
+                  if (!slots.length) return null;
                   const choices = kitchenPlan.pieceChoices(editEntry);
-                  const groups = pieceGroups(choices);
-                  if (!groups.some((g) => g.choices.length > 1)) return null;
-                  const pinned = (editEntry.pieces ?? []).length > 0;
-                  const meal = choices.find((c) => c.current)?.calories;
-                  const heading = <Text style={eyebrow}>{groups.length > 1 ? "WHICH ONES" : "WHICH ONE"}</Text>;
-                  // (Folded to what it's counted at, until it's to be changed.)
-                  if (!showPieces) {
+                  const sized = kitchenPlan.sized([editEntry])[0].sizedTo;
+                  const typed = (editEntry.pieceSizes ?? []).length > 0;
+                  const now = (scaleRecipeNutrition(editEntry.recipe!, editEntry.recipeServings ?? 1).calories ?? 0) + (sized?.shift.calories ?? 0);
+                  const heading = <Text style={eyebrow}>HOW BIG?</Text>;
+                  if (!pieceDraft) {
                     return (
                       <>
                         {heading}
-                        <Tap onPress={() => setShowPieces(true)} style={[card, { marginBottom: 20, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13 }]} pressedStyle={{ opacity: 0.8 }}>
+                        <Tap onPress={() => setPieceDraft({ picked: editEntry.pieces ?? [], sizes: editEntry.pieceSizes ?? [] })} style={[card, { marginBottom: 20, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13 }]} pressedStyle={{ opacity: 0.8 }}>
                           <View style={{ flex: 1 }}>
-                            {groups.map((g) => (
-                              <Text key={g.group} style={{ fontSize: 15, color: oc.text }} numberOfLines={1}>
-                                {g.choices.find((c) => c.current)?.label ?? `${g.group}: not chosen`}
-                              </Text>
-                            ))}
+                            <Text style={{ fontSize: 15, color: oc.text }} numberOfLines={1}>
+                              {sized?.piece ? sized.piece.charAt(0).toUpperCase() + sized.piece.slice(1) : `${slots[0].name}, about ${slots[0].assumed} ${slots[0].unit}`}
+                            </Text>
+                            <Text style={{ marginTop: 1, fontSize: 12, color: oc.faint }}>
+                              {typed ? "A size you gave" : (editEntry.pieces ?? []).length ? "Kept for this meal" : sized?.piece ? "The planner's choice" : "None in the pantry: the size the recipe's written for"}
+                            </Text>
                           </View>
-                          {meal != null && <Text style={{ marginRight: 8, fontSize: 13, fontWeight: "600", color: oc.muted }}>{meal} kcal</Text>}
+                          <Text style={{ marginRight: 8, fontSize: 13, fontWeight: "600", color: oc.muted }}>{Math.round(now)} kcal</Text>
                           <Text style={{ fontSize: 13, fontWeight: "600", color: oc.accent }}>Change</Text>
                           <Ionicons name="chevron-forward" size={15} color={oc.accent} />
                         </Tap>
@@ -2024,67 +2026,29 @@ function PhonePlannerScreen() {
                   return (
                     <>
                       {heading}
-                      {groups.map((g) => {
-                        const expanded = groups.length === 1 || openPieces.includes(g.group);
-                        return (
-                        <View key={g.group} style={{ marginBottom: 8 }}>
-                          {groups.length > 1 && pieceHeading(g.group, expanded, g.choices.find((c) => c.current)?.label, g.choices.some((c) => editEntry.pieces?.includes(c.pantryItemId)), true)}
-                          {expanded && <View style={card}>
-                            {g.choices.map((c, i) => (
-                              <Pressable
-                                key={c.pantryItemId}
-                                onPress={() => {
-                                  if (groups.length === 1) setShowPieces(false);
-                                  void choosePiece(editEntry, withPiece(editEntry.pieces, choices, c));
-                                }}
-                                style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: i ? 1 : 0, borderTopColor: oc.border }}
-                              >
-                                {/* (Marked: what's been kept for it; the planner's own pick is labelled.) */}
-                                <Ionicons name={c.chosen ? "radio-button-on" : "radio-button-off"} size={20} color={c.chosen ? oc.ink : oc.faint} />
-                                <View style={{ flex: 1, marginLeft: 12 }}>
-                                  <Text style={{ fontSize: 15, color: oc.text }}>
-                                    {c.label}
-                                    {c.current && !g.choices.some((x) => x.chosen) && <Text style={{ fontSize: 12, color: oc.accent }}>  · planner&apos;s pick</Text>}
-                                  </Text>
-                                  {!!c.elsewhere && (
-                                    <Text style={{ fontSize: 12, color: oc.faint }}>
-                                      going to {shortDateLabel(c.elsewhere.date)} {c.elsewhere.slot}
-                                    </Text>
-                                  )}
-                                </View>
-                                <Text style={{ fontSize: 13, fontWeight: "600", color: oc.muted }}>{c.calories} kcal</Text>
-                              </Pressable>
-                            ))}
-                            {/* Or none in particular: the planner's to choose. */}
-                            <Pressable
-                              onPress={() => {
-                                if (groups.length === 1) setShowPieces(false);
-                                void choosePiece(editEntry, (editEntry.pieces ?? []).filter((id) => !g.choices.some((c) => c.pantryItemId === id)));
-                              }}
-                              style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: oc.border }}
-                            >
-                              {(() => {
-                                const mine = g.choices.some((c) => editEntry.pieces?.includes(c.pantryItemId));
-                                return <Ionicons name={mine ? "radio-button-off" : "radio-button-on"} size={20} color={mine ? oc.faint : oc.accent} />;
-                              })()}
-                              <Text style={{ flex: 1, marginLeft: 12, fontSize: 15, color: oc.accent }}>Let the planner choose</Text>
-                            </Pressable>
-                          </View>}
-                        </View>
-                        );
-                      })}
-                      <View style={{ marginBottom: 20, marginTop: 2, paddingHorizontal: 4, flexDirection: "row", alignItems: "center" }}>
-                        <Text style={{ flex: 1, fontSize: 12, color: oc.faint }}>
-                          {pinned ? "Kept for this meal." : "Chosen for you: the best fit for the day, then the soonest to go."}
-                        </Text>
-                        {pinned && (
-                          <Pressable onPress={() => void choosePiece(editEntry, [])} hitSlop={8}>
-                            <Text style={{ fontSize: 12, fontWeight: "600", color: oc.accent }}>Let the planner choose</Text>
-                          </Pressable>
-                        )}
-                        <Pressable onPress={() => setShowPieces(false)} hitSlop={8} style={{ marginLeft: 12 }}>
-                          <Text style={{ fontSize: 12, fontWeight: "600", color: oc.muted }}>Done</Text>
-                        </Pressable>
+                      <PieceSizePicker
+                        slots={slots}
+                        choices={choices}
+                        picked={pieceDraft.picked}
+                        sizes={pieceDraft.sizes}
+                        caloriesFor={(sizes) => kitchenPlan.sizedCalories(editEntry, sizes)}
+                        onChange={(picked, sizes) => setPieceDraft({ picked, sizes })}
+                      />
+                      <View style={{ marginTop: 12, marginBottom: 20, flexDirection: "row", gap: 10 }}>
+                        <Tap onPress={() => setPieceDraft(null)} style={{ flex: 1, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: oc.pill }}>
+                          <Text style={{ fontSize: 15, fontWeight: "600", color: oc.onPill }}>Cancel</Text>
+                        </Tap>
+                        <Tap
+                          onPress={() => {
+                            const draft = pieceDraft;
+                            setPieceDraft(null);
+                            void choosePiece(editEntry, draft.picked, draft.sizes);
+                          }}
+                          style={{ flex: 1, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: oc.ink }}
+                          pressedStyle={{ opacity: 0.85 }}
+                        >
+                          <Text style={{ fontSize: 15, fontWeight: "600", color: oc.onInk }}>Save size</Text>
+                        </Tap>
                       </View>
                     </>
                   );
@@ -2560,88 +2524,43 @@ function PhonePlannerScreen() {
               contentContainerStyle={{ padding: 16, paddingBottom: 40, ...(wideAdd ? { width: "100%", maxWidth: 640, alignSelf: "center" } : {}) }}
             >
               {addStepCard("book-outline", pendingPieces.recipe.name, `${pendingPieces.servings} serving${pendingPieces.servings === 1 ? "" : "s"}`)}
+              {o ? <Text style={sheetEyebrow}>HOW BIG?</Text> : <Text className="mb-1.5 text-sm font-semibold text-slate-700">How big?</Text>}
               {(() => {
-                const groups = pieceGroups(pendingPieces.options);
-                const many = groups.length > 1;
-                // With one piece to choose, a tap is the choice; with more,
-                // each is picked, then added together.
-                const pick = (c: PieceChoice) => {
-                  if (!many) return void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, [c.pantryItemId], pendingPieces.menuItem);
-                  const next = withPiece(pendingPieces.picked, pendingPieces.options, { ...c, chosen: pendingPieces.picked.includes(c.pantryItemId) });
-                  setPendingPieces({ ...pendingPieces, picked: next });
-                };
+                // (The meal as it would be planned, for its calories at a size.)
+                const draft: MealPlanEntry = { _id: "", date: selectedDate, slot: addSlot, status: "planned", recipe: pendingPieces.recipe, recipeServings: pendingPieces.servings };
                 return (
-                  <>
-                    {o ? <Text style={sheetEyebrow}>{many ? "WHICH ONES" : "WHICH ONE"}</Text> : <Text className="mb-1.5 text-sm font-semibold text-slate-700">{many ? "Which ones?" : "Which one?"}</Text>}
-                    {groups.map((g) => {
-                      const expanded = !many || openPieces.includes(g.group);
-                      const mine = g.choices.find((c) => pendingPieces.picked.includes(c.pantryItemId));
-                      return (
-                      <View key={g.group} className="mb-2">
-                        {many && pieceHeading(g.group, expanded, mine ? mine.label : "The planner's choice", !!mine, !!o)}
-                        {expanded && <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o && sheetCard}>
-                          {g.choices.map((c, i) => (
-                            <Pressable
-                              key={c.pantryItemId}
-                              disabled={saving}
-                              onPress={() => pick(c)}
-                              className={`flex-row items-center px-4 py-3.5 active:bg-slate-50 ${i > 0 ? "border-t border-slate-100" : ""}`}
-                              style={o && { borderTopColor: o.border, backgroundColor: "transparent" }}
-                            >
-                              {many && <Ionicons name={pendingPieces.picked.includes(c.pantryItemId) ? "radio-button-on" : "radio-button-off"} size={20} color={pendingPieces.picked.includes(c.pantryItemId) ? (o?.ink ?? "#2563EB") : (o?.faint ?? "#94A3B8")} style={{ marginRight: 10 }} />}
-                              <View className="flex-1">
-                                <Text className="text-base text-slate-900" style={o && { fontSize: 15, color: o.text }}>{c.label}</Text>
-                                {!!c.elsewhere && (
-                                  <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>
-                                    going to {shortDateLabel(c.elsewhere.date)} {c.elsewhere.slot}
-                                  </Text>
-                                )}
-                              </View>
-                              <Text className="text-sm font-semibold text-slate-600" style={o && { fontSize: 13, color: o.muted }}>{c.calories} kcal</Text>
-                              {!many && <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#94A3B8"} style={{ marginLeft: 6 }} />}
-                            </Pressable>
-                          ))}
-                          {/* Or none in particular: the planner's to choose. */}
-                          {many && (
-                            <Pressable
-                              onPress={() => setPendingPieces({ ...pendingPieces, picked: pendingPieces.picked.filter((id) => !g.choices.some((c) => c.pantryItemId === id)) })}
-                              className="flex-row items-center border-t border-slate-100 px-4 py-3.5 active:bg-slate-50"
-                              style={o && { borderTopColor: o.border, backgroundColor: "transparent" }}
-                            >
-                              <Ionicons name={mine ? "radio-button-off" : "radio-button-on"} size={20} color={mine ? (o?.faint ?? "#94A3B8") : (o?.accent ?? "#7C3AED")} style={{ marginRight: 10 }} />
-                              <Text className="flex-1 text-base text-violet-700" style={o && { fontSize: 15, color: o.accent }}>Let the planner choose</Text>
-                            </Pressable>
-                          )}
-                        </View>}
-                      </View>
-                      );
-                    })}
-                    {many && (
-                      <Pressable
-                        disabled={saving}
-                        onPress={() => void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, pendingPieces.picked, pendingPieces.menuItem)}
-                        className={`mt-2 items-center rounded-2xl py-3.5 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
-                        style={o && { ...sheetPrimary(saving), marginTop: 8 }}
-                      >
-                        <Text className="font-semibold text-white" style={o && { fontSize: 16, color: o.onInk }}>{saving ? "Adding…" : "Add to plan"}</Text>
-                      </Pressable>
-                    )}
-                    <Pressable
-                      disabled={saving}
-                      onPress={() => void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, [], pendingPieces.menuItem)}
-                      className="mt-2 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 py-3.5 active:bg-slate-50"
-                      style={o && { ...sheetCard, marginTop: 10 }}
-                    >
-                      <Ionicons name="sparkles-outline" size={16} color={o?.accent ?? "#7C3AED"} />
-                      <Text className="ml-2 flex-1 text-base text-violet-700" style={o && { fontSize: 15, color: o.accent }}>Let the planner choose{many ? " all" : ""}</Text>
-                      <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#94A3B8"} />
-                    </Pressable>
-                    <Text className="mt-1.5 text-xs text-slate-400" style={o && { marginTop: 8, paddingHorizontal: 4, lineHeight: 17, color: o.faint }}>
-                      {many ? "Any left unpicked are chosen by the planner: the best fit for the day, then the soonest to go." : "The planner picks the best fit for the day, then the soonest to go."} Either way it can be changed from the meal later.
-                    </Text>
-                  </>
+                  <PieceSizePicker
+                    slots={kitchenPlan.pieceSlots(draft)}
+                    choices={pendingPieces.options.map((c) => ({ ...c, chosen: pendingPieces.picked.includes(c.pantryItemId) }))}
+                    picked={pendingPieces.picked}
+                    sizes={pendingPieces.sizes}
+                    caloriesFor={(sizes) => kitchenPlan.sizedCalories(draft, sizes)}
+                    onChange={(picked, sizes) => setPendingPieces({ ...pendingPieces, picked, sizes })}
+                  />
                 );
               })()}
+              {/* Cancel goes back without adding anything; Add to plan adds it. */}
+              <View style={{ marginTop: o ? 18 : 16, flexDirection: "row", gap: 10 }}>
+                <Pressable
+                  disabled={saving}
+                  onPress={() => setPendingPieces(null)}
+                  className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+                  style={o && { height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16, backgroundColor: o.pill }}
+                >
+                  <Text className="font-semibold text-slate-600" style={o && { fontSize: 16, color: o.onPill }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  disabled={saving}
+                  onPress={() => void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, pendingPieces.picked, pendingPieces.menuItem, pendingPieces.sizes)}
+                  className={`flex-1 items-center rounded-2xl py-3.5 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+                  style={o && { ...sheetPrimary(saving), flex: 1 }}
+                >
+                  <Text className="font-semibold text-white" style={o && { fontSize: 16, color: o.onInk }}>{saving ? "Adding…" : "Add to plan"}</Text>
+                </Pressable>
+              </View>
+              <Text className="mt-1.5 text-xs text-slate-400" style={o && { marginTop: 8, paddingHorizontal: 4, lineHeight: 17, color: o.faint }}>
+                It can be changed from the meal later. Once it&apos;s eaten, the piece really used is logged.
+              </Text>
             </ScrollView>
           ) : pendingIngredient ? (
             /* ── Ingredient quantity-entry step ── */

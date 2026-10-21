@@ -11,11 +11,12 @@ import { MenuCard, MenuOverlay } from "@/src/components/planner/web/MenuCard";
 import { DragSource, DropTarget } from "@/src/components/web/dragDrop";
 import { getWebScale } from "@/src/components/web/scale";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
-import { pieceGroups, withPiece, type PieceChoice } from "@/src/components/planner/usePlanNeeds";
+import { type PieceChoice } from "@/src/components/planner/usePlanNeeds";
+import { PieceSizePicker } from "@/src/components/planner/PieceSizePicker";
+import type { PieceSlot } from "@/src/utils/pieceSizing";
 import { noteSuggestions, recordSuggestion, settleSuggestions, type SuggestionAction } from "@/src/components/planner/suggestionRecord";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
-import { compactDate } from "@/src/components/web/fields";
 import { Button, Card, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
@@ -28,6 +29,7 @@ import {
   setMealPlanEntryPieces,
   unconfirmMealPlanEntry,
   type MealPlanEntry,
+  type PieceSizeInput,
   type MealSlot,
 } from "@/src/services/mealPlanApi";
 import { getPantryItems } from "@/src/services/pantryApi";
@@ -193,12 +195,9 @@ export function WebWeekPlanScreen() {
     showActions(entryName(entry), [
       { label: entry.status === "confirmed" ? "Mark as not eaten" : "Mark as eaten", onPress: () => toggleEaten(entry) },
       { label: "Open", onPress: () => openItem(entry) },
-      // Still to come, and made with one of several pieces: which, on a
-      // card of its own (there can be many).
-      ...(() => {
-        const groups = pieceGroups(plan.pieceChoices(entry));
-        return groups.some((g) => g.choices.length > 1) ? [{ label: groups.length > 1 ? "Change which ones…" : "Change which one…", onPress: () => setChoosing(entry) }] : [];
-      })(),
+      // Still to come, and takes a whole piece (a steak, or a bag made from
+      // one): how big, on a card of its own.
+      ...(plan.pieceSlots(entry).length ? [{ label: "Change how big…", onPress: () => setChoosing(entry) }] : []),
       ...(usualId
         ? [
             { label: "Remove just this day", destructive: true, onPress: () => void deleteMealPlanEntry(entry._id).then(reload, fail) },
@@ -767,11 +766,14 @@ export function WebWeekPlanScreen() {
       {choosing && (
         <PieceChooser
           title={entryName(choosing)}
+          slots={plan.pieceSlots(choosing)}
           choices={plan.pieceChoices(choosing)}
           kept={choosing.pieces ?? []}
-          onChoose={(pieces) => {
+          keptSizes={choosing.pieceSizes ?? []}
+          caloriesFor={(sizes) => plan.sizedCalories(choosing, sizes)}
+          onChoose={(pieces, sizes) => {
             setChoosing(null);
-            void setMealPlanEntryPieces(choosing._id, pieces).then(() => {
+            void setMealPlanEntryPieces(choosing._id, pieces, sizes).then(() => {
               plan.reload();
               reload();
             }, fail);
@@ -905,106 +907,42 @@ function Legend({ color, border, dashed, label }: { color: string; border: strin
 // are, with what the meal comes to, the one it's counted at marked; or the
 // planner's choice. With one to choose, a click is the choice; with more,
 // they're saved together.
-function PieceChooser({ title, choices, kept, onChoose, onClose }: { title: string; choices: PieceChoice[]; kept: string[]; onChoose: (pieces: string[]) => void; onClose: () => void }) {
-  const groups = pieceGroups(choices);
+function PieceChooser({ title, slots, choices, kept, keptSizes, caloriesFor, onChoose, onClose }: { title: string; slots: PieceSlot[]; choices: PieceChoice[]; kept: string[]; keptSizes: PieceSizeInput[]; caloriesFor: (sizes: PieceSizeInput[]) => number; onChoose: (pieces: string[], sizes: PieceSizeInput[]) => void; onClose: () => void }) {
+  // How big a planned meal's piece is to be — the same choice as the phone's
+  // (PieceSizePicker), saved together.
   const [picked, setPicked] = useState<string[]>(kept);
-  // Which pieces' options are showing (all of them when there's one).
-  const [open, setOpen] = useState<string[]>([]);
-  const pick = (c: PieceChoice) => {
-    const next = withPiece(picked, choices, { ...c, chosen: picked.includes(c.pantryItemId) });
-    if (groups.length === 1) onChoose(next);
-    else setPicked(next);
-  };
-  // (Marked: what's been picked. What the planner's using, while it's the
-  // planner's to choose, is labelled instead.)
-  const shown = (c: PieceChoice) => picked.includes(c.pantryItemId);
+  const [sizes, setSizes] = useState<PieceSizeInput[]>(keptSizes);
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable onPress={onClose} style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(15,23,42,0.45)", padding: 24 }}>
-        <Pressable onPress={() => {}} style={{ width: "100%", maxWidth: 460, maxHeight: "80%", borderRadius: 18, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, overflow: "hidden" }}>
+        <Pressable onPress={() => {}} style={{ width: "100%", maxWidth: 520, maxHeight: "86%", borderRadius: 18, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, overflow: "hidden" }}>
           <View style={{ paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10 }}>
-            <Text style={{ fontSize: 17, fontWeight: "700", color: WEB.text }}>{groups.length > 1 ? "Which ones" : "Which one"}</Text>
+            <Text style={{ fontSize: 17, fontWeight: "700", color: WEB.text }}>How big?</Text>
             <Text numberOfLines={1} style={{ marginTop: 2, fontSize: 13, color: WEB.muted }}>
               {title}
             </Text>
           </View>
-          <ScrollView style={{ flexGrow: 0 }}>
-            {groups.map((g) => {
-              const expanded = groups.length === 1 || open.includes(g.group);
-              const now = g.choices.find((c) => shown(c)) ?? g.choices.find((c) => c.current);
-              const chosen = g.choices.some((c) => picked.includes(c.pantryItemId));
-              return (
-              <View key={g.group}>
-                {/* Each piece folds to what it's set to; "Not chosen" while the planner's choosing it. */}
-                {groups.length > 1 && (
-                  <Pressable
-                    onPress={() => setOpen((prev) => (prev.includes(g.group) ? prev.filter((x) => x !== g.group) : [...prev, g.group]))}
-                    style={({ hovered }: { hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 11, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: hovered ? WEB.page : "transparent" })}
-                  >
-                    <Ionicons name={expanded ? "chevron-down" : "chevron-forward"} size={14} color={WEB.muted} />
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase", color: WEB.muted }}>{g.group}</Text>
-                      {!expanded && !!now && <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 13, color: WEB.text }}>{now.label}</Text>}
-                    </View>
-                    {!chosen && (
-                      <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: "#FEF3C7" }}>
-                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#B45309" }}>Not chosen</Text>
-                      </View>
-                    )}
-                  </Pressable>
-                )}
-                {expanded && g.choices.map((c) => (
-                  <Pressable
-                    key={c.pantryItemId}
-                    onPress={() => pick(c)}
-                    style={({ hovered }: { hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 11, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: hovered ? WEB.page : "transparent" })}
-                  >
-                    <Ionicons name={shown(c) ? "radio-button-on" : "radio-button-off"} size={18} color={shown(c) ? WEB.blue : WEB.faint} />
-                    <View style={{ flex: 1, marginLeft: 10 }}>
-                      <Text style={{ fontSize: 14, color: WEB.text }}>
-                        {c.label}
-                        {!chosen && c.current && <Text style={{ fontSize: 12, color: "#7C3AED" }}>  · planner's pick</Text>}
-                      </Text>
-                      {!!c.elsewhere && <Text style={{ fontSize: 12, color: WEB.faint }}>going to {compactDate(c.elsewhere.date)} {c.elsewhere.slot}</Text>}
-                    </View>
-                    <Text style={{ fontSize: 13, fontWeight: "600", color: WEB.muted }}>{c.calories} kcal</Text>
-                  </Pressable>
-                ))}
-                {/* Or none of them in particular: the planner's to choose. */}
-                {expanded && (
-                  <Pressable
-                    onPress={() => {
-                      const rest = picked.filter((id) => !g.choices.some((c) => c.pantryItemId === id));
-                      if (groups.length === 1) onChoose(rest);
-                      else setPicked(rest);
-                    }}
-                    style={({ hovered }: { hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 11, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: hovered ? WEB.page : "transparent" })}
-                  >
-                    <Ionicons name={chosen ? "radio-button-off" : "radio-button-on"} size={18} color={chosen ? WEB.faint : "#7C3AED"} />
-                    <Text style={{ flex: 1, marginLeft: 10, fontSize: 14, color: "#7C3AED" }}>Let the planner choose</Text>
-                  </Pressable>
-                )}
-              </View>
-              );
-            })}
+          <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 14 }} keyboardShouldPersistTaps="handled">
+            <PieceSizePicker
+              slots={slots}
+              choices={choices.map((c) => ({ ...c, chosen: picked.includes(c.pantryItemId) }))}
+              picked={picked}
+              sizes={sizes}
+              caloriesFor={caloriesFor}
+              onChange={(nextPicked, nextSizes) => {
+                setPicked(nextPicked);
+                setSizes(nextSizes);
+              }}
+            />
           </ScrollView>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: WEB.border }}>
-            {groups.length > 1 ? (
-              <Pressable onPress={() => onChoose([])}>
-                <Text style={{ fontSize: 13, fontWeight: "600", color: "#7C3AED" }}>Let the planner choose all</Text>
-              </Pressable>
-            ) : (
-              <Text style={{ fontSize: 12, color: WEB.faint }}>The planner picks the best fit for the day.</Text>
-            )}
-            <View style={{ flex: 1 }} />
+            <Text style={{ flex: 1, fontSize: 12, color: WEB.faint }}>Once it&apos;s eaten, the piece really used is logged.</Text>
             <Pressable onPress={onClose} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: WEB.border }}>
               <Text style={{ fontSize: 13, fontWeight: "600", color: WEB.body }}>Cancel</Text>
             </Pressable>
-            {groups.length > 1 && (
-              <Pressable onPress={() => onChoose(picked)} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, backgroundColor: WEB.blue }}>
-                <Text style={{ fontSize: 13, fontWeight: "600", color: "#FFFFFF" }}>Save</Text>
-              </Pressable>
-            )}
+            <Pressable onPress={() => onChoose(picked, sizes)} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, backgroundColor: WEB.blue }}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: "#FFFFFF" }}>Save</Text>
+            </Pressable>
           </View>
         </Pressable>
       </Pressable>

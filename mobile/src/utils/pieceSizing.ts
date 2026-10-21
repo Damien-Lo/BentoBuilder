@@ -1,5 +1,5 @@
 import type { Ingredient } from "@/src/services/ingredientApi";
-import type { MealPlanEntry } from "@/src/services/mealPlanApi";
+import type { MealPlanEntry, PieceSizeInput } from "@/src/services/mealPlanApi";
 import type { Recipe } from "@/src/services/recipeApi";
 import type { PantryItem } from "@/src/types/pantry";
 
@@ -48,6 +48,9 @@ export interface PieceWant {
   date?: string;
   // The entries already taken out for it: those, whatever else there is.
   pinned?: string[];
+  // Sizes typed in for its pieces (MealPlanEntry.pieceSizes): those, in
+  // place of any entry — nothing taken from the pantry for them.
+  sizes?: PieceSizeInput[];
 }
 
 const daysUntil = (from: string, to: string) => Math.round((Date.parse(`${to.slice(0, 10)}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
@@ -63,8 +66,10 @@ export function pieceSizer(recipes: Recipe[], ingredients: Ingredient[], convers
   // The whole pieces some servings of a recipe take — its own, and those of
   // anything it uses that's made ahead from one (a marinated fillet in a
   // bag) and hasn't been made yet.
-  type PieceLine = { ingredient: Ingredient; count: number; min: number; max: number; unit: string; factor: number };
-  const pieceLines = (recipe: Recipe, ratio: number, from: PantryItem[], nested = false): PieceLine[] =>
+  // (`via`: the made-ahead thing it's inside — the bag. One in stock is
+  // used as it is, unless a size has been typed in for its piece.)
+  type PieceLine = { ingredient: Ingredient; count: number; min: number; max: number; unit: string; factor: number; via?: string };
+  const pieceLines = (recipe: Recipe, ratio: number, from: PantryItem[], typed: Set<string>, nested = false): PieceLine[] =>
     recipe.ingredientList.flatMap((line) => {
       const ingredient = ingredientById.get(idOf(line.ingredient));
       if (!ingredient) return [];
@@ -73,8 +78,10 @@ export function pieceSizer(recipes: Recipe[], ingredients: Ingredient[], convers
         return count > 0 ? [{ ingredient, count, min: line.pieceMinWeight ?? 0, max: line.pieceMaxWeight ?? Infinity, unit: line.pieceWeightUnit ?? "g", factor: line.nutritionFactor ?? 1 }] : [];
       }
       const made = recipeById.get(idOf(ingredient.productionRecipe));
-      if (nested || !made?.madeAhead || from.some((p) => idOf(p.ingredient) === ingredient._id)) return [];
-      return pieceLines(made, (line.quantity * ratio) / (made.servings || 1), from, true);
+      if (nested || !made?.madeAhead) return [];
+      const inner = pieceLines(made, (line.quantity * ratio) / (made.servings || 1), from, typed, true);
+      if (from.some((p) => idOf(p.ingredient) === ingredient._id) && !inner.some((l) => typed.has(l.ingredient._id))) return [];
+      return inner.map((l) => ({ ...l, via: ingredient._id }));
     });
 
   // `servings` of a recipe at the size of the pieces it would get from `from`.
@@ -96,11 +103,25 @@ export function pieceSizer(recipes: Recipe[], ingredients: Ingredient[], convers
     };
     let piece: string | undefined;
     const ratio = servings / (recipe.servings || 1);
-    for (const line of pieceLines(recipe, ratio, from)) {
+    // Sizes typed in, by the piece's ingredient (each piece of it takes the
+    // next one, the last again for any more), and the bags they stand in for.
+    const typed = new Map<string, PieceSizeInput[]>();
+    for (const size of want.sizes ?? []) if (size.amount > 0) typed.set(size.ingredient, [...(typed.get(size.ingredient) ?? []), size]);
+    const typedFor = new Set<string>();
+    for (const line of pieceLines(recipe, ratio, from, new Set(typed.keys()))) {
       const family = new Set([line.ingredient._id, ...ingredients.filter((i) => idOf(i.genericParent) === line.ingredient._id).map((i) => i._id)]);
+      const sizes = typed.get(line.ingredient._id);
+      if (sizes && line.via) typedFor.add(line.via);
       for (let n = 0; n < line.count; n++) {
         // The recipe as written assumes a piece in the middle of its range.
         const assumed = scaleIngredientNutrition(line.ingredient, (line.min + line.max) / 2, line.unit, conversionsOf(line.ingredient));
+        if (sizes) {
+          const size = sizes[Math.min(n, sizes.length - 1)];
+          const real = scaleIngredientNutrition(line.ingredient, size.amount, size.unit, conversionsOf(line.ingredient));
+          for (const m of MACROS) shift[m] += ((real[m] ?? 0) - (assumed[m] ?? 0)) * line.factor;
+          piece = `${round(size.amount)} ${size.unit} ${line.ingredient.name.toLowerCase()}`;
+          continue;
+        }
         const realOf = (p: PantryItem) => {
           const its = ingredientById.get(idOf(p.ingredient)) ?? line.ingredient;
           return scaleIngredientNutrition(its, p.quantityAvailable ?? 0, p.quantityUnit, conversionsOf(its));
@@ -121,7 +142,7 @@ export function pieceSizer(recipes: Recipe[], ingredients: Ingredient[], convers
     // steak) carries its own figures: the dish counts at those.
     for (const line of recipe.ingredientList) {
       const ingredient = ingredientById.get(idOf(line.ingredient));
-      if (!ingredient || line.matchMode === "wholePiece") continue;
+      if (!ingredient || line.matchMode === "wholePiece" || typedFor.has(ingredient._id)) continue;
       const { quantity, unit } = recipeLineToRow(line, ratio);
       let left = quantity;
       while (left > 1e-6) {
@@ -163,8 +184,9 @@ export function sizePlanned(entries: MealPlanEntry[], recipes: Recipe[], ingredi
     const base = scaleRecipeNutrition(entry.recipe!, entry.recipeServings ?? 1).calories ?? 0;
     const beside = entries.filter((e) => e !== entry && e.date === entry.date && e.slot === entry.slot && e.recipe).reduce((sum, e) => sum + (scaleRecipeNutrition(e.recipe!, e.recipeServings ?? 1).calories ?? 0), 0);
     const room = dayGoal ? dayGoal * (SLOT_SHARE[entry.slot] ?? 0.3) : 0;
-    const sized = size(entry.recipe!, stock, entry.recipeServings ?? 1, { calories: room ? Math.max(150, beside ? room - beside : room * MAIN_SHARE) : undefined, base, date: entry.date, pinned: entry.pieces });
-    if (!sized.claims.length) continue;
+    const sized = size(entry.recipe!, stock, entry.recipeServings ?? 1, { calories: room ? Math.max(150, beside ? room - beside : room * MAIN_SHARE) : undefined, base, date: entry.date, pinned: entry.pieces, sizes: entry.pieceSizes });
+    // (Nothing taken and no size given: as written.)
+    if (!sized.claims.length && !sized.piece) continue;
     sizes.set(entry, sized);
     stock = stock.filter((p) => !sized.claims.includes(p._id));
   }
@@ -176,13 +198,13 @@ export function sizePlanned(entries: MealPlanEntry[], recipes: Recipe[], ingredi
 // piece, or a whole piece in its weight range), those in stock that would
 // do — `group` being that line's ingredient — each with what the dish would
 // come to with it (the rest as the planner would have them).
-export function pieceOptions(recipe: Recipe, stock: PantryItem[], recipes: Recipe[], ingredients: Ingredient[], conversions: CustomUnitConversion[], servings = 1): { pantryItemId: string; label: string; calories: number; group: string }[] {
+export function pieceOptions(recipe: Recipe, stock: PantryItem[], recipes: Recipe[], ingredients: Ingredient[], conversions: CustomUnitConversion[], servings = 1): { pantryItemId: string; label: string; calories: number; group: string; weight?: { amount: number; unit: string } }[] {
   const ingredientById = new Map(ingredients.map((i) => [i._id, i]));
   const conversionsOf = (ingredient: Ingredient) => getIngredientConversions(ingredient, conversions, ingredients);
   const size = pieceSizer(recipes, ingredients, conversions);
   const base = scaleRecipeNutrition(recipe, servings).calories ?? 0;
   const inStock = stock.filter((p) => (p.quantityAvailable ?? 0) > 0);
-  const options: { pantryItemId: string; label: string; calories: number; group: string }[] = [];
+  const options: { pantryItemId: string; label: string; calories: number; group: string; weight?: { amount: number; unit: string } }[] = [];
   for (const line of recipe.ingredientList) {
     const ingredient = ingredientById.get(idOf(line.ingredient));
     if (!ingredient) continue;
@@ -197,9 +219,54 @@ export function pieceOptions(recipe: Recipe, stock: PantryItem[], recipes: Recip
         const from = p.madeFrom?.[0];
         const label = from ? `${(ingredientById.get(from.ingredient)?.name ?? ingredient.name)} from ${round(from.amount)} ${from.unit}` : `${round(p.quantityAvailable ?? 0)} ${p.quantityUnit} ${(ingredientById.get(idOf(p.ingredient)) ?? ingredient).name}`;
         const sized = size(recipe, inStock, servings, { pinned: [p._id] });
-        return { pantryItemId: p._id, label, calories: Math.max(0, Math.round(base + sized.shift.calories)), group: ingredient.name };
+        // (The piece's own weight: a bag's is the piece it was made from.)
+        const weight = from ? { amount: round(from.amount), unit: from.unit } : line.matchMode === "wholePiece" ? { amount: round(p.quantityAvailable ?? 0), unit: p.quantityUnit } : undefined;
+        return { pantryItemId: p._id, label, calories: Math.max(0, Math.round(base + sized.shift.calories)), group: ingredient.name, ...(weight ? { weight } : {}) };
       })
       .sort((a, b) => a.calories - b.calories));
   }
   return options;
+}
+
+// The whole pieces a recipe takes, for asking how big they'll be: each with
+// its weight range and the size the recipe counts it at when not told (the
+// middle of the range). `group` is the recipe's own line it's in — the bag
+// a steak goes into — to match pieceOptions' groups; `ingredientId` is the
+// piece's, for a size typed in (MealPlanEntry.pieceSizes).
+export interface PieceSlot {
+  group: string;
+  ingredientId: string;
+  name: string;
+  min: number;
+  max: number;
+  unit: string;
+  assumed: number;
+}
+
+export function pieceSlots(recipe: Recipe, recipes: Recipe[], ingredients: Ingredient[]): PieceSlot[] {
+  const ingredientById = new Map(ingredients.map((i) => [i._id, i]));
+  const recipeById = new Map(recipes.map((r) => [r._id, r]));
+  const slot = (group: string, line: Recipe["ingredientList"][number]): PieceSlot[] => {
+    const piece = ingredientById.get(idOf(line.ingredient));
+    if (!piece) return [];
+    const min = line.pieceMinWeight ?? 0;
+    const max = line.pieceMaxWeight ?? 0;
+    return [{ group, ingredientId: piece._id, name: piece.name, min, max, unit: line.pieceWeightUnit ?? "g", assumed: max > 0 ? Math.round((min + max) / 2) : min }];
+  };
+  return recipe.ingredientList.flatMap((line) => {
+    const ingredient = ingredientById.get(idOf(line.ingredient));
+    if (!ingredient) return [];
+    if (line.matchMode === "wholePiece") return slot(ingredient.name, line);
+    const made = recipeById.get(idOf(ingredient.productionRecipe));
+    if (!made?.madeAhead) return [];
+    return made.ingredientList.filter((inner) => inner.matchMode === "wholePiece").flatMap((inner) => slot(ingredient.name, inner));
+  });
+}
+
+// What `servings` of a recipe would come to (calories) with these sizes
+// typed in for its pieces — the rest as the planner would have them.
+export function caloriesWithSizes(recipe: Recipe, sizes: PieceSizeInput[], stock: PantryItem[], recipes: Recipe[], ingredients: Ingredient[], conversions: CustomUnitConversion[], servings = 1): number {
+  const size = pieceSizer(recipes, ingredients, conversions);
+  const base = scaleRecipeNutrition(recipe, servings).calories ?? 0;
+  return Math.max(0, Math.round(base + size(recipe, stock.filter((p) => (p.quantityAvailable ?? 0) > 0), servings, { sizes }).shift.calories));
 }

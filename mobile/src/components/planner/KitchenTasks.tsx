@@ -94,7 +94,8 @@ export function KitchenTasks({
       const moved = await takeOutPantryItem(pantryItemId, { storageLocation: to._id, expiryDate: suggestion.expiryDate, today, ...(part ? { amount: task.amount, unit: task.unit } : {}) });
       // What came out is that meal's from here on, whichever it was.
       const meal = task.kind === "thaw" ? task.for?.[0]?.entryId : undefined;
-      if (meal) await setMealPlanEntryPieces(meal, [moved._id]).catch(() => {});
+      // (Any size typed in for it gives way to the real one.)
+      if (meal) await setMealPlanEntryPieces(meal, [moved._id], []).catch(() => {});
       if (task.asks && task.ingredientId) await setCooksFromFrozen(task.ingredientId, false);
       Alert.alert(`In the ${to.name.toLowerCase()}`, `Good until ${shortDateLabel(suggestion.expiryDate)} (${suggestion.days} day${suggestion.days === 1 ? "" : "s"}, ${suggestion.learned ? "what you've given it before" : "a usual figure"}). Change the date on the pantry entry if that's not right.`);
       changed();
