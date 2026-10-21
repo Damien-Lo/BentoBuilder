@@ -20,8 +20,8 @@ const ORB_D    = 48;   // the orb's diameter
 // A section's tabs at the bottom of the phone screen — at most four, two
 // either side of the orb, Orbit's mascot: tap it to go home, hold it for
 // the quick actions (the same as the home screen's orb). In Orbit's look,
-// light and dark: the open tab in ink with its icon filled in, the others
-// quiet; blue is the orb's alone.
+// light and dark: the open tab in its accent with its icon filled in, the
+// others quiet.
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -39,7 +39,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   function renderTab(route: (typeof state.routes)[0]) {
     const focused = state.index === state.routes.indexOf(route);
     const desc    = descriptors[route.key];
-    const color   = focused ? colors.text : colors.faint;
+    const color   = focused ? colors.ink : colors.faint;
     // (The open tab's icon filled in: the "-outline" icon's solid twin.)
     const icon = desc.options.tabBarIcon?.({ focused, color, size: 24 });
     const shown = isValidElement(icon) && typeof (icon.props as { name?: unknown }).name === "string"

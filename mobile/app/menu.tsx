@@ -8,13 +8,21 @@ import { Tap } from "@/src/components/ui/Tap";
 import { getMeals, type Meal } from "@/src/services/mealApi";
 import { addToMenu, getMenu, menuName, removeFromMenu, updateMenuItem, type MenuItem } from "@/src/services/menuApi";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
-import { useOrbitTheme } from "@/src/theme/orbit";
+import { OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 import { getMealKcal, getRecipeKcal } from "@/src/utils/mealPlan";
 
 // The menu on the phone (Kitchen → Plan → Menu): what you'd like to have
 // soon, not yet on a day (see services/menuApi.ts). Added here; put on a day
 // from Log's Add, where it's at the top. In Orbit's look, light or dark.
 export default function MenuScreen() {
+  return (
+    <OrbitSection section="kitchen">
+      <MenuPage />
+    </OrbitSection>
+  );
+}
+
+function MenuPage() {
   const router = useRouter();
   const { colors: c } = useOrbitTheme();
   const [menu, setMenu] = useState<MenuItem[] | null>(null);

@@ -99,6 +99,8 @@ export const DARK: OrbitColors = {
 };
 
 export type Appearance = "system" | "light" | "dark";
+// The orb's colour: the assistant's blue, or a section's own (its agent's).
+export type OrbHue = "blue" | "orange";
 const KEY = "orbit.appearance";
 
 interface ThemeValue {
@@ -106,8 +108,9 @@ interface ThemeValue {
   setAppearance: (next: Appearance) => void;
   dark: boolean;
   colors: OrbitColors;
+  orbHue: OrbHue;
 }
-const ThemeContext = createContext<ThemeValue>({ appearance: "system", setAppearance: () => {}, dark: false, colors: LIGHT });
+const ThemeContext = createContext<ThemeValue>({ appearance: "system", setAppearance: () => {}, dark: false, colors: LIGHT, orbHue: "blue" });
 export const useOrbitTheme = () => useContext(ThemeContext);
 
 export function OrbitThemeProvider({ children }: { children: ReactNode }) {
@@ -124,7 +127,7 @@ export function OrbitThemeProvider({ children }: { children: ReactNode }) {
   }, []);
   const value = useMemo(() => {
     const dark = Platform.OS !== "web" && (appearance === "dark" || (appearance === "system" && system === "dark"));
-    return { appearance, setAppearance, dark, colors: dark ? DARK : LIGHT };
+    return { appearance, setAppearance, dark, colors: dark ? DARK : LIGHT, orbHue: "blue" as OrbHue };
   }, [appearance, system, setAppearance]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
@@ -140,4 +143,42 @@ export const useOrbitPage = () => useContext(PageContext);
 export function OrbitPage({ on = true, children }: { on?: boolean; children: ReactNode }) {
   const { colors } = useOrbitTheme();
   return <PageContext.Provider value={on ? colors : null}>{children}</PageContext.Provider>;
+}
+
+// A section in its own colour — its agent's (see TODO: agents as coloured
+// orbs): its pages, tab bar, sheets and orb take it in place of the
+// theme's accent (black, or white in the dark). The home screen, the hub
+// for every section, keeps the plain accent. Kitchen first (Oct 2026).
+export type Section = "kitchen";
+const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark: Partial<OrbitColors> }> = {
+  kitchen: {
+    orb: "orange",
+    light: { ink: "#EA580C", onInk: "#FFFFFF", fill: "#F97316", selectedRing: "#FDBA74", orbGlow: "rgba(234, 88, 12, 0.45)" },
+    dark: { ink: "#FB923C", onInk: "#0D0F14", fill: "#FB923C", selectedRing: "#F97316", orbGlow: "rgba(251, 146, 60, 0.55)" },
+  },
+};
+
+export function OrbitSection({ section, children }: { section: Section; children: ReactNode }) {
+  const parent = useOrbitTheme();
+  const value = useMemo(() => {
+    const own = SECTIONS[section];
+    return { ...parent, orbHue: own.orb, colors: { ...parent.colors, ...(parent.dark ? own.dark : own.light) } };
+  }, [parent, section]);
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+// Each section's own colour — its agent's — where it's shown outside the
+// section, e.g. its node on the home screen's orbit. (Light / dark shade;
+// Kitchen's is the one its pages use. Gym, when it's a section: red.)
+const SECTION_HUES: Record<string, { light: string; dark: string }> = {
+  kitchen: { light: "#EA580C", dark: "#FB923C" }, // orange
+  calendar: { light: "#7C3AED", dark: "#A78BFA" }, // purple
+  tasks: { light: "#2563EB", dark: "#60A5FA" }, // blue
+  health: { light: "#16A34A", dark: "#4ADE80" }, // green
+  nutrition: { light: "#0D9488", dark: "#2DD4BF" }, // teal (for now: not yet decided)
+};
+
+export function sectionColor(id: string, dark: boolean): string | null {
+  const hue = SECTION_HUES[id];
+  return hue ? (dark ? hue.dark : hue.light) : null;
 }

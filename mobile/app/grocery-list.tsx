@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Tap } from "@/src/components/ui/Tap";
-import { OrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { OrbitPage, OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -111,7 +111,11 @@ function orbitTag(tag: "Plan" | "Menu" | "Added", o: OrbitColors, dark: boolean)
 }
 
 export default function GroceryListScreen() {
-  return <GroceryList />;
+  return (
+    <OrbitSection section="kitchen">
+      <GroceryList />
+    </OrbitSection>
+  );
 }
 
 // (`inTabs`: in the Kitchen's Plan tab — no way back, and the tab says what

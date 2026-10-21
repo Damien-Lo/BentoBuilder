@@ -14,7 +14,8 @@ import { Tap } from "@/src/components/ui/Tap";
 import { minutesLabel } from "@/src/components/calendar/calendarUtils";
 import { mealLine } from "@/src/components/calendar/mealFood";
 import { updateTodoTask } from "@/src/services/todoApi";
-import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { nutrientColor } from "@/src/theme/nutrients";
+import { sectionColor, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 import { useToday, type Today } from "./useToday";
 
@@ -134,6 +135,10 @@ function Ring({ size, value, colors }: { size: number; value: number; colors: Or
 function Node({ section, index, turn, centre, radius, selected, value, onPress, colors }: { section: Section; index: number; turn: SharedValue<number>; centre: number; radius: number; selected: boolean; value: string; onPress: () => void; colors: OrbitColors }) {
   const box = 96;
   const dot = selected ? 62 : 54;
+  // In its section's colour: the icon, or — chosen — the whole node, with a
+  // soft ring of it round.
+  const { dark } = useOrbitTheme();
+  const hue = section.soon ? null : sectionColor(section.id, dark);
   const place = useAnimatedStyle(() => {
     const a = ((-90 + index * STEP + turn.value) * Math.PI) / 180;
     return { transform: [{ translateX: centre + radius * Math.cos(a) - box / 2 }, { translateY: centre + radius * Math.sin(a) - dot / 2 }] };
@@ -151,12 +156,12 @@ function Node({ section, index, turn, centre, radius, selected, value, onPress, 
           borderRadius: dot / 2,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: selected ? colors.ink : section.soon ? colors.nodeSoon : colors.node,
+          backgroundColor: selected ? (hue ?? colors.ink) : section.soon ? colors.nodeSoon : colors.node,
           borderWidth: selected ? 3 : 1,
-          borderColor: selected ? colors.selectedRing : colors.nodeBorder,
+          borderColor: selected ? (hue ? `${hue}59` : colors.selectedRing) : colors.nodeBorder,
         }}
       >
-        <Ionicons name={section.icon} size={selected ? 24 : 21} color={selected ? colors.onInk : section.soon ? colors.faint : colors.icon} />
+        <Ionicons name={section.icon} size={selected ? 24 : 21} color={selected ? colors.onInk : section.soon ? colors.faint : (hue ?? colors.icon)} />
       </Pressable>
       <Text numberOfLines={1} style={{ marginTop: 5, fontSize: 12, fontWeight: "600", color: section.soon ? colors.faint : colors.text }}>
         {section.label}
@@ -203,6 +208,7 @@ function Action({ label, icon, onPress, primary, colors }: { label: string; icon
 }
 
 function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today; go: (route: Href) => void; onDone: () => void; colors: OrbitColors }) {
+  const { dark } = useOrbitTheme();
   const open = section.route ? <Action label={`Open ${section.label}`} icon="arrow-forward" primary onPress={() => go(section.route!)} colors={colors} /> : null;
   const quiet = (text: string) => <Text style={{ paddingVertical: 8, fontSize: 14, color: colors.muted }}>{text}</Text>;
   let body: React.ReactNode = null;
@@ -271,9 +277,9 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
         <Text style={{ fontSize: 24, fontWeight: "700", color: colors.text }}>
           {Math.max(0, left).toLocaleString()} <Text style={{ fontSize: 14, fontWeight: "400", color: colors.muted }}>kcal {left >= 0 ? "left" : "over"}</Text>
         </Text>
-        {bar("Protein", t.eaten.protein, t.settings.dailyProteinLimit, "#3B82F6")}
-        {bar("Carbs", t.eaten.carbs, t.settings.dailyCarbsLimit, "#F59E0B")}
-        {bar("Fat", t.eaten.fats, t.settings.dailyFatsLimit, "#EC4899")}
+        {bar("Protein", t.eaten.protein, t.settings.dailyProteinLimit, nutrientColor("protein", dark))}
+        {bar("Carbs", t.eaten.carbs, t.settings.dailyCarbsLimit, nutrientColor("carbs", dark))}
+        {bar("Fat", t.eaten.fats, t.settings.dailyFatsLimit, nutrientColor("fats", dark))}
       </>
     );
   } else if (section.id === "health") {

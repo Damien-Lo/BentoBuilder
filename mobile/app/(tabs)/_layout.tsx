@@ -3,12 +3,15 @@ import { Tabs } from "expo-router";
 import React from "react";
 
 import { CustomTabBar } from "@/src/components/CustomTabBar";
+import { OrbitSection } from "@/src/theme/orbit";
 
 // The Kitchen on the phone: four tabs, two either side of the orb — Log
 // (what's eaten and planned, day by day), Recipes, Pantry, and Plan (the
 // grocery list, and prep & shopping).
 export default function TabLayout() {
   return (
+    // (The Kitchen in its own colour: its tabs, pages and orb.)
+    <OrbitSection section="kitchen">
     <Tabs tabBar={(props) => <CustomTabBar {...props} />} initialRouteName="planner" screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="planner" options={{ title: "Log", tabBarIcon: ({ color }) => <Ionicons size={26} name="journal-outline" color={color} /> }} />
       <Tabs.Screen name="RecipesMainPage" options={{ title: "Recipes", tabBarIcon: ({ color }) => <Ionicons size={26} name="restaurant-outline" color={color} /> }} />
@@ -19,5 +22,6 @@ export default function TabLayout() {
       <Tabs.Screen name="overview" options={{ href: null, title: "Overview" }} />
       <Tabs.Screen name="health" options={{ href: null, title: "Nutrition" }} />
     </Tabs>
+    </OrbitSection>
   );
 }
