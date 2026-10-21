@@ -2,8 +2,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { requireOptionalNativeModule } from "expo";
 import { useRouter, type Href } from "expo-router";
 import { useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
-import Animated, { Easing, FadeIn, FadeInDown, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
+import { Gesture, GestureDetector, ScrollView } from "react-native-gesture-handler";
+import { Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
+import Animated, { Easing, FadeIn, FadeInDown, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
@@ -22,7 +23,8 @@ import { useToday, type Today } from "./useToday";
 // The phone's home screen: the assistant — the orb — at the centre, and
 // the app's sections on an orbit around it, each with its one number for
 // today. The selected section sits at the top (Calendar, to start); tapping
-// another turns the orbit to bring it up, and the panel below shows what
+// another turns the orbit to bring it up — or it can be turned by hand,
+// dragged round and let go, settling on the section nearest the top — and the panel below shows what
 // matters in it now, with its quick actions — tap it again to open the
 // section. The ring round the orb is the selected section's progress (the
 // day so far, calories, tasks done). Tapping the orb opens quick actions —
@@ -347,11 +349,15 @@ export function OrbitHome() {
   const turned = useRef(0);
   const still = useReducedMotion();
   function select(section: Section) {
-    if (section.id === selected) {
+    // (Letting go of a turn isn't a tap on what's under the finger.)
+    if (Date.now() - draggedAt.current < 400) return;
+    // (From where the orbit is turned to — it may still be settling from a
+    // turn by hand, with the selection not caught up yet.)
+    const from = ((Math.round(-turned.current / STEP) % ORBIT.length) + ORBIT.length) % ORBIT.length;
+    if (section.id === ORBIT[from].id) {
       if (section.route) router.push(section.route);
       return;
     }
-    const from = ORBIT.findIndex((s) => s.id === selected);
     const to = ORBIT.findIndex((s) => s.id === section.id);
     let delta = ((to - from) * STEP) % 360;
     if (delta > 180) delta -= 360;
@@ -363,12 +369,81 @@ export function OrbitHome() {
   }
   const go = (route: Href) => router.push(route);
 
+  // Turning it by hand: the orbit follows the finger round its centre, with
+  // a tick as each section passes the top; let go, it springs on from the
+  // speed it had to the section nearest the top, which is then the selected
+  // one. (Nothing else on the page changes until then: redrawing the panel
+  // and the ring mid-turn made it stutter.)
+  const scrollRef = useRef<ScrollView>(null);
+  const draggedAt = useRef(0);
+  const dragging = () => {
+    draggedAt.current = Date.now();
+  };
+  const dragFrom = useSharedValue(0); // the finger's angle last time (radians)
+  const showing = useSharedValue(0); // the section at the top while dragging
+  const indexAt = (deg: number) => {
+    "worklet";
+    const n = ORBIT.length;
+    return ((Math.round(-deg / STEP) % n) + n) % n;
+  };
+  // Where it's settling (straight away, for taps to turn on from), then —
+  // once it's at rest — the section that's selected.
+  function landing(at: number) {
+    draggedAt.current = Date.now();
+    turned.current = at;
+  }
+  function settle(index: number) {
+    setSelected(ORBIT[index].id);
+  }
+
   const size = Math.min(width - 24, 400);
   const centre = size / 2;
   const radius = size * 0.39;
   const orb = size * 0.3;
   const ring = size * 0.43;
   const current = ORBIT.find((s) => s.id === selected)!;
+  const turning = Gesture.Pan()
+    // (A tap on a section or the orb is still a tap; the page still scrolls
+    // from everywhere else.)
+    .minDistance(8)
+    // (The page's scroll waits while the orbit is being turned.)
+    .blocksExternalGesture(scrollRef as unknown as React.RefObject<React.ComponentType>)
+    .onBegin((e) => {
+      dragFrom.value = Math.atan2(e.y - centre, e.x - centre);
+      showing.value = indexAt(turn.value);
+    })
+    .onStart(() => {
+      runOnJS(dragging)();
+    })
+    .onUpdate((e) => {
+      const a = Math.atan2(e.y - centre, e.x - centre);
+      let d = a - dragFrom.value;
+      if (d > Math.PI) d -= 2 * Math.PI;
+      if (d < -Math.PI) d += 2 * Math.PI;
+      dragFrom.value = a;
+      turn.value += (d * 180) / Math.PI;
+      const now = indexAt(turn.value);
+      if (now !== showing.value) {
+        showing.value = now;
+        runOnJS(tick)();
+      }
+    })
+    .onEnd((e) => {
+      // How fast it was turning (degrees a second), from the finger's speed
+      // across the line to the centre; a short way further on, then the
+      // nearest section.
+      const x = e.x - centre;
+      const y = e.y - centre;
+      const r2 = Math.max(x * x + y * y, 400);
+      const spin = (((x * e.velocityY - y * e.velocityX) / r2) * 180) / Math.PI;
+      const at = Math.round((turn.value + spin * 0.15) / STEP) * STEP;
+      const index = indexAt(at);
+      turn.value = withSpring(at, { velocity: spin, damping: 22, stiffness: 170, mass: 1 }, (finished) => {
+        if (finished) runOnJS(settle)(index);
+      });
+      if (index !== showing.value) runOnJS(tick)();
+      runOnJS(landing)(at);
+    });
   const focus = glance(selected, t);
   const name = account?.name.split(" ")[0] ?? "";
   const date = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }).toUpperCase();
@@ -382,7 +457,7 @@ export function OrbitHome() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>
       <StatusBar style={dark ? "light" : "dark"} />
-      <ScrollView contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
         {/* The top: the time, and what's on */}
         <View style={{ flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 12 }}>
           <View style={{ flex: 1 }}>
@@ -399,7 +474,8 @@ export function OrbitHome() {
           </View>
         </View>
 
-        {/* The orbit */}
+        {/* The orbit — turned by tapping a section, or by hand */}
+        <GestureDetector gesture={turning}>
         <View style={{ width: size, height: centre + radius + 72, alignSelf: "center", marginTop: 8 }}>
           <View pointerEvents="none" style={{ position: "absolute", left: centre - radius, top: centre - radius, width: radius * 2, height: radius * 2, borderRadius: radius, borderWidth: 1.5, borderStyle: "dotted", borderColor: colors.orbit }} />
           <View style={{ position: "absolute", left: centre - ring / 2, top: centre - ring / 2, width: ring, height: ring, alignItems: "center", justifyContent: "center" }}>
@@ -421,6 +497,7 @@ export function OrbitHome() {
             />
           ))}
         </View>
+        </GestureDetector>
         <Text style={{ textAlign: "center", fontSize: 12, color: colors.muted }}>{focus.caption}</Text>
 
         {/* What matters in the selected section */}
