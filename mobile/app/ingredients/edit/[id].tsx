@@ -1109,9 +1109,12 @@ function IngredientDetail() {
                 </Tap>
               )}
             </View>
-            <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }} numberOfLines={2}>
-              {ingredient.name}
-            </Text>
+            {/* (Viewing, the card below names it; editing has no card, so the title does.) */}
+            {isEditing && (
+              <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }} numberOfLines={2}>
+                {ingredient.name}
+              </Text>
+            )}
           </View>
         )}
 
@@ -1658,6 +1661,8 @@ function IngredientDetail() {
                               ? "text-emerald-600"
                               : "text-slate-500"
                       }`}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
                     >
                       {isAlwaysAvailable
                         ? "Always available"
