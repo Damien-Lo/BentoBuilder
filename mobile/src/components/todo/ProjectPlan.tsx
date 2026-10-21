@@ -18,9 +18,11 @@ import {
   type TodoList,
   type TodoTask,
 } from "@/src/services/todoApi";
+import { Tap } from "@/src/components/ui/Tap";
+import { useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import { todayStr } from "@/src/utils/mealPlan";
 
-import { ProgressBar } from "./TaskBits";
+import { pillTint, ProgressBar } from "./TaskBits";
 import { TextPromptModal } from "./TextPromptModal";
 import { friendlyDate, showActions, type TodoTheme } from "./theme";
 import { TimelineTab } from "./web/WebProjectView";
@@ -78,6 +80,10 @@ export function ProjectSummary({
 }) {
   const today = todayStr();
   const insets = useSafeAreaInsets();
+  // (On an Orbit page: a card of its own under the title, its buttons the
+  // section's secondary pills.)
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [addingPhase, setAddingPhase] = useState(false);
   const [picking, setPicking] = useState<"startDate" | "targetDate" | null>(null);
@@ -93,17 +99,18 @@ export function ProjectSummary({
   const done = tasks.filter((t) => t.completed).length;
   const progress = tasks.length ? Math.round(tasks.reduce((sum, t) => sum + (t.completed ? 100 : t.progress ?? 0), 0) / tasks.length) : 0;
   const status = STATUS[project.projectStatus ?? "planning"];
+  const statusTint = pillTint(status, o, dark);
   const left = project.targetDate ? daysBetween(today, project.targetDate) : null;
   const setProject = (changes: Parameters<typeof updateTodoProject>[1]) => void updateTodoProject(project._id, changes).then(onChanged, fail);
 
   return (
-    <View style={{ borderTopWidth: 1, borderTopColor: theme.rowDivider }}>
+    <View style={o ? { backgroundColor: o.surface, borderWidth: 1, borderColor: o.border, borderRadius: 18, overflow: "hidden" } : { borderTopWidth: 1, borderTopColor: theme.rowDivider }}>
       {/* The project in one line; tap for the rest. */}
       <View>
         <Pressable onPress={() => setDetailsOpen((v) => !v)} className="active:opacity-70" style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <View style={{ borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, backgroundColor: status.bg }}>
-              <Text style={{ fontSize: 12, fontWeight: "700", color: status.fg }}>{status.label}</Text>
+            <View style={{ borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, backgroundColor: statusTint.bg }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: statusTint.fg }}>{status.label}</Text>
             </View>
             <Text numberOfLines={1} style={{ flex: 1, marginLeft: 10, fontSize: 13, fontWeight: left !== null && left < 0 ? "700" : "500", color: left !== null && left < 0 ? theme.danger : theme.textMuted }}>
               {project.targetDate ? `${friendlyDate(project.targetDate)} · ${left! < 0 ? `${-left!} d late` : left === 0 ? "today" : `${left} d left`}` : "No target date"}
@@ -122,13 +129,13 @@ export function ProjectSummary({
         {detailsOpen && (
           <View style={{ borderTopWidth: 1, borderTopColor: theme.rowDivider }}>
             <View style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 4 }}>
-              <Text style={{ fontSize: 12, fontWeight: "700", color: theme.textMuted }}>GOAL</Text>
+              <Text style={o ? { fontSize: 11, fontWeight: "700", letterSpacing: 1.2, color: o.faint } : { fontSize: 12, fontWeight: "700", color: theme.textMuted }}>GOAL</Text>
               <TextInput
                 value={goal}
                 onChangeText={setGoal}
                 onBlur={() => goal !== (project.description ?? "") && setProject({ description: goal })}
                 placeholder="What this project is for, and what done looks like"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 multiline
                 style={{ marginTop: 4, minHeight: 44, fontSize: 15, lineHeight: 21, color: theme.text }}
               />
@@ -148,14 +155,14 @@ export function ProjectSummary({
             <DetailRow theme={theme} icon="flag-outline" label="Start date" value={project.startDate ? friendlyDate(project.startDate) : "None"} faint={!project.startDate} onPress={() => setPicking("startDate")} onClear={project.startDate ? () => setProject({ startDate: null }) : undefined} />
             <DetailRow theme={theme} icon="calendar-outline" label="Target date" value={project.targetDate ? friendlyDate(project.targetDate) : "None"} faint={!project.targetDate} onPress={() => setPicking("targetDate")} onClear={project.targetDate ? () => setProject({ targetDate: null }) : undefined} />
             <View style={{ flexDirection: "row", gap: 8, padding: 12, borderTopWidth: 1, borderTopColor: theme.rowDivider }}>
-              <Pressable onPress={() => setTimeline(true)} className="flex-1 flex-row items-center justify-center rounded-xl bg-slate-100 py-3 active:bg-slate-200">
-                <Ionicons name="analytics-outline" size={17} color="#334155" />
-                <Text className="ml-2 text-sm font-semibold text-slate-700">Timeline</Text>
-              </Pressable>
-              <Pressable onPress={() => setAddingPhase(true)} className="flex-1 flex-row items-center justify-center rounded-xl bg-slate-100 py-3 active:bg-slate-200">
-                <Ionicons name="layers-outline" size={17} color="#334155" />
-                <Text className="ml-2 text-sm font-semibold text-slate-700">Add a phase</Text>
-              </Pressable>
+              <Tap onPress={() => setTimeline(true)} className="flex-1 flex-row items-center justify-center rounded-xl bg-slate-100 py-3 active:bg-slate-200" style={o && { backgroundColor: o.pill, borderRadius: 14 }} pressedStyle={o ? { opacity: 0.75 } : {}}>
+                <Ionicons name="analytics-outline" size={17} color={o?.onPill ?? "#334155"} />
+                <Text className="ml-2 text-sm font-semibold text-slate-700" style={o && { color: o.onPill }}>Timeline</Text>
+              </Tap>
+              <Tap onPress={() => setAddingPhase(true)} className="flex-1 flex-row items-center justify-center rounded-xl bg-slate-100 py-3 active:bg-slate-200" style={o && { backgroundColor: o.pill, borderRadius: 14 }} pressedStyle={o ? { opacity: 0.75 } : {}}>
+                <Ionicons name="layers-outline" size={17} color={o?.onPill ?? "#334155"} />
+                <Text className="ml-2 text-sm font-semibold text-slate-700" style={o && { color: o.onPill }}>Add a phase</Text>
+              </Tap>
             </View>
           </View>
         )}
@@ -189,12 +196,19 @@ export function ProjectSummary({
       <Modal visible={timeline} animationType="slide" onRequestClose={() => setTimeline(false)}>
         {/* (Padded by hand: a modal is outside the page's safe area.) */}
         <View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: theme.bg }}>
-          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 6 }}>
-            <Pressable onPress={() => setTimeline(false)} accessibilityLabel="Close" style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
-              <Ionicons name="close" size={26} color={theme.text} />
-            </Pressable>
+          {/* (Orbit: a round close button, the title on the page itself.) */}
+          <View style={o ? { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 12, paddingTop: 4, paddingBottom: 12 } : { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 6 }}>
+            {o ? (
+              <Tap onPress={() => setTimeline(false)} accessibilityLabel="Close" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                <Ionicons name="close" size={21} color={o.text} />
+              </Tap>
+            ) : (
+              <Pressable onPress={() => setTimeline(false)} accessibilityLabel="Close" style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="close" size={26} color={theme.text} />
+              </Pressable>
+            )}
             <View style={{ flex: 1 }}>
-              <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: "700", color: theme.title }}>
+              <Text numberOfLines={1} style={{ fontSize: o ? 22 : 18, fontWeight: o ? "800" : "700", letterSpacing: o ? -0.3 : 0, color: theme.title }}>
                 Timeline
               </Text>
               <Text numberOfLines={1} style={{ fontSize: 13, color: theme.textMuted }}>
@@ -244,6 +258,7 @@ export function ProjectPlan({
 }) {
   const [closed, setClosed] = useState<string[]>([]);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
+  const o = useOrbitPage();
 
   const fail = (error: unknown) => {
     Alert.alert("Couldn't save", error instanceof Error ? error.message : "Something went wrong.");
@@ -334,7 +349,7 @@ export function ProjectPlan({
             <View style={{ flexDirection: "row", alignItems: "center", height: 40 }}>
               <Pressable onPress={() => setClosed((prev) => (shut ? prev.filter((id) => id !== phase._id) : [...prev, phase._id]))} style={{ flex: 1, flexDirection: "row", alignItems: "center", height: 40 }}>
                 <Ionicons name={shut ? "chevron-forward" : "chevron-down"} size={16} color={theme.icon} />
-                <Text numberOfLines={1} style={{ flexShrink: 1, marginLeft: 6, fontSize: 15, fontWeight: "700", color: theme.text }}>
+                <Text numberOfLines={1} style={{ flexShrink: 1, marginLeft: 6, fontSize: 15, fontWeight: o ? "800" : "700", color: theme.text }}>
                   {phase.name}
                 </Text>
                 <Text style={{ marginLeft: 8, fontSize: 13, color: theme.textFaint }}>
@@ -342,7 +357,7 @@ export function ProjectPlan({
                 </Text>
               </Pressable>
               <Pressable onPress={() => setPrompt({ kind: "addTo", phase })} accessibilityLabel={`Add a task to ${phase.name}`} hitSlop={6} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="add" size={22} color={accent} />
+                <Ionicons name="add" size={22} color={o?.ink ?? accent} />
               </Pressable>
               <Pressable onPress={() => phaseMenu(phase)} accessibilityLabel={`${phase.name} options`} hitSlop={6} style={{ width: 36, height: 40, alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name="ellipsis-horizontal" size={18} color={theme.icon} />
@@ -392,18 +407,19 @@ function DetailRow({
   onPress: () => void;
   onClear?: () => void;
 }) {
+  const o = useOrbitPage();
   return (
-    <Pressable onPress={onPress} className="active:bg-slate-50" style={{ flexDirection: "row", alignItems: "center", minHeight: 48, paddingHorizontal: 14, borderTopWidth: 1, borderTopColor: theme.rowDivider }}>
-      <Ionicons name={icon} size={18} color={theme.icon} />
+    <Tap onPress={onPress} className="active:bg-slate-50" style={{ flexDirection: "row", alignItems: "center", minHeight: 48, paddingHorizontal: 14, borderTopWidth: 1, borderTopColor: theme.rowDivider }} pressedStyle={o ? { backgroundColor: o.pill } : {}}>
+      <Ionicons name={icon} size={18} color={o?.muted ?? theme.icon} />
       <Text style={{ flex: 1, marginLeft: 12, fontSize: 15, color: theme.text }}>{label}</Text>
       <Text style={{ fontSize: 15, color: faint ? theme.textFaint : theme.text }}>{value}</Text>
       {onClear ? (
         <Pressable hitSlop={10} onPress={onClear} style={{ marginLeft: 8 }}>
-          <Ionicons name="close-circle" size={18} color="#94A3B8" />
+          <Ionicons name="close-circle" size={18} color={o?.faint ?? "#94A3B8"} />
         </Pressable>
       ) : (
-        <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 4 }} />
+        <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#CBD5E1"} style={{ marginLeft: 4 }} />
       )}
-    </Pressable>
+    </Tap>
   );
 }

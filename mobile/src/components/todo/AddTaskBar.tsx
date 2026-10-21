@@ -3,8 +3,11 @@ import { useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { DatePickerModal } from "@/src/components/forms";
+import { Tap } from "@/src/components/ui/Tap";
+import { useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { todayStr } from "@/src/utils/mealPlan";
 
+import { readableAccent } from "./TaskBits";
 import { friendlyDate } from "./theme";
 
 export interface NewTaskInput {
@@ -21,6 +24,8 @@ type QuickDefaults = Partial<Pick<NewTaskInput, "myDay" | "doDate" | "dueDate">>
 // list a row of quick options appears underneath — add to My Day, a do
 // date (when you plan to work on it), a due date, and a description — so a
 // task can be set up without opening it. Checklists get just the text.
+// On a page in Orbit's look it takes the page's colours (the list's own
+// colour still on its + and chips); elsewhere it keeps the older look.
 export function AddTaskBar({
   accent,
   checklist,
@@ -33,6 +38,9 @@ export function AddTaskBar({
   defaults?: QuickDefaults;
   onAdd: (input: NewTaskInput) => void;
 }) {
+  const o = useOrbitPage();
+  // (The list's colour as text and icons: lightened in the dark, to read.)
+  const shown = readableAccent(accent, o, useOrbitTheme().dark);
   const inputRef = useRef<TextInput>(null);
   const [active, setActive] = useState(false);
   const [title, setTitle] = useState("");
@@ -65,8 +73,11 @@ export function AddTaskBar({
   const showOptions = active && !checklist;
 
   return (
-    <View className="border-b border-slate-200 bg-white px-4 pb-2.5 pt-2.5">
-      <View className={`rounded-2xl border bg-slate-50 px-4 ${active ? "border-blue-400" : "border-slate-200"}`}>
+    <View className="border-b border-slate-200 bg-white px-4 pb-2.5 pt-2.5" style={o && { backgroundColor: o.canvas, borderBottomColor: o.border }}>
+      <View
+        className={`rounded-2xl border bg-slate-50 px-4 ${active ? "border-blue-400" : "border-slate-200"}`}
+        style={o && { backgroundColor: o.surface, borderColor: active ? o.selectedRing : o.border, borderRadius: 18 }}
+      >
         <Pressable
           onPress={() => {
             setActive(true);
@@ -75,14 +86,14 @@ export function AddTaskBar({
           className="flex-row items-center"
           style={{ minHeight: 50 }}
         >
-          <Ionicons name={active ? "ellipse-outline" : "add"} size={active ? 24 : 26} color={active ? "#94A3B8" : accent} />
+          <Ionicons name={active ? "ellipse-outline" : "add"} size={active ? 24 : 26} color={active ? (o?.faint ?? "#94A3B8") : shown} />
           {active ? (
             <TextInput
               ref={inputRef}
               value={title}
               onChangeText={setTitle}
               placeholder={noun}
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={o?.faint ?? "#94A3B8"}
               returnKeyType="done"
               blurOnSubmit={false}
               onSubmitEditing={submit}
@@ -91,16 +102,16 @@ export function AddTaskBar({
                 if (!title.trim() && !description.trim() && !showDescription && picking == null) setActive(false);
               }}
               className="ml-3 flex-1 text-base text-slate-900"
-              style={{ paddingVertical: 12 }}
+              style={[{ paddingVertical: 12 }, o && { color: o.text }]}
             />
           ) : (
-            <Text className="ml-3 text-base font-semibold" style={{ color: accent }}>
+            <Text className="ml-3 text-base font-semibold" style={{ color: shown }}>
               {noun}
             </Text>
           )}
           {active && !!title.trim() && (
             <Pressable onPress={submit} hitSlop={8} accessibilityLabel="Add" className="ml-2">
-              <Ionicons name="arrow-up-circle" size={30} color={accent} />
+              <Ionicons name="arrow-up-circle" size={30} color={shown} />
             </Pressable>
           )}
         </Pressable>
@@ -110,22 +121,23 @@ export function AddTaskBar({
             value={description}
             onChangeText={setDescription}
             placeholder="Description"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={o?.faint ?? "#94A3B8"}
             multiline
             autoFocus
             className="mb-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-            style={{ minHeight: 56 }}
+            style={[{ minHeight: 56 }, o && { backgroundColor: o.canvas, borderColor: o.border, color: o.text }]}
           />
         )}
 
         {showOptions && (
           <View className="flex-row flex-wrap items-center gap-2 pb-3">
-            <QuickChip icon="sunny-outline" label={myDay ? "My Day" : null} on={myDay} accent={accent} hint="Add to My Day" onPress={() => setMyDay((v) => !v)} />
+            <QuickChip icon="sunny-outline" label={myDay ? "My Day" : null} on={myDay} accent={accent} o={o} hint="Add to My Day" onPress={() => setMyDay((v) => !v)} />
             <QuickChip
               icon="play-circle-outline"
               label={doDate ? `Do ${friendlyDate(doDate)}` : null}
               on={!!doDate}
               accent={accent}
+              o={o}
               hint="Set a do date"
               onPress={() => setPicking("do")}
               onClear={() => setDoDate(null)}
@@ -135,6 +147,7 @@ export function AddTaskBar({
               label={dueDate ? `Due ${friendlyDate(dueDate)}` : null}
               on={!!dueDate}
               accent={accent}
+              o={o}
               hint="Set a due date"
               onPress={() => setPicking("due")}
               onClear={() => setDueDate(null)}
@@ -144,6 +157,7 @@ export function AddTaskBar({
               label={showDescription ? "Description" : null}
               on={showDescription}
               accent={accent}
+              o={o}
               hint="Add a description"
               onPress={() => setShowDescription((v) => !v)}
             />
@@ -173,6 +187,7 @@ function QuickChip({
   label,
   on,
   accent,
+  o,
   hint,
   onPress,
   onClear,
@@ -181,25 +196,29 @@ function QuickChip({
   label: string | null;
   on: boolean;
   accent: string;
+  // The page's colours in Orbit's look, else null.
+  o: OrbitColors | null;
   hint: string;
   onPress: () => void;
   onClear?: () => void;
 }) {
   return (
-    <Pressable
+    // (Held, an unset one shows a soft circle; a set one doesn't change.)
+    <Tap
       onPress={onPress}
       accessibilityLabel={hint}
-      className={`h-9 flex-row items-center rounded-full ${on ? "px-3" : "w-10 justify-center"} ${on ? "" : "active:bg-slate-200"}`}
+      className={`h-9 flex-row items-center rounded-full ${on ? "px-3" : "w-10 justify-center"}`}
       style={on ? { backgroundColor: accent } : undefined}
+      pressedStyle={on ? {} : { backgroundColor: o?.pill ?? "#E2E8F0" }}
     >
-      <Ionicons name={icon} size={on ? 16 : 22} color={on ? "#FFFFFF" : "#64748B"} />
+      <Ionicons name={icon} size={on ? 16 : 22} color={on ? "#FFFFFF" : (o?.muted ?? "#64748B")} />
       {on && label && <Text className="ml-1.5 text-xs font-semibold text-white">{label}</Text>}
       {on && onClear && (
         <Pressable onPress={onClear} hitSlop={8} accessibilityLabel="Clear" className="ml-1.5">
           <Ionicons name="close" size={14} color="#FFFFFF" />
         </Pressable>
       )}
-    </Pressable>
+    </Tap>
   );
 }
 

@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AddTaskBar, type NewTaskInput } from "@/src/components/todo/AddTaskBar";
 import { openListOptions } from "@/src/components/todo/listActions";
 import { ProjectPlan, ProjectSummary } from "@/src/components/todo/ProjectPlan";
-import { PriorityPill, ProgressBar, StatusPill, TaskNumber } from "@/src/components/todo/TaskBits";
+import { PriorityPill, ProgressBar, StatusPill, TaskNumber, useListsTheme } from "@/src/components/todo/TaskBits";
 import { TextPromptModal } from "@/src/components/todo/TextPromptModal";
 import {
   friendlyDate,
@@ -24,9 +24,9 @@ import {
   longToday,
   showActions,
   SMART_LISTS,
-  useTodoTheme,
   type TodoTheme,
 } from "@/src/components/todo/theme";
+import { Tap } from "@/src/components/ui/Tap";
 import {
   createTodoTask,
   deleteTodoTask,
@@ -41,14 +41,30 @@ import {
   type TodoList,
   type TodoTask,
 } from "@/src/services/todoApi";
+import { OrbitPage, OrbitSection, useOrbitPage } from "@/src/theme/orbit";
 import { todayStr } from "@/src/utils/mealPlan";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // One list — a real one, or a smart list (My Day / Important / Planned /
 // All) when `id` is one of those. Task cards, a collapsible Completed
-// section, and an "Add a Task" bar pinned to the bottom.
+// section, and an "Add a Task" bar pinned to the bottom. On a phone in
+// Orbit's look, in the Tasks section's violet; in a desktop browser as it was.
 export default function TodoListScreen() {
+  const wide = useWideWeb();
+  return (
+    <OrbitSection section="tasks">
+      <OrbitPage on={!wide}>
+        <TodoListPage />
+      </OrbitPage>
+    </OrbitSection>
+  );
+}
+
+function TodoListPage() {
   const router = useRouter();
-  const theme = useTodoTheme();
+  // (On an Orbit page: the same roles in Orbit's colours.)
+  const theme = useListsTheme();
+  const o = useOrbitPage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const smart = SMART_LISTS.find((s) => s.id === id);
 
@@ -194,62 +210,99 @@ export default function TodoListScreen() {
   const done = tasks
     .filter((t) => t.completed)
     .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
+  const subtitle =
+    smart?.id === "myday"
+      ? longToday()
+      : `${isChecklist ? "Checklist · " : isProject ? "Project · " : ""}${open.length} ${noun}${open.length === 1 ? "" : "s"}${done.length ? ` · ${done.length} ${isChecklist ? "ticked" : "completed"}` : ""}`;
+
+  function openOptions(target: TodoList) {
+    openListOptions({
+      list: target,
+      groups,
+      onRename: () => setRenaming(true),
+      onChanged: refresh,
+      allowProject: true,
+      onDeleted: () => router.back(),
+      // It now belongs on a different tab — go back to the tabs.
+      onMoved: () => router.back(),
+    });
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        {/* Header: the title and, for a project, its details beneath it. */}
-        <View style={{ backgroundColor: theme.headerBg, borderBottomWidth: 1, borderBottomColor: theme.cardBorder }}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            paddingHorizontal: 12,
-            paddingVertical: 12,
-          }}
-        >
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityLabel="Back to lists"
-            className="active:bg-slate-100"
-            style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }}
-          >
-            <Ionicons name="chevron-back" size={26} color={theme.text} />
-          </Pressable>
-          <View style={{ flex: 1, marginLeft: 4 }}>
-            <Text style={{ fontSize: 24, fontWeight: "700", color: theme.title }} numberOfLines={1}>
+        {/* Header: the title and, for a project, its details beneath it.
+            (Phone, Orbit: round buttons over a large title on the page
+            itself, the project's strip a card under it; desktop: its bar.) */}
+        {o ? (
+          <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
+              <Tap onPress={() => router.back()} accessibilityLabel="Back to lists" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                <Ionicons name="chevron-back" size={22} color={o.text} />
+              </Tap>
+              <View style={{ flex: 1 }} />
+              {list && (
+                <Tap onPress={() => openOptions(list)} accessibilityLabel="List options" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                  <Ionicons name="ellipsis-horizontal" size={20} color={o.icon} />
+                </Tap>
+              )}
+            </View>
+            <Text numberOfLines={2} style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>
               {title}
             </Text>
-            <Text style={{ marginTop: 2, fontSize: 14, color: theme.textMuted }} numberOfLines={1}>
-              {smart?.id === "myday"
-                ? longToday()
-                : `${isChecklist ? "Checklist · " : isProject ? "Project · " : ""}${open.length} ${noun}${open.length === 1 ? "" : "s"}${done.length ? ` · ${done.length} ${isChecklist ? "ticked" : "completed"}` : ""}`}
-            </Text>
+            {/* The list's own colour, beside what's in it. */}
+            <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center" }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, marginRight: 8, backgroundColor: accent }} />
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: "600", color: o.muted }}>
+                {subtitle}
+              </Text>
+            </View>
+            {isProject && list && (
+              <View style={{ marginTop: 14 }}>
+                <ProjectSummary project={list} tasks={tasks} accent={accent} theme={theme} onOpenTask={openTask} onChanged={refresh} />
+              </View>
+            )}
           </View>
-          {list && (
+        ) : (
+          <View style={{ backgroundColor: theme.headerBg, borderBottomWidth: 1, borderBottomColor: theme.cardBorder }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 12,
+              paddingVertical: 12,
+            }}
+          >
             <Pressable
-              accessibilityLabel="List options"
-              onPress={() =>
-                openListOptions({
-                  list,
-                  groups,
-                  onRename: () => setRenaming(true),
-                  onChanged: refresh,
-                  allowProject: true,
-                  onDeleted: () => router.back(),
-                  // It now belongs on a different tab — go back to the tabs.
-                  onMoved: () => router.back(),
-                })
-              }
+              onPress={() => router.back()}
+              accessibilityLabel="Back to lists"
               className="active:bg-slate-100"
               style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }}
             >
-              <Ionicons name="ellipsis-horizontal" size={22} color={theme.icon} />
+              <Ionicons name="chevron-back" size={26} color={theme.text} />
             </Pressable>
-          )}
-        </View>
-        {isProject && list && <ProjectSummary project={list} tasks={tasks} accent={accent} theme={theme} onOpenTask={openTask} onChanged={refresh} />}
-        </View>
+            <View style={{ flex: 1, marginLeft: 4 }}>
+              <Text style={{ fontSize: 24, fontWeight: "700", color: theme.title }} numberOfLines={1}>
+                {title}
+              </Text>
+              <Text style={{ marginTop: 2, fontSize: 14, color: theme.textMuted }} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            </View>
+            {list && (
+              <Pressable
+                accessibilityLabel="List options"
+                onPress={() => openOptions(list)}
+                className="active:bg-slate-100"
+                style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }}
+              >
+                <Ionicons name="ellipsis-horizontal" size={22} color={theme.icon} />
+              </Pressable>
+            )}
+          </View>
+          {isProject && list && <ProjectSummary project={list} tasks={tasks} accent={accent} theme={theme} onOpenTask={openTask} onChanged={refresh} />}
+          </View>
+        )}
 
         <AddTaskBar
           accent={accent}

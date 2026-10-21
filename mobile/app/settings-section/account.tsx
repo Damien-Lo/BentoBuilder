@@ -6,8 +6,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAccount } from "@/src/components/auth/AuthGate";
 import { PrivacyPolicyModal } from "@/src/components/legal/PrivacyPolicy";
-import { useOrbitTheme, type Appearance } from "@/src/theme/orbit";
-import { Button, Card, confirm, errorText, Heading, Input, when } from "@/src/components/settings/AccountParts";
+import { OrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+import { Button, Card, confirm, errorText, Heading, Input, PageHeader, SmallButton, useGoBack, when } from "@/src/components/settings/AccountParts";
+import { Tap } from "@/src/components/ui/Tap";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import {
   changePassword,
   deleteMyAccount,
@@ -21,14 +23,17 @@ import {
 // Settings → Account: who's signed in — name, email, password — the devices
 // signed in to the account, signing out, and deleting the account. (The
 // admin lets people in, and looks after their accounts, in Developer →
-// People.)
+// People.) On the phone in Orbit's look, light or dark (`o`: its colours);
+// a desktop browser keeps the older look. (How it looks — Appearance — has
+// its own page now, from the Settings list.)
 
 export default function AccountSettingsScreen() {
   const { account, setAccount, signOut } = useAccount();
-  const { appearance, setAppearance } = useOrbitTheme();
-  // (In a browser the web's own light/dark switch does this — the sidebar's.)
-  const phone = Platform.OS !== "web";
   const router = useRouter();
+  const back = useGoBack("/settings-section");
+  const wide = useWideWeb();
+  const { colors } = useOrbitTheme();
+  const o = wide ? null : colors;
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,54 +117,69 @@ export default function AccountSettingsScreen() {
   }
 
   const others = (sessions ?? []).filter((s) => !s.current);
+  const signedInAs = `Signed in as ${account.email}${isAdmin ? " · admin" : ""}`;
+  const errorStyle = o && { color: o.danger };
+  const line = o && { borderTopColor: o.border };
+  // A "Change" link, in the page's colours.
+  const change = (onPress: () => void) =>
+    o ? (
+      <Tap onPress={onPress} hitSlop={8} accessibilityRole="button" accessibilityLabel="Change" pressedStyle={{ opacity: 0.5 }}>
+        <Text style={{ fontSize: 14, fontWeight: "600", color: o.accent }}>Change</Text>
+      </Tap>
+    ) : (
+      <Pressable onPress={onPress} hitSlop={8}>
+        <Text className="text-sm font-semibold text-blue-600">Change</Text>
+      </Pressable>
+    );
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60, maxWidth: 820, width: "100%", alignSelf: "center" }} keyboardShouldPersistTaps="handled">
-        <Text className="text-2xl font-bold text-slate-950">Account</Text>
-        <Text className="mt-1 text-sm text-slate-500">
-          Signed in as {account.email}
-          {isAdmin ? " · admin" : ""}
-        </Text>
-        {!!error && <Text className="mt-3 text-sm text-red-600">{error}</Text>}
+    <OrbitPage on={!wide}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
+      <ScrollView contentContainerStyle={[{ padding: 20, paddingBottom: 60, maxWidth: 820, width: "100%", alignSelf: "center" }, o && { paddingHorizontal: 16, paddingTop: 4 }]} keyboardShouldPersistTaps="handled">
+        {o ? (
+          <PageHeader title="Account" subtitle={signedInAs} onBack={back} />
+        ) : (
+          <>
+            <Text className="text-2xl font-bold text-slate-950">Account</Text>
+            <Text className="mt-1 text-sm text-slate-500">{signedInAs}</Text>
+          </>
+        )}
+        {!!error && <Text className="mt-3 text-sm text-red-600" style={errorStyle}>{error}</Text>}
 
         {/* You */}
         <Heading>You</Heading>
         <Card>
           <View className="flex-row items-center px-4 py-3">
-            <Ionicons name="person-outline" size={18} color="#475569" />
+            <Ionicons name="person-outline" size={18} color={o?.icon ?? "#475569"} />
             <TextInput
               value={name}
               onChangeText={setName}
               onBlur={() => void saveName()}
               onSubmitEditing={() => void saveName()}
               placeholder="Your name"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={o?.faint ?? "#94A3B8"}
               className="ml-3 flex-1 text-base text-slate-900"
-              style={Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : undefined}
+              style={[Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : undefined, o && { color: o.text }]}
               accessibilityLabel="Your name"
             />
-            <Text className="text-xs text-slate-400">Name</Text>
+            <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>Name</Text>
           </View>
-          <View className="border-t border-slate-100 px-4 py-3">
+          <View className="border-t border-slate-100 px-4 py-3" style={line}>
             <View className="flex-row items-center">
-              <Ionicons name="mail-outline" size={18} color="#475569" />
-              <Text className="ml-3 flex-1 text-base text-slate-900">{account.email}</Text>
-              {!changingEmail && (
-                <Pressable onPress={() => setChangingEmail(true)} hitSlop={8}>
-                  <Text className="text-sm font-semibold text-blue-600">Change</Text>
-                </Pressable>
-              )}
+              <Ionicons name="mail-outline" size={18} color={o?.icon ?? "#475569"} />
+              <Text className="ml-3 flex-1 text-base text-slate-900" style={o && { color: o.text }}>{account.email}</Text>
+              {!changingEmail && change(() => setChangingEmail(true))}
             </View>
             {changingEmail && (
               <View className="mt-2">
                 <Input value={email} onChangeText={setEmail} placeholder="New email" keyboardType="email-address" textContentType="username" autoComplete="email" />
                 <Input value={emailPassword} onChangeText={setEmailPassword} placeholder="Your current password" secureTextEntry textContentType="password" autoComplete="current-password" />
-                {!!emailState?.error && <Text className="mt-2 text-sm text-red-600">{emailState.error}</Text>}
+                {!!emailState?.error && <Text className="mt-2 text-sm text-red-600" style={errorStyle}>{emailState.error}</Text>}
                 <View className="mt-3 flex-row gap-2">
-                  <Button label="Save email" busy={emailState?.busy} onPress={() => void saveEmail()} />
+                  <Button label="Save email" fill busy={emailState?.busy} onPress={() => void saveEmail()} />
                   <Button
                     label="Cancel"
                     tone="plain"
+                    fill
                     onPress={() => {
                       setChangingEmail(false);
                       setEmail(account.email);
@@ -172,41 +192,6 @@ export default function AccountSettingsScreen() {
           </View>
         </Card>
 
-        {/* Appearance, on the phone */}
-        {phone && (
-          <>
-            <Heading>Appearance</Heading>
-            <Card>
-              <View className="px-4 py-3">
-                <View className="flex-row rounded-xl bg-slate-100 p-1">
-                  {(
-                    [
-                      ["system", "Automatic", "phone-portrait-outline"],
-                      ["light", "Light", "sunny-outline"],
-                      ["dark", "Dark", "moon-outline"],
-                    ] as [Appearance, string, keyof typeof Ionicons.glyphMap][]
-                  ).map(([value, label, icon]) => {
-                    const on = appearance === value;
-                    return (
-                      <Pressable
-                        key={value}
-                        onPress={() => setAppearance(value)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: on }}
-                        className={`flex-1 flex-row items-center justify-center rounded-lg py-2 ${on ? "bg-white" : ""}`}
-                      >
-                        <Ionicons name={icon} size={15} color={on ? "#0F172A" : "#64748B"} />
-                        <Text className={`ml-1.5 text-sm font-semibold ${on ? "text-slate-900" : "text-slate-500"}`}>{label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                <Text className="mt-2 text-xs text-slate-400">Automatic follows your phone. For now only the home screen changes — the rest of the app is being redesigned to match.</Text>
-              </View>
-            </Card>
-          </>
-        )}
-
         {/* Password */}
         <Heading>Password</Heading>
         <Card>
@@ -216,13 +201,14 @@ export default function AccountSettingsScreen() {
                 <Input value={current} onChangeText={setCurrent} placeholder="Current password" secureTextEntry textContentType="password" autoComplete="current-password" />
                 <Input value={next} onChangeText={setNext} placeholder="New password (at least 8 characters)" secureTextEntry textContentType="newPassword" autoComplete="new-password" />
                 <Input value={again} onChangeText={setAgain} placeholder="New password again" secureTextEntry textContentType="newPassword" autoComplete="new-password" />
-                {!!passwordState?.error && <Text className="mt-2 text-sm text-red-600">{passwordState.error}</Text>}
-                <Text className="mt-2 text-xs text-slate-400">Your other devices will be signed out.</Text>
+                {!!passwordState?.error && <Text className="mt-2 text-sm text-red-600" style={errorStyle}>{passwordState.error}</Text>}
+                <Text className="mt-2 text-xs text-slate-400" style={o && { color: o.faint }}>Your other devices will be signed out.</Text>
                 <View className="mt-3 flex-row gap-2">
-                  <Button label="Change password" busy={passwordState?.busy} onPress={() => void savePassword()} />
+                  <Button label="Change password" fill busy={passwordState?.busy} onPress={() => void savePassword()} />
                   <Button
                     label="Cancel"
                     tone="plain"
+                    fill
                     onPress={() => {
                       setChangingPassword(false);
                       setPasswordState(null);
@@ -232,11 +218,9 @@ export default function AccountSettingsScreen() {
               </>
             ) : (
               <View className="flex-row items-center">
-                <Ionicons name="key-outline" size={18} color="#475569" />
-                <Text className="ml-3 flex-1 text-sm text-slate-600">{passwordState?.done ?? "••••••••"}</Text>
-                <Pressable onPress={() => setChangingPassword(true)} hitSlop={8}>
-                  <Text className="text-sm font-semibold text-blue-600">Change</Text>
-                </Pressable>
+                <Ionicons name="key-outline" size={18} color={o?.icon ?? "#475569"} />
+                <Text className="ml-3 flex-1 text-sm text-slate-600" style={o && { color: o.muted }}>{passwordState?.done ?? "••••••••"}</Text>
+                {change(() => setChangingPassword(true))}
               </View>
             )}
           </View>
@@ -245,52 +229,58 @@ export default function AccountSettingsScreen() {
         {/* Devices */}
         <Heading>Signed in on</Heading>
         <Card>
-          {!sessions && <ActivityIndicator className="my-4" color="#2563EB" />}
+          {!sessions && <ActivityIndicator className="my-4" color={o?.muted ?? "#2563EB"} />}
           {sessions?.map((session, i) => (
-            <View key={session._id} className={`flex-row items-center px-4 py-3 ${i ? "border-t border-slate-100" : ""}`}>
-              <Ionicons name={/iPhone|Phone/.test(session.deviceName) ? "phone-portrait-outline" : "desktop-outline"} size={18} color="#2563EB" />
+            <View key={session._id} className={`flex-row items-center px-4 py-3 ${i ? "border-t border-slate-100" : ""}`} style={i ? line : undefined}>
+              <Ionicons name={/iPhone|Phone/.test(session.deviceName) ? "phone-portrait-outline" : "desktop-outline"} size={18} color={o?.icon ?? "#2563EB"} />
               <View className="ml-3 flex-1">
-                <Text className="text-[15px] font-semibold text-slate-900">
+                <Text className="text-[15px] font-semibold text-slate-900" style={o && { color: o.text }}>
                   {session.deviceName || "A device"}
-                  {session.current ? <Text className="text-xs font-semibold text-green-600">  · this device</Text> : null}
+                  {session.current ? <Text className="text-xs font-semibold text-green-600" style={o && { color: o.success }}>  · this device</Text> : null}
                 </Text>
-                <Text className="text-xs text-slate-400">
+                <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>
                   Signed in {when(session.createdAt)} · last used {when(session.lastUsedAt)}
                 </Text>
               </View>
               {!session.current && (
-                <Pressable
+                <SmallButton
+                  label="Sign out"
                   onPress={() => confirm(`Sign out ${session.deviceName || "this device"}?`, "It'll need your password to sign in again.", "Sign out", () => void endSession(session._id).then(load, () => {}))}
-                  hitSlop={8}
-                  className="rounded-lg bg-slate-100 px-3 py-1.5 active:bg-slate-200"
-                >
-                  <Text className="text-xs font-semibold text-slate-600">Sign out</Text>
-                </Pressable>
+                />
               )}
             </View>
           ))}
         </Card>
-        <View className="mt-3 flex-row flex-wrap gap-2">
+        <View className="mt-3 flex-row flex-wrap gap-2" style={o && { flexDirection: "column", gap: 10 }}>
           {others.length > 0 && (
             <Button
               label="Sign out everywhere else"
               tone="plain"
+              fill
               icon="log-out-outline"
               onPress={() => confirm("Sign out your other devices?", `${others.length} other device${others.length === 1 ? "" : "s"} will need your password to sign in again.`, "Sign out", () => void endOtherSessions().then(load, () => {}))}
             />
           )}
-          <Button label="Sign out" tone="red" icon="log-out-outline" onPress={() => confirm("Sign out?", "You'll need your password to sign in again on this device.", "Sign out", () => void signOut())} />
+          <Button label="Sign out" tone="red" fill icon="log-out-outline" onPress={() => confirm("Sign out?", "You'll need your password to sign in again on this device.", "Sign out", () => void signOut())} />
         </View>
 
         {isAdmin && (
           <>
             <Heading>People</Heading>
             <Card>
-              <Pressable onPress={() => router.push("/developer/people")} className="flex-row items-center px-4 py-3.5 active:bg-slate-50">
-                <Ionicons name="people-outline" size={18} color="#475569" />
-                <Text className="ml-3 flex-1 text-[15px] text-slate-900">Invite people and look after their accounts</Text>
-                <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-              </Pressable>
+              {o ? (
+                <Tap onPress={() => router.push("/developer/people")} accessibilityRole="button" style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14 }} pressedStyle={{ backgroundColor: o.pill }}>
+                  <Ionicons name="people-outline" size={18} color={o.icon} />
+                  <Text style={{ marginLeft: 12, flex: 1, fontSize: 15, color: o.text }}>Invite people and look after their accounts</Text>
+                  <Ionicons name="chevron-forward" size={18} color={o.faint} />
+                </Tap>
+              ) : (
+                <Pressable onPress={() => router.push("/developer/people")} className="flex-row items-center px-4 py-3.5 active:bg-slate-50">
+                  <Ionicons name="people-outline" size={18} color="#475569" />
+                  <Text className="ml-3 flex-1 text-[15px] text-slate-900">Invite people and look after their accounts</Text>
+                  <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+                </Pressable>
+              )}
             </Card>
           </>
         )}
@@ -301,17 +291,18 @@ export default function AccountSettingsScreen() {
             <Heading>Delete my account</Heading>
             <Card>
               <View className="px-4 py-3">
-                <Text className="text-sm text-slate-500">
+                <Text className="text-sm text-slate-500" style={o && { color: o.muted, lineHeight: 20 }}>
                   Deletes your account and everything that&apos;s yours — your pantry, plans, meals, lists, weight, receipts and photos — for good. It can&apos;t be undone.
                 </Text>
                 {deleting ? (
                   <>
                     <Input value={deletePassword} onChangeText={setDeletePassword} placeholder="Your password, to confirm" secureTextEntry textContentType="password" autoComplete="current-password" />
-                    {!!deleteState?.error && <Text className="mt-2 text-sm text-red-600">{deleteState.error}</Text>}
+                    {!!deleteState?.error && <Text className="mt-2 text-sm text-red-600" style={errorStyle}>{deleteState.error}</Text>}
                     <View className="mt-3 flex-row gap-2">
                       <Button
                         label="Delete everything"
                         tone="red"
+                        fill
                         icon="trash-outline"
                         busy={deleteState?.busy}
                         onPress={() =>
@@ -321,6 +312,7 @@ export default function AccountSettingsScreen() {
                       <Button
                         label="Cancel"
                         tone="plain"
+                        fill
                         onPress={() => {
                           setDeleting(false);
                           setDeletePassword("");
@@ -340,10 +332,11 @@ export default function AccountSettingsScreen() {
         )}
 
         <Pressable onPress={() => setPrivacy(true)} hitSlop={6} className="mt-8 items-center">
-          <Text className="text-xs font-semibold text-slate-400">Privacy policy</Text>
+          <Text className="text-xs font-semibold text-slate-400" style={o && { color: o.faint }}>Privacy policy</Text>
         </Pressable>
         <PrivacyPolicyModal visible={privacy} onClose={() => setPrivacy(false)} />
       </ScrollView>
     </SafeAreaView>
+    </OrbitPage>
   );
 }

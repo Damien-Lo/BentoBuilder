@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 
+import { useOrbitPage } from "@/src/theme/orbit";
+
 // null = blank; undefined = not a valid (finite, non-negative) number.
 function parse(raw: string): number | null | undefined {
   const trimmed = raw.trim();
@@ -23,6 +25,8 @@ export function SettingsNumericInput({
   onFocus?: () => void;
 }) {
   const [text, setText] = useState(value != null ? String(value) : "");
+  // (On an Orbit page, in its colours.)
+  const o = useOrbitPage();
 
   // Resync from `value` only when it actually differs from what's typed —
   // so reporting "1." as 1 mid-typing doesn't snap the text back to "1".
@@ -55,13 +59,14 @@ export function SettingsNumericInput({
         onBlur={() => commit(text)}
         onFocus={onFocus}
         placeholder={placeholder}
-        placeholderTextColor="#94A3B8"
+        placeholderTextColor={o?.faint ?? "#94A3B8"}
         keyboardType="numeric"
         returnKeyType="done"
         className="w-24 rounded-xl bg-slate-100 px-3 py-2 text-right text-base font-semibold text-slate-900"
+        style={o && { backgroundColor: o.pill, color: o.text }}
       />
       {unit && (
-        <Text className="ml-1.5 text-sm text-slate-400">{unit}</Text>
+        <Text className="ml-1.5 text-sm text-slate-400" style={o && { color: o.faint }}>{unit}</Text>
       )}
     </View>
   );

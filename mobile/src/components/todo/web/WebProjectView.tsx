@@ -21,6 +21,7 @@ import {
   type TodoTask,
   type TodoTaskChanges,
 } from "@/src/services/todoApi";
+import { useOrbitPage } from "@/src/theme/orbit";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
 import { StatusPill } from "../TaskBits";
@@ -829,6 +830,12 @@ export function TimelineTab({
   onOpenTask: (id: string) => void;
   compact?: boolean;
 }) {
+  // (Also on the phone's project page, in Orbit's look when that's an Orbit
+  // page — light or dark; the desktop's colours otherwise.)
+  const o = useOrbitPage();
+  const c = o
+    ? { card: o.surface, border: o.border, line: o.border, head: o.canvas, band: o.pill, bandSoft: o.pill, weekend: o.track, weekendSoft: o.track, row: o.surface, rowOn: o.pill, text: o.text, body: o.icon, muted: o.muted, faint: o.faint, today: o.selectedRing, todayText: o.ink, target: o.faint, now: o.danger, picked: o.ink }
+    : { card: WEB.card, border: WEB.border, line: WEB.line, head: "#F8FAFC", band: "#F1F5F9", bandSoft: "rgba(241,245,249,0.85)", weekend: "#F1F5F9", weekendSoft: "rgba(241,245,249,0.6)", row: "#FFFFFF", rowOn: "#EFF6FF", text: WEB.text, body: WEB.body, muted: WEB.muted, faint: WEB.faint, today: "#DBEAFE", todayText: WEB.blueDark, target: "#94A3B8", now: "#EF4444", picked: "#1D4ED8" };
   const labels = compact ? 124 : LABELS;
   const gutter = compact ? 12 : 28;
   const [width, setWidth] = useState(0);
@@ -938,12 +945,12 @@ export function TimelineTab({
       {tasks.length === 0 ? (
         <Empty icon="analytics-outline" text="Add tasks on the Plan tab, give them dates, and they'll be laid out here" />
       ) : (
-        <View style={{ flex: 1, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, borderRadius: 14, overflow: "hidden" }}>
+        <View style={{ flex: 1, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: o ? 18 : 14, overflow: "hidden" }}>
           <ScrollView>
             <View style={{ flexDirection: "row" }}>
               {/* Names, down the left */}
-              <View style={{ width: labels, borderRightWidth: 1, borderRightColor: WEB.border }}>
-                <View style={{ height: 52, justifyContent: "center", paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: WEB.border, backgroundColor: "#F8FAFC" }}>
+              <View style={{ width: labels, borderRightWidth: 1, borderRightColor: c.border }}>
+                <View style={{ height: 52, justifyContent: "center", paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: c.border, backgroundColor: c.head }}>
                   <View style={{ alignSelf: "flex-start", display: compact ? "none" : "flex" }}>
                     <Segmented
                       options={[
@@ -959,8 +966,8 @@ export function TimelineTab({
                   const rows = inPhase(phase?._id ?? NONE).filter((t) => spanOf(t));
                   return (
                     <View key={phase?._id ?? NONE}>
-                      <View style={{ height: ROW, justifyContent: "center", paddingHorizontal: 12, backgroundColor: "#F1F5F9" }}>
-                        <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "700", color: WEB.body }}>
+                      <View style={{ height: ROW, justifyContent: "center", paddingHorizontal: 12, backgroundColor: c.band }}>
+                        <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "700", color: c.body }}>
                           {phase?.name ?? (phases.length ? "Not in a phase yet" : "Tasks")}
                         </Text>
                       </View>
@@ -968,10 +975,10 @@ export function TimelineTab({
                         <Pressable
                           key={task._id}
                           onPress={() => onOpenTask(task._id)}
-                          style={hoverable(({ hovered }) => ({ height: ROW, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, backgroundColor: selectedTaskId === task._id ? "#EFF6FF" : hovered ? "#F8FAFC" : "#FFFFFF" }))}
+                          style={hoverable(({ hovered }) => ({ height: ROW, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, backgroundColor: selectedTaskId === task._id ? c.rowOn : hovered ? c.head : c.row }))}
                         >
-                          <Ionicons name={task.completed ? "checkmark-circle" : task.milestone ? "diamond" : "ellipse-outline"} size={13} color={task.completed ? WEB.green : task.milestone ? accent : WEB.faint} />
-                          <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontSize: 13, color: task.completed ? WEB.faint : WEB.text }}>
+                          <Ionicons name={task.completed ? "checkmark-circle" : task.milestone ? "diamond" : "ellipse-outline"} size={13} color={task.completed ? WEB.green : task.milestone ? accent : c.faint} />
+                          <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontSize: 13, color: task.completed ? c.faint : c.text }}>
                             {task.title}
                           </Text>
                         </Pressable>
@@ -993,12 +1000,12 @@ export function TimelineTab({
               >
                 <View style={{ width: days * dayWidth }}>
                   {/* Months, then days */}
-                  <View style={{ height: 52, borderBottomWidth: 1, borderBottomColor: WEB.border, backgroundColor: "#F8FAFC" }}>
+                  <View style={{ height: 52, borderBottomWidth: 1, borderBottomColor: c.border, backgroundColor: c.head }}>
                     <View style={{ height: 24 }}>
                       {months.map((m) => (
-                        <View key={m.key} style={{ position: "absolute", left: m.left, width: m.width, height: 24, justifyContent: "center", paddingLeft: 6, borderLeftWidth: 1, borderLeftColor: WEB.border }}>
+                        <View key={m.key} style={{ position: "absolute", left: m.left, width: m.width, height: 24, justifyContent: "center", paddingLeft: 6, borderLeftWidth: 1, borderLeftColor: c.border }}>
                           {/* (Stays in view while any of its month is.) */}
-                          <Text numberOfLines={1} style={[{ alignSelf: "flex-start", fontSize: 12, fontWeight: "700", color: WEB.body }, Platform.OS === "web" ? ({ position: "sticky", left: 6 } as object) : null]}>
+                          <Text numberOfLines={1} style={[{ alignSelf: "flex-start", fontSize: 12, fontWeight: "700", color: c.body }, Platform.OS === "web" ? ({ position: "sticky", left: 6 } as object) : null]}>
                             {m.label}
                           </Text>
                         </View>
@@ -1010,10 +1017,10 @@ export function TimelineTab({
                         const weekend = d.getDay() === 0 || d.getDay() === 6;
                         const isToday = day === today;
                         return (
-                          <View key={day} style={{ width: dayWidth, alignItems: "center", justifyContent: "center", backgroundColor: isToday ? "#DBEAFE" : weekend ? "#F1F5F9" : "transparent" }}>
+                          <View key={day} style={{ width: dayWidth, alignItems: "center", justifyContent: "center", backgroundColor: isToday ? c.today : weekend ? c.weekend : "transparent" }}>
                             {named(day, d.getDay()) && (
                               // (Wider than a narrow day, so the number isn't cut off.)
-                              <Text numberOfLines={1} style={{ minWidth: 22, textAlign: "center", fontSize: dayWidth >= 60 ? 11 : 10, fontWeight: isToday ? "700" : "500", color: isToday ? WEB.blueDark : WEB.muted }}>
+                              <Text numberOfLines={1} style={{ minWidth: 22, textAlign: "center", fontSize: dayWidth >= 60 ? 11 : 10, fontWeight: isToday ? "700" : "500", color: isToday ? c.todayText : c.muted }}>
                                 {dayWidth >= 60 ? `${WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()}` : dayWidth >= 26 ? `${WEEKDAYS_SHORT[d.getDay()][0]} ${d.getDate()}` : d.getDate()}
                               </Text>
                             )}
@@ -1027,25 +1034,25 @@ export function TimelineTab({
                   <View pointerEvents="none" style={{ position: "absolute", top: 52, bottom: 0, left: 0, right: 0 }}>
                     {allDays.map((day) => {
                       const d = parseLocalDate(day).getDay();
-                      return d === 0 || d === 6 ? <View key={day} style={{ position: "absolute", left: x(day), width: dayWidth, top: 0, bottom: 0, backgroundColor: "rgba(241,245,249,0.6)" }} /> : null;
+                      return d === 0 || d === 6 ? <View key={day} style={{ position: "absolute", left: x(day), width: dayWidth, top: 0, bottom: 0, backgroundColor: c.weekendSoft, opacity: o ? 0.5 : 1 }} /> : null;
                     })}
                     {!!project.targetDate && (
-                      <View style={{ position: "absolute", left: x(project.targetDate) + dayWidth, top: 0, bottom: 0, borderLeftWidth: 2, borderStyle: "dashed", borderColor: "#94A3B8" }} />
+                      <View style={{ position: "absolute", left: x(project.targetDate) + dayWidth, top: 0, bottom: 0, borderLeftWidth: 2, borderStyle: "dashed", borderColor: c.target }} />
                     )}
-                    <View style={{ position: "absolute", left: x(today) + dayWidth / 2 - 1, top: 0, bottom: 0, width: 2, backgroundColor: "#EF4444" }} />
+                    <View style={{ position: "absolute", left: x(today) + dayWidth / 2 - 1, top: 0, bottom: 0, width: 2, backgroundColor: c.now }} />
                   </View>
 
                   {sections.map((phase) => {
                     const rows = inPhase(phase?._id ?? NONE).filter((t) => spanOf(t));
                     return (
                       <View key={phase?._id ?? NONE}>
-                        <View style={{ height: ROW, backgroundColor: "rgba(241,245,249,0.85)" }} />
+                        <View style={{ height: ROW, backgroundColor: c.bandSoft }} />
                         {rows.map((task) => {
                           const span = spanOf(task)!;
                           const color = barColor(task);
                           const overdue = !task.completed && !!task.dueDate && task.dueDate < today;
                           return (
-                            <View key={task._id} style={{ height: ROW, borderBottomWidth: 1, borderBottomColor: WEB.line }}>
+                            <View key={task._id} style={{ height: ROW, borderBottomWidth: 1, borderBottomColor: c.line }}>
                               {task.milestone ? (
                                 <Pressable
                                   onPress={() => onOpenTask(task._id)}
@@ -1069,7 +1076,7 @@ export function TimelineTab({
                                     backgroundColor: color,
                                     opacity: hovered ? 0.85 : 1,
                                     borderWidth: overdue || selectedTaskId === task._id ? 2 : 0,
-                                    borderColor: overdue ? WEB.red : "#1D4ED8",
+                                    borderColor: overdue ? WEB.red : c.picked,
                                   }))}
                                 >
                                   {/* How far through it is, as a darker stretch from the left. */}

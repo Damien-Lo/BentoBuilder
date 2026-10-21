@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -40,6 +39,9 @@ import {
   renameRecipeCategory,
 } from "@/src/services/recipeApi";
 import { useWideForm } from "@/src/components/forms/wideForm";
+import { dangerSoft, PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
+import { Tap } from "@/src/components/ui/Tap";
+import { OrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 
 type ListKind = "tags" | "ingredientCategories" | "recipeCategories" | "brands" | "stores";
 
@@ -105,8 +107,12 @@ const LIST_CONFIG: Record<ListKind, ListConfig> = {
 
 const KIND_ORDER: ListKind[] = ["tags", "ingredientCategories", "recipeCategories", "brands", "stores"];
 
+// Settings → Kitchen → Manage lists: the tags, categories, brands and stores
+// the Kitchen's pickers offer — added, renamed and deleted here. On the
+// phone in Orbit's look, light or dark (`o`: its colours), in the plain
+// accent like the rest of Settings; a desktop browser keeps the older look.
 export default function ManageListsScreen() {
-  const router = useRouter();
+  const back = useGoBack("/settings-section/kitchen");
   const [activeKind, setActiveKind] = useState<ListKind>("tags");
   const [itemsByKind, setItemsByKind] = useState<Partial<Record<ListKind, ListItem[]>>>({});
   const [loading, setLoading] = useState(true);
@@ -119,6 +125,10 @@ export default function ManageListsScreen() {
   const [showCreate, setShowCreate] = useState(false);
   const [createDraft, setCreateDraft] = useState("");
   const layout = useWideForm();
+  const { colors, dark } = useOrbitTheme();
+  const o = layout.wide ? null : colors;
+  const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 };
+  const field = o && { backgroundColor: o.surface, borderColor: o.border, color: o.text };
 
   useEffect(() => {
     let cancelled = false;
@@ -224,17 +234,21 @@ export default function ManageListsScreen() {
   }
 
   return (
-    <>
-    <SafeAreaView className="flex-1 bg-slate-50" style={layout.page} edges={["top", "left", "right"]}>
-      <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-        <Pressable
-          className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-          onPress={() => router.back()}
-        >
-          <Ionicons name="chevron-back" size={26} color="#0F172A" />
-        </Pressable>
-        <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Manage lists</Text>
-      </View>
+    <OrbitPage on={!layout.wide}>
+    <SafeAreaView className="flex-1 bg-slate-50" style={[layout.page, o && { backgroundColor: o.canvas }]} edges={["top", "left", "right"]}>
+      {o ? (
+        <PageHeader title="Manage lists" subtitle="Tags, categories, brands and stores" onBack={back} style={{ paddingHorizontal: 16, paddingTop: 4 }} />
+      ) : (
+        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
+          <Pressable
+            className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
+            onPress={back}
+          >
+            <Ionicons name="chevron-back" size={26} color="#0F172A" />
+          </Pressable>
+          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Manage lists</Text>
+        </View>
+      )}
 
       <ScrollView
         horizontal
@@ -242,7 +256,7 @@ export default function ManageListsScreen() {
         contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}
         className="border-b border-slate-200 bg-white"
         // (On the web a sideways scroller grows to fill the page unless told not to.)
-        style={{ flexGrow: 0 }}
+        style={[{ flexGrow: 0 }, o && { backgroundColor: "transparent", borderBottomWidth: 0, marginTop: 4 }]}
       >
         {KIND_ORDER.map((kind) => {
           const isActive = kind === activeKind;
@@ -250,9 +264,12 @@ export default function ManageListsScreen() {
             <Pressable
               key={kind}
               className={`rounded-full px-4 py-2 ${isActive ? "bg-blue-600" : "bg-slate-100"}`}
+              style={o && { backgroundColor: isActive ? o.ink : o.pill }}
               onPress={() => setActiveKind(kind)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }}
             >
-              <Text className={`text-sm font-semibold ${isActive ? "text-white" : "text-slate-600"}`}>
+              <Text className={`text-sm font-semibold ${isActive ? "text-white" : "text-slate-600"}`} style={o && { color: isActive ? o.onInk : o.onPill }}>
                 {LIST_CONFIG[kind].label}
               </Text>
             </Pressable>
@@ -260,33 +277,34 @@ export default function ManageListsScreen() {
         })}
       </ScrollView>
 
-      <View className="px-5 pt-4">
-        <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
-          <Ionicons name="search-outline" size={19} color="#64748B" />
+      <View className="px-5 pt-4" style={o && { paddingHorizontal: 16, paddingTop: 4 }}>
+        <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 16 }}>
+          <Ionicons name="search-outline" size={19} color={o?.muted ?? "#64748B"} />
           <TextInput
             value={searchText}
             onChangeText={setSearchText}
             placeholder={`Search ${config.label.toLowerCase()}`}
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={o?.faint ?? "#94A3B8"}
             className="ml-3 flex-1 text-base text-slate-950"
+            style={o && { color: o.text }}
           />
         </View>
       </View>
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
         </View>
       ) : (
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 100 }}
+          contentContainerStyle={[{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 100 }, o && { paddingHorizontal: 16 }]}
           showsVerticalScrollIndicator={false}
         >
           {items.length === 0 ? (
-            <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
-              <Ionicons name="pricetag-outline" size={38} color="#94A3B8" />
-              <Text className="mt-3 text-center text-slate-500">
+            <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16" style={card}>
+              <Ionicons name="pricetag-outline" size={38} color={o?.faint ?? "#94A3B8"} />
+              <Text className="mt-3 text-center text-slate-500" style={o && { color: o.muted }}>
                 {searchText ? "No matches." : `No ${config.label.toLowerCase()} yet.`}
               </Text>
             </View>
@@ -294,21 +312,46 @@ export default function ManageListsScreen() {
             <View style={layout.columns}>
             {itemColumns.map((columnItems, columnIndex) => (
             <View key={columnIndex} style={layout.column}>
-            <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={card}>
               {columnItems.map((item, index) => (
                 <View
                   key={item._id}
                   className={`flex-row items-center px-4 py-3.5 ${
                     index < columnItems.length - 1 ? "border-b border-slate-100" : ""
                   }`}
+                  style={o && { borderBottomColor: o.border }}
                 >
-                  <Text className="flex-1 text-base text-slate-900" numberOfLines={1}>
+                  <Text className="flex-1 text-base text-slate-900" style={o && { color: o.text }} numberOfLines={1}>
                     {item.name}
                   </Text>
                   {item.isDefault ? (
-                    <View className="mr-2 rounded-full bg-slate-100 px-2.5 py-1">
-                      <Text className="text-xs font-semibold text-slate-500">Default</Text>
+                    <View className="mr-2 rounded-full bg-slate-100 px-2.5 py-1" style={o && { backgroundColor: o.pill }}>
+                      <Text className="text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>Default</Text>
                     </View>
+                  ) : o ? (
+                    <>
+                      <Tap
+                        accessibilityRole="button"
+                        accessibilityLabel={`Rename ${item.name}`}
+                        style={{ marginRight: 4, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }}
+                        pressedStyle={{ backgroundColor: o.pill }}
+                        onPress={() => {
+                          setRenameTarget(item);
+                          setRenameDraft(item.name);
+                        }}
+                      >
+                        <Ionicons name="pencil-outline" size={18} color={o.icon} />
+                      </Tap>
+                      <Tap
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete ${item.name}`}
+                        style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }}
+                        pressedStyle={{ backgroundColor: dangerSoft(dark) }}
+                        onPress={() => handleDelete(item)}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={o.danger} />
+                      </Tap>
+                    </>
                   ) : (
                     <>
                       <Pressable
@@ -339,44 +382,62 @@ export default function ManageListsScreen() {
       )}
 
       <View className="absolute bottom-6 right-5">
-        <Pressable
-          className="h-14 w-14 items-center justify-center rounded-full bg-blue-600 shadow-lg active:bg-blue-700"
-          onPress={() => {
-            setCreateDraft(searchText.trim());
-            setShowCreate(true);
-          }}
-        >
-          <Ionicons name="add" size={28} color="white" />
-        </Pressable>
+        {o ? (
+          <Tap
+            accessibilityRole="button"
+            accessibilityLabel={`New ${config.singular}`}
+            style={{ width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", backgroundColor: o.ink, shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 }}
+            pressedStyle={{ opacity: 0.85 }}
+            onPress={() => {
+              setCreateDraft(searchText.trim());
+              setShowCreate(true);
+            }}
+          >
+            <Ionicons name="add" size={28} color={o.onInk} />
+          </Tap>
+        ) : (
+          <Pressable
+            className="h-14 w-14 items-center justify-center rounded-full bg-blue-600 shadow-lg active:bg-blue-700"
+            onPress={() => {
+              setCreateDraft(searchText.trim());
+              setShowCreate(true);
+            }}
+          >
+            <Ionicons name="add" size={28} color="white" />
+          </Pressable>
+        )}
       </View>
     </SafeAreaView>
 
     {/* Rename modal */}
     <Modal visible={!!renameTarget} transparent animationType="fade" onRequestClose={() => setRenameTarget(null)}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1 items-center justify-center bg-black/40 px-6">
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1 items-center justify-center bg-black/40 px-6" style={o && { backgroundColor: o.scrim }}>
         <Pressable className="absolute inset-0" onPress={() => setRenameTarget(null)} />
-        <View className="w-full rounded-3xl bg-white p-5" style={dialogStyle}>
-          <Text className="text-lg font-bold text-slate-950">Rename {config.singular}</Text>
+        <View className="w-full rounded-3xl bg-white p-5" style={[dialogStyle, o && { backgroundColor: o.surface }]}>
+          <Text className="text-lg font-bold text-slate-950" style={o && { color: o.text }}>Rename {config.singular}</Text>
           <TextInput
             value={renameDraft}
             onChangeText={setRenameDraft}
             autoFocus
             className="mt-4 h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+            style={field}
           />
           <View className="mt-5 flex-row gap-3">
             <Pressable
               disabled={saving}
               className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+              style={o && { backgroundColor: o.pill, height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16 }}
               onPress={() => setRenameTarget(null)}
             >
-              <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+              <Text className="text-sm font-semibold text-slate-600" style={o && { color: o.onPill, fontSize: 15 }}>Cancel</Text>
             </Pressable>
             <Pressable
               disabled={saving}
               className={`flex-1 items-center rounded-2xl py-3.5 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+              style={o && { backgroundColor: o.ink, opacity: saving ? 0.5 : 1, height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16 }}
               onPress={() => void handleRename()}
             >
-              <Text className="text-sm font-semibold text-white">{saving ? "Saving..." : "Save"}</Text>
+              <Text className="text-sm font-semibold text-white" style={o && { color: o.onInk, fontSize: 15 }}>{saving ? "Saving..." : "Save"}</Text>
             </Pressable>
           </View>
         </View>
@@ -385,37 +446,40 @@ export default function ManageListsScreen() {
 
     {/* Create modal */}
     <Modal visible={showCreate} transparent animationType="fade" onRequestClose={() => setShowCreate(false)}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1 items-center justify-center bg-black/40 px-6">
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1 items-center justify-center bg-black/40 px-6" style={o && { backgroundColor: o.scrim }}>
         <Pressable className="absolute inset-0" onPress={() => setShowCreate(false)} />
-        <View className="w-full rounded-3xl bg-white p-5" style={dialogStyle}>
-          <Text className="text-lg font-bold text-slate-950">New {config.singular}</Text>
+        <View className="w-full rounded-3xl bg-white p-5" style={[dialogStyle, o && { backgroundColor: o.surface }]}>
+          <Text className="text-lg font-bold text-slate-950" style={o && { color: o.text }}>New {config.singular}</Text>
           <TextInput
             value={createDraft}
             onChangeText={setCreateDraft}
             autoFocus
             placeholder={`e.g. ${config.singular === "tag" ? "Freezer-friendly" : "Name"}`}
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={o?.faint ?? "#94A3B8"}
             className="mt-4 h-14 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+            style={field}
           />
           <View className="mt-5 flex-row gap-3">
             <Pressable
               disabled={saving}
               className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+              style={o && { backgroundColor: o.pill, height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16 }}
               onPress={() => setShowCreate(false)}
             >
-              <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+              <Text className="text-sm font-semibold text-slate-600" style={o && { color: o.onPill, fontSize: 15 }}>Cancel</Text>
             </Pressable>
             <Pressable
               disabled={saving}
               className={`flex-1 items-center rounded-2xl py-3.5 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+              style={o && { backgroundColor: o.ink, opacity: saving ? 0.5 : 1, height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16 }}
               onPress={() => void handleCreate()}
             >
-              <Text className="text-sm font-semibold text-white">{saving ? "Creating..." : "Create"}</Text>
+              <Text className="text-sm font-semibold text-white" style={o && { color: o.onInk, fontSize: 15 }}>{saving ? "Creating..." : "Create"}</Text>
             </Pressable>
           </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
-    </>
+    </OrbitPage>
   );
 }

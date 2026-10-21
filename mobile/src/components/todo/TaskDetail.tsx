@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DatePickerModal, FormCard } from "@/src/components/forms";
 import { PriorityPill, ProgressBar, ProgressSlider, StatusPill, TaskNumber } from "@/src/components/todo/TaskBits";
+import { Tap } from "@/src/components/ui/Tap";
 import { countDescriptions, DescriptionOutline, SubtaskTree } from "@/src/components/todo/TaskTree";
 import {
   friendlyDate,
@@ -42,6 +43,7 @@ import {
   type TodoTaskDetail,
 } from "@/src/services/todoApi";
 import { minutesLabel } from "@/src/components/calendar/calendarUtils";
+import { useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import { todayStr } from "@/src/utils/mealPlan";
 
 // Subtasks nest this deep below a top-level task (matches the server).
@@ -77,7 +79,9 @@ export interface TaskDetailProps {
 
 // One task (or subtask) in full: status, priority, progress, due date,
 // calendar toggle, tags, people, notes and its subtasks. Used as the task's
-// page and, for subtasks, inside the overlay sheet.
+// page and, for subtasks, inside the overlay sheet. On an Orbit page (the
+// phone's task page and its sheets) in Orbit's look; elsewhere (the desktop's
+// task pane) as it was.
 export function TaskDetail({
   id,
   mode,
@@ -92,6 +96,8 @@ export function TaskDetail({
   const theme = useTodoTheme();
   const router = useRouter();
   const sheet = mode === "sheet";
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
 
   const [task, setTask] = useState<TodoTaskDetail | null>(null);
   const [title, setTitle] = useState("");
@@ -233,8 +239,8 @@ export function TaskDetail({
 
   if (!task) {
     return (
-      <View className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
+      <View className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
       </View>
     );
   }
@@ -265,10 +271,70 @@ export function TaskDetail({
       .filter(Boolean)
       .join(" · ") || "Due date, calendar, tags, people and notes";
 
+  // (Orbit's look: text in its greys, hairlines its border, the soft red of
+  // something to delete.)
+  const textColor = o && { color: o.text };
+  const faintColor = o && { color: o.faint };
+  const line = o && { borderColor: o.border };
+  const dangerTint = dark ? "rgba(248,113,113,0.14)" : "#FEF2F2";
+  const path = (sheet ? task.ancestors.map((a) => a.title) : [task.list.name, ...task.ancestors.map((a) => a.title)]).join("  ›  ");
+  const kind = isSubtask ? (task.depth > 1 ? "Sub-subtask" : "Subtask") : "Task";
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={sheet ? ["left", "right"] : ["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={sheet ? ["left", "right"] : ["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        {/* Header */}
+        {/* Header (Orbit: round buttons on the page itself, no band — on the
+            task's page a large title under them, on a subtask's card the
+            title between them) */}
+        {o ? (
+          <View style={{ paddingHorizontal: sheet ? 14 : 16, paddingTop: sheet ? 14 : 4, paddingBottom: sheet ? 4 : 0 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: sheet ? 0 : -4, minHeight: 40 }}>
+              <Tap
+                onPress={sheet && !canGoBack ? onClose : onExit}
+                accessibilityLabel={sheet && !canGoBack ? "Close" : "Back"}
+                style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
+                pressedStyle={{ backgroundColor: o.pill }}
+              >
+                <Ionicons name={sheet && !canGoBack ? "close" : "chevron-back"} size={sheet && !canGoBack ? 21 : 22} color={o.text} />
+              </Tap>
+              <View style={{ flex: 1, marginHorizontal: 4, alignItems: "center" }}>
+                {sheet && (
+                  <>
+                    <Text numberOfLines={1} style={{ fontSize: 17, fontWeight: "800", color: o.text }}>
+                      {kind}
+                    </Text>
+                    <Text numberOfLines={1} style={{ fontSize: 12, color: o.muted }}>
+                      {path}
+                    </Text>
+                  </>
+                )}
+              </View>
+              <Tap
+                onPress={confirmDelete}
+                accessibilityLabel="Delete task"
+                style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: dangerTint }}
+                pressedStyle={{ opacity: 0.7 }}
+              >
+                <Ionicons name="trash-outline" size={19} color={o.danger} />
+              </Tap>
+            </View>
+            {!sheet && (
+              <>
+                <Text numberOfLines={1} style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>
+                  {kind}
+                </Text>
+                {/* Where it lives: its list (in the list's own colour), and
+                    the tasks above it. */}
+                <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center" }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, marginRight: 8, backgroundColor: accent }} />
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: "600", color: o.muted }}>
+                    {path}
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
+        ) : (
         <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-2.5">
           <Pressable
             onPress={sheet && !canGoBack ? onClose : onExit}
@@ -279,11 +345,11 @@ export function TaskDetail({
           </Pressable>
           <View className="ml-1 flex-1">
             <Text className="text-lg font-bold text-slate-950" numberOfLines={1}>
-              {isSubtask ? (task.depth > 1 ? "Sub-subtask" : "Subtask") : "Task"}
+              {kind}
             </Text>
             {/* The path down to here, so it's clear how deep this is. */}
             <Text className="text-xs text-slate-500" numberOfLines={1}>
-              {(sheet ? task.ancestors.map((a) => a.title) : [task.list.name, ...task.ancestors.map((a) => a.title)]).join("  ›  ")}
+              {path}
             </Text>
           </View>
           <Pressable
@@ -294,24 +360,27 @@ export function TaskDetail({
             <Ionicons name="trash-outline" size={19} color="#DC2626" />
           </Pressable>
         </View>
+        )}
 
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
+          contentContainerStyle={{ padding: 16, paddingTop: o && !sheet ? 20 : o ? 12 : 16, paddingBottom: 48 }}
           scrollEnabled={!treeDragging}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {parent && onOpenParent && (
-            <Pressable
+            <Tap
               onPress={() => onOpenParent(parent._id)}
               className="mb-3 flex-row items-center rounded-2xl bg-blue-50 px-4 py-2.5 active:bg-blue-100"
+              style={o && { backgroundColor: o.accentSoft, borderRadius: 16 }}
+              pressedStyle={o ? { opacity: 0.8 } : {}}
             >
-              <Ionicons name="return-up-back-outline" size={16} color="#1D4ED8" />
-              <Text className="ml-2 flex-1 text-sm text-blue-800" numberOfLines={1}>
-                Part of <Text className="font-semibold">{parent.title}</Text>
+              <Ionicons name="return-up-back-outline" size={16} color={o?.accent ?? "#1D4ED8"} />
+              <Text className="ml-2 flex-1 text-sm text-blue-800" numberOfLines={1} style={o && { color: o.icon }}>
+                Part of <Text className="font-semibold" style={o && { color: o.accent }}>{parent.title}</Text>
               </Text>
-            </Pressable>
+            </Tap>
           )}
 
           {/* Summary */}
@@ -354,7 +423,7 @@ export function TaskDetail({
                     accessibilityLabel={task.important ? "Remove importance" : "Mark as important"}
                     className="ml-auto"
                   >
-                    <Ionicons name={task.important ? "star" : "star-outline"} size={22} color={task.important ? accent : "#94A3B8"} />
+                    <Ionicons name={task.important ? "star" : "star-outline"} size={22} color={task.important ? accent : o?.faint ?? "#94A3B8"} />
                   </Pressable>
                 )}
               </View>
@@ -371,8 +440,9 @@ export function TaskDetail({
                 blurOnSubmit
                 returnKeyType="done"
                 placeholder="Title"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 className={`mt-2 text-xl font-bold ${task.completed ? "text-slate-400 line-through" : "text-slate-950"}`}
+                style={o && { fontWeight: "800", letterSpacing: -0.3, color: task.completed ? o.faint : o.text }}
               />
               <TextInput
                 value={description}
@@ -380,16 +450,17 @@ export function TaskDetail({
                 onBlur={() => description.trim() !== task.description && save(task, { description: description.trim() })}
                 multiline
                 placeholder="Add a description"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 className="mt-1 pb-1 text-[15px] leading-5 text-slate-700"
+                style={o && { color: o.icon }}
               />
 
               <View className="mb-1.5 mt-3 flex-row items-center justify-between">
-                <Text className="text-xs font-medium text-slate-500">
+                <Text className="text-xs font-medium text-slate-500" style={o && { color: o.muted }}>
                   Progress
                   {task.subtaskCount > 0 ? ` · ${task.subtaskCount - task.openSubtaskCount} of ${task.subtaskCount} subtasks` : ""}
                 </Text>
-                <Text className="text-sm font-bold text-slate-900">{progressPreview ?? task.progress}%</Text>
+                <Text className="text-sm font-bold text-slate-900" style={textColor}>{progressPreview ?? task.progress}%</Text>
               </View>
               {task.subtaskCount === 0 && !task.completed ? (
                 <ProgressSlider
@@ -407,21 +478,27 @@ export function TaskDetail({
               )}
             </View>
 
-            <Pressable
+            {/* (Orbit: the section's main button; undoing, a secondary pill.) */}
+            <Tap
               onPress={() => toggleComplete(task)}
               className={`mx-4 mb-4 mt-4 flex-row items-center justify-center rounded-2xl py-3 ${
                 task.completed ? "bg-slate-100 active:bg-slate-200" : "bg-blue-600 active:bg-blue-700"
               }`}
+              style={o && { height: 52, paddingVertical: 0, borderRadius: 16, backgroundColor: task.completed ? o.pill : o.ink }}
+              pressedStyle={o ? { opacity: 0.85 } : {}}
             >
               <Ionicons
                 name={task.completed ? "arrow-undo-outline" : "checkmark-circle-outline"}
                 size={18}
-                color={task.completed ? "#475569" : "white"}
+                color={o ? (task.completed ? o.onPill : o.onInk) : task.completed ? "#475569" : "white"}
               />
-              <Text className={`ml-2 text-sm font-semibold ${task.completed ? "text-slate-600" : "text-white"}`}>
+              <Text
+                className={`ml-2 text-sm font-semibold ${task.completed ? "text-slate-600" : "text-white"}`}
+                style={o && { fontSize: 15, color: task.completed ? o.onPill : o.onInk }}
+              >
                 {task.completed ? "Mark as not completed" : "Complete"}
               </Text>
-            </Pressable>
+            </Tap>
           </Card>
 
           {/* Details */}
@@ -432,14 +509,17 @@ export function TaskDetail({
             expanded={detailsOpen}
             onToggle={() => setDetailsOpen((v) => !v)}
           >
-            <View className="-mx-4 mt-3 border-t border-slate-100">
+            <View className="-mx-4 mt-3 border-t border-slate-100" style={line}>
             <Row icon="calendar-outline" label="Due date" onPress={() => setPickingDateFor(task)}>
-              <Text className={`text-base ${overdue ? "font-semibold text-red-600" : task.dueDate ? "text-slate-900" : "text-slate-400"}`}>
+              <Text
+                className={`text-base ${overdue ? "font-semibold text-red-600" : task.dueDate ? "text-slate-900" : "text-slate-400"}`}
+                style={o && { color: overdue ? o.danger : task.dueDate ? o.text : o.faint }}
+              >
                 {task.dueDate ? `${friendlyDate(task.dueDate)}${overdue ? " (overdue)" : ""}` : "None"}
               </Text>
               {task.dueDate && (
                 <Pressable hitSlop={10} onPress={() => save(task, { dueDate: null, showInCalendar: false })} className="ml-2">
-                  <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                  <Ionicons name="close-circle" size={18} color={o?.faint ?? "#94A3B8"} />
                 </Pressable>
               )}
             </Row>
@@ -447,10 +527,10 @@ export function TaskDetail({
                 the due date), whether it's a milestone, and its phase. */}
             {inProject && !task.milestone && (
               <Row icon="flag-outline" label="Start date" border onPress={() => setPickingStart(true)}>
-                <Text className={`text-base ${task.startDate ? "text-slate-900" : "text-slate-400"}`}>{task.startDate ? friendlyDate(task.startDate) : "None"}</Text>
+                <Text className={`text-base ${task.startDate ? "text-slate-900" : "text-slate-400"}`} style={o && (task.startDate ? textColor : faintColor)}>{task.startDate ? friendlyDate(task.startDate) : "None"}</Text>
                 {task.startDate && (
                   <Pressable hitSlop={10} onPress={() => save(task, { startDate: null })} className="ml-2">
-                    <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                    <Ionicons name="close-circle" size={18} color={o?.faint ?? "#94A3B8"} />
                   </Pressable>
                 )}
               </Row>
@@ -472,14 +552,14 @@ export function TaskDetail({
                   ])
                 }
               >
-                <Text className={`text-base ${phases.some((p) => p._id === task.phase) ? "text-slate-900" : "text-slate-400"}`}>{phases.find((p) => p._id === task.phase)?.name ?? "None"}</Text>
-                <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 4 }} />
+                <Text className={`text-base ${phases.some((p) => p._id === task.phase) ? "text-slate-900" : "text-slate-400"}`} style={o && (phases.some((p) => p._id === task.phase) ? textColor : faintColor)}>{phases.find((p) => p._id === task.phase)?.name ?? "None"}</Text>
+                <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#CBD5E1"} style={{ marginLeft: 4 }} />
               </Row>
             )}
             {/* Do date: tapping it opens the calendar to drag out a block of
                 time for this task alone. */}
             <Row icon="play-circle-outline" label="Do date" border onPress={openScheduler}>
-              <Text className={`text-base ${task.workBlocks.length || task.doDate ? "text-slate-900" : "text-blue-600"}`}>
+              <Text className={`text-base ${task.workBlocks.length || task.doDate ? "text-slate-900" : "text-blue-600"}`} style={o && { color: task.workBlocks.length || task.doDate ? o.text : o.ink }}>
                 {task.workBlocks.length
                   ? `${task.workBlocks.length} time${task.workBlocks.length === 1 ? "" : "s"} booked`
                   : task.doDate
@@ -488,17 +568,17 @@ export function TaskDetail({
               </Text>
               {task.doDate && task.workBlocks.length === 0 && (
                 <Pressable hitSlop={10} onPress={() => save(task, { doDate: null })} className="ml-2">
-                  <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                  <Ionicons name="close-circle" size={18} color={o?.faint ?? "#94A3B8"} />
                 </Pressable>
               )}
-              <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 4 }} />
+              <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#CBD5E1"} style={{ marginLeft: 4 }} />
             </Row>
             {/* Time blocked out in the calendar to do it. */}
             {[...task.workBlocks]
               .sort((a, b) => a.date.localeCompare(b.date) || a.startMinutes - b.startMinutes)
               .map((block) => (
                 <Row key={block._id} icon="time-outline" label={friendlyDate(block.date)} border>
-                  <Text className={`text-base ${block.date < todayStr() ? "text-slate-400" : "text-slate-900"}`}>
+                  <Text className={`text-base ${block.date < todayStr() ? "text-slate-400" : "text-slate-900"}`} style={o && (block.date < todayStr() ? faintColor : textColor)}>
                     {minutesLabel(block.startMinutes)}–{minutesLabel(block.endMinutes)}
                   </Text>
                   <Pressable
@@ -507,7 +587,7 @@ export function TaskDetail({
                     onPress={() => unscheduleTodoTask(task._id, block._id).then(load, fail)}
                     className="ml-2"
                   >
-                    <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                    <Ionicons name="close-circle" size={18} color={o?.faint ?? "#94A3B8"} />
                   </Pressable>
                 </Row>
               ))}
@@ -530,9 +610,10 @@ export function TaskDetail({
                 onChangeText={setTags}
                 onBlur={() => splitList(tags).join() !== task.tags.join() && save(task, { tags: splitList(tags) })}
                 placeholder="e.g. home, planning"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 autoCapitalize="none"
                 className="text-base text-slate-900"
+                style={textColor}
               />
             </Field>
             <Field icon="people-outline" label="Relevant parties" border>
@@ -541,8 +622,9 @@ export function TaskDetail({
                 onChangeText={setParties}
                 onBlur={() => splitList(parties).join() !== task.parties.join() && save(task, { parties: splitList(parties) })}
                 placeholder="e.g. Landlord, HR"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 className="text-base text-slate-900"
+                style={textColor}
               />
             </Field>
             <Field icon="document-text-outline" label="Notes" border>
@@ -551,13 +633,13 @@ export function TaskDetail({
                 onChangeText={setNote}
                 onBlur={() => note.trim() !== task.note && save(task, { note: note.trim() })}
                 placeholder="Add notes"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 multiline
                 className="text-base leading-5 text-slate-900"
-                style={{ minHeight: 44 }}
+                style={[{ minHeight: 44 }, textColor]}
               />
             </Field>
-            <Text className="px-4 pb-1 text-xs text-slate-400">Separate tags and people with commas.</Text>
+            <Text className="px-4 pb-1 text-xs text-slate-400" style={faintColor}>Separate tags and people with commas.</Text>
             </View>
           </FormCard>
 
@@ -589,7 +671,7 @@ export function TaskDetail({
             >
               <View className="-mx-4 mt-3">
               {task.subtasks.length === 0 && (
-                <Text className="px-4 pb-3 text-sm text-slate-400">No subtasks yet.</Text>
+                <Text className="px-4 pb-3 text-sm text-slate-400" style={faintColor}>No subtasks yet.</Text>
               )}
               {/* The task's page shows the whole tree; a subtask's card
                   just lists what's directly under it. */}
@@ -622,8 +704,8 @@ export function TaskDetail({
                   onToggleCalendar={toggleCalendar}
                 />
               ))}
-              <View className="flex-row items-center border-t border-slate-100 px-4">
-                <Ionicons name="add" size={22} color={accent} />
+              <View className="flex-row items-center border-t border-slate-100 px-4" style={line}>
+                <Ionicons name="add" size={22} color={o?.ink ?? accent} />
                 <TextInput
                   value={newSubtask}
                   onChangeText={setNewSubtask}
@@ -631,16 +713,16 @@ export function TaskDetail({
                   blurOnSubmit={false}
                   returnKeyType="done"
                   placeholder="Add subtask"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={o?.faint ?? "#94A3B8"}
                   className="ml-2 flex-1 text-base text-slate-900"
-                  style={{ height: 46 }}
+                  style={[{ height: 46 }, textColor]}
                 />
               </View>
               </View>
             </FormCard>
           )}
 
-          <Text className="mt-1 text-center text-xs text-slate-400">
+          <Text className="mt-1 text-center text-xs text-slate-400" style={faintColor}>
             {task.completed && task.completedAt
               ? `Completed ${shortDateFromIso(task.completedAt)}`
               : `Created ${shortDateFromIso(task.createdAt)}`}
@@ -697,13 +779,15 @@ function SubtaskRows({
   onPickDate: (task: TodoTask) => void;
   onToggleCalendar: (task: TodoTask) => void;
 }) {
+  const o = useOrbitPage();
   const overdue = !!subtask.dueDate && !subtask.completed && isOverdue(subtask.dueDate);
   return (
     <>
-      <Pressable
+      <Tap
         onPress={() => onOpen(subtask)}
         className="flex-row items-center border-t border-slate-100 py-2.5 pr-2 active:bg-slate-50"
-        style={{ paddingLeft: 16 + level * 26 }}
+        style={[{ paddingLeft: 16 + level * 26 }, o && { borderTopColor: o.border }]}
+        pressedStyle={o ? { backgroundColor: o.pill } : {}}
       >
         <Pressable onPress={() => onToggle(subtask)} hitSlop={10} accessibilityLabel="Complete subtask">
           {subtask.completed ? (
@@ -711,18 +795,19 @@ function SubtaskRows({
               <Ionicons name="checkmark" size={14} color="white" />
             </View>
           ) : (
-            <View className="h-[22px] w-[22px] rounded-full border-2 border-slate-400" />
+            <View className="h-[22px] w-[22px] rounded-full border-2 border-slate-400" style={o && { borderColor: o.faint }} />
           )}
         </Pressable>
         <View className="ml-3 flex-1">
           <Text
             className={`text-[15px] ${subtask.completed ? "text-slate-400 line-through" : "text-slate-900"}`}
             numberOfLines={2}
+            style={o && { color: subtask.completed ? o.faint : o.text }}
           >
             {subtask.title}
           </Text>
           {(subtask.dueDate || subtask.subtaskCount > 0) && (
-            <Text className={`mt-0.5 text-xs ${overdue ? "font-medium text-red-600" : "text-slate-500"}`}>
+            <Text className={`mt-0.5 text-xs ${overdue ? "font-medium text-red-600" : "text-slate-500"}`} style={o && { color: overdue ? o.danger : o.muted }}>
               {subtask.dueDate ? friendlyDate(subtask.dueDate) : ""}
               {subtask.dueDate && subtask.subtaskCount > 0 ? "  ·  " : ""}
               {subtask.subtaskCount > 0
@@ -731,26 +816,28 @@ function SubtaskRows({
             </Text>
           )}
         </View>
-        <Pressable
+        <Tap
           onPress={() => onPickDate(subtask)}
           accessibilityLabel="Set due date"
           className="h-9 w-9 items-center justify-center rounded-full active:bg-slate-100"
+          pressedStyle={o ? { backgroundColor: o.pill } : {}}
         >
-          <Ionicons name="calendar-outline" size={18} color={subtask.dueDate ? "#475569" : "#CBD5E1"} />
-        </Pressable>
-        <Pressable
+          <Ionicons name="calendar-outline" size={18} color={subtask.dueDate ? o?.icon ?? "#475569" : o?.faint ?? "#CBD5E1"} />
+        </Tap>
+        <Tap
           onPress={() => onToggleCalendar(subtask)}
           accessibilityLabel={subtask.showInCalendar ? "Remove from calendar" : "Show in calendar"}
           className="h-9 w-9 items-center justify-center rounded-full active:bg-slate-100"
+          pressedStyle={o ? { backgroundColor: o.pill } : {}}
         >
           <Ionicons
             name={subtask.showInCalendar ? "calendar-number" : "calendar-number-outline"}
             size={18}
-            color={subtask.showInCalendar ? "#2563EB" : "#CBD5E1"}
+            color={subtask.showInCalendar ? o?.ink ?? "#2563EB" : o?.faint ?? "#CBD5E1"}
           />
-        </Pressable>
-        <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
-      </Pressable>
+        </Tap>
+        <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#CBD5E1"} />
+      </Tap>
       {subtask.subtasks.map((child) => (
         <SubtaskRows
           key={child._id}
@@ -768,7 +855,12 @@ function SubtaskRows({
 }
 
 function Card({ children }: { children: ReactNode }) {
-  return <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white">{children}</View>;
+  const o = useOrbitPage();
+  return (
+    <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 20 }}>
+      {children}
+    </View>
+  );
 }
 
 function Row({
@@ -784,17 +876,19 @@ function Row({
   onPress?: () => void;
   border?: boolean;
 }) {
+  const o = useOrbitPage();
   return (
-    <Pressable
+    <Tap
       disabled={!onPress}
       onPress={onPress}
       className={`flex-row items-center px-4 active:bg-slate-50 ${border ? "border-t border-slate-100" : ""}`}
-      style={{ minHeight: 54 }}
+      style={[{ minHeight: 54 }, o && { borderTopColor: o.border }]}
+      pressedStyle={o ? { backgroundColor: o.pill } : {}}
     >
-      <Ionicons name={icon} size={20} color="#64748B" />
-      <Text className="ml-3 flex-1 text-base text-slate-900">{label}</Text>
+      <Ionicons name={icon} size={20} color={o?.muted ?? "#64748B"} />
+      <Text className="ml-3 flex-1 text-base text-slate-900" style={o && { color: o.text }}>{label}</Text>
       {children}
-    </Pressable>
+    </Tap>
   );
 }
 
@@ -809,21 +903,24 @@ function Field({
   children: ReactNode;
   border?: boolean;
 }) {
+  const o = useOrbitPage();
   return (
-    <View className={`flex-row px-4 py-3 ${border ? "border-t border-slate-100" : ""}`}>
-      <Ionicons name={icon} size={20} color="#64748B" style={{ marginTop: 2 }} />
+    <View className={`flex-row px-4 py-3 ${border ? "border-t border-slate-100" : ""}`} style={o && { borderTopColor: o.border }}>
+      <Ionicons name={icon} size={20} color={o?.muted ?? "#64748B"} style={{ marginTop: 2 }} />
       <View className="ml-3 flex-1">
-        <Text className="mb-0.5 text-xs font-medium text-slate-500">{label}</Text>
+        <Text className="mb-0.5 text-xs font-medium text-slate-500" style={o && { color: o.muted }}>{label}</Text>
         {children}
       </View>
     </View>
   );
 }
 
-// The app's own blue switch (same look as ToggleRow's).
+// The app's own blue switch (same look as ToggleRow's — on an Orbit page,
+// the section's colour on its track).
 function Toggle({ value }: { value: boolean }) {
+  const o = useOrbitPage();
   return (
-    <View className={`h-7 w-12 justify-center rounded-full px-1 ${value ? "bg-blue-600" : "bg-slate-200"}`}>
+    <View className={`h-7 w-12 justify-center rounded-full px-1 ${value ? "bg-blue-600" : "bg-slate-200"}`} style={o && { backgroundColor: value ? o.ink : o.track }}>
       <View className="h-5 w-5 rounded-full bg-white" style={{ transform: [{ translateX: value ? 20 : 0 }] }} />
     </View>
   );

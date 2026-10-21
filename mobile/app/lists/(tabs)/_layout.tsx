@@ -2,11 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 
 import { CustomTabBar } from "@/src/components/CustomTabBar";
+import { OrbitSection } from "@/src/theme/orbit";
 
 // The Lists section: the same bottom bar as Kitchen (two tabs either side
 // of the centre home button).
 export default function ListsSectionLayout() {
   return (
+    // (Tasks in its own colour, violet: its tabs, pages and orb.)
+    <OrbitSection section="tasks">
     <Tabs tabBar={(props) => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen
         name="index"
@@ -37,5 +40,6 @@ export default function ListsSectionLayout() {
         }}
       />
     </Tabs>
+    </OrbitSection>
   );
 }

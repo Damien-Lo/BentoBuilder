@@ -4,14 +4,18 @@ import { Pressable, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 
+import { Tap } from "@/src/components/ui/Tap";
 import type { TodoSubtask, TodoTask } from "@/src/services/todoApi";
+import { useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+import { hexToRgba } from "@/src/utils/mealPlan";
 
-import { PriorityPill, StatusPill, TaskNumber } from "./TaskBits";
+import { PriorityPill, readableAccent, StatusPill, TaskNumber } from "./TaskBits";
 import { friendlyDate, isOverdue } from "./theme";
 
 // The two structured views on a task's page: every description as an
 // outline, and the subtasks as a collapsible tree. Both walk the whole
-// subtree, so they work at any depth.
+// subtree, so they work at any depth. On an Orbit page they take its
+// colours; elsewhere they look as they always have.
 
 const INDENT = 16;
 
@@ -42,17 +46,20 @@ export function countDescriptions(task: TodoTask, subtasks: TodoSubtask[]): numb
 // every level), indented under a bar so the whole brief reads in one place.
 // Just the content — the caller supplies the card around it.
 export function DescriptionOutline({ task, subtasks, accent }: { task: TodoTask; subtasks: TodoSubtask[]; accent: string }) {
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
   const rows = flatten(subtasks).filter((row) => row.subtask.description.trim());
 
   return (
     <View className="mt-3">
 
       <View className="border-l-2 pl-3" style={{ borderLeftColor: accent }}>
-        <Text className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent }}>
+        {/* (The list's colour, lighter on the dark theme so it reads.) */}
+        <Text className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: readableAccent(accent, o, dark) }}>
           Main task{task.number != null ? ` · #${task.number}` : ""}
         </Text>
-        <Text className="mt-0.5 text-[15px] font-semibold text-slate-900">{task.title}</Text>
-        <Text className="mt-0.5 text-sm leading-5 text-slate-600">
+        <Text className="mt-0.5 text-[15px] font-semibold text-slate-900" style={o && { color: o.text }}>{task.title}</Text>
+        <Text className="mt-0.5 text-sm leading-5 text-slate-600" style={o && { color: o.icon }}>
           {task.description.trim() || "No description."}
         </Text>
       </View>
@@ -61,18 +68,19 @@ export function DescriptionOutline({ task, subtasks, accent }: { task: TodoTask;
         <View
           key={subtask._id}
           className="mt-3 border-l-2 border-slate-200 pl-3"
-          style={{ marginLeft: level * INDENT }}
+          style={[{ marginLeft: level * INDENT }, o && { borderLeftColor: o.border }]}
         >
-          <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400" style={o && { color: o.faint }}>
             Subtask {path}
             {subtask.number != null ? ` · #${subtask.number}` : ""}
           </Text>
           <Text
             className={`mt-0.5 text-[15px] font-semibold ${subtask.completed ? "text-slate-400 line-through" : "text-slate-900"}`}
+            style={o && { color: subtask.completed ? o.faint : o.text }}
           >
             {subtask.title}
           </Text>
-          <Text className="mt-0.5 text-sm leading-5 text-slate-600">{subtask.description.trim()}</Text>
+          <Text className="mt-0.5 text-sm leading-5 text-slate-600" style={o && { color: o.icon }}>{subtask.description.trim()}</Text>
         </View>
       ))}
     </View>
@@ -125,6 +133,7 @@ export function SubtaskTree({
   // True while a card is being dragged (so the page can stop scrolling).
   onDragChange?: (dragging: boolean) => void;
 }) {
+  const o = useOrbitPage();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [target, setTarget] = useState<DropTarget | null>(null);
@@ -228,7 +237,7 @@ export function SubtaskTree({
         />
       ))}
       {rows.length > 1 && (
-        <Text className="px-1 pb-2 pt-1 text-[11px] leading-4 text-slate-400">
+        <Text className="px-1 pb-2 pt-1 text-[11px] leading-4 text-slate-400" style={o && { color: o.faint }}>
           Drag ≡ to rearrange. Drop on the right half of a card to make it that card&apos;s subtask, or on the left half to
           place it after that card.
         </Text>
@@ -238,12 +247,14 @@ export function SubtaskTree({
 }
 
 // Where a dragged card will land.
+// (On an Orbit page: in the section's colour.)
 function DropLine({ level, label }: { level: number; label: string }) {
+  const o = useOrbitPage();
   return (
     <View className="mb-2 flex-row items-center" style={{ marginLeft: level * INDENT }}>
-      <View className="h-2 w-2 rounded-full bg-blue-600" />
-      <View className="h-0.5 flex-1 bg-blue-600" />
-      <Text className="ml-2 text-[11px] font-semibold text-blue-600">{label}</Text>
+      <View className="h-2 w-2 rounded-full bg-blue-600" style={o && { backgroundColor: o.ink }} />
+      <View className="h-0.5 flex-1 bg-blue-600" style={o && { backgroundColor: o.ink }} />
+      <Text className="ml-2 text-[11px] font-semibold text-blue-600" style={o && { color: o.ink }}>{label}</Text>
     </View>
   );
 }
@@ -276,6 +287,7 @@ function TreeRow({
   onDragMove: (absoluteX: number, absoluteY: number) => void;
   onDragEnd: (commit: boolean) => void;
 }) {
+  const o = useOrbitPage();
   const { subtask, level } = row;
   const overdue = !!subtask.dueDate && !subtask.completed && isOverdue(subtask.dueDate);
   const hasChildren = subtask.subtasks.length > 0;
@@ -316,14 +328,24 @@ function TreeRow({
         {/* One guide line per level above this row. */}
         {Array.from({ length: level }, (_, i) => (
           <View key={i} style={{ width: INDENT }} className="items-center">
-            <View className="w-0.5 flex-1 bg-slate-200" />
+            <View className="w-0.5 flex-1 bg-slate-200" style={o && { backgroundColor: o.border }} />
           </View>
         ))}
-        <Pressable
+        {/* (Orbit: its card; the one dropped on tinted in the section's
+            colour, the one held ringed in it.) */}
+        <Tap
           onPress={onOpen}
           className={`mb-2 flex-1 flex-row rounded-2xl border bg-white py-2.5 pl-3 active:bg-slate-50 ${
             drop === "child" ? "border-blue-500 bg-blue-50" : dragging ? "border-blue-300" : "border-slate-200"
           }`}
+          style={
+            o && {
+              borderRadius: 16,
+              backgroundColor: drop === "child" ? hexToRgba(o.fill, 0.14) : o.surface,
+              borderColor: drop === "child" ? o.ink : dragging ? o.selectedRing : o.border,
+            }
+          }
+          pressedStyle={o ? { backgroundColor: o.pill } : {}}
         >
           <Pressable onPress={onToggle} hitSlop={10} accessibilityLabel="Complete subtask" className="pt-0.5">
             {subtask.completed ? (
@@ -331,7 +353,7 @@ function TreeRow({
                 <Ionicons name="checkmark" size={14} color="white" />
               </View>
             ) : (
-              <View className="h-[22px] w-[22px] rounded-full border-2 border-slate-400" />
+              <View className="h-[22px] w-[22px] rounded-full border-2 border-slate-400" style={o && { borderColor: o.faint }} />
             )}
           </Pressable>
 
@@ -343,11 +365,12 @@ function TreeRow({
             </View>
             <Text
               className={`mt-1 text-[15px] font-semibold ${subtask.completed ? "text-slate-400 line-through" : "text-slate-900"}`}
+              style={o && { color: subtask.completed ? o.faint : o.text }}
             >
               {subtask.title}
             </Text>
             {!!subtask.description.trim() && (
-              <Text className="mt-0.5 text-xs leading-4 text-slate-500" numberOfLines={2}>
+              <Text className="mt-0.5 text-xs leading-4 text-slate-500" numberOfLines={2} style={o && { color: o.muted }}>
                 {subtask.description.trim()}
               </Text>
             )}
@@ -355,8 +378,8 @@ function TreeRow({
               <View className="mt-1 flex-row flex-wrap items-center gap-x-3 gap-y-0.5">
                 {subtask.dueDate && (
                   <View className="flex-row items-center">
-                    <Ionicons name="calendar-outline" size={12} color={overdue ? "#DC2626" : "#94A3B8"} />
-                    <Text className={`ml-1 text-xs ${overdue ? "font-medium text-red-600" : "text-slate-500"}`}>
+                    <Ionicons name="calendar-outline" size={12} color={overdue ? o?.danger ?? "#DC2626" : o?.faint ?? "#94A3B8"} />
+                    <Text className={`ml-1 text-xs ${overdue ? "font-medium text-red-600" : "text-slate-500"}`} style={o && { color: overdue ? o.danger : o.muted }}>
                       {friendlyDate(subtask.dueDate)}
                       {overdue ? " (overdue)" : ""}
                     </Text>
@@ -364,14 +387,14 @@ function TreeRow({
                 )}
                 {subtask.parties.length > 0 && (
                   <View className="flex-row items-center">
-                    <Ionicons name="people-outline" size={12} color="#94A3B8" />
-                    <Text className="ml-1 text-xs text-slate-500" numberOfLines={1}>
+                    <Ionicons name="people-outline" size={12} color={o?.faint ?? "#94A3B8"} />
+                    <Text className="ml-1 text-xs text-slate-500" numberOfLines={1} style={o && { color: o.muted }}>
                       {subtask.parties.join(", ")}
                     </Text>
                   </View>
                 )}
                 {hasChildren && (
-                  <Text className="text-xs text-slate-500">
+                  <Text className="text-xs text-slate-500" style={o && { color: o.muted }}>
                     {subtask.subtaskCount - subtask.openSubtaskCount}/{subtask.subtaskCount} subtasks
                   </Text>
                 )}
@@ -382,20 +405,21 @@ function TreeRow({
           <View className="items-center">
             <GestureDetector gesture={drag}>
               <View accessibilityLabel="Drag to rearrange" className="h-9 w-10 items-center justify-center">
-                <Ionicons name="reorder-three-outline" size={22} color="#94A3B8" />
+                <Ionicons name="reorder-three-outline" size={22} color={o?.faint ?? "#94A3B8"} />
               </View>
             </GestureDetector>
             {hasChildren && (
-              <Pressable
+              <Tap
                 onPress={onToggleBranch}
                 accessibilityLabel={folded ? "Show subtasks" : "Hide subtasks"}
                 className="h-8 w-10 items-center justify-center rounded-full active:bg-slate-100"
+                pressedStyle={o ? { backgroundColor: o.pill } : {}}
               >
-                <Ionicons name={folded ? "chevron-forward" : "chevron-down"} size={18} color="#64748B" />
-              </Pressable>
+                <Ionicons name={folded ? "chevron-forward" : "chevron-down"} size={18} color={o?.muted ?? "#64748B"} />
+              </Tap>
             )}
           </View>
-        </Pressable>
+        </Tap>
       </View>
       {drop === "child" && <DropLine level={level + 1} label="Make subtask" />}
       {drop === "sibling" && <DropLine level={level} label="Place after" />}

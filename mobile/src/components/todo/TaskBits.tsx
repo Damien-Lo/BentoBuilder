@@ -4,18 +4,79 @@ import { Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 import type { TaskPriority, TaskStatus } from "@/src/services/todoApi";
+import { useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { hexToRgba } from "@/src/utils/mealPlan";
 
-import { TASK_PRIORITY_META, TASK_STATUS_META } from "./theme";
+import { TASK_PRIORITY_META, TASK_STATUS_META, useTodoTheme, type TodoTheme } from "./theme";
 
 // Small shared pieces of the task UI: the status / priority pills, the
-// "#12" reference and the progress bar (plain, and as a slider).
+// "#12" reference and the progress bar (plain, and as a slider). On an
+// Orbit page (useOrbitPage) they take its colours; elsewhere they look as
+// they always have.
+
+// A colour mixed towards white — a list's or a pill's hue made light enough
+// to read as text on the dark theme.
+export function lighten(hex: string, amount: number): string {
+  const h = hex.replace("#", "");
+  const channel = (i: number) => {
+    const value = parseInt(h.slice(i, i + 2), 16);
+    return Math.round(value + (255 - value) * amount)
+      .toString(16)
+      .padStart(2, "0");
+  };
+  return `#${channel(0)}${channel(2)}${channel(4)}`;
+}
+
+// A status or priority pill's colours. On a dark Orbit page its hue, made
+// light, as the text over a soft tint of the same; otherwise its own.
+export function pillTint(meta: { fg: string; bg: string }, o: OrbitColors | null, dark: boolean): { fg: string; bg: string } {
+  if (!o || !dark) return meta;
+  const fg = lighten(meta.fg, 0.55);
+  return { fg, bg: hexToRgba(fg, 0.16) };
+}
+
+// A list's colour where it's text (e.g. a heading): itself, or lighter on a
+// dark Orbit page so it still reads.
+export function readableAccent(accent: string, o: OrbitColors | null, dark: boolean): string {
+  return o && dark ? lighten(accent, 0.35) : accent;
+}
+
+// The Lists pages' colours on an Orbit page: the same roles as TodoTheme,
+// filled from the Orbit palette (so pieces that take a TodoTheme follow).
+export function useListsTheme(): TodoTheme {
+  const base = useTodoTheme();
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
+  if (!o) return base;
+  return {
+    dark,
+    bg: o.canvas,
+    headerBg: o.canvas,
+    card: o.surface,
+    cardBorder: o.border,
+    rowDivider: o.border,
+    detailBg: o.canvas,
+    title: o.text,
+    text: o.text,
+    textMuted: o.muted,
+    textFaint: o.faint,
+    icon: o.icon,
+    separator: o.border,
+    circle: o.faint,
+    pill: o.pill,
+    danger: o.danger,
+  };
+}
 
 export function StatusPill({ status }: { status: TaskStatus }) {
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
   const meta = TASK_STATUS_META[status] ?? TASK_STATUS_META.not_started;
+  const tint = pillTint(meta, o, dark);
   return (
-    <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: meta.bg }}>
-      <Ionicons name={meta.icon} size={12} color={meta.fg} />
-      <Text className="ml-1 text-xs font-semibold" style={{ color: meta.fg }}>
+    <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: tint.bg }}>
+      <Ionicons name={meta.icon} size={12} color={tint.fg} />
+      <Text className="ml-1 text-xs font-semibold" style={{ color: tint.fg }}>
         {meta.label}
       </Text>
     </View>
@@ -23,10 +84,13 @@ export function StatusPill({ status }: { status: TaskStatus }) {
 }
 
 export function PriorityPill({ priority }: { priority: TaskPriority }) {
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
   const meta = TASK_PRIORITY_META[priority] ?? TASK_PRIORITY_META.medium;
+  const tint = pillTint(meta, o, dark);
   return (
-    <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: meta.bg }}>
-      <Text className="text-xs font-semibold" style={{ color: meta.fg }}>
+    <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: tint.bg }}>
+      <Text className="text-xs font-semibold" style={{ color: tint.fg }}>
         {meta.label}
       </Text>
     </View>
@@ -34,15 +98,23 @@ export function PriorityPill({ priority }: { priority: TaskPriority }) {
 }
 
 export function TaskNumber({ number }: { number: number | null | undefined }) {
+  const o = useOrbitPage();
   if (number == null) return null;
-  return <Text className="text-xs font-medium text-slate-400">#{number}</Text>;
+  return (
+    <Text className="text-xs font-medium text-slate-400" style={o && { color: o.faint }}>
+      #{number}
+    </Text>
+  );
 }
 
-export function ProgressBar({ value, color = "#2563EB" }: { value: number; color?: string }) {
+// (On an Orbit page: its track, and filled in the section's colour unless
+// told otherwise.)
+export function ProgressBar({ value, color }: { value: number; color?: string }) {
+  const o = useOrbitPage();
   const pct = Math.max(0, Math.min(100, value));
   return (
-    <View className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-      <View style={{ width: `${pct}%`, height: 8, backgroundColor: color }} />
+    <View className="h-2 w-full overflow-hidden rounded-full bg-slate-100" style={o && { backgroundColor: o.track }}>
+      <View style={{ width: `${pct}%`, height: 8, backgroundColor: color ?? o?.fill ?? "#2563EB" }} />
     </View>
   );
 }
@@ -55,7 +127,7 @@ const THUMB = 22;
 // can keep up; `onChange` fires once, on release.
 export function ProgressSlider({
   value,
-  color = "#2563EB",
+  color,
   onPreview,
   onChange,
 }: {
@@ -64,6 +136,8 @@ export function ProgressSlider({
   onPreview?: (value: number | null) => void;
   onChange: (value: number) => void;
 }) {
+  const o = useOrbitPage();
+  const fill = color ?? o?.fill ?? "#2563EB";
   const [width, setWidth] = useState(0);
   // The value under the finger while dragging.
   const [dragging, setDragging] = useState<number | null>(null);
@@ -106,9 +180,11 @@ export function ProgressSlider({
         accessibilityValue={{ min: 0, max: 100, now: pct }}
         style={{ height: 32, justifyContent: "center" }}
       >
-        <View className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-          <View style={{ width: `${pct}%`, height: 8, backgroundColor: color }} />
+        <View className="h-2 w-full overflow-hidden rounded-full bg-slate-100" style={o && { backgroundColor: o.track }}>
+          <View style={{ width: `${pct}%`, height: 8, backgroundColor: fill }} />
         </View>
+        {/* The thumb (on an Orbit page: the card's colour, ringed in the
+            section's ink — or in the bar's own colour, e.g. a list's). */}
         <View
           style={{
             position: "absolute",
@@ -116,9 +192,9 @@ export function ProgressSlider({
             width: THUMB,
             height: THUMB,
             borderRadius: THUMB / 2,
-            backgroundColor: "#FFFFFF",
+            backgroundColor: o?.surface ?? "#FFFFFF",
             borderWidth: 2,
-            borderColor: color,
+            borderColor: o && (!color || color === o.fill) ? o.ink : fill,
             shadowColor: "#000",
             shadowOpacity: 0.18,
             shadowRadius: 3,

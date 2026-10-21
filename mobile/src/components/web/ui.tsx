@@ -218,8 +218,10 @@ export function IconButton({ icon, label, onPress, size = 34, color = WEB.body }
 }
 
 export function Segmented<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (value: T) => void }) {
+  // (On an Orbit page: its track, the chosen one in its accent.)
+  const o = useOrbitPage();
   return (
-    <View style={{ flexDirection: "row", borderRadius: 10, backgroundColor: "#EEF2F7", padding: 3 }}>
+    <View style={{ flexDirection: "row", borderRadius: 10, backgroundColor: o?.pill ?? "#EEF2F7", padding: 3 }}>
       {options.map((option) => {
         const on = option.value === value;
         return (
@@ -231,11 +233,11 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
               paddingHorizontal: 12,
               justifyContent: "center",
               borderRadius: 8,
-              backgroundColor: on ? SEGMENT_ON : hovered ? "#E2E8F0" : "transparent",
-              boxShadow: on ? "0 1px 2px rgba(15,23,42,0.12)" : undefined,
+              backgroundColor: on ? (o?.ink ?? SEGMENT_ON) : hovered ? (o?.track ?? "#E2E8F0") : "transparent",
+              boxShadow: on && !o ? "0 1px 2px rgba(15,23,42,0.12)" : undefined,
             }))}
           >
-            <Text style={{ fontSize: 13, fontWeight: on ? "700" : "500", color: on ? WEB.blueDark : "#475569" }}>{option.label}</Text>
+            <Text style={{ fontSize: 13, fontWeight: on ? "700" : "500", color: on ? (o?.onInk ?? WEB.blueDark) : (o?.muted ?? "#475569") }}>{option.label}</Text>
           </Pressable>
         );
       })}

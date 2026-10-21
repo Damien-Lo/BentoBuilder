@@ -13,11 +13,12 @@ import { SECTION_PALETTE, useOrbitTheme, type OrbHue, type OrbitColors } from "@
 // one. It breathes slowly (unless motion is turned down).
 // (The same light as the browser's gradient: from the edge, deep blue, to
 // the bright spot at 36% across, 30% down.)
-// (A section's orb is one hue — the Kitchen's orange, the Calendar's blue — and takes it from
+// (A section's orb is one hue — the Kitchen's orange, the Calendar's blue, Tasks' violet — and takes it from
 // useOrbitTheme(); the main one is all of them: MainOrb, below. Shades from
 // Claude Design's orb sheet, Oct 2026.)
 const HUES: Record<Exclude<OrbHue, "main">, { stops: [number, string][]; glow: { light: string; dark: string } }> = {
   blue: { stops: [[0, SECTION_PALETTE.calendar.tint], [0.24, "#93C2F6"], [0.52, SECTION_PALETTE.calendar.base], [0.86, SECTION_PALETTE.calendar.dark], [1, SECTION_PALETTE.calendar.deep]], glow: { light: SECTION_PALETTE.calendar.base, dark: SECTION_PALETTE.calendar.base } },
+  violet: { stops: [[0, SECTION_PALETTE.tasks.tint], [0.24, "#C3B6FA"], [0.52, SECTION_PALETTE.tasks.base], [0.86, SECTION_PALETTE.tasks.dark], [1, SECTION_PALETTE.tasks.deep]], glow: { light: SECTION_PALETTE.tasks.base, dark: SECTION_PALETTE.tasks.base } },
   orange: { stops: [[0, SECTION_PALETTE.kitchen.tint], [0.24, "#F7AE6E"], [0.52, SECTION_PALETTE.kitchen.base], [0.86, SECTION_PALETTE.kitchen.dark], [1, SECTION_PALETTE.kitchen.deep]], glow: { light: SECTION_PALETTE.kitchen.base, dark: SECTION_PALETTE.kitchen.base } },
 };
 

@@ -48,7 +48,7 @@ export default function RootLayout() {
           }}
         />
 
-        {/* Settings section — its own tab group, one tab per app area */}
+        {/* Settings — a list (like the iPhone's), each row its own page */}
         <Stack.Screen
           name="settings-section"
           options={{

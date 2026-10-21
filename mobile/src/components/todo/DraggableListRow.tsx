@@ -4,12 +4,14 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 import type { TodoList } from "@/src/services/todoApi";
+import { useOrbitTheme } from "@/src/theme/orbit";
 
 import { listAccent, type TodoTheme } from "./theme";
 
 // One list row on the Lists home: tap opens it; long-press then drag moves
 // it (the parent works out where it lands); long-press and let go without
-// moving opens its options menu instead.
+// moving opens its options menu instead. (In Orbit's look: its icon in the
+// list's own colour, the rest in the theme's.)
 export function DraggableListRow({
   list,
   indented,
@@ -24,7 +26,7 @@ export function DraggableListRow({
 }: {
   list: TodoList;
   indented: boolean;
-  // A slate-100 line above the row (the app's card-row divider).
+  // A hairline above the row (the card's row divider).
   divider: boolean;
   theme: TodoTheme;
   onLayout: (event: LayoutChangeEvent) => void;
@@ -34,6 +36,8 @@ export function DraggableListRow({
   onDragMove: (translationY: number) => void;
   onDragEnd: () => void;
 }) {
+  const { colors } = useOrbitTheme();
+  const surface = colors.surface;
   const translateY = useSharedValue(0);
   const lifted = useSharedValue(0);
   const pressed = useSharedValue(0);
@@ -71,7 +75,7 @@ export function DraggableListRow({
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }, { scale: 1 + lifted.value * 0.03 }],
     opacity: pressed.value && !lifted.value ? 0.6 : 1,
-    backgroundColor: lifted.value > 0 ? theme.card : "transparent",
+    backgroundColor: lifted.value > 0 ? surface : "transparent",
     borderRadius: 12,
     shadowOpacity: lifted.value * 0.25,
   }));
@@ -88,9 +92,9 @@ export function DraggableListRow({
         {
           marginLeft: indented ? 25 : 0,
           borderLeftWidth: indented ? 2 : 0,
-          borderLeftColor: theme.separator,
+          borderLeftColor: colors.border,
           borderTopWidth: divider ? 1 : 0,
-          borderTopColor: theme.rowDivider,
+          borderTopColor: colors.border,
         },
         wrapperStyle,
       ]}
@@ -112,10 +116,10 @@ export function DraggableListRow({
         ]}
       >
         <Ionicons name={list.type === "checklist" ? "checkbox-outline" : list.type === "project" ? "git-network-outline" : "list"} size={20} color={listAccent(list.color, theme)} />
-        <Text numberOfLines={1} style={{ flex: 1, marginLeft: 14, fontSize: 16, color: theme.text }}>
+        <Text numberOfLines={1} style={{ flex: 1, marginLeft: 14, fontSize: 16, color: colors.text }}>
           {list.name}
         </Text>
-        {!!list.openCount && <Text style={{ fontSize: 15, color: theme.textFaint }}>{list.openCount}</Text>}
+        {!!list.openCount && <Text style={{ fontSize: 15, color: colors.faint }}>{list.openCount}</Text>}
       </Animated.View>
     </GestureDetector>
     </Animated.View>

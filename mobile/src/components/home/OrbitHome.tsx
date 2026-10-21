@@ -470,7 +470,7 @@ export function OrbitHome() {
           </View>
           <View style={{ marginLeft: 12, flexDirection: "row", gap: 4 }}>
             {isAdmin && corner("construct-outline", "Developer", "/developer/home")}
-            {corner("settings-outline", "Settings", "/settings-section/kitchen")}
+            {corner("settings-outline", "Settings", "/settings-section" as Href)}
           </View>
         </View>
 

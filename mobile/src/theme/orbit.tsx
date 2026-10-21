@@ -5,7 +5,7 @@ import { Platform, useColorScheme } from "react-native";
 // Orbit's look: the colours every redesigned screen takes, in light and
 // dark — first worked out on the phone's home screen (components/home), the
 // reference for the rest. Which one shows is the person's choice in
-// Settings → Account → Appearance: Automatic (as the phone is set), Light
+// Settings → Appearance: Automatic (as the phone is set), Light
 // or Dark; kept on the device.
 //
 // In a browser it's always the light colours: the web has its own dark mode
@@ -102,7 +102,7 @@ export type Appearance = "system" | "light" | "dark";
 // The orb's colour: the main one — every section's colour together, the
 // assistant as a whole (home, and anywhere outside a section) — or a
 // section's own (its agent's).
-export type OrbHue = "main" | "blue" | "orange";
+export type OrbHue = "main" | "blue" | "orange" | "violet";
 const KEY = "orbit.appearance";
 
 interface ThemeValue {
@@ -151,7 +151,7 @@ export function OrbitPage({ on = true, children }: { on?: boolean; children: Rea
 // orbs): its pages, tab bar, sheets and orb take it in place of the
 // theme's accent (black, or white in the dark). The home screen, the hub
 // for every section, keeps the plain accent. Kitchen first (Oct 2026).
-export type Section = "kitchen" | "calendar";
+export type Section = "kitchen" | "calendar" | "tasks";
 const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark: Partial<OrbitColors> }> = {
   kitchen: {
     orb: "orange",
@@ -165,6 +165,12 @@ const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark
     // (SECTION_PALETTE.calendar, the same way as the Kitchen's.)
     light: { ink: "#2C5DC9", onInk: "#FFFFFF", fill: "#5FA2F2", selectedRing: "#9CC4F6", orbGlow: "rgba(95, 162, 242, 0.45)" },
     dark: { ink: "#5FA2F2", onInk: "#0D0F14", fill: "#5FA2F2", selectedRing: "#2C5DC9", orbGlow: "rgba(95, 162, 242, 0.55)" },
+  },
+  tasks: {
+    orb: "violet",
+    // (SECTION_PALETTE.tasks, the same way as the Kitchen's.)
+    light: { ink: "#5A44C9", onInk: "#FFFFFF", fill: "#A08CF7", selectedRing: "#C9BDFB", orbGlow: "rgba(160, 140, 247, 0.45)" },
+    dark: { ink: "#A08CF7", onInk: "#0D0F14", fill: "#A08CF7", selectedRing: "#5A44C9", orbGlow: "rgba(160, 140, 247, 0.55)" },
   },
 };
 

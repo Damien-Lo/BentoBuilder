@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DraggableListRow } from "@/src/components/todo/DraggableListRow";
+import { Tap } from "@/src/components/ui/Tap";
 import { WebTasksScreen } from "@/src/components/todo/web/WebTasksScreen";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { openListOptions } from "@/src/components/todo/listActions";
@@ -12,6 +13,7 @@ import { applyDrop, computeDrop, rowKey, type DragRow, type DropTarget, type Row
 import { TextPromptModal } from "@/src/components/todo/TextPromptModal";
 import { listAccent, showActions, SMART_LISTS, useTodoTheme } from "@/src/components/todo/theme";
 import { loadSettings } from "@/src/services/settingsService";
+import { OrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import {
   createTodoGroup,
   createTodoList,
@@ -42,15 +44,25 @@ function initials(name: string): string {
 // The Tasks tab — smart lists, then your own task lists and groups, with
 // "New List" / new group at the bottom (modelled on Microsoft To Do).
 export default function TasksTabScreen() {
-  // A desktop browser gets its own layout; the phone screen is below.
+  // A desktop browser gets its own layout; the phone screen is below, in
+  // Orbit's look.
   const wide = useWideWeb();
-  return wide ? <WebTasksScreen /> : <PhoneTasksTabScreen />;
+  return wide ? (
+    <WebTasksScreen />
+  ) : (
+    <OrbitPage>
+      <PhoneTasksTabScreen />
+    </OrbitPage>
+  );
 }
 
 function PhoneTasksTabScreen() {
   const router = useRouter();
   const theme = useTodoTheme();
-  const accent = listAccent("blue", theme);
+  // The section's violet for what you make and where things land; each
+  // list keeps its own colour on its icon.
+  const { colors } = useOrbitTheme();
+  const accent = colors.ink;
   const [overview, setOverview] = useState<TodoOverview | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [prompt, setPrompt] = useState<Prompt | null>(null);
@@ -99,14 +111,15 @@ function PhoneTasksTabScreen() {
     }
   }
 
-  // The app's standard card: white, rounded-2xl, slate-200 outline.
+  // Orbit's card: the surface, rounded, a hairline round it.
   const cardStyle = {
-    backgroundColor: theme.card,
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: theme.cardBorder,
+    borderColor: colors.border,
     overflow: "hidden" as const,
   };
+  const pressed = { backgroundColor: colors.pill };
 
   // Checklists have their own tabs.
   const lists = (overview?.lists ?? []).filter((l) => l.type !== "checklist");
@@ -211,7 +224,7 @@ function PhoneTasksTabScreen() {
 
   function listRow(list: TodoList, indented = false) {
     return (
-      <Pressable
+      <Tap
         key={list._id}
         onPress={() => router.push({ pathname: "/lists/[id]", params: { id: list._id } })}
         onLongPress={() =>
@@ -224,92 +237,84 @@ function PhoneTasksTabScreen() {
             onDeleted: refresh,
           })
         }
-        className="active:bg-slate-50"
-        style={{ flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: theme.rowDivider }}
+        accessibilityRole="button"
+        accessibilityLabel={list.name}
+        style={{ flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.border }}
+        pressedStyle={pressed}
       >
         <Ionicons name={list.isDefault ? "home-outline" : list.type === "checklist" ? "checkbox-outline" : list.type === "project" ? "git-network-outline" : "list"} size={20} color={listAccent(list.color, theme)} />
-        <Text numberOfLines={1} style={{ flex: 1, marginLeft: 14, fontSize: 16, color: theme.text }}>
+        <Text numberOfLines={1} style={{ flex: 1, marginLeft: 14, fontSize: 16, color: colors.text }}>
           {list.name}
         </Text>
-        {!!list.openCount && <Text style={{ fontSize: 15, color: theme.textFaint }}>{list.openCount}</Text>}
-      </Pressable>
+        {!!list.openCount && <Text style={{ fontSize: 15, color: colors.faint }}>{list.openCount}</Text>}
+      </Tap>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={["top", "left", "right"]}>
-      {/* Header */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 20,
-          paddingVertical: 12,
-          backgroundColor: theme.headerBg,
-          borderBottomWidth: 1,
-          borderBottomColor: theme.cardBorder,
-        }}
-      >
-        {initials(displayName) ? (
-          <View
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: "#EFF6FF",
-              alignItems: "center",
-              justifyContent: "center",
-              marginRight: 12,
-            }}
-          >
-            <Text style={{ color: "#1D4ED8", fontSize: 15, fontWeight: "700" }}>
-              {initials(displayName)}
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 }} scrollEnabled={!draggingId} showsVerticalScrollIndicator={false}>
+        {/* The title on the page, with your initials beside it */}
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 20 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 28, fontWeight: "800", color: colors.text, letterSpacing: -0.5 }} numberOfLines={1}>
+              Tasks
             </Text>
+            <Text style={{ marginTop: 2, fontSize: 14, color: colors.muted }}>Your task lists</Text>
           </View>
-        ) : null}
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 24, fontWeight: "700", color: theme.title }} numberOfLines={1}>
-            Tasks
-          </Text>
-          <Text style={{ marginTop: 2, fontSize: 14, color: theme.textMuted }}>Your task lists</Text>
+          {initials(displayName) ? (
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                backgroundColor: colors.pill,
+                alignItems: "center",
+                justifyContent: "center",
+                marginLeft: 12,
+              }}
+            >
+              <Text style={{ color: colors.ink, fontSize: 15, fontWeight: "700" }}>{initials(displayName)}</Text>
+            </View>
+          ) : null}
         </View>
-      </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 }} scrollEnabled={!draggingId}>
         {/* Smart lists */}
         <View style={cardStyle}>
           {SMART_LISTS.map((smart, i) => {
             const count = overview?.smartCounts[smart.id] ?? 0;
             return (
-              <Pressable
+              <Tap
                 key={smart.id}
                 onPress={() => router.push({ pathname: "/lists/[id]", params: { id: smart.id } })}
-                className="active:bg-slate-50"
+                accessibilityRole="button"
+                accessibilityLabel={smart.name}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
                   minHeight: 52,
                   paddingHorizontal: 16,
                   borderTopWidth: i > 0 ? 1 : 0,
-                  borderTopColor: theme.rowDivider,
+                  borderTopColor: colors.border,
                 }}
+                pressedStyle={pressed}
               >
                 <Ionicons name={smart.icon} size={20} color={listAccent(smart.color, theme)} />
-                <Text style={{ flex: 1, marginLeft: 14, fontSize: 16, color: theme.text }}>{smart.name}</Text>
-                {count > 0 && <Text style={{ fontSize: 15, color: theme.textFaint }}>{count}</Text>}
-              </Pressable>
+                <Text style={{ flex: 1, marginLeft: 14, fontSize: 16, color: colors.text }}>{smart.name}</Text>
+                {count > 0 && <Text style={{ fontSize: 15, color: colors.faint }}>{count}</Text>}
+              </Tap>
             );
           })}
           {defaultList && listRow(defaultList)}
         </View>
 
-        <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">My lists</Text>
+        <Text style={{ marginTop: 24, marginBottom: 8, marginLeft: 4, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, color: colors.faint }}>MY LISTS</Text>
 
         {/* Your lists, then groups — one flat column of rows so each row's
             measured position lines up for drag-and-drop. */}
         <View style={cardStyle}>
           {ungrouped.length === 0 && groups.length === 0 && (
-            <Text style={{ paddingHorizontal: 16, paddingVertical: 16, fontSize: 15, color: theme.textFaint }}>
+            <Text style={{ paddingHorizontal: 16, paddingVertical: 16, fontSize: 15, color: colors.faint }}>
               No lists yet — tap New List to make one.
             </Text>
           )}
@@ -329,28 +334,31 @@ function PhoneTasksTabScreen() {
                   paddingLeft: 16,
                   paddingRight: 4,
                   borderTopWidth: gi > 0 || ungrouped.length > 0 ? 1 : 0,
-                  borderTopColor: theme.rowDivider,
-                  backgroundColor: hovered ? "#EFF6FF" : "transparent",
+                  borderTopColor: colors.border,
+                  // (A dragged list over it: a soft wash of the section's colour.)
+                  backgroundColor: hovered ? `${colors.selectedRing}40` : "transparent",
                 }}
               >
-                <Ionicons name="albums-outline" size={20} color={hovered ? listAccent("blue", theme) : theme.icon} />
-                <Text numberOfLines={1} style={{ flex: 1, marginLeft: 14, fontSize: 16, fontWeight: "700", color: theme.text }}>
+                <Ionicons name="albums-outline" size={20} color={hovered ? colors.ink : colors.icon} />
+                <Text numberOfLines={1} style={{ flex: 1, marginLeft: 14, fontSize: 16, fontWeight: "700", color: colors.text }}>
                   {group.name}
                 </Text>
-                <Pressable
+                <Tap
                   onPress={() => groupOptions(group)}
                   accessibilityLabel={`${group.name} options`}
-                  style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+                  style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }}
+                  pressedStyle={pressed}
                 >
-                  <Ionicons name="ellipsis-horizontal" size={20} color={theme.textFaint} />
-                </Pressable>
-                <Pressable
+                  <Ionicons name="ellipsis-horizontal" size={20} color={colors.faint} />
+                </Tap>
+                <Tap
                   onPress={() => toggleGroup(group)}
                   accessibilityLabel={group.collapsed ? `Expand ${group.name}` : `Collapse ${group.name}`}
-                  style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+                  style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }}
+                  pressedStyle={pressed}
                 >
-                  <Ionicons name={group.collapsed ? "chevron-forward" : "chevron-down"} size={20} color={theme.textFaint} />
-                </Pressable>
+                  <Ionicons name={group.collapsed ? "chevron-forward" : "chevron-down"} size={20} color={colors.faint} />
+                </Tap>
               </View>,
               ...(group.collapsed
                 ? []
@@ -358,7 +366,7 @@ function PhoneTasksTabScreen() {
                   ? [
                       <Text
                         key={`empty-${group._id}`}
-                        style={{ marginLeft: 25, borderLeftWidth: 2, borderLeftColor: theme.separator, paddingLeft: 16, paddingVertical: 12, fontSize: 14, color: theme.textFaint }}
+                        style={{ marginLeft: 25, borderLeftWidth: 2, borderLeftColor: colors.border, paddingLeft: 16, paddingVertical: 12, fontSize: 14, color: colors.faint }}
                       >
                         Drag a list here, or use ⋯ to add one.
                       </Text>,
@@ -378,26 +386,28 @@ function PhoneTasksTabScreen() {
                 top: dropTarget.indicatorY - 1,
                 height: 3,
                 borderRadius: 2,
-                backgroundColor: listAccent("blue", theme),
+                backgroundColor: colors.ink,
               }}
             />
           )}
         </View>
 
         {/* Deleted tasks wait here for 30 days. */}
-        <Pressable
+        <Tap
           onPress={() => router.push("/lists/deleted")}
-          className="active:bg-slate-50"
+          accessibilityRole="button"
+          accessibilityLabel="Recently deleted"
           style={[cardStyle, { marginTop: 24, flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 16 }]}
+          pressedStyle={pressed}
         >
-          <Ionicons name="trash-outline" size={20} color={theme.textMuted} />
-          <Text style={{ flex: 1, marginLeft: 14, fontSize: 16, color: theme.text }}>Recently deleted</Text>
-          {deletedCount > 0 && <Text style={{ fontSize: 15, color: theme.textFaint }}>{deletedCount}</Text>}
-          <Ionicons name="chevron-forward" size={16} color={theme.textFaint} style={{ marginLeft: 6 }} />
-        </Pressable>
+          <Ionicons name="trash-outline" size={20} color={colors.muted} />
+          <Text style={{ flex: 1, marginLeft: 14, fontSize: 16, color: colors.text }}>Recently deleted</Text>
+          {deletedCount > 0 && <Text style={{ fontSize: 15, color: colors.faint }}>{deletedCount}</Text>}
+          <Ionicons name="chevron-forward" size={16} color={colors.faint} style={{ marginLeft: 6 }} />
+        </Tap>
       </ScrollView>
 
-      {/* New list / new group */}
+      {/* New list / new group: on the page, a hairline above */}
       <View
         style={{
           flexDirection: "row",
@@ -406,20 +416,22 @@ function PhoneTasksTabScreen() {
           paddingTop: 8,
           paddingBottom: 28,
           borderTopWidth: 1,
-          borderTopColor: theme.cardBorder,
-          backgroundColor: theme.headerBg,
+          borderTopColor: colors.border,
+          backgroundColor: colors.canvas,
         }}
       >
-        <Pressable
+        <Tap
           onPress={() => startNewList(null)}
-          className="active:opacity-60"
+          accessibilityRole="button"
+          accessibilityLabel="New List"
           style={{ flex: 1, flexDirection: "row", alignItems: "center", minHeight: 48, paddingHorizontal: 8 }}
+          pressedStyle={{ opacity: 0.6 }}
         >
           <Ionicons name="add" size={26} color={accent} />
-          <Text style={{ marginLeft: 12, fontSize: 16, fontWeight: "600", color: accent }}>New List</Text>
-        </Pressable>
+          <Text style={{ marginLeft: 12, fontSize: 16, fontWeight: "700", color: accent }}>New List</Text>
+        </Tap>
         {/* The less common things to make: a project, a group. */}
-        <Pressable
+        <Tap
           onPress={() =>
             showActions("New", [
               { label: "New project", onPress: () => setPrompt({ kind: "newList", group: null, type: "project" }) },
@@ -427,11 +439,11 @@ function PhoneTasksTabScreen() {
             ])
           }
           accessibilityLabel="New project or group"
-          className="active:bg-slate-100"
           style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }}
+          pressedStyle={pressed}
         >
           <Ionicons name="duplicate-outline" size={22} color={accent} />
-        </Pressable>
+        </Tap>
       </View>
 
       <TextPromptModal

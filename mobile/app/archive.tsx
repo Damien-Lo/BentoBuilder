@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -33,6 +32,9 @@ import {
   restoreRestaurantMeal,
 } from "@/src/services/restaurantMealApi";
 import { useWideForm } from "@/src/components/forms/wideForm";
+import { dangerSoft, PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
+import { Tap } from "@/src/components/ui/Tap";
+import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 
 type ArchiveKind = "ingredients" | "recipes" | "meals" | "restaurantMeals";
 
@@ -91,14 +93,31 @@ const ARCHIVE_CONFIG: Record<ArchiveKind, ArchiveConfig> = {
 
 const KIND_ORDER: ArchiveKind[] = ["ingredients", "recipes", "meals", "restaurantMeals"];
 
+// The Kitchen's archive (from Settings → Kitchen): archived ingredients,
+// recipes, meals and eating-out visits — restored or deleted for good here.
+// On the phone in the Kitchen's Orbit look, light or dark (`o`: its
+// colours); a desktop browser keeps the older look.
 export default function ArchiveScreen() {
-  const router = useRouter();
+  return (
+    <OrbitSection section="kitchen">
+      <ArchivePage />
+    </OrbitSection>
+  );
+}
+
+function ArchivePage() {
+  const back = useGoBack("/settings-section/kitchen");
   const [activeKind, setActiveKind] = useState<ArchiveKind>("ingredients");
   const [itemsByKind, setItemsByKind] = useState<Partial<Record<ArchiveKind, ArchiveItem[]>>>({});
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const layout = useWideForm();
+  const { colors, dark } = useOrbitTheme();
+  const o = layout.wide ? null : colors;
+  const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 };
+  // (Restoring, in a soft green.)
+  const restoreBg = dark ? "rgba(52,211,153,0.14)" : "#ECFDF5";
 
   useEffect(() => {
     let cancelled = false;
@@ -179,16 +198,21 @@ export default function ArchiveScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" style={layout.page} edges={["top", "left", "right"]}>
-      <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-        <Pressable
-          className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-          onPress={() => router.back()}
-        >
-          <Ionicons name="chevron-back" size={26} color="#0F172A" />
-        </Pressable>
-        <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Archive</Text>
-      </View>
+    <OrbitPage on={!layout.wide}>
+    <SafeAreaView className="flex-1 bg-slate-50" style={[layout.page, o && { backgroundColor: o.canvas }]} edges={["top", "left", "right"]}>
+      {o ? (
+        <PageHeader title="Archive" subtitle="Restore what you archived, or delete it for good" onBack={back} style={{ paddingHorizontal: 16, paddingTop: 4 }} />
+      ) : (
+        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
+          <Pressable
+            className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
+            onPress={back}
+          >
+            <Ionicons name="chevron-back" size={26} color="#0F172A" />
+          </Pressable>
+          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Archive</Text>
+        </View>
+      )}
 
       <ScrollView
         horizontal
@@ -196,7 +220,7 @@ export default function ArchiveScreen() {
         contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}
         className="border-b border-slate-200 bg-white"
         // (On the web a sideways scroller grows to fill the page unless told not to.)
-        style={{ flexGrow: 0 }}
+        style={[{ flexGrow: 0 }, o && { backgroundColor: "transparent", borderBottomWidth: 0, marginTop: 4 }]}
       >
         {KIND_ORDER.map((kind) => {
           const isActive = kind === activeKind;
@@ -205,9 +229,12 @@ export default function ArchiveScreen() {
             <Pressable
               key={kind}
               className={`rounded-full px-4 py-2 ${isActive ? "bg-blue-600" : "bg-slate-100"}`}
+              style={o && { backgroundColor: isActive ? o.ink : o.pill }}
               onPress={() => setActiveKind(kind)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }}
             >
-              <Text className={`text-sm font-semibold ${isActive ? "text-white" : "text-slate-600"}`}>
+              <Text className={`text-sm font-semibold ${isActive ? "text-white" : "text-slate-600"}`} style={o && { color: isActive ? o.onInk : o.onPill }}>
                 {ARCHIVE_CONFIG[kind].label}
                 {!loading ? ` · ${count}` : ""}
               </Text>
@@ -216,33 +243,34 @@ export default function ArchiveScreen() {
         })}
       </ScrollView>
 
-      <View className="px-5 pt-4">
-        <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
-          <Ionicons name="search-outline" size={19} color="#64748B" />
+      <View className="px-5 pt-4" style={o && { paddingHorizontal: 16, paddingTop: 4 }}>
+        <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 16 }}>
+          <Ionicons name="search-outline" size={19} color={o?.muted ?? "#64748B"} />
           <TextInput
             value={searchText}
             onChangeText={setSearchText}
             placeholder={`Search archived ${config.label.toLowerCase()}`}
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={o?.faint ?? "#94A3B8"}
             className="ml-3 flex-1 text-base text-slate-950"
+            style={o && { color: o.text }}
           />
         </View>
       </View>
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color={o?.fill ?? "#2563EB"} />
         </View>
       ) : (
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 60 }}
+          contentContainerStyle={[{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 60 }, o && { paddingHorizontal: 16 }]}
           showsVerticalScrollIndicator={false}
         >
           {items.length === 0 ? (
-            <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
-              <Ionicons name="archive-outline" size={38} color="#94A3B8" />
-              <Text className="mt-3 text-center text-slate-500">
+            <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16" style={card}>
+              <Ionicons name="archive-outline" size={38} color={o?.faint ?? "#94A3B8"} />
+              <Text className="mt-3 text-center text-slate-500" style={o && { color: o.muted }}>
                 {searchText ? "No matches." : `No archived ${config.label.toLowerCase()}.`}
               </Text>
             </View>
@@ -250,7 +278,7 @@ export default function ArchiveScreen() {
             <View style={layout.columns}>
             {itemColumns.map((columnItems, columnIndex) => (
             <View key={columnIndex} style={layout.column}>
-            <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={card}>
               {columnItems.map((item, index) => {
                 const isBusy = busyId === item._id;
                 return (
@@ -259,10 +287,37 @@ export default function ArchiveScreen() {
                     className={`flex-row items-center px-4 py-3.5 ${
                       index < columnItems.length - 1 ? "border-b border-slate-100" : ""
                     }`}
+                    style={o && { borderBottomColor: o.border }}
                   >
-                    <Text className="flex-1 text-base text-slate-900" numberOfLines={1}>
+                    <Text className="flex-1 text-base text-slate-900" style={o && { color: o.text }} numberOfLines={1}>
                       {item.name}
                     </Text>
+                    {o ? (
+                      <>
+                        <Tap
+                          disabled={isBusy}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Restore ${item.name}`}
+                          style={{ marginRight: 4, flexDirection: "row", alignItems: "center", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: restoreBg, opacity: isBusy ? 0.5 : 1 }}
+                          pressedStyle={{ opacity: 0.7 }}
+                          onPress={() => void handleRestore(item)}
+                        >
+                          <Ionicons name="arrow-undo-outline" size={15} color={o.success} />
+                          <Text style={{ marginLeft: 4, fontSize: 12, fontWeight: "600", color: o.success }}>Restore</Text>
+                        </Tap>
+                        <Tap
+                          disabled={isBusy}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete ${item.name} for good`}
+                          style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }}
+                          pressedStyle={{ backgroundColor: dangerSoft(dark) }}
+                          onPress={() => handleDeletePermanently(item)}
+                        >
+                          <Ionicons name="trash-outline" size={18} color={o.danger} />
+                        </Tap>
+                      </>
+                    ) : (
+                    <>
                     <Pressable
                       disabled={isBusy}
                       className="mr-1 flex-row items-center rounded-full bg-emerald-50 px-3 py-1.5 active:bg-emerald-100"
@@ -278,6 +333,8 @@ export default function ArchiveScreen() {
                     >
                       <Ionicons name="trash-outline" size={18} color="#DC2626" />
                     </Pressable>
+                    </>
+                    )}
                   </View>
                 );
               })}
@@ -289,5 +346,6 @@ export default function ArchiveScreen() {
         </ScrollView>
       )}
     </SafeAreaView>
+    </OrbitPage>
   );
 }
