@@ -83,8 +83,9 @@ function glance(id: SectionId, t: Today): { value: string; ring: number; caption
     case "kitchen":
       return {
         value: t.nextMeal ? t.nextMeal.title : t.expiring.length ? `${t.expiring.length} expiring` : "—",
-        ring: t.mealsPlanned ? t.mealsEaten / t.mealsPlanned : 0,
-        caption: t.mealsPlanned ? `${t.mealsEaten} of ${t.mealsPlanned} meals eaten` : "Nothing planned today",
+        // (The ring: the day's calories against the goal.)
+        ring: t.goal ? Math.min(1, kcal / t.goal) : 0,
+        caption: t.goal ? `${kcal.toLocaleString()} of ${t.goal.toLocaleString()} kcal` : `${kcal.toLocaleString()} kcal today`,
       };
     case "nutrition":
       return { value: `${Math.round((kcal / t.goal) * 100)}%`, ring: Math.min(1, kcal / t.goal), caption: `${kcal.toLocaleString()} of ${t.goal.toLocaleString()} kcal` };
