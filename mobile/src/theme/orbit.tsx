@@ -151,7 +151,7 @@ export function OrbitPage({ on = true, children }: { on?: boolean; children: Rea
 // orbs): its pages, tab bar, sheets and orb take it in place of the
 // theme's accent (black, or white in the dark). The home screen, the hub
 // for every section, keeps the plain accent. Kitchen first (Oct 2026).
-export type Section = "kitchen";
+export type Section = "kitchen" | "calendar";
 const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark: Partial<OrbitColors> }> = {
   kitchen: {
     orb: "orange",
@@ -159,6 +159,12 @@ const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark
     // theme, for white text; the colour itself for rings, and in the dark.)
     light: { ink: "#C2471A", onInk: "#FFFFFF", fill: "#F28A3C", selectedRing: "#F7AE6E", orbGlow: "rgba(242, 138, 60, 0.45)" },
     dark: { ink: "#F28A3C", onInk: "#0D0F14", fill: "#F28A3C", selectedRing: "#C2471A", orbGlow: "rgba(242, 138, 60, 0.55)" },
+  },
+  calendar: {
+    orb: "blue",
+    // (SECTION_PALETTE.calendar, the same way as the Kitchen's.)
+    light: { ink: "#2C5DC9", onInk: "#FFFFFF", fill: "#5FA2F2", selectedRing: "#9CC4F6", orbGlow: "rgba(95, 162, 242, 0.45)" },
+    dark: { ink: "#5FA2F2", onInk: "#0D0F14", fill: "#5FA2F2", selectedRing: "#2C5DC9", orbGlow: "rgba(95, 162, 242, 0.55)" },
   },
 };
 

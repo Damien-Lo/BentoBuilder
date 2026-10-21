@@ -49,6 +49,9 @@ import {
   type RepeatFrequency,
 } from "@/src/services/calendarApi";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
+import { useWideWeb } from "@/src/utils/useWideWeb";
+import { Tap } from "@/src/components/ui/Tap";
+import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 
 // "Today", "Tomorrow", "Thursday", "Next Thursday" — the grey hint under
 // the date, like Outlook's.
@@ -69,9 +72,22 @@ type SheetTarget = "calendar" | "repeat" | "remind" | null;
 
 // New event / edit event. Opened with `date` + `start`/`end` (minutes) from
 // a dragged-out block or the + button, or with `id` to edit an event (a
-// repeating event is edited as a whole series).
+// repeating event is edited as a whole series). In the Calendar's colours,
+// and on a phone in Orbit's look; a desktop browser keeps its own.
 export default function EditCalendarEventScreen() {
+  return (
+    <OrbitSection section="calendar">
+      <EditCalendarEventPage />
+    </OrbitSection>
+  );
+}
+
+function EditCalendarEventPage() {
   const router = useRouter();
+  // (On a phone, in Orbit's colours; null in a desktop browser.)
+  const wide = useWideWeb();
+  const { colors, dark } = useOrbitTheme();
+  const o = wide ? null : colors;
   const params = useLocalSearchParams<{
     id?: string;
     date?: string;
@@ -329,16 +345,61 @@ export default function EditCalendarEventScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
       </SafeAreaView>
     );
   }
 
+  // (Orbit's look, on a phone: a hairline, a choice on or off, and the soft
+  // red of something to delete.)
+  const line = o && { borderColor: o.border };
+  const choice = (on: boolean) => o && { backgroundColor: on ? o.ink : o.pill, borderRadius: 12 };
+  const choiceText = (on: boolean) => o && { color: on ? o.onInk : o.onPill };
+  const dangerTint = dark ? "rgba(248,113,113,0.14)" : "#FEF2F2";
+  const heading = !editingId
+    ? "New event"
+    : scope === "one"
+      ? "Edit this event"
+      : scope === "following"
+        ? "Edit this & following"
+        : scope === "all"
+          ? "Edit series"
+          : "Edit event";
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <OrbitPage on={!wide}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        {/* Header: cancel · title + calendar · save */}
+        {/* Header (phone): close and Save over a large title, and the
+            calendar it's in as a pill to change it, on the page itself */}
+        {o && (
+          <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
+              <Tap onPress={() => router.back()} disabled={saving} accessibilityLabel="Close" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                <Ionicons name="close" size={22} color={o.text} />
+              </Tap>
+              <View style={{ flex: 1 }} />
+              <Tap disabled={saving} onPress={() => void handleSave()} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }} pressedStyle={{ opacity: 0.8 }}>
+                <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>{saving ? "Saving..." : "Save"}</Text>
+              </Tap>
+            </View>
+            <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>{heading}</Text>
+            <Tap
+              onPress={() => setSheet("calendar")}
+              accessibilityLabel="Calendar"
+              style={{ alignSelf: "flex-start", marginTop: 10, height: 32, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, borderRadius: 16, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
+              pressedStyle={{ backgroundColor: o.pill }}
+            >
+              <View style={{ width: 9, height: 9, borderRadius: 4.5, marginRight: 7, backgroundColor: color }} />
+              <Text style={{ fontSize: 13, fontWeight: "600", color: o.onPill }}>{calendar?.name ?? "Calendar"}</Text>
+              <Ionicons name="chevron-down" size={13} color={o.muted} style={{ marginLeft: 4 }} />
+            </Tap>
+          </View>
+        )}
+
+        {/* Header (desktop): cancel · title + calendar · save */}
+        {!o && (
         <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-2.5">
           <Pressable
             onPress={() => router.back()}
@@ -348,17 +409,7 @@ export default function EditCalendarEventScreen() {
             <Ionicons name="close" size={26} color="#0F172A" />
           </Pressable>
           <Pressable onPress={() => setSheet("calendar")} className="ml-1 flex-1 active:opacity-60">
-            <Text className="text-lg font-bold text-slate-950">
-              {!editingId
-                ? "New event"
-                : scope === "one"
-                  ? "Edit this event"
-                  : scope === "following"
-                    ? "Edit this & following"
-                    : scope === "all"
-                      ? "Edit series"
-                      : "Edit event"}
-            </Text>
+            <Text className="text-lg font-bold text-slate-950">{heading}</Text>
             <View className="flex-row items-center">
               <View className="mr-1.5 h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
               <Text className="text-xs font-medium text-slate-500">{calendar?.name ?? "Calendar"}</Text>
@@ -373,6 +424,7 @@ export default function EditCalendarEventScreen() {
             <Text className="font-semibold text-white">{saving ? "Saving..." : "Save"}</Text>
           </Pressable>
         </View>
+        )}
 
         <ScrollView
           className="flex-1"
@@ -381,9 +433,9 @@ export default function EditCalendarEventScreen() {
           showsVerticalScrollIndicator={false}
         >
           {scope && occurrence && (
-            <View className="mb-3 flex-row items-center rounded-2xl bg-blue-50 px-4 py-3">
-              <Ionicons name="repeat" size={16} color="#1D4ED8" />
-              <Text className="ml-2 flex-1 text-xs leading-4 text-blue-800">
+            <View className="mb-3 flex-row items-center rounded-2xl bg-blue-50 px-4 py-3" style={o && { backgroundColor: o.accentSoft, borderRadius: 16 }}>
+              <Ionicons name="repeat" size={16} color={o?.accent ?? "#1D4ED8"} />
+              <Text className="ml-2 flex-1 text-xs leading-4 text-blue-800" style={o && { color: o.icon }}>
                 {scope === "one"
                   ? `Changes apply only to ${shortDateLabel(occurrence)}. It's split off the series as its own event.`
                   : scope === "following"
@@ -394,35 +446,37 @@ export default function EditCalendarEventScreen() {
           )}
 
           {/* Title */}
-          <View className="mb-3 flex-row items-center rounded-3xl border border-slate-200 bg-white px-4">
+          <View className="mb-3 flex-row items-center rounded-3xl border border-slate-200 bg-white px-4" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 }}>
             <View className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
             <TextInput
               value={title}
               onChangeText={setTitle}
               placeholder="Title"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={o?.faint ?? "#94A3B8"}
               autoFocus={!editingId}
               className="ml-3 flex-1 text-lg font-semibold text-slate-950"
-              style={{ height: 60 }}
+              style={{ height: 60, ...(o && { color: o.text }) }}
             />
           </View>
 
           {/* Which meal — only in the Meals calendar */}
           {isMeal && (
-            <View className="mb-3 rounded-3xl border border-slate-200 bg-white p-4">
-              <Text className="text-sm font-semibold text-slate-900">Meal or session</Text>
-              <Text className="mt-0.5 text-xs text-slate-500">A meal shows its food from your planner; a session shows what to prep or buy.</Text>
+            <View className="mb-3 rounded-3xl border border-slate-200 bg-white p-4" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 }}>
+              <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>Meal or session</Text>
+              <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>A meal shows its food from your planner; a session shows what to prep or buy.</Text>
               <View className="mt-3 flex-row gap-2">
                 {MEAL_TYPES.map((meal) => {
                   const on = mealSlot === meal.value;
                   return (
-                    <Pressable
+                    <Tap
                       key={meal.value}
                       onPress={() => pickMeal(meal.value)}
                       className={`flex-1 items-center rounded-xl py-2.5 ${on ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"}`}
+                      style={choice(on)}
+                      pressedStyle={o ? { opacity: 0.75 } : {}}
                     >
-                      <Text className={`text-[13px] font-semibold ${on ? "text-white" : "text-slate-700"}`}>{meal.label}</Text>
-                    </Pressable>
+                      <Text className={`text-[13px] font-semibold ${on ? "text-white" : "text-slate-700"}`} style={choiceText(on)}>{meal.label}</Text>
+                    </Tap>
                   );
                 })}
               </View>
@@ -430,13 +484,15 @@ export default function EditCalendarEventScreen() {
                 {SESSION_TYPES.map((session) => {
                   const on = kitchenKind === session.value;
                   return (
-                    <Pressable
+                    <Tap
                       key={session.value}
                       onPress={() => pickSession(session.value)}
                       className={`flex-1 items-center rounded-xl py-2.5 ${on ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"}`}
+                      style={choice(on)}
+                      pressedStyle={o ? { opacity: 0.75 } : {}}
                     >
-                      <Text className={`text-[13px] font-semibold ${on ? "text-white" : "text-slate-700"}`}>{session.label}</Text>
-                    </Pressable>
+                      <Text className={`text-[13px] font-semibold ${on ? "text-white" : "text-slate-700"}`} style={choiceText(on)}>{session.label}</Text>
+                    </Tap>
                   );
                 })}
               </View>
@@ -454,7 +510,7 @@ export default function EditCalendarEventScreen() {
               hideChevron
             >
               {/* Same toggle as the app's ToggleRow. */}
-              <View className={`h-7 w-12 justify-center rounded-full px-1 ${allDay ? "bg-blue-600" : "bg-slate-200"}`}>
+              <View className={`h-7 w-12 justify-center rounded-full px-1 ${allDay ? "bg-blue-600" : "bg-slate-200"}`} style={o && { backgroundColor: allDay ? o.ink : o.track }}>
                 <View
                   className="h-5 w-5 rounded-full bg-white shadow"
                   style={{ transform: [{ translateX: allDay ? 20 : 0 }] }}
@@ -463,42 +519,44 @@ export default function EditCalendarEventScreen() {
             </Row>
 
             {allDay ? (
-              <View className="flex-row border-t border-slate-100">
-                <Pressable onPress={() => setDateTarget("start")} className="flex-1 px-4 py-3 active:bg-slate-50">
-                  <Text className="text-xs font-medium text-slate-500">Starts</Text>
-                  <Text className="mt-0.5 text-base font-semibold text-slate-950">{shortDateLabel(date)}</Text>
-                  <Text className="text-xs text-slate-400">{relativeDay(date)}</Text>
-                </Pressable>
-                <Pressable
+              <View className="flex-row border-t border-slate-100" style={line}>
+                <Tap onPress={() => setDateTarget("start")} className="flex-1 px-4 py-3 active:bg-slate-50" pressedStyle={o ? { backgroundColor: o.pill } : {}}>
+                  <Text className="text-xs font-medium text-slate-500" style={o && { color: o.muted }}>Starts</Text>
+                  <Text className="mt-0.5 text-base font-semibold text-slate-950" style={o && { color: o.text }}>{shortDateLabel(date)}</Text>
+                  <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>{relativeDay(date)}</Text>
+                </Tap>
+                <Tap
                   onPress={() => setDateTarget("end")}
                   className="flex-1 border-l border-slate-100 px-4 py-3 active:bg-slate-50"
+                  style={line}
+                  pressedStyle={o ? { backgroundColor: o.pill } : {}}
                 >
-                  <Text className="text-xs font-medium text-slate-500">Ends</Text>
-                  <Text className="mt-0.5 text-base font-semibold text-slate-950">{shortDateLabel(endDate)}</Text>
-                  <Text className="text-xs text-slate-400">
+                  <Text className="text-xs font-medium text-slate-500" style={o && { color: o.muted }}>Ends</Text>
+                  <Text className="mt-0.5 text-base font-semibold text-slate-950" style={o && { color: o.text }}>{shortDateLabel(endDate)}</Text>
+                  <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>
                     {daysBetween(date, endDate) + 1} day{daysBetween(date, endDate) === 0 ? "" : "s"}
                   </Text>
-                </Pressable>
+                </Tap>
               </View>
             ) : (
-              <View className="flex-row border-t border-slate-100">
-                <Pressable onPress={() => setDateTarget("start")} className="flex-1 px-4 py-3 active:bg-slate-50">
-                  <Text className="text-xs font-medium text-slate-500">Date</Text>
-                  <Text className="mt-0.5 text-base font-semibold text-slate-950">{shortDateLabel(date)}</Text>
-                  <Text className="text-xs text-slate-400">{relativeDay(date)}</Text>
-                </Pressable>
-                <View className="flex-1 border-l border-slate-100 px-4 py-3">
-                  <Text className="text-xs font-medium text-slate-500">Time</Text>
+              <View className="flex-row border-t border-slate-100" style={line}>
+                <Tap onPress={() => setDateTarget("start")} className="flex-1 px-4 py-3 active:bg-slate-50" pressedStyle={o ? { backgroundColor: o.pill } : {}}>
+                  <Text className="text-xs font-medium text-slate-500" style={o && { color: o.muted }}>Date</Text>
+                  <Text className="mt-0.5 text-base font-semibold text-slate-950" style={o && { color: o.text }}>{shortDateLabel(date)}</Text>
+                  <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>{relativeDay(date)}</Text>
+                </Tap>
+                <View className="flex-1 border-l border-slate-100 px-4 py-3" style={line}>
+                  <Text className="text-xs font-medium text-slate-500" style={o && { color: o.muted }}>Time</Text>
                   <View className="mt-0.5 flex-row items-center">
                     <Pressable onPress={() => setTimeTarget("start")} hitSlop={6} className="active:opacity-60">
-                      <Text className="text-base font-semibold text-blue-600">{minutesLabel(startMinutes)}</Text>
+                      <Text className="text-base font-semibold text-blue-600" style={o && { color: o.ink }}>{minutesLabel(startMinutes)}</Text>
                     </Pressable>
-                    <Ionicons name="arrow-forward" size={14} color="#94A3B8" style={{ marginHorizontal: 6 }} />
+                    <Ionicons name="arrow-forward" size={14} color={o?.faint ?? "#94A3B8"} style={{ marginHorizontal: 6 }} />
                     <Pressable onPress={() => setTimeTarget("end")} hitSlop={6} className="active:opacity-60">
-                      <Text className="text-base font-semibold text-blue-600">{minutesLabel(endMinutes)}</Text>
+                      <Text className="text-base font-semibold text-blue-600" style={o && { color: o.ink }}>{minutesLabel(endMinutes)}</Text>
                     </Pressable>
                   </View>
-                  <Text className="text-xs text-slate-400">
+                  <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>
                     {durationLabel(duration)}
                     {overnight ? " · ends next day" : ""}
                   </Text>
@@ -508,14 +566,14 @@ export default function EditCalendarEventScreen() {
 
             {scope !== "one" && (
             <Row icon="repeat" label="Repeat" onPress={() => setSheet("repeat")} border>
-              <Text className="text-base text-slate-500">
+              <Text className="text-base text-slate-500" style={o && { color: o.muted }}>
                 {REPEAT_OPTIONS.find((o) => o.value === repeatFrequency)?.label}
               </Text>
             </Row>
             )}
             {repeatFrequency === "weekly" && (
-              <View className="border-t border-slate-100 px-4 py-3">
-                <Text className="mb-2 text-xs font-medium text-slate-500">Repeat on</Text>
+              <View className="border-t border-slate-100 px-4 py-3" style={line}>
+                <Text className="mb-2 text-xs font-medium text-slate-500" style={o && { color: o.muted }}>Repeat on</Text>
                 <View className="flex-row justify-between">
                   {Array.from({ length: 7 }, (_, i) => (weekStartDay + i) % 7).map((day) => {
                     const on = weeklyDays({ weekdays: repeatDays }, date).includes(day);
@@ -530,8 +588,9 @@ export default function EditCalendarEventScreen() {
                           if (next.length) setRepeatDays(next);
                         }}
                         className={`h-10 w-10 items-center justify-center rounded-full ${on ? "bg-blue-600" : "bg-slate-100"}`}
+                        style={o && { backgroundColor: on ? o.ink : o.pill }}
                       >
-                        <Text className={`text-sm font-semibold ${on ? "text-white" : "text-slate-600"}`}>
+                        <Text className={`text-sm font-semibold ${on ? "text-white" : "text-slate-600"}`} style={choiceText(on)}>
                           {WEEKDAYS_FULL[day][0]}
                         </Text>
                       </Pressable>
@@ -542,7 +601,7 @@ export default function EditCalendarEventScreen() {
             )}
             {repeatFrequency && (
               <Row icon="flag-outline" label="Until" onPress={() => setDateTarget("until")} border>
-                <Text className="text-base text-slate-500">{repeatUntil ? shortDateLabel(repeatUntil) : "Forever"}</Text>
+                <Text className="text-base text-slate-500" style={o && { color: o.muted }}>{repeatUntil ? shortDateLabel(repeatUntil) : "Forever"}</Text>
               </Row>
             )}
             {/* Or a number of times, kept as the date that falls on. */}
@@ -554,13 +613,14 @@ export default function EditCalendarEventScreen() {
                   onSubmitEditing={endAfterTimes}
                   onBlur={endAfterTimes}
                   placeholder="10"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={o?.faint ?? "#94A3B8"}
                   keyboardType="number-pad"
                   returnKeyType="done"
                   accessibilityLabel="Number of times"
                   className="w-14 rounded-lg bg-slate-100 px-2 py-1.5 text-center text-base text-slate-900"
+                  style={o && { backgroundColor: o.pill, color: o.text, borderRadius: 10 }}
                 />
-                <Text className="ml-2 text-base text-slate-500">times</Text>
+                <Text className="ml-2 text-base text-slate-500" style={o && { color: o.muted }}>times</Text>
               </Row>
             )}
           </Card>
@@ -568,27 +628,27 @@ export default function EditCalendarEventScreen() {
           {/* Where / details */}
           <Card>
             <View className="flex-row items-center px-4">
-              <Ionicons name="location-outline" size={20} color="#64748B" />
+              <Ionicons name="location-outline" size={20} color={o?.muted ?? "#64748B"} />
               <TextInput
                 value={location}
                 onChangeText={setLocation}
                 placeholder="Location"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 className="ml-3 flex-1 text-base text-slate-950"
-                style={{ height: 52 }}
+                style={{ height: 52, ...(o && { color: o.text }) }}
               />
             </View>
-            <View className="flex-row border-t border-slate-100 px-4 pt-3">
-              <Ionicons name="reorder-three-outline" size={20} color="#64748B" />
+            <View className="flex-row border-t border-slate-100 px-4 pt-3" style={line}>
+              <Ionicons name="reorder-three-outline" size={20} color={o?.muted ?? "#64748B"} />
               <TextInput
                 value={description}
                 onChangeText={setDescription}
                 placeholder="Description"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 multiline
                 textAlignVertical="top"
                 className="ml-3 flex-1 pb-3 text-base text-slate-950"
-                style={{ minHeight: 80 }}
+                style={{ minHeight: 80, ...(o && { color: o.text }) }}
               />
             </View>
           </Card>
@@ -596,20 +656,22 @@ export default function EditCalendarEventScreen() {
           {/* Reminder */}
           <Card>
             <Row icon="notifications-outline" label="Remind me" onPress={() => setSheet("remind")}>
-              <Text className="text-base text-slate-500">{remindLabel(remindMinutes)}</Text>
+              <Text className="text-base text-slate-500" style={o && { color: o.muted }}>{remindLabel(remindMinutes)}</Text>
             </Row>
           </Card>
-          <Text className="-mt-1 mb-3 px-2 text-xs leading-4 text-slate-400">
+          <Text className="-mt-1 mb-3 px-2 text-xs leading-4 text-slate-400" style={o && { color: o.faint }}>
             Reminders are saved with the event; phone notifications for them arrive in a later update.
           </Text>
 
           {editingId && (
-            <Pressable
+            <Tap
               onPress={handleDelete}
               className="mt-2 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
+              style={o && { backgroundColor: dangerTint, borderColor: dangerTint, borderRadius: 16 }}
+              pressedStyle={o ? { opacity: 0.75 } : {}}
             >
-              <Text className="font-semibold text-red-600">Delete event</Text>
-            </Pressable>
+              <Text className="font-semibold text-red-600" style={o && { color: o.danger }}>Delete event</Text>
+            </Tap>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -676,11 +738,18 @@ export default function EditCalendarEventScreen() {
         onClose={() => setSheet(null)}
       />
     </SafeAreaView>
+    </OrbitPage>
   );
 }
 
+// (Inside the page: in Orbit's colours on a phone, the older look elsewhere.)
 function Card({ children }: { children: ReactNode }) {
-  return <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white">{children}</View>;
+  const o = useOrbitPage();
+  return (
+    <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 }}>
+      {children}
+    </View>
+  );
 }
 
 function Row({
@@ -698,19 +767,21 @@ function Row({
   border?: boolean;
   hideChevron?: boolean;
 }) {
+  const o = useOrbitPage();
   return (
-    <Pressable
+    <Tap
       disabled={!onPress}
       onPress={onPress}
       className={`px-4 active:bg-slate-50 ${border ? "border-t border-slate-100" : ""}`}
-      style={{ minHeight: 54, flexDirection: "row", alignItems: "center" }}
+      style={{ minHeight: 54, flexDirection: "row", alignItems: "center", ...(o && { borderColor: o.border }) }}
+      pressedStyle={o ? { backgroundColor: o.pill } : {}}
     >
-      <Ionicons name={icon} size={20} color="#64748B" />
-      <Text className="ml-3 flex-1 text-base text-slate-900">{label}</Text>
+      <Ionicons name={icon} size={20} color={o?.muted ?? "#64748B"} />
+      <Text className="ml-3 flex-1 text-base text-slate-900" style={o && { color: o.text }}>{label}</Text>
       {children}
       {onPress && !hideChevron && (
-        <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 6 }} />
+        <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#CBD5E1"} style={{ marginLeft: 6 }} />
       )}
-    </Pressable>
+    </Tap>
   );
 }

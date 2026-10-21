@@ -25,6 +25,9 @@ import { useEntryConfirm } from "@/src/components/planner/useEntryConfirm";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { showActions } from "@/src/components/todo/theme";
+import { Tap } from "@/src/components/ui/Tap";
+import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
+import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import {
   deleteCalendarEvent,
   getCalendarEvent,
@@ -51,8 +54,18 @@ import { hexToRgba, parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
 // One event, as Outlook's event page shows it: the summary card (title,
 // date, time, repeat), then location / notes / reminder, then delete. `date`
-// is the occurrence that was tapped (for a repeating event).
+// is the occurrence that was tapped (for a repeating event). In the
+// Calendar's colours, and on a phone in Orbit's look; a desktop browser
+// keeps its own.
 export default function CalendarEventScreen() {
+  return (
+    <OrbitSection section="calendar">
+      <CalendarEventPage />
+    </OrbitSection>
+  );
+}
+
+function CalendarEventPage() {
   const router = useRouter();
   const { id, date } = useLocalSearchParams<{ id: string; date?: string }>();
   const [event, setEvent] = useState<CalendarEvent | null>(null);
@@ -65,6 +78,9 @@ export default function CalendarEventScreen() {
   const [loadedFood, setFood] = useState<{ entries: MealPlanEntry[]; conversions: CustomUnitConversion[]; day: string; slot: MealType } | null | undefined>(undefined);
   const kitchenPlan = usePlanNeeds();
   const wide = useWideWeb();
+  // (On a phone, in Orbit's colours; null in a desktop browser.)
+  const { colors, dark } = useOrbitTheme();
+  const o = wide ? null : colors;
   const food = useMemo<MealFood | null | undefined>(
     () => (loadedFood ? (buildMealFood(kitchenPlan.sized(loadedFood.entries), loadedFood.conversions).get(mealKey(loadedFood.day, loadedFood.slot)) ?? null) : loadedFood),
     [loadedFood, kitchenPlan],
@@ -153,11 +169,17 @@ export default function CalendarEventScreen() {
 
   if (loading || !event) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
       </SafeAreaView>
     );
   }
+
+  // (Orbit's look, on a phone: a card, a hairline, and the soft red of
+  // something to delete.)
+  const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 };
+  const line = o && { borderColor: o.border };
+  const dangerTint = dark ? "rgba(248,113,113,0.14)" : "#FEF2F2";
 
   const occurrence = date ?? event.date;
   const span = daysBetween(event.date, event.endDate);
@@ -314,20 +336,20 @@ export default function CalendarEventScreen() {
 
         {/* Food from the planner */}
         {event.mealSlot && (
-          <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+          <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white" style={card}>
             <View className="flex-row items-center px-4 pb-1 pt-3.5">
-              <Ionicons name="restaurant-outline" size={18} color="#64748B" />
-              <Text className="ml-2 flex-1 text-base font-semibold text-slate-900">Food</Text>
+              <Ionicons name="restaurant-outline" size={18} color={o?.muted ?? "#64748B"} />
+              <Text className="ml-2 flex-1 text-base font-semibold text-slate-900" style={o && { color: o.text }}>Food</Text>
               {!!food && (
-                <Text className="mr-3 text-sm font-semibold text-slate-700">{Math.round(food.nutrition.calories ?? 0)} kcal</Text>
+                <Text className="mr-3 text-sm font-semibold text-slate-700" style={o && { color: o.muted }}>{Math.round(food.nutrition.calories ?? 0)} kcal</Text>
               )}
               {/* (Suggestions are only worked out from today on.) */}
               {occurrence >= todayStr() && <SuggestionsToggle on={showSuggestions} onPress={toggleSuggestions} />}
             </View>
             {food === undefined ? (
-              <ActivityIndicator className="my-4" color="#2563EB" />
+              <ActivityIndicator className="my-4" color={o?.muted ?? "#2563EB"} />
             ) : !food ? (
-              <Text className="px-4 pb-3 pt-1 text-sm text-slate-500">Nothing planned for this meal yet.</Text>
+              <Text className="px-4 pb-3 pt-1 text-sm text-slate-500" style={o && { color: o.muted }}>Nothing planned for this meal yet.</Text>
             ) : (
               <>
                 {food.items.map((item) => {
@@ -345,10 +367,10 @@ export default function CalendarEventScreen() {
                     />
                   );
                 })}
-                <View className="flex-row border-t border-slate-100 px-4 py-3">
-                  <Macro label="Protein" value={food.nutrition.protein} />
-                  <Macro label="Carbs" value={food.nutrition.carbs} />
-                  <Macro label="Fat" value={food.nutrition.fats} />
+                <View className="flex-row border-t border-slate-100 px-4 py-3" style={line}>
+                  <Macro label="Protein" nutrient="protein" value={food.nutrition.protein} />
+                  <Macro label="Carbs" nutrient="carbs" value={food.nutrition.carbs} />
+                  <Macro label="Fat" nutrient="fats" value={food.nutrition.fats} />
                 </View>
               </>
             )}
@@ -364,21 +386,24 @@ export default function CalendarEventScreen() {
                 }}
               />
             )}
-            <View className="flex-row border-t border-slate-100">
-              <Pressable
+            <View className="flex-row border-t border-slate-100" style={line}>
+              <Tap
                 onPress={() => event.mealSlot && openPlanner({ add: event.mealSlot })}
                 className="flex-1 flex-row items-center justify-center py-3.5 active:bg-slate-50"
+                pressedStyle={o ? { backgroundColor: o.pill } : {}}
               >
-                <Ionicons name="add-circle-outline" size={18} color="#1D4ED8" />
-                <Text className="ml-1.5 font-semibold text-blue-700">Add food</Text>
-              </Pressable>
-              <Pressable
+                <Ionicons name="add-circle-outline" size={18} color={o?.ink ?? "#1D4ED8"} />
+                <Text className="ml-1.5 font-semibold text-blue-700" style={o && { color: o.ink }}>Add food</Text>
+              </Tap>
+              <Tap
                 onPress={() => openPlanner()}
                 className="flex-1 flex-row items-center justify-center border-l border-slate-100 py-3.5 active:bg-slate-50"
+                style={line}
+                pressedStyle={o ? { backgroundColor: o.pill } : {}}
               >
-                <Text className="font-semibold text-slate-700">Open planner</Text>
-                <Ionicons name="chevron-forward" size={16} color="#475569" style={{ marginLeft: 4 }} />
-              </Pressable>
+                <Text className="font-semibold text-slate-700" style={o && { color: o.icon }}>Open planner</Text>
+                <Ionicons name="chevron-forward" size={16} color={o?.muted ?? "#475569"} style={{ marginLeft: 4 }} />
+              </Tap>
             </View>
           </View>
         )}
@@ -386,7 +411,22 @@ export default function CalendarEventScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : undefined}>
+    <OrbitPage on={!wide}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : o && { backgroundColor: o.canvas }}>
+      {/* Nav bar: on a phone round buttons on the page itself (the title's
+          the large one in the page); in a desktop browser its own bar */}
+      {o ? (
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingTop: 4 }}>
+          <Tap onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+            <Ionicons name="chevron-back" size={22} color={o.text} />
+          </Tap>
+          <View style={{ flex: 1 }} />
+          <Tap onPress={startEdit} accessibilityLabel="Edit event" style={{ height: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, borderRadius: 20, backgroundColor: o.ink }} pressedStyle={{ opacity: 0.8 }}>
+            <Ionicons name="create-outline" size={17} color={o.onInk} />
+            <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>Edit</Text>
+          </Tap>
+        </View>
+      ) : (
       <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-2.5">
         <Pressable onPress={() => router.back()} className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100">
           <Ionicons name="chevron-back" size={26} color="#0F172A" />
@@ -404,87 +444,103 @@ export default function CalendarEventScreen() {
           <Ionicons name="create-outline" size={23} color="#2563EB" />
         </Pressable>
       </View>
+      )}
 
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingTop: o ? 12 : 16, paddingBottom: 48 }}>
+        {/* (On a phone: the event's title as the page's large one, and its
+            calendar under it.) */}
+        {o && (
+          <View style={{ marginBottom: 16 }}>
+            <Text style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>{event.title}</Text>
+            <View style={{ marginTop: 6, flexDirection: "row", alignItems: "center" }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, marginRight: 8, backgroundColor: color }} />
+              <Text style={{ fontSize: 14, fontWeight: "600", color: o.muted }}>{calendar?.name ?? "Calendar"}</Text>
+            </View>
+          </View>
+        )}
         {/* (In a desktop browser: what the event is on the left, what it's
             for — the food, or the session's prep and shopping — on the right.) */}
         <View style={wide ? { flexDirection: "row", alignItems: "flex-start", gap: 16 } : undefined}>
           <View style={wide ? { flex: 2, minWidth: 0 } : undefined}>
         {/* Summary */}
-        <View className="mb-3 flex-row rounded-3xl border border-slate-200 bg-white p-4">
-          <View className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: hexToRgba(color, 0.15) }}>
+        <View className="mb-3 flex-row rounded-3xl border border-slate-200 bg-white p-4" style={card}>
+          <View className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: hexToRgba(color, o && dark ? 0.22 : 0.15) }}>
             <View className="h-4 w-4 rounded-full" style={{ backgroundColor: color }} />
           </View>
-          <View className="ml-3 flex-1">
-            <Text className="text-xl font-bold text-slate-950">{event.title}</Text>
-            <Text className="mt-1.5 text-base text-slate-700">{longDateLabel(occurrence)}</Text>
+          <View className="ml-3 flex-1" style={o && { justifyContent: "center" }}>
+            {!o && <Text className="text-xl font-bold text-slate-950">{event.title}</Text>}
+            <Text className="mt-1.5 text-base text-slate-700" style={o && { marginTop: 0, fontWeight: "600", color: o.text }}>{longDateLabel(occurrence)}</Text>
             {event.allDay ? (
-              <Text className="mt-0.5 text-base text-slate-500">
+              <Text className="mt-0.5 text-base text-slate-500" style={o && { color: o.muted }}>
                 {span === 0 ? "All day" : `All day, until ${shortDateLabel(occurrenceEnd)}`}
               </Text>
             ) : (
-              <Text className="mt-0.5 text-base text-slate-500">
+              <Text className="mt-0.5 text-base text-slate-500" style={o && { color: o.muted }}>
                 {minutesLabel(event.startMinutes)} → {minutesLabel(event.endMinutes)}
                 {span > 0 ? ` ${shortDateLabel(occurrenceEnd)}` : ""} ({durationLabel(duration)})
               </Text>
             )}
             {event.seriesId && !event.repeat && (
               <View className="mt-1.5 flex-row items-center">
-                <Ionicons name="git-branch-outline" size={15} color="#64748B" />
-                <Text className="ml-1.5 flex-1 text-sm text-slate-500">Changed from its repeating series</Text>
+                <Ionicons name="git-branch-outline" size={15} color={o?.muted ?? "#64748B"} />
+                <Text className="ml-1.5 flex-1 text-sm text-slate-500" style={o && { color: o.muted }}>Changed from its repeating series</Text>
               </View>
             )}
             {event.repeat && (
               <View className="mt-1.5 flex-row items-center">
-                <Ionicons name="repeat" size={15} color="#64748B" />
-                <Text className="ml-1.5 flex-1 text-sm text-slate-500">{repeatLabel(event.repeat, event.date)}</Text>
+                <Ionicons name="repeat" size={15} color={o?.muted ?? "#64748B"} />
+                <Text className="ml-1.5 flex-1 text-sm text-slate-500" style={o && { color: o.muted }}>{repeatLabel(event.repeat, event.date)}</Text>
               </View>
             )}
           </View>
         </View>
 
         {/* Details */}
-        <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+        <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white" style={card}>
           {!!event.location && (
             <Detail icon="location-outline">
-              <Text className="text-base text-slate-900">{event.location}</Text>
+              <Text className="text-base text-slate-900" style={o && { color: o.text }}>{event.location}</Text>
             </Detail>
           )}
           {!!event.description && (
             <Detail icon="reorder-three-outline">
-              <Text className="text-base leading-6 text-slate-700">{event.description}</Text>
+              <Text className="text-base leading-6 text-slate-700" style={o && { color: o.icon }}>{event.description}</Text>
             </Detail>
           )}
           <Detail icon="notifications-outline">
-            <Text className="text-base text-slate-900">{remindLabel(event.remindMinutes)}</Text>
+            <Text className="text-base text-slate-900" style={o && { color: o.text }}>{remindLabel(event.remindMinutes)}</Text>
           </Detail>
           <Detail icon="calendar-outline" last>
             <View className="flex-row items-center">
               <View className="mr-2 h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-              <Text className="text-base text-slate-900">{calendar?.name ?? "Calendar"}</Text>
+              <Text className="text-base text-slate-900" style={o && { color: o.text }}>{calendar?.name ?? "Calendar"}</Text>
             </View>
           </Detail>
         </View>
           {!wide && purpose}
         {regularMeal && (
-          <Pressable
+          <Tap
             onPress={() => router.push("/calendar/meal-times")}
             className="mb-3 flex-row items-center rounded-2xl bg-blue-50 px-4 py-3 active:bg-blue-100"
+            style={o && { backgroundColor: o.accentSoft, borderRadius: 16 }}
+            pressedStyle={o ? { opacity: 0.8 } : {}}
           >
-            <Ionicons name="time-outline" size={18} color="#1D4ED8" />
-            <Text className="ml-2 flex-1 text-sm text-blue-900">
+            <Ionicons name="time-outline" size={18} color={o?.accent ?? "#1D4ED8"} />
+            <Text className="ml-2 flex-1 text-sm text-blue-900" style={o && { color: o.icon }}>
               This is one of your regular meal times. Editing here changes this day only.
             </Text>
-            <Text className="text-sm font-semibold text-blue-700">Change times</Text>
-          </Pressable>
+            <Text className="text-sm font-semibold text-blue-700" style={o && { color: o.accent }}>Change times</Text>
+          </Tap>
         )}
 
-        <Pressable
+        <Tap
           onPress={confirmDelete}
           className="items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
+          style={o && { backgroundColor: dangerTint, borderColor: dangerTint, borderRadius: 16 }}
+          pressedStyle={o ? { opacity: 0.75 } : {}}
         >
-          <Text className="font-semibold text-red-600">{regularMeal ? "Skip this day" : "Delete event"}</Text>
-        </Pressable>
+          <Text className="font-semibold text-red-600" style={o && { color: o.danger }}>{regularMeal ? "Skip this day" : "Delete event"}</Text>
+        </Tap>
           </View>
           {wide && <View style={{ flex: 3, minWidth: 0 }}>{purpose}</View>}
         </View>
@@ -512,23 +568,32 @@ export default function CalendarEventScreen() {
         }}
       />
     </SafeAreaView>
+    </OrbitPage>
   );
 }
 
+// (Inside the page: in Orbit's colours on a phone, the older look elsewhere.)
 function Detail({ icon, children, last = false }: { icon: keyof typeof Ionicons.glyphMap; children: ReactNode; last?: boolean }) {
+  const o = useOrbitPage();
   return (
-    <View className={`flex-row items-start px-4 py-3.5 ${last ? "" : "border-b border-slate-100"}`}>
-      <Ionicons name={icon} size={20} color="#64748B" style={{ marginTop: 1 }} />
+    <View className={`flex-row items-start px-4 py-3.5 ${last ? "" : "border-b border-slate-100"}`} style={o && { borderColor: o.border }}>
+      <Ionicons name={icon} size={20} color={o?.muted ?? "#64748B"} style={{ marginTop: 1 }} />
       <View className="ml-3 flex-1">{children}</View>
     </View>
   );
 }
 
-function Macro({ label, value }: { label: string; value: number | null | undefined }) {
+// One of the meal's macros (on a phone, by its nutrient's colour).
+function Macro({ label, nutrient, value }: { label: string; nutrient: MainNutrient; value: number | null | undefined }) {
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
   return (
     <View className="flex-1 items-center">
-      <Text className="text-sm font-semibold text-slate-900">{Math.round(value ?? 0)} g</Text>
-      <Text className="text-xs text-slate-500">{label}</Text>
+      <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>{Math.round(value ?? 0)} g</Text>
+      <View className="flex-row items-center">
+        {o && <View style={{ width: 6, height: 6, borderRadius: 3, marginRight: 5, backgroundColor: nutrientColor(nutrient, dark) }} />}
+        <Text className="text-xs text-slate-500" style={o && { color: o.muted }}>{label}</Text>
+      </View>
     </View>
   );
 }
@@ -553,13 +618,14 @@ function FoodRow({
   onMenu: () => void;
 }) {
   const swipe = useRef<SwipeableMethods | null>(null);
+  const o = useOrbitPage();
   const then = (action: () => void) => () => {
     swipe.current?.close();
     action();
   };
 
   return (
-    <View className="border-t border-slate-100">
+    <View className="border-t border-slate-100" style={o && { borderColor: o.border }}>
       <ReanimatedSwipeable
         ref={swipe}
         friction={2}
@@ -577,9 +643,9 @@ function FoodRow({
         renderRightActions={() => (
           <View className="flex-row">
             {canRate && (
-              <Pressable className="w-20 items-center justify-center bg-blue-600 active:opacity-80" onPress={then(onRate)}>
-                <Ionicons name="star-outline" size={20} color="white" />
-                <Text className="mt-1 text-[10px] font-semibold text-white">Rate</Text>
+              <Pressable className="w-20 items-center justify-center bg-blue-600 active:opacity-80" style={o && { backgroundColor: o.ink }} onPress={then(onRate)}>
+                <Ionicons name="star-outline" size={20} color={o?.onInk ?? "white"} />
+                <Text className="mt-1 text-[10px] font-semibold text-white" style={o && { color: o.onInk }}>Rate</Text>
               </Pressable>
             )}
             <Pressable
@@ -593,7 +659,7 @@ function FoodRow({
           </View>
         )}
       >
-        <View className="flex-row items-center bg-white pl-2 pr-4">
+        <View className="flex-row items-center bg-white pl-2 pr-4" style={o && { backgroundColor: o.surface }}>
           <Pressable
             hitSlop={6}
             onPress={onToggleEaten}
@@ -603,18 +669,18 @@ function FoodRow({
             <Ionicons
               name={item.eaten ? "checkmark-circle" : "ellipse-outline"}
               size={22}
-              color={item.eaten ? "#16A34A" : "#94A3B8"}
+              color={item.eaten ? (o?.success ?? "#16A34A") : (o?.faint ?? "#94A3B8")}
             />
           </Pressable>
           <Pressable onPress={onMenu} className="flex-1 flex-row items-center py-3 active:opacity-60">
-            <Text className="ml-1 flex-1 text-base text-slate-900" numberOfLines={2}>
+            <Text className="ml-1 flex-1 text-base text-slate-900" style={o && { color: o.text }} numberOfLines={2}>
               {item.name}
               {/* One of your usual meals. */}
               {item.usual ? "  " : ""}
-              {item.usual && <Ionicons name="repeat" size={14} color="#2563EB" />}
+              {item.usual && <Ionicons name="repeat" size={14} color={o?.accent ?? "#2563EB"} />}
             </Text>
-            <Text className="text-sm text-slate-500">{item.kcal} kcal</Text>
-            <Ionicons name="ellipsis-horizontal" size={16} color="#CBD5E1" style={{ marginLeft: 8 }} />
+            <Text className="text-sm text-slate-500" style={o && { color: o.muted }}>{item.kcal} kcal</Text>
+            <Ionicons name="ellipsis-horizontal" size={16} color={o?.faint ?? "#CBD5E1"} style={{ marginLeft: 8 }} />
           </Pressable>
         </View>
       </ReanimatedSwipeable>

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -9,6 +9,7 @@ import { RepeatDaysSheet } from "@/src/components/calendar/RepeatDaysSheet";
 import { loadUsualFoods, UsualFoodPicker, type UsualFood } from "@/src/components/calendar/UsualFoodPicker";
 import { durationLabel, minutesLabel, WEEKDAYS_FULL, WEEKDAYS_SHORT } from "@/src/components/calendar/calendarUtils";
 import { DatePickerModal } from "@/src/components/forms";
+import { Tap } from "@/src/components/ui/Tap";
 import {
   getMealTimes,
   getMealTimesUntil,
@@ -28,6 +29,7 @@ import {
   usualName,
   type UsualMeal,
 } from "@/src/services/usualMealApi";
+import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 import { parseLocalDate, SLOT_MAP, todayStr } from "@/src/utils/mealPlan";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 
@@ -44,12 +46,19 @@ const DEFAULT_TIMES: Record<MealType, MealTime> = {
 // the repeating meal events follow from today on; earlier days keep the
 // times they had.
 export default function MealTimesScreen() {
-  // A desktop browser gets the week laid out as a table.
-  return useWideWeb() ? <WebMealTimesScreen /> : <PhoneMealTimesScreen />;
+  // A desktop browser gets the week laid out as a table, in its older look;
+  // the phone's is in Orbit's, in the Calendar's blue.
+  const wide = useWideWeb();
+  return (
+    <OrbitSection section="calendar">
+      <OrbitPage on={!wide}>{wide ? <WebMealTimesScreen /> : <PhoneMealTimesScreen />}</OrbitPage>
+    </OrbitSection>
+  );
 }
 
 function PhoneMealTimesScreen() {
   const router = useRouter();
+  const { colors: c, dark } = useOrbitTheme();
   const [times, setTimes] = useState<MealTimes | null>(null);
   const [saved, setSaved] = useState("");
   const [saving, setSaving] = useState(false);
@@ -87,8 +96,8 @@ function PhoneMealTimesScreen() {
 
   if (!times) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.canvas }}>
+        <ActivityIndicator size="large" color={c.muted} />
       </SafeAreaView>
     );
   }
@@ -187,89 +196,93 @@ function PhoneMealTimesScreen() {
     ]);
   }
 
+  // Orbit's pieces, light or dark.
+  const card = { backgroundColor: c.surface, borderRadius: 18, borderWidth: 1, borderColor: c.border, overflow: "hidden" as const };
+  const line = { borderTopWidth: 1, borderTopColor: c.border };
+  const dangerSoft = dark ? "rgba(248,113,113,0.14)" : "#FEF2F2";
+  const canSave = dirty && !saving;
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
-      <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-2.5">
-        <Pressable onPress={close} className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100">
-          <Ionicons name="chevron-back" size={26} color="#0F172A" />
-        </Pressable>
-        <View className="ml-1 flex-1">
-          <Text className="text-lg font-bold text-slate-950">Meal times</Text>
-          <Text className="text-xs text-slate-500">When you usually eat, for the Kitchen calendar</Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>
+      {/* The way back and Save over a large title, on the page itself */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4 }}>
+          <Tap onPress={close} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }} pressedStyle={{ backgroundColor: c.pill }}>
+            <Ionicons name="chevron-back" size={22} color={c.text} />
+          </Tap>
+          <View style={{ flex: 1 }} />
+          <Tap onPress={save} disabled={!canSave} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: canSave ? c.ink : c.pill }} pressedStyle={{ opacity: 0.8 }}>
+            <Text style={{ fontSize: 15, fontWeight: "600", color: canSave ? c.onInk : c.faint }}>{saving ? "Saving…" : "Save"}</Text>
+          </Tap>
         </View>
-        <Pressable
-          onPress={save}
-          disabled={!dirty || saving}
-          className={`h-10 justify-center rounded-xl px-4 ${dirty && !saving ? "bg-blue-600 active:bg-blue-700" : "bg-slate-200"}`}
-        >
-          <Text className={`font-semibold ${dirty && !saving ? "text-white" : "text-slate-400"}`}>{saving ? "Saving…" : "Save"}</Text>
-        </Pressable>
+        <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>Meal times</Text>
+        <Text style={{ marginTop: 2, fontSize: 14, color: c.muted }}>When you usually eat, for the Kitchen calendar</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 20, paddingBottom: 48 }}>
         {/* Which meal */}
-        <View className="flex-row gap-2">
+        <View style={{ flexDirection: "row", gap: 8 }}>
           {MEAL_TYPES.map((m) => {
             const on = meal === m.value;
             const count = times[m.value].filter(Boolean).length;
             return (
-              <Pressable
+              <Tap
                 key={m.value}
                 onPress={() => setMeal(m.value)}
-                className={`flex-1 items-center rounded-2xl border py-2.5 ${on ? "border-blue-600 bg-blue-600" : "border-slate-200 bg-white active:bg-slate-100"}`}
+                style={{ flex: 1, alignItems: "center", borderRadius: 16, borderWidth: 1, paddingVertical: 10, borderColor: on ? c.ink : c.border, backgroundColor: on ? c.ink : c.surface }}
+                pressedStyle={on ? { opacity: 0.85 } : { backgroundColor: c.pill }}
               >
-                <Ionicons name={SLOT_MAP[m.value].icon} size={18} color={on ? "#FFFFFF" : SLOT_MAP[m.value].iconColor} />
-                <Text className={`mt-1 text-[13px] font-semibold ${on ? "text-white" : "text-slate-800"}`}>{m.label}</Text>
-                <Text className={`text-[11px] ${on ? "text-blue-100" : "text-slate-400"}`}>
+                <Ionicons name={SLOT_MAP[m.value].icon} size={18} color={on ? c.onInk : c.icon} />
+                <Text style={{ marginTop: 4, fontSize: 13, fontWeight: "600", color: on ? c.onInk : c.text }}>{m.label}</Text>
+                <Text style={{ fontSize: 11, color: on ? c.onInk : c.faint, opacity: on ? 0.75 : 1 }}>
                   {count === 0 ? "Off" : count === 7 ? "Every day" : `${count} day${count === 1 ? "" : "s"}`}
                 </Text>
-              </Pressable>
+              </Tap>
             );
           })}
         </View>
 
         {/* Which day */}
-        <Text className="mb-2 mt-5 text-xs font-bold uppercase tracking-widest text-slate-400">Day</Text>
-        <View className="flex-row gap-1.5">
+        <Eyebrow top={20}>Day</Eyebrow>
+        <View style={{ flexDirection: "row", gap: 6 }}>
           {days.map((d) => {
             const on = day === d;
             const time = times[meal][d];
             return (
-              <Pressable
+              <Tap
                 key={d}
                 onPress={() => setDay(d)}
-                className={`flex-1 items-center rounded-xl border py-2 ${on ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white active:bg-slate-100"}`}
+                style={{ flex: 1, alignItems: "center", borderRadius: 12, borderWidth: 1, paddingVertical: 8, borderColor: on ? c.ink : c.border, backgroundColor: on ? c.accentSoft : c.surface }}
+                pressedStyle={on ? { opacity: 0.85 } : { backgroundColor: c.pill }}
               >
-                <Text className={`text-[13px] font-semibold ${on ? "text-blue-700" : "text-slate-800"}`}>{WEEKDAYS_SHORT[d]}</Text>
-                <Text className={`mt-0.5 text-[10px] ${time ? (on ? "text-blue-700" : "text-slate-500") : "text-slate-300"}`}>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: on ? c.ink : c.text }}>{WEEKDAYS_SHORT[d]}</Text>
+                <Text style={{ marginTop: 2, fontSize: 10, color: time ? (on ? c.ink : c.muted) : c.orbit }}>
                   {time ? minutesLabel(time.start) : "—"}
                 </Text>
-              </Pressable>
+              </Tap>
             );
           })}
         </View>
 
         {/* That meal on that day */}
-        <View className="mt-3 overflow-hidden rounded-3xl border border-slate-200 bg-white">
-          <Pressable onPress={toggleDay} className="flex-row items-center px-4 active:bg-slate-50" style={{ minHeight: 56 }}>
-            <Text className="flex-1 text-base font-semibold text-slate-900">
+        <View style={[card, { marginTop: 12 }]}>
+          <Tap onPress={toggleDay} style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, minHeight: 56 }} pressedStyle={{ backgroundColor: c.pill }}>
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: "600", color: c.text }}>
               {mealLabel} on {WEEKDAYS_FULL[day]}
             </Text>
-            <View className={`h-7 w-12 justify-center rounded-full px-1 ${current ? "bg-blue-600" : "bg-slate-200"}`}>
-              <View className="h-5 w-5 rounded-full bg-white shadow" style={{ transform: [{ translateX: current ? 20 : 0 }] }} />
-            </View>
-          </Pressable>
+            <Switch on={!!current} />
+          </Tap>
           {current ? (
             <>
               <TimeRow label="Starts" value={minutesLabel(current.start)} onPress={() => setPicking("start")} />
               <TimeRow label="Ends" value={minutesLabel(current.end)} onPress={() => setPicking("end")} />
-              <View className="border-t border-slate-100 px-4 py-2.5">
-                <Text className="text-xs text-slate-500">{durationLabel(current.end - current.start)}</Text>
+              <View style={[line, { paddingHorizontal: 16, paddingVertical: 10 }]}>
+                <Text style={{ fontSize: 12, color: c.muted }}>{durationLabel(current.end - current.start)}</Text>
               </View>
             </>
           ) : (
-            <View className="border-t border-slate-100 px-4 py-3">
-              <Text className="text-sm text-slate-500">
+            <View style={[line, { paddingHorizontal: 16, paddingVertical: 12 }]}>
+              <Text style={{ fontSize: 14, color: c.muted }}>
                 No {mealLabel.toLowerCase()} block on {WEEKDAYS_FULL[day]}s.
               </Text>
             </View>
@@ -277,82 +290,75 @@ function PhoneMealTimesScreen() {
         </View>
 
         {/* Reuse this day's setting */}
-        <View className="mt-3 flex-row gap-2">
+        <View style={{ marginTop: 12, flexDirection: "row", gap: 8 }}>
           <CopyButton label="Copy to every day" onPress={() => setDayTime([0, 1, 2, 3, 4, 5, 6], current)} />
           <CopyButton label="Copy to weekdays" onPress={() => setDayTime([1, 2, 3, 4, 5], current)} />
         </View>
 
         {/* How long the regular times run */}
-        <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">Run until</Text>
-        <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
-          <View className="flex-row items-center pl-4 pr-2" style={{ minHeight: 56 }}>
-            <Pressable onPress={() => setPickingUntil(true)} className="flex-1 py-3 active:opacity-60">
-              <Text className="text-base font-semibold text-slate-900">
+        <Eyebrow top={24}>Run until</Eyebrow>
+        <View style={card}>
+          <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8, minHeight: 56 }}>
+            <Tap onPress={() => setPickingUntil(true)} style={{ flex: 1, paddingVertical: 12 }} pressedStyle={{ opacity: 0.6 }}>
+              <Text style={{ fontSize: 16, fontWeight: "600", color: c.text }}>
                 {until ? parseLocalDate(until).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "long", year: "numeric" }) : "No end date"}
               </Text>
-              <Text className="mt-0.5 text-xs text-slate-500">{until ? "Every meal's regular time stops after this day." : "Tap to set a last day for all the regular times."}</Text>
-            </Pressable>
+              <Text style={{ marginTop: 2, fontSize: 12, color: c.muted }}>{until ? "Every meal's regular time stops after this day." : "Tap to set a last day for all the regular times."}</Text>
+            </Tap>
             {!!until && (
-              <Pressable onPress={() => setUntil(null)} hitSlop={6} accessibilityLabel="No end date" className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100">
-                <Ionicons name="close-circle" size={20} color="#94A3B8" />
-              </Pressable>
+              <Tap onPress={() => setUntil(null)} hitSlop={6} accessibilityLabel="No end date" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" }} pressedStyle={{ backgroundColor: c.pill }}>
+                <Ionicons name="close-circle" size={20} color={c.faint} />
+              </Tap>
             )}
           </View>
         </View>
 
         {/* Usual food for this meal */}
-        <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">
-          Usual {mealLabel.toLowerCase()}
-        </Text>
-        <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+        <Eyebrow top={24}>Usual {mealLabel.toLowerCase()}</Eyebrow>
+        <View style={card}>
           {mealUsuals.length === 0 ? (
-            <Text className="px-4 py-3.5 text-sm leading-5 text-slate-500">
+            <Text style={{ paddingHorizontal: 16, paddingVertical: 14, fontSize: 14, lineHeight: 20, color: c.muted }}>
               Nothing yet. Add what you have for {mealLabel.toLowerCase()} most weeks, and it&apos;s planned for you on those days.
             </Text>
           ) : (
             mealUsuals.map((usual, index) => (
-              <View
-                key={usual._id}
-                className={`flex-row items-center pl-4 pr-2 ${index > 0 ? "border-t border-slate-100" : ""}`}
-                style={{ minHeight: 60 }}
-              >
-                <Pressable onPress={() => setEditingDays(usual)} className="flex-1 py-2.5 active:opacity-60">
-                  <Text className={`text-base font-semibold ${usual.active ? "text-slate-900" : "text-slate-400"}`} numberOfLines={1}>
+              <View key={usual._id} style={[{ flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8, minHeight: 60 }, index > 0 && line]}>
+                <Tap onPress={() => setEditingDays(usual)} style={{ flex: 1, paddingVertical: 10 }} pressedStyle={{ opacity: 0.6 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "600", color: usual.active ? c.text : c.faint }} numberOfLines={1}>
                     {usualName(usual)}
                   </Text>
-                  <Text className="mt-0.5 text-xs text-blue-700">
+                  <Text style={{ marginTop: 2, fontSize: 12, color: c.ink }}>
                     {daysLabel(usual.weekdays)}
                     {usual.active ? "" : " · off"}
                   </Text>
-                </Pressable>
+                </Tap>
                 <Pressable onPress={() => toggleUsual(usual)} hitSlop={6} accessibilityLabel={usual.active ? "Switch off" : "Switch on"}>
-                  <View className={`h-7 w-12 justify-center rounded-full px-1 ${usual.active ? "bg-blue-600" : "bg-slate-200"}`}>
-                    <View className="h-5 w-5 rounded-full bg-white shadow" style={{ transform: [{ translateX: usual.active ? 20 : 0 }] }} />
-                  </View>
+                  <Switch on={usual.active} />
                 </Pressable>
-                <Pressable
+                <Tap
                   onPress={() => confirmStopUsual(usual)}
                   hitSlop={6}
                   accessibilityLabel={`Stop having ${usualName(usual)}`}
-                  className="ml-1 h-10 w-10 items-center justify-center rounded-full active:bg-red-50"
+                  style={{ marginLeft: 4, width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" }}
+                  pressedStyle={{ backgroundColor: dangerSoft }}
                 >
-                  <Ionicons name="trash-outline" size={19} color="#DC2626" />
-                </Pressable>
+                  <Ionicons name="trash-outline" size={19} color={c.danger} />
+                </Tap>
               </View>
             ))
           )}
         </View>
-        <Pressable onPress={chooseUsual} className="mt-2 flex-row items-center justify-center rounded-2xl bg-blue-50 py-3 active:bg-blue-100">
-          <Ionicons name="add" size={18} color="#1D4ED8" />
-          <Text className="ml-1 font-semibold text-blue-700">Add a usual {mealLabel.toLowerCase()}</Text>
-        </Pressable>
-        <Text className="mt-2 px-1 text-xs leading-4 text-slate-500">
+        <Tap onPress={chooseUsual} style={{ marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 16, paddingVertical: 12, backgroundColor: c.pill }}>
+          <Ionicons name="add" size={18} color={c.onPill} />
+          <Text style={{ marginLeft: 4, fontSize: 15, fontWeight: "600", color: c.onPill }}>Add a usual {mealLabel.toLowerCase()}</Text>
+        </Tap>
+        <Text style={{ marginTop: 8, paddingHorizontal: 4, fontSize: 12, lineHeight: 16, color: c.faint }}>
           Usual food is added to your planner as planned, two weeks ahead. Changes here apply straight away.
         </Text>
 
-        <View className="mt-5 flex-row rounded-2xl bg-blue-50 px-4 py-3">
-          <Ionicons name="information-circle-outline" size={18} color="#1D4ED8" style={{ marginTop: 1 }} />
-          <Text className="ml-2 flex-1 text-[13px] leading-5 text-blue-900">
+        <View style={{ marginTop: 20, flexDirection: "row", borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.pill }}>
+          <Ionicons name="information-circle-outline" size={18} color={c.muted} style={{ marginTop: 1 }} />
+          <Text style={{ marginLeft: 8, flex: 1, fontSize: 13, lineHeight: 20, color: c.onPill }}>
             Changes start today. Earlier days keep the times they had, and any single day you&apos;ve edited or skipped in
             the calendar stays as it is.
           </Text>
@@ -428,29 +434,44 @@ function PhoneMealTimesScreen() {
   );
 }
 
-function TimeRow({ label, value, onPress }: { label: string; value: string; onPress: () => void }) {
+// A small heading over a card.
+function Eyebrow({ top = 0, children }: { top?: number; children: ReactNode }) {
+  const { colors: c } = useOrbitTheme();
+  return <Text style={{ marginTop: top, marginBottom: 8, marginLeft: 4, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase", color: c.faint }}>{children}</Text>;
+}
+
+// An on/off switch, drawn (its row does the switching).
+function Switch({ on }: { on: boolean }) {
+  const { colors: c } = useOrbitTheme();
   return (
-    <Pressable
-      onPress={onPress}
-      className="flex-row items-center border-t border-slate-100 px-4 active:bg-slate-50"
-      style={{ minHeight: 54 }}
-    >
-      <Ionicons name="time-outline" size={20} color="#64748B" />
-      <Text className="ml-3 flex-1 text-base text-slate-900">{label}</Text>
-      <Text className="text-base font-medium text-blue-700">{value}</Text>
-      <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 6 }} />
-    </Pressable>
+    <View style={{ height: 28, width: 48, justifyContent: "center", borderRadius: 14, paddingHorizontal: 4, backgroundColor: on ? c.ink : c.track }}>
+      <View className="h-5 w-5 rounded-full bg-white shadow" style={{ transform: [{ translateX: on ? 20 : 0 }] }} />
+    </View>
+  );
+}
+
+function TimeRow({ label, value, onPress }: { label: string; value: string; onPress: () => void }) {
+  const { colors: c } = useOrbitTheme();
+  return (
+    <Tap onPress={onPress} style={{ flexDirection: "row", alignItems: "center", borderTopWidth: 1, borderTopColor: c.border, paddingHorizontal: 16, minHeight: 54 }} pressedStyle={{ backgroundColor: c.pill }}>
+      <Ionicons name="time-outline" size={20} color={c.muted} />
+      <Text style={{ marginLeft: 12, flex: 1, fontSize: 16, color: c.text }}>{label}</Text>
+      <Text style={{ fontSize: 16, fontWeight: "500", color: c.ink }}>{value}</Text>
+      <Ionicons name="chevron-forward" size={16} color={c.faint} style={{ marginLeft: 6 }} />
+    </Tap>
   );
 }
 
 function CopyButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const { colors: c } = useOrbitTheme();
   return (
-    <Pressable
+    <Tap
       onPress={onPress}
-      className="flex-1 flex-row items-center justify-center rounded-xl border border-slate-200 bg-white py-2.5 active:bg-slate-100"
+      style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 14, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, paddingVertical: 10 }}
+      pressedStyle={{ backgroundColor: c.pill }}
     >
-      <Ionicons name="copy-outline" size={15} color="#475569" />
-      <Text className="ml-1.5 text-[13px] font-semibold text-slate-700">{label}</Text>
-    </Pressable>
+      <Ionicons name="copy-outline" size={15} color={c.icon} />
+      <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: "600", color: c.icon }}>{label}</Text>
+    </Tap>
   );
 }

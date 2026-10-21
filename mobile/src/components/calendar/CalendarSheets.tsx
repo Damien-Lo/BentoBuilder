@@ -18,11 +18,58 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Tap } from "@/src/components/ui/Tap";
 import { isAssistantCalendar, KITCHEN_KINDS, type EventCalendar } from "@/src/services/calendarApi";
+import { useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { hexToRgba } from "@/src/utils/mealPlan";
 
 import { CALENDAR_COLORS, calendarColor } from "./calendarUtils";
 
 const CALENDAR_ROW_HEIGHT = 52;
+
+// Each of these takes the look of the page it's opened on: on an Orbit page
+// (useOrbitPage) its colours, light or dark, in the section's; anywhere
+// else the older look, as before.
+
+// A calendar's round check (or a kind's square one) in the drawer: filled
+// in its colour when on, ringed when off — on the drawer's own colour.
+function checkStyle(on: boolean, color: string, o: OrbitColors | null) {
+  return on ? { backgroundColor: color } : { borderWidth: 2, borderColor: color, backgroundColor: o?.canvas ?? "white" };
+}
+
+// The drawer's small round buttons (a calendar's gear) and its "Times" pill.
+function GearButton({ label, size, onPress }: { label: string; size: number; onPress: () => void }) {
+  const o = useOrbitPage();
+  return (
+    <Tap
+      hitSlop={8}
+      onPress={onPress}
+      accessibilityLabel={label}
+      className="h-9 w-9 items-center justify-center rounded-full active:bg-slate-100"
+      pressedStyle={o ? { backgroundColor: o.pill } : {}}
+    >
+      <Ionicons name="settings-outline" size={size} color={o?.muted ?? "#64748B"} />
+    </Tap>
+  );
+}
+
+function TimesButton({ onPress }: { onPress: () => void }) {
+  const o = useOrbitPage();
+  return (
+    <Tap
+      hitSlop={8}
+      onPress={onPress}
+      accessibilityLabel="Meal times"
+      className="mr-1 h-9 flex-row items-center rounded-full bg-blue-50 px-3 active:bg-blue-100"
+      // (Orbit: a soft wash of the section's colour.)
+      style={o && { backgroundColor: hexToRgba(o.fill, 0.16) }}
+      pressedStyle={o ? { backgroundColor: hexToRgba(o.fill, 0.28) } : {}}
+    >
+      <Ionicons name="time-outline" size={16} color={o?.ink ?? "#1D4ED8"} />
+      <Text className="ml-1 text-xs font-semibold text-blue-700" style={o && { color: o.ink }}>Times</Text>
+    </Tap>
+  );
+}
 
 // ── Bottom sheet with a list of choices ─────────────────────────────────────
 
@@ -42,26 +89,40 @@ export function OptionSheet<T>({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const o = useOrbitPage();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable className="flex-1 bg-black/40" onPress={onClose} />
-      <View className="rounded-t-3xl bg-white pt-4" style={{ paddingBottom: insets.bottom + 12, maxHeight: "70%" }}>
-        <Text className="px-5 pb-2 text-lg font-bold text-slate-950">{title}</Text>
+      <Pressable className="flex-1 bg-black/40" onPress={onClose} style={o && { backgroundColor: o.scrim }} />
+      <View
+        className="rounded-t-3xl bg-white pt-4"
+        style={[{ paddingBottom: insets.bottom + 12, maxHeight: "70%" }, o && { backgroundColor: o.canvas, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10 }]}
+      >
+        {/* (Orbit: a handle, then the choices in a card.) */}
+        {o && (
+          <View style={{ alignItems: "center", paddingBottom: 12 }}>
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: o.track }} />
+          </View>
+        )}
+        <Text className="px-5 pb-2 text-lg font-bold text-slate-950" style={o && { fontWeight: "800", color: o.text, paddingBottom: 12 }}>{title}</Text>
         <ScrollView>
-          {options.map((option) => (
-            <Pressable
-              key={String(option.value)}
-              onPress={() => {
-                onSelect(option.value);
-                onClose();
-              }}
-              className="flex-row items-center border-t border-slate-100 px-5 py-4 active:bg-slate-50"
-            >
-              {option.color && <View className="mr-3 h-3 w-3 rounded-full" style={{ backgroundColor: option.color }} />}
-              <Text className="flex-1 text-base text-slate-900">{option.label}</Text>
-              {option.value === value && <Ionicons name="checkmark" size={20} color="#2563EB" />}
-            </Pressable>
-          ))}
+          <View style={o && { marginHorizontal: 16, backgroundColor: o.surface, borderRadius: 18, borderWidth: 1, borderColor: o.border, overflow: "hidden" }}>
+            {options.map((option, i) => (
+              <Tap
+                key={String(option.value)}
+                onPress={() => {
+                  onSelect(option.value);
+                  onClose();
+                }}
+                className="flex-row items-center border-t border-slate-100 px-5 py-4 active:bg-slate-50"
+                style={o && { backgroundColor: "transparent", paddingHorizontal: 16, borderTopWidth: i ? 1 : 0, borderTopColor: o.border }}
+                pressedStyle={o ? { backgroundColor: o.pill } : {}}
+              >
+                {option.color && <View className="mr-3 h-3 w-3 rounded-full" style={{ backgroundColor: option.color }} />}
+                <Text className="flex-1 text-base text-slate-900" style={o && { color: o.text, fontWeight: option.value === value ? "600" : "400" }}>{option.label}</Text>
+                {option.value === value && <Ionicons name="checkmark" size={20} color={o?.ink ?? "#2563EB"} />}
+              </Tap>
+            ))}
+          </View>
         </ScrollView>
       </View>
     </Modal>
@@ -93,6 +154,10 @@ export function TimePickerModal({
     if (visible) setPicked(toDate(minutes));
   }, [visible, minutes]);
   const fromDate = (d: Date) => d.getHours() * 60 + d.getMinutes();
+  // (On an Orbit page: its sheet, light or dark, in the section's colour —
+  // as DatePickerModal.)
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
 
   if (Platform.OS !== "ios") {
     if (!visible) return null;
@@ -109,27 +174,28 @@ export function TimePickerModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <Pressable className="flex-1 bg-black/40" onPress={onCancel} />
-      <View className="rounded-t-3xl bg-white px-5 pb-8 pt-5">
-        <Text className="text-lg font-bold text-slate-950">{title}</Text>
+      <Pressable className="flex-1 bg-black/40" onPress={onCancel} style={o && { backgroundColor: o.scrim }} />
+      <View className="rounded-t-3xl bg-white px-5 pb-8 pt-5" style={o && { backgroundColor: o.canvas, borderTopLeftRadius: 28, borderTopRightRadius: 28 }}>
+        <Text className="text-lg font-bold text-slate-950" style={o && { color: o.text }}>{title}</Text>
         <DateTimePicker
           value={picked}
           mode="time"
           display="spinner"
           is24Hour
           minuteInterval={5}
-          themeVariant="light"
+          themeVariant={o && dark ? "dark" : "light"}
           onChange={(_, d) => d && setPicked(d)}
         />
         <View className="mt-2 flex-row gap-3">
-          <Pressable onPress={onCancel} className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200">
-            <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+          <Pressable onPress={onCancel} className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200" style={o && { backgroundColor: o.pill }}>
+            <Text className="text-sm font-semibold text-slate-600" style={o && { color: o.onPill }}>Cancel</Text>
           </Pressable>
           <Pressable
             onPress={() => onConfirm(fromDate(picked))}
             className="flex-1 items-center rounded-2xl bg-blue-600 py-3.5 active:bg-blue-700"
+            style={o && { backgroundColor: o.ink }}
           >
-            <Text className="text-sm font-semibold text-white">Set time</Text>
+            <Text className="text-sm font-semibold text-white" style={o && { color: o.onInk }}>Set time</Text>
           </Pressable>
         </View>
       </View>
@@ -162,31 +228,43 @@ export function CalendarEditSheet({
     }
   }, [visible, calendar]);
   const trimmed = name.trim();
+  const o = useOrbitPage();
+  // (Orbit: the eyebrow headings of its sheets.)
+  const eyebrow = o && { fontSize: 11, fontWeight: "700" as const, letterSpacing: 1.2, color: o.faint, marginLeft: 4 };
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1 justify-center bg-black/40 px-6"
+        style={o && { backgroundColor: o.scrim }}
       >
         <Pressable className="absolute inset-0" onPress={onClose} />
-        <View className="rounded-3xl bg-white p-5">
-          <Text className="text-lg font-bold text-slate-950">{calendar ? "Edit calendar" : "New calendar"}</Text>
+        <View className="rounded-3xl bg-white p-5" style={o && { backgroundColor: o.canvas, borderRadius: 28 }}>
+          <Text className="text-lg font-bold text-slate-950" style={o && { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: o.text }}>
+            {calendar ? "Edit calendar" : "New calendar"}
+          </Text>
+          {o && <Text style={[eyebrow, { marginTop: 18, marginBottom: 8 }]}>NAME</Text>}
           <TextInput
             value={name}
             onChangeText={setName}
             placeholder="e.g. Gym, Classes, Personal"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={o?.faint ?? "#94A3B8"}
             autoFocus={!calendar}
             className="mt-4 rounded-2xl border border-slate-200 px-4 text-base text-slate-950"
-            style={{ height: 52 }}
+            style={[{ height: 52 }, o && { marginTop: 0, borderRadius: 16, borderColor: o.border, backgroundColor: o.surface, color: o.text }]}
           />
-          <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">Colour</Text>
+          {o ? (
+            <Text style={[eyebrow, { marginTop: 18, marginBottom: 10 }]}>COLOUR</Text>
+          ) : (
+            <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">Colour</Text>
+          )}
           <View className="flex-row flex-wrap gap-2.5">
             {Object.entries(CALENDAR_COLORS).map(([key, { value }]) => (
               <Pressable
                 key={key}
                 onPress={() => setColor(key)}
+                accessibilityState={{ selected: color === key }}
                 className="h-9 w-9 items-center justify-center rounded-full"
                 style={{ backgroundColor: value }}
               >
@@ -194,21 +272,26 @@ export function CalendarEditSheet({
               </Pressable>
             ))}
           </View>
-          <View className="mt-5 flex-row gap-3">
-            <Pressable onPress={onClose} className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200">
-              <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+          <View className="mt-5 flex-row gap-3" style={o && { marginTop: 22 }}>
+            <Pressable
+              onPress={onClose}
+              className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+              style={o && { height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16, backgroundColor: o.pill }}
+            >
+              <Text className="text-sm font-semibold text-slate-600" style={o && { fontSize: 15, color: o.onPill }}>Cancel</Text>
             </Pressable>
             <Pressable
               disabled={!trimmed}
               onPress={() => onSave(trimmed, color)}
               className={`flex-1 items-center rounded-2xl py-3.5 ${trimmed ? "bg-blue-600 active:bg-blue-700" : "bg-blue-300"}`}
+              style={o && { height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16, backgroundColor: o.ink, opacity: trimmed ? 1 : 0.4 }}
             >
-              <Text className="text-sm font-semibold text-white">{calendar ? "Save" : "Create"}</Text>
+              <Text className="text-sm font-semibold text-white" style={o && { fontSize: 15, color: o.onInk }}>{calendar ? "Save" : "Create"}</Text>
             </Pressable>
           </View>
           {calendar && !calendar.isDefault && !calendar.isTasks && !calendar.isMeals && (
             <Pressable onPress={() => onDelete(calendar)} className="mt-3 items-center py-2 active:opacity-60">
-              <Text className="text-sm font-semibold text-red-600">Delete calendar</Text>
+              <Text className="text-sm font-semibold text-red-600" style={o && { color: o.danger }}>Delete calendar</Text>
             </Pressable>
           )}
         </View>
@@ -258,6 +341,7 @@ export function CalendarsDrawer({
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const drawerWidth = Math.min(340, width * 0.85);
+  const o = useOrbitPage();
   const slide = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
   const [showHidden, setShowHidden] = useState(false);
@@ -285,7 +369,7 @@ export function CalendarsDrawer({
 
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} onDismiss={() => onClosed?.()}>
-      <Animated.View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", opacity: slide }}>
+      <Animated.View style={{ flex: 1, backgroundColor: o?.scrim ?? "rgba(0,0,0,0.4)", opacity: slide }}>
         <Pressable className="flex-1" onPress={onClose} />
       </Animated.View>
       <Animated.View
@@ -298,20 +382,24 @@ export function CalendarsDrawer({
           transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [-drawerWidth, 0] }) }],
           paddingTop: insets.top + 12,
           paddingBottom: insets.bottom + 12,
+          ...(o && { backgroundColor: o.canvas, borderTopRightRadius: 28, borderBottomRightRadius: 28 }),
         }}
         className="rounded-r-3xl bg-white"
       >
         <View className="flex-row items-center px-5 pb-3">
-          <View className="h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
-            <Ionicons name="calendar" size={20} color="#2563EB" />
+          <View
+            className="h-10 w-10 items-center justify-center rounded-xl bg-blue-50"
+            style={o && { borderRadius: 20, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
+          >
+            <Ionicons name="calendar" size={o ? 19 : 20} color={o?.ink ?? "#2563EB"} />
           </View>
           <View className="ml-3 flex-1">
-            <Text className="text-lg font-bold text-slate-950">Calendars</Text>
-            <Text className="text-xs text-slate-500">Tap to show or hide · hold and drag to reorder</Text>
+            <Text className="text-lg font-bold text-slate-950" style={o && { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: o.text }}>Calendars</Text>
+            <Text className="text-xs text-slate-500" style={o && { color: o.muted }}>Tap to show or hide · hold and drag to reorder</Text>
           </View>
         </View>
 
-        <ScrollView className="flex-1 border-t border-slate-100" scrollEnabled={!dragging}>
+        <ScrollView className="flex-1 border-t border-slate-100" style={o && { borderTopColor: o.border }} scrollEnabled={!dragging}>
           <CalendarRows
             calendars={shown}
             onToggle={onToggle}
@@ -324,17 +412,18 @@ export function CalendarsDrawer({
           {/* Calendars that are switched off, tucked away. */}
           {hidden.length > 0 && (
             <>
-              <Pressable
+              <Tap
                 onPress={() => setShowHidden((v) => !v)}
                 className="flex-row items-center border-b border-slate-100 bg-slate-50 px-5 active:bg-slate-100"
-                style={{ height: 46 }}
+                style={[{ height: 46 }, o && { backgroundColor: o.track, borderBottomColor: o.border }]}
+                pressedStyle={o ? { backgroundColor: o.pill } : {}}
               >
-                <Ionicons name="eye-off-outline" size={18} color="#64748B" />
-                <Text className="ml-3 flex-1 text-sm font-semibold text-slate-600">
+                <Ionicons name="eye-off-outline" size={18} color={o?.muted ?? "#64748B"} />
+                <Text className="ml-3 flex-1 text-sm font-semibold text-slate-600" style={o && { color: o.muted }}>
                   Hidden calendars ({hidden.length})
                 </Text>
-                <Ionicons name={showHidden ? "chevron-up" : "chevron-down"} size={18} color="#64748B" />
-              </Pressable>
+                <Ionicons name={showHidden ? "chevron-up" : "chevron-down"} size={18} color={o?.muted ?? "#64748B"} />
+              </Tap>
               {showHidden && (
                 <CalendarRows
                   calendars={hidden}
@@ -347,38 +436,49 @@ export function CalendarsDrawer({
               )}
             </>
           )}
-          <Pressable onPress={onAdd} className="flex-row items-center px-5 py-4 active:bg-slate-50">
-            <Ionicons name="add-circle-outline" size={22} color="#2563EB" />
-            <Text className="ml-3 text-base font-semibold text-blue-600">New calendar</Text>
-          </Pressable>
+          <Tap
+            onPress={onAdd}
+            className="flex-row items-center px-5 py-4 active:bg-slate-50"
+            style={o && { backgroundColor: "transparent" }}
+            pressedStyle={o ? { backgroundColor: o.pill } : {}}
+          >
+            <Ionicons name="add-circle-outline" size={22} color={o?.ink ?? "#2563EB"} />
+            <Text className="ml-3 text-base font-semibold text-blue-600" style={o && { color: o.ink }}>New calendar</Text>
+          </Tap>
 
-          {/* What the app's sections put on the calendar for you. */}
-          <View className="border-y border-slate-100 bg-slate-50 px-5 py-2">
-            <Text className="text-xs font-bold uppercase tracking-widest text-slate-500">Assistants</Text>
-            <Text className="mt-0.5 text-xs text-slate-400">Filled in for you from the Kitchen and your tasks</Text>
+          {/* What the app's sections put on the calendar for you. (Orbit:
+              an eyebrow heading on the drawer, not a band.) */}
+          <View
+            className="border-y border-slate-100 bg-slate-50 px-5 py-2"
+            style={o && { backgroundColor: "transparent", borderTopWidth: 0, borderBottomColor: o.border, paddingTop: 16, paddingBottom: 8 }}
+          >
+            <Text
+              className="text-xs font-bold uppercase tracking-widest text-slate-500"
+              style={o && { fontSize: 11, fontWeight: "700", letterSpacing: 1.2, color: o.faint }}
+            >
+              Assistants
+            </Text>
+            <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.faint }}>Filled in for you from the Kitchen and your tasks</Text>
           </View>
           {assistants.map((calendar) => {
             const color = calendarColor(calendar);
             return (
-              <View key={calendar._id} className="border-b border-slate-100">
+              <View key={calendar._id} className="border-b border-slate-100" style={o && { borderBottomColor: o.border }}>
                 <View className="flex-row items-center pl-5 pr-3" style={{ height: CALENDAR_ROW_HEIGHT }}>
                   <Pressable onPress={() => onToggle(calendar)} className="flex-1 flex-row items-center self-stretch active:opacity-60">
-                    <View className="h-6 w-6 items-center justify-center rounded-full" style={calendar.visible ? { backgroundColor: color } : { borderWidth: 2, borderColor: color, backgroundColor: "white" }}>
+                    <View className="h-6 w-6 items-center justify-center rounded-full" style={checkStyle(calendar.visible, color, o)}>
                       {calendar.visible && <Ionicons name="checkmark" size={15} color="white" />}
                     </View>
-                    <Text numberOfLines={1} className={`ml-3 flex-1 text-base ${calendar.visible ? "text-slate-900" : "text-slate-400"}`}>
+                    <Text
+                      numberOfLines={1}
+                      className={`ml-3 flex-1 text-base ${calendar.visible ? "text-slate-900" : "text-slate-400"}`}
+                      style={o && { color: calendar.visible ? o.text : o.faint }}
+                    >
                       {calendar.name}
                     </Text>
                   </Pressable>
-                  {calendar.isMeals && (
-                    <Pressable hitSlop={8} onPress={onMealTimes} accessibilityLabel="Meal times" className="mr-1 h-9 flex-row items-center rounded-full bg-blue-50 px-3 active:bg-blue-100">
-                      <Ionicons name="time-outline" size={16} color="#1D4ED8" />
-                      <Text className="ml-1 text-xs font-semibold text-blue-700">Times</Text>
-                    </Pressable>
-                  )}
-                  <Pressable hitSlop={8} onPress={() => onEdit(calendar)} accessibilityLabel={`Edit ${calendar.name}`} className="h-9 w-9 items-center justify-center rounded-full active:bg-slate-100">
-                    <Ionicons name="settings-outline" size={19} color="#64748B" />
-                  </Pressable>
+                  {calendar.isMeals && <TimesButton onPress={onMealTimes} />}
+                  <GearButton label={`Edit ${calendar.name}`} size={19} onPress={() => onEdit(calendar)} />
                 </View>
                 {/* The Kitchen's kinds, each on or off by itself. */}
                 {calendar.isKitchen &&
@@ -386,16 +486,22 @@ export function CalendarsDrawer({
                   KITCHEN_KINDS.map((kind) => {
                     const on = !(calendar.hiddenKinds ?? []).includes(kind.value);
                     return (
-                      <Pressable key={kind.value} onPress={() => onToggleKind(calendar, kind.value)} className="flex-row items-center pl-14 pr-5 active:bg-slate-50" style={{ height: 40 }}>
-                        <View className="h-5 w-5 items-center justify-center rounded-md" style={on ? { backgroundColor: color } : { borderWidth: 2, borderColor: color, backgroundColor: "white" }}>
+                      <Tap
+                        key={kind.value}
+                        onPress={() => onToggleKind(calendar, kind.value)}
+                        className="flex-row items-center pl-14 pr-5 active:bg-slate-50"
+                        style={[{ height: 40 }, o && { backgroundColor: "transparent" }]}
+                        pressedStyle={o ? { backgroundColor: o.pill } : {}}
+                      >
+                        <View className="h-5 w-5 items-center justify-center rounded-md" style={checkStyle(on, color, o)}>
                           {on && <Ionicons name="checkmark" size={13} color="white" />}
                         </View>
-                        <Text className={`ml-3 flex-1 text-sm ${on ? "text-slate-700" : "text-slate-400"}`}>{kind.label}</Text>
+                        <Text className={`ml-3 flex-1 text-sm ${on ? "text-slate-700" : "text-slate-400"}`} style={o && { color: on ? o.icon : o.faint }}>
+                          {kind.label}
+                        </Text>
                         {/* Its regular times: the meals', or this kind of session's. */}
-                        <Pressable hitSlop={8} onPress={() => onKindSettings(kind.value)} accessibilityLabel={`${kind.label}: regular times`} className="h-9 w-9 items-center justify-center rounded-full active:bg-slate-100">
-                          <Ionicons name="settings-outline" size={17} color="#64748B" />
-                        </Pressable>
-                      </Pressable>
+                        <GearButton label={`${kind.label}: regular times`} size={17} onPress={() => onKindSettings(kind.value)} />
+                      </Tap>
                     );
                   })}
               </View>
@@ -441,6 +547,7 @@ function CalendarRows({
 
   // The line sits above the row at `to` when moving up, below it when down.
   const lineAt = drag && drag.to !== drag.from ? (drag.to > drag.from ? drag.to + 1 : drag.to) : null;
+  const o = useOrbitPage();
 
   return (
     <View>
@@ -467,7 +574,7 @@ function CalendarRows({
         <View
           pointerEvents="none"
           className="absolute left-3 right-3 rounded-full bg-blue-600"
-          style={{ top: lineAt * CALENDAR_ROW_HEIGHT - 2, height: 3 }}
+          style={[{ top: lineAt * CALENDAR_ROW_HEIGHT - 2, height: 3 }, o && { backgroundColor: o.ink }]}
         />
       )}
     </View>
@@ -494,6 +601,7 @@ function CalendarRow({
   onDragCancel: () => void;
 }) {
   const color = calendarColor(calendar);
+  const o = useOrbitPage();
   const translateY = useSharedValue(0);
   const lifted = useSharedValue(0);
 
@@ -527,39 +635,26 @@ function CalendarRow({
         className="flex-row items-center border-b border-slate-100 bg-white pl-5 pr-3"
         style={[
           { height: CALENDAR_ROW_HEIGHT, shadowColor: "#000", shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+          // (Orbit: on the drawer's colour — solid, so a lifted row hides
+          // what's under it.)
+          o && { backgroundColor: o.canvas, borderBottomColor: o.border },
           rowStyle,
         ]}
       >
         <Pressable onPress={onToggle} className="flex-1 flex-row items-center self-stretch active:opacity-60">
-          <View
-            className="h-6 w-6 items-center justify-center rounded-full"
-            style={calendar.visible ? { backgroundColor: color } : { borderWidth: 2, borderColor: color, backgroundColor: "white" }}
-          >
+          <View className="h-6 w-6 items-center justify-center rounded-full" style={checkStyle(calendar.visible, color, o)}>
             {calendar.visible && <Ionicons name="checkmark" size={15} color="white" />}
           </View>
-          <Text numberOfLines={1} className={`ml-3 flex-1 text-base ${calendar.visible ? "text-slate-900" : "text-slate-400"}`}>
+          <Text
+            numberOfLines={1}
+            className={`ml-3 flex-1 text-base ${calendar.visible ? "text-slate-900" : "text-slate-400"}`}
+            style={o && { color: calendar.visible ? o.text : o.faint }}
+          >
             {calendar.name}
           </Text>
         </Pressable>
-        {calendar.isMeals && (
-          <Pressable
-            hitSlop={8}
-            onPress={onMealTimes}
-            accessibilityLabel="Meal times"
-            className="mr-1 h-9 flex-row items-center rounded-full bg-blue-50 px-3 active:bg-blue-100"
-          >
-            <Ionicons name="time-outline" size={16} color="#1D4ED8" />
-            <Text className="ml-1 text-xs font-semibold text-blue-700">Times</Text>
-          </Pressable>
-        )}
-        <Pressable
-          hitSlop={8}
-          onPress={onEdit}
-          accessibilityLabel={`Edit ${calendar.name}`}
-          className="h-9 w-9 items-center justify-center rounded-full active:bg-slate-100"
-        >
-          <Ionicons name="settings-outline" size={19} color="#64748B" />
-        </Pressable>
+        {calendar.isMeals && <TimesButton onPress={onMealTimes} />}
+        <GearButton label={`Edit ${calendar.name}`} size={19} onPress={onEdit} />
       </Reanimated.View>
     </GestureDetector>
   );

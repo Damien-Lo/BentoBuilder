@@ -6,6 +6,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 
 import type { EventCalendar, EventOccurrence } from "@/src/services/calendarApi";
+import { useOrbitTheme } from "@/src/theme/orbit";
 import { hexToRgba, parseLocalDate } from "@/src/utils/mealPlan";
 
 import { TaskChip } from "./TaskChip";
@@ -41,7 +42,8 @@ interface Props {
 
 // The Day / 3-Day view: an all-day strip, then the 24 hours, scrolling
 // vertically. Swipe sideways to move by a page; long-press and drag on
-// empty time to sketch a new event's time.
+// empty time to sketch a new event's time. (The phone's — always in
+// Orbit's look, on the page; events keep their calendar's colour.)
 export function CalendarTimeGrid({
   startDate,
   dayCount,
@@ -60,6 +62,7 @@ export function CalendarTimeGrid({
   const verticalRef = useRef<ScrollView>(null);
   const pagerRef = useRef<ScrollView>(null);
   const [dragging, setDragging] = useState(false);
+  const { colors: o } = useOrbitTheme();
 
   // Three pages — previous, current, next — re-centred after every swipe.
   const pages = useMemo(
@@ -92,11 +95,11 @@ export function CalendarTimeGrid({
   const hasAllDay = allDayByDay.some((list) => list.length > 0);
 
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1" style={{ backgroundColor: o.canvas }}>
       {/* Day headings + all-day events */}
-      <View className="flex-row border-b border-slate-200 bg-white">
+      <View className="flex-row" style={{ borderBottomWidth: 1, borderBottomColor: o.border }}>
         <View style={{ width: LABEL_WIDTH }} className="justify-end pb-2">
-          <Text className="text-center text-[10px] font-medium text-slate-400">all-day</Text>
+          <Text className="text-center text-[10px] font-medium" style={{ color: o.faint }}>all-day</Text>
         </View>
         {currentDays.map((day, i) => {
           const d = parseLocalDate(day);
@@ -105,12 +108,13 @@ export function CalendarTimeGrid({
             <Pressable
               key={day}
               onPress={() => onPressDay?.(day)}
-              style={{ width: columnWidth }}
-              className="border-l border-slate-100 px-1 pb-1.5 pt-1.5"
+              style={{ width: columnWidth, borderLeftWidth: 1, borderLeftColor: o.track }}
+              className="px-1 pb-1.5 pt-1.5"
             >
+              {/* Today in the Calendar's blue. */}
               <View className="flex-row items-baseline">
-                <Text className={`text-lg font-bold ${isToday ? "text-blue-600" : "text-slate-900"}`}>{d.getDate()}</Text>
-                <Text className={`ml-1 text-xs font-medium ${isToday ? "text-blue-600" : "text-slate-500"}`}>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: isToday ? o.ink : o.text }}>{d.getDate()}</Text>
+                <Text style={{ marginLeft: 4, fontSize: 12, fontWeight: "600", color: isToday ? o.ink : o.muted }}>
                   {WEEKDAYS_SHORT[d.getDay()]}
                 </Text>
               </View>
@@ -131,7 +135,7 @@ export function CalendarTimeGrid({
                       className="rounded-md px-1.5 py-0.5"
                       style={{ backgroundColor: hexToRgba(color, 0.18), borderLeftWidth: 3, borderLeftColor: color }}
                     >
-                      <Text numberOfLines={1} className="text-[11px] font-semibold text-slate-900">
+                      <Text numberOfLines={1} className="text-[11px] font-semibold" style={{ color: o.text }}>
                         {event.title}
                       </Text>
                     </Pressable>
@@ -151,8 +155,8 @@ export function CalendarTimeGrid({
               h === 0 ? null : (
                 <Text
                   key={h}
-                  className="absolute right-2 text-[11px] font-medium text-slate-400"
-                  style={{ top: h * HOUR_HEIGHT + 8 - 7 }}
+                  className="absolute right-2 text-[11px] font-medium"
+                  style={{ top: h * HOUR_HEIGHT + 8 - 7, color: o.faint }}
                 >
                   {String(h).padStart(2, "0")}
                 </Text>
@@ -219,6 +223,7 @@ function DayColumn({
   onDragChange: (dragging: boolean) => void;
 }) {
   const laidOut = useMemo(() => layoutDay(events, day), [events, day]);
+  const { colors: o } = useOrbitTheme();
 
   // The block being sketched, in minutes.
   const anchor = useSharedValue(0);
@@ -264,12 +269,12 @@ function DayColumn({
 
   return (
     <GestureDetector gesture={drag}>
-      <View style={{ width, height: GRID_HEIGHT }} className="border-l border-slate-100">
-        {/* Hour and half-hour lines */}
+      <View style={{ width, height: GRID_HEIGHT, borderLeftWidth: 1, borderLeftColor: o.track }}>
+        {/* Hour and half-hour lines (the half hours fainter) */}
         {Array.from({ length: 24 }, (_, h) => (
           <View key={h} style={{ position: "absolute", top: h * HOUR_HEIGHT, left: 0, right: 0, height: HOUR_HEIGHT }}>
-            <View className="border-t border-slate-200" />
-            <View className="border-t border-dashed border-slate-100" style={{ marginTop: HOUR_HEIGHT / 2 - 1 }} />
+            <View style={{ borderTopWidth: 1, borderTopColor: o.border }} />
+            <View style={{ borderTopWidth: 1, borderStyle: "dashed", borderTopColor: o.track, marginTop: HOUR_HEIGHT / 2 - 1 }} />
           </View>
         ))}
 
@@ -297,8 +302,8 @@ function DayColumn({
             >
               <Text
                 numberOfLines={height < 34 ? 1 : 3}
-                className={`font-semibold ${event.task?.completed ? "text-slate-400 line-through" : "text-slate-900"} ${height < 20 ? "text-[10px]" : "text-xs"}`}
-                style={height < 20 ? { lineHeight: 11, marginTop: -2 } : undefined}
+                className={`font-semibold ${event.task?.completed ? "line-through" : ""} ${height < 20 ? "text-[10px]" : "text-xs"}`}
+                style={[{ color: event.task?.completed ? o.faint : o.text }, height < 20 && { lineHeight: 11, marginTop: -2 }]}
               >
                 {event.task && (
                   <Ionicons name={event.task.depth > 0 ? "diamond-outline" : "flag"} size={height < 20 ? 8 : 10} color={color} />
@@ -308,14 +313,14 @@ function DayColumn({
               </Text>
               {/* A meal's food from the planner. */}
               {event.meal && height >= 30 && (
-                <Text numberOfLines={height >= 56 ? 2 : 1} className={`text-[10px] ${event.meal.food ? "text-slate-700" : "text-slate-400"}`}>
-                  {event.meal.food?.eaten && <Ionicons name="checkmark-circle" size={10} color="#16A34A" />}
+                <Text numberOfLines={height >= 56 ? 2 : 1} className="text-[10px]" style={{ color: event.meal.food ? o.icon : o.faint }}>
+                  {event.meal.food?.eaten && <Ionicons name="checkmark-circle" size={10} color={o.success} />}
                   {event.meal.food?.eaten ? " " : ""}
                   {mealLine(event)}
                 </Text>
               )}
               {height >= (event.meal ? 58 : 40) && (
-                <Text numberOfLines={1} className="text-[10px] text-slate-600">
+                <Text numberOfLines={1} className="text-[10px]" style={{ color: o.muted }}>
                   {minutesLabel(event.startMinutes)}–{minutesLabel(event.endMinutes)}
                   {event.location ? ` · ${event.location}` : ""}
                   {event.task && event.task.depth > 0 ? ` · ${event.task.rootTitle}` : ""}
@@ -331,15 +336,15 @@ function DayColumn({
             style={{ position: "absolute", left: 0, right: 0, top: (nowMinutes / 60) * HOUR_HEIGHT - 1 }}
             className="flex-row items-center"
           >
-            <View className="h-2.5 w-2.5 rounded-full bg-red-500" style={{ marginLeft: -5 }} />
-            <View className="h-0.5 flex-1 bg-red-500" />
+            <View className="h-2.5 w-2.5 rounded-full" style={{ marginLeft: -5, backgroundColor: o.danger }} />
+            <View className="h-0.5 flex-1" style={{ backgroundColor: o.danger }} />
           </View>
         )}
 
         <Animated.View
           pointerEvents="none"
-          style={[{ position: "absolute", left: 2, right: 2, borderRadius: 8 }, ghostStyle]}
-          className="border-2 border-blue-500 bg-blue-500/20"
+          // The block being sketched, in the Calendar's blue.
+          style={[{ position: "absolute", left: 2, right: 2, borderRadius: 8, borderWidth: 2, borderColor: o.fill, backgroundColor: hexToRgba(o.fill, 0.2) }, ghostStyle]}
         />
       </View>
     </GestureDetector>

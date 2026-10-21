@@ -5,7 +5,7 @@ import { Alert, Pressable, Text, View } from "react-native";
 
 import { SidePicker } from "@/src/components/planner/SidePicker";
 import { OrbSphere } from "@/src/components/ui/OrbSphere";
-import { useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+import { OrbitSection, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import type { useSuggestionWatch } from "@/src/components/planner/useSuggestionWatch";
 import type { MealPlanEntry, MealSlot } from "@/src/services/mealPlanApi";
 import type { Dish } from "@/src/utils/recommend";
@@ -29,7 +29,8 @@ export function useSuggestionsToggle(): [boolean, () => void] {
 
 export function SuggestionsToggle({ on, onPress }: { on: boolean; onPress: () => void }) {
   // On an Orbit page they're the assistant's — the orb's — not a purple
-  // thing of their own.
+  // thing of their own: the food agent's, so the Kitchen's orange orb
+  // wherever they show (the Calendar's meals too).
   const o = useOrbitPage();
   const { dark } = useOrbitTheme();
   if (o) {
@@ -40,7 +41,9 @@ export function SuggestionsToggle({ on, onPress }: { on: boolean; onPress: () =>
         style={{ flexDirection: "row", alignItems: "center", height: 32, paddingLeft: 6, paddingRight: 12, borderRadius: 16, backgroundColor: on ? o.accentSoft : o.pill }}
       >
         <View pointerEvents="none">
-          <OrbSphere size={20} colors={o} dark={dark} />
+          <OrbitSection section="kitchen">
+            <OrbSphere size={20} colors={o} dark={dark} />
+          </OrbitSection>
         </View>
         <Text style={{ marginLeft: 7, fontSize: 13, fontWeight: "600", color: on ? o.accent : o.onPill }}>{on ? "Suggesting" : "Suggestions"}</Text>
       </Pressable>

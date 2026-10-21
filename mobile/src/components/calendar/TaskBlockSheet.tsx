@@ -8,6 +8,7 @@ import { durationLabel, longDateLabel, minutesLabel } from "@/src/components/cal
 import { DatePickerModal } from "@/src/components/forms";
 import { PriorityPill, ProgressBar, ProgressSlider, StatusPill, TaskNumber } from "@/src/components/todo/TaskBits";
 import { friendlyDate, isOverdue } from "@/src/components/todo/theme";
+import { Tap } from "@/src/components/ui/Tap";
 import type { EventOccurrence } from "@/src/services/calendarApi";
 import {
   getTodoTask,
@@ -16,6 +17,8 @@ import {
   updateTodoTask,
   type TodoTaskDetail,
 } from "@/src/services/todoApi";
+import { useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+import { hexToRgba } from "@/src/utils/mealPlan";
 
 type TaskInfo = NonNullable<EventOccurrence["task"]>;
 type Timing = { date: string; startMinutes: number; endMinutes: number };
@@ -25,6 +28,8 @@ type Timing = { date: string; startMinutes: number; endMinutes: number };
 // booking alone — its date and time can be moved here, and its bin removes
 // this time from the calendar and leaves the task untouched. The task
 // itself is reached (and deleted) only through "View full task".
+// On an Orbit page it takes the page's look, light or dark; anywhere else
+// (the desktop) it keeps the older one.
 export function TaskBlockSheet({
   block: current,
   onClose,
@@ -44,6 +49,10 @@ export function TaskBlockSheet({
   onScheduleAnother: (taskId: string) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
+  // Orbit's cards on the sheet.
+  const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 };
   // Keep the last block on the card while it fades out.
   const [block, setBlock] = useState(current);
   const [timing, setTiming] = useState<Timing | null>(null);
@@ -143,34 +152,43 @@ export function TaskBlockSheet({
     <Modal visible={!!current} transparent animationType="fade" onRequestClose={onClose} onDismiss={dismissed}>
       <View
         className="flex-1 justify-center bg-black/45"
-        style={{ paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20, paddingHorizontal: 12 }}
+        style={[{ paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20, paddingHorizontal: 12 }, o && { backgroundColor: o.scrim }]}
       >
         <Pressable className="absolute inset-0" onPress={onClose} accessibilityLabel="Close" />
         {block && info && timing && (
           <View
             className="overflow-hidden rounded-3xl bg-slate-50"
-            style={{
-              maxHeight: "100%",
-              shadowColor: "#000",
-              shadowOpacity: 0.25,
-              shadowRadius: 20,
-              shadowOffset: { width: 0, height: 8 },
-            }}
+            style={[
+              {
+                maxHeight: "100%",
+                shadowColor: "#000",
+                shadowOpacity: 0.25,
+                shadowRadius: 20,
+                shadowOffset: { width: 0, height: 8 },
+              },
+              o && { backgroundColor: o.canvas, borderRadius: 28 },
+            ]}
           >
-            {/* Header */}
-            <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-2.5">
-              <Pressable
+            {/* Header (on an Orbit page: on the card itself, round buttons
+                either side, no band) */}
+            <View
+              className="flex-row items-center border-b border-slate-200 bg-white px-3 py-2.5"
+              style={o && { backgroundColor: "transparent", borderBottomWidth: 0, paddingHorizontal: 14, paddingTop: 14, paddingBottom: 4 }}
+            >
+              <Tap
                 onPress={onClose}
                 accessibilityLabel="Close"
                 className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
+                style={o && { backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
+                pressedStyle={o ? { backgroundColor: o.pill } : {}}
               >
-                <Ionicons name="close" size={24} color="#0F172A" />
-              </Pressable>
+                <Ionicons name="close" size={o ? 21 : 24} color={o?.text ?? "#0F172A"} />
+              </Tap>
               <View className="mx-1 flex-1 items-center">
-                <Text className="text-base font-bold text-slate-950" numberOfLines={1}>
+                <Text className="text-base font-bold text-slate-950" numberOfLines={1} style={o && { fontSize: 17, fontWeight: "800", color: o.text }}>
                   Scheduled time
                 </Text>
-                <Text className="text-xs text-slate-500" numberOfLines={1}>
+                <Text className="text-xs text-slate-500" numberOfLines={1} style={o && { color: o.muted }}>
                   {task
                     ? [task.list.name, ...task.ancestors.map((a) => a.title)].join("  ›  ")
                     : isSubtask
@@ -178,27 +196,33 @@ export function TaskBlockSheet({
                       : "Tasks"}
                 </Text>
               </View>
-              <Pressable
+              <Tap
                 onPress={confirmRemove}
                 accessibilityLabel="Remove this time"
                 className="h-10 w-10 items-center justify-center rounded-full active:bg-red-50"
+                // (Orbit: the soft red of a destructive button.)
+                style={o && { backgroundColor: dark ? "rgba(248,113,113,0.14)" : "#FEF2F2" }}
+                pressedStyle={o ? { opacity: 0.7 } : {}}
               >
-                <Ionicons name="trash-outline" size={22} color="#DC2626" />
-              </Pressable>
+                <Ionicons name="trash-outline" size={o ? 20 : 22} color={o?.danger ?? "#DC2626"} />
+              </Tap>
             </View>
 
             <ScrollView contentContainerStyle={{ padding: 16 }} showsVerticalScrollIndicator={false}>
               {/* Summary */}
-              <View className="mb-3 flex-row rounded-3xl border border-slate-200 bg-white p-4">
-                <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-                  <Ionicons name={isSubtask ? "diamond-outline" : "flag"} size={18} color="#2563EB" />
+              <View className="mb-3 flex-row rounded-3xl border border-slate-200 bg-white p-4" style={card}>
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-100" style={o && { backgroundColor: hexToRgba(o.fill, 0.18) }}>
+                  <Ionicons name={isSubtask ? "diamond-outline" : "flag"} size={18} color={o?.ink ?? "#2563EB"} />
                 </View>
                 <View className="ml-3 flex-1">
-                  <Text className={`text-xl font-bold ${info.completed ? "text-slate-400 line-through" : "text-slate-950"}`}>
+                  <Text
+                    className={`text-xl font-bold ${info.completed ? "text-slate-400 line-through" : "text-slate-950"}`}
+                    style={o && { fontWeight: "800", letterSpacing: -0.3, color: info.completed ? o.faint : o.text }}
+                  >
                     {block.title}
                   </Text>
-                  <Text className="mt-1.5 text-base text-slate-700">{longDateLabel(timing.date)}</Text>
-                  <Text className="mt-0.5 text-base text-slate-500">
+                  <Text className="mt-1.5 text-base text-slate-700" style={o && { color: o.icon }}>{longDateLabel(timing.date)}</Text>
+                  <Text className="mt-0.5 text-base text-slate-500" style={o && { color: o.muted }}>
                     {minutesLabel(timing.startMinutes)} → {minutesLabel(timing.endMinutes)} (
                     {durationLabel(timing.endMinutes - timing.startMinutes)})
                   </Text>
@@ -211,48 +235,50 @@ export function TaskBlockSheet({
               </View>
 
               {/* When — each row opens its picker */}
-              <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+              <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white" style={card}>
                 <Row icon="calendar-outline" label="Date" value={longDateLabel(timing.date)} onPress={() => setPicking("date")} />
                 <Row icon="time-outline" label="Starts" value={minutesLabel(timing.startMinutes)} onPress={() => setPicking("start")} />
                 <Row icon="time-outline" label="Ends" value={minutesLabel(timing.endMinutes)} onPress={() => setPicking("end")} last />
               </View>
 
               {/* The task */}
-              <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+              <View className="mb-3 overflow-hidden rounded-3xl border border-slate-200 bg-white" style={card}>
                 {!task ? (
-                  <ActivityIndicator className="my-5" color="#2563EB" />
+                  <ActivityIndicator className="my-5" color={o?.muted ?? "#2563EB"} />
                 ) : (
                   <>
                     <Detail icon="stats-chart-outline">
                       <View className="flex-row items-center justify-between">
-                        <Text className="text-base text-slate-900">
+                        <Text className="text-base text-slate-900" style={o && { color: o.text }}>
                           Progress
                           {task.subtaskCount > 0
                             ? ` · ${task.subtaskCount - task.openSubtaskCount} of ${task.subtaskCount} subtasks`
                             : ""}
                         </Text>
-                        <Text className="text-base font-bold text-slate-900">{progressPreview ?? task.progress}%</Text>
+                        <Text className="text-base font-bold text-slate-900" style={o && { color: o.text }}>{progressPreview ?? task.progress}%</Text>
                       </View>
+                      {/* (Orbit: filled in the Calendar's blue.) */}
                       {task.subtaskCount === 0 && !task.completed ? (
-                        <ProgressSlider value={task.progress} onPreview={setProgressPreview} onChange={setProgress} />
+                        <ProgressSlider value={task.progress} color={o?.fill} onPreview={setProgressPreview} onChange={setProgress} />
                       ) : (
                         <View className="mt-2">
-                          <ProgressBar value={task.progress} />
+                          <ProgressBar value={task.progress} color={o?.fill} />
                         </View>
                       )}
                       {task.subtaskCount > 0 && (
-                        <Text className="mt-1.5 text-xs text-slate-500">Worked out from its subtasks.</Text>
+                        <Text className="mt-1.5 text-xs text-slate-500" style={o && { color: o.muted }}>Worked out from its subtasks.</Text>
                       )}
                     </Detail>
                     {!!task.description && (
                       <Detail icon="reorder-three-outline">
-                        <Text className="text-base leading-6 text-slate-700">{task.description}</Text>
+                        <Text className="text-base leading-6 text-slate-700" style={o && { color: o.icon }}>{task.description}</Text>
                       </Detail>
                     )}
                     {task.dueDate && (
                       <Detail icon="flag-outline">
                         <Text
                           className={`text-base ${!task.completed && isOverdue(task.dueDate) ? "text-red-600" : "text-slate-900"}`}
+                          style={o && { color: !task.completed && isOverdue(task.dueDate) ? o.danger : o.text }}
                         >
                           Due {friendlyDate(task.dueDate)}
                         </Text>
@@ -260,11 +286,11 @@ export function TaskBlockSheet({
                     )}
                     {!!task.note && (
                       <Detail icon="document-text-outline">
-                        <Text className="text-base leading-6 text-slate-700">{task.note}</Text>
+                        <Text className="text-base leading-6 text-slate-700" style={o && { color: o.icon }}>{task.note}</Text>
                       </Detail>
                     )}
                     <Detail icon="list-outline" last>
-                      <Text className="text-base text-slate-900">
+                      <Text className="text-base text-slate-900" style={o && { color: o.text }}>
                         {task.workBlocks.length === 1 ? "The only time booked" : `One of ${task.workBlocks.length} times booked`}
                       </Text>
                     </Detail>
@@ -273,20 +299,26 @@ export function TaskBlockSheet({
               </View>
 
               {/* Didn't finish? Book the same task again. */}
-              <Pressable
+              {/* (Orbit: the main button in the Calendar's blue, the other
+                  outlined.) */}
+              <Tap
                 onPress={() => closeThen(() => onScheduleAnother(info.id))}
                 className="flex-row items-center justify-center rounded-2xl bg-blue-600 py-3.5 active:bg-blue-700"
+                style={o && { height: 52, paddingVertical: 0, borderRadius: 16, backgroundColor: o.ink }}
+                pressedStyle={o ? { opacity: 0.85 } : {}}
               >
-                <Ionicons name="copy-outline" size={18} color="#FFFFFF" />
-                <Text className="ml-2 font-semibold text-white">Schedule another time</Text>
-              </Pressable>
-              <Pressable
+                <Ionicons name="copy-outline" size={18} color={o?.onInk ?? "#FFFFFF"} />
+                <Text className="ml-2 font-semibold text-white" style={o && { fontSize: 15, color: o.onInk }}>Schedule another time</Text>
+              </Tap>
+              <Tap
                 onPress={() => closeThen(() => onOpenTask(info))}
                 className="mt-2 flex-row items-center justify-center rounded-2xl border border-slate-200 bg-white py-3.5 active:bg-slate-100"
+                style={o && { height: 52, paddingVertical: 0, borderRadius: 16, backgroundColor: o.surface, borderColor: o.border }}
+                pressedStyle={o ? { backgroundColor: o.pill } : {}}
               >
-                <Text className="font-semibold text-blue-700">View full task</Text>
-                <Ionicons name="chevron-forward" size={17} color="#1D4ED8" style={{ marginLeft: 4 }} />
-              </Pressable>
+                <Text className="font-semibold text-blue-700" style={o && { fontSize: 15, color: o.ink }}>View full task</Text>
+                <Ionicons name="chevron-forward" size={17} color={o?.ink ?? "#1D4ED8"} style={{ marginLeft: 4 }} />
+              </Tap>
             </ScrollView>
           </View>
         )}
@@ -334,23 +366,27 @@ function Row({
   onPress: () => void;
   last?: boolean;
 }) {
+  const o = useOrbitPage();
   return (
-    <Pressable
+    <Tap
       onPress={onPress}
       className={`flex-row items-center px-4 py-3.5 active:bg-slate-50 ${last ? "" : "border-b border-slate-100"}`}
+      style={o && { backgroundColor: "transparent", borderBottomColor: o.border }}
+      pressedStyle={o ? { backgroundColor: o.pill } : {}}
     >
-      <Ionicons name={icon} size={20} color="#64748B" />
-      <Text className="ml-3 flex-1 text-base text-slate-900">{label}</Text>
-      <Text className="text-base font-medium text-blue-700">{value}</Text>
-      <Ionicons name="chevron-forward" size={16} color="#94A3B8" style={{ marginLeft: 6 }} />
-    </Pressable>
+      <Ionicons name={icon} size={20} color={o?.muted ?? "#64748B"} />
+      <Text className="ml-3 flex-1 text-base text-slate-900" style={o && { color: o.text }}>{label}</Text>
+      <Text className="text-base font-medium text-blue-700" style={o && { color: o.ink }}>{value}</Text>
+      <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#94A3B8"} style={{ marginLeft: 6 }} />
+    </Tap>
   );
 }
 
 function Detail({ icon, children, last = false }: { icon: keyof typeof Ionicons.glyphMap; children: ReactNode; last?: boolean }) {
+  const o = useOrbitPage();
   return (
-    <View className={`flex-row items-start px-4 py-3.5 ${last ? "" : "border-b border-slate-100"}`}>
-      <Ionicons name={icon} size={20} color="#64748B" style={{ marginTop: 1 }} />
+    <View className={`flex-row items-start px-4 py-3.5 ${last ? "" : "border-b border-slate-100"}`} style={o && { borderBottomColor: o.border }}>
+      <Ionicons name={icon} size={20} color={o?.muted ?? "#64748B"} style={{ marginTop: 1 }} />
       <View className="ml-3 flex-1">{children}</View>
     </View>
   );

@@ -7,6 +7,8 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { CalendarTimeGrid } from "@/src/components/calendar/CalendarTimeGrid";
 import { WebCalendarScreen } from "@/src/components/calendar/web/WebCalendarScreen";
 import { useWideWeb } from "@/src/utils/useWideWeb";
+import { Tap } from "@/src/components/ui/Tap";
+import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 import { FloatingHomeButton, HOME_BAR_HEIGHT } from "@/src/components/CustomTabBar";
 import { AgendaView, MonthView, WeekStrip } from "@/src/components/calendar/CalendarViews";
 import {
@@ -69,15 +71,21 @@ const LOAD_RETRY_MS = 2500;
 // pulls down into the month, Day / 3-Day time grids (drag on empty time to
 // create an event), Month and Agenda views, and a drawer of calendars.
 export default function CalendarScreen() {
-  // A desktop browser gets its own layout; the phone screen is below.
+  // A desktop browser gets its own layout; the phone screen is below, in
+  // Orbit's look in the Calendar's blue (the desktop keeps its own look).
   const wide = useWideWeb();
-  return wide ? <WebCalendarScreen /> : <PhoneCalendarScreen />;
+  return (
+    <OrbitSection section="calendar">
+      <OrbitPage on={!wide}>{wide ? <WebCalendarScreen /> : <PhoneCalendarScreen />}</OrbitPage>
+    </OrbitSection>
+  );
 }
 
 function PhoneCalendarScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const today = todayStr();
+  const { colors: o } = useOrbitTheme();
 
   const [focusDate, setFocusDate] = useState(today);
   const [view, setView] = useState<CalendarView>("day");
@@ -313,48 +321,66 @@ function PhoneCalendarScreen() {
   }
 
   const dayCount = view === "threeDay" ? 3 : 1;
+  // The header's round buttons.
+  const roundButton = {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    backgroundColor: o.surface,
+    borderWidth: 1,
+    borderColor: o.border,
+  };
 
   return (
-    <SafeAreaView className="flex-1 bg-white" edges={["top", "left", "right"]}>
-      {/* Header */}
-      <View className="flex-row items-center bg-white px-3 pb-2 pt-1">
+    <SafeAreaView className="flex-1" edges={["top", "left", "right"]} style={{ backgroundColor: o.canvas }}>
+      {/* Header: on the page itself — round buttons either side of the
+          month, large. */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}>
         {/* No back button — the floating home button covers that. */}
-        <Pressable
+        <Tap
           onPress={() => setDrawerOpen(true)}
           accessibilityLabel="Calendars"
-          className="ml-1 h-10 w-10 items-center justify-center rounded-xl bg-blue-50 active:bg-blue-100"
+          style={roundButton}
+          pressedStyle={{ backgroundColor: o.pill }}
         >
-          <Ionicons name="calendar" size={20} color="#2563EB" />
-        </Pressable>
-        <Text className="ml-3 flex-1 text-3xl font-bold text-slate-950" numberOfLines={1}>
+          <Ionicons name="calendar" size={19} color={o.ink} />
+        </Tap>
+        <Text style={{ flex: 1, marginLeft: 4, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }} numberOfLines={1}>
           {title}
         </Text>
         {focusDate !== today && (
-          <Pressable
+          <Tap
             onPress={() => setFocusDate(today)}
-            className="mr-1 h-9 justify-center rounded-full bg-slate-100 px-3 active:bg-slate-200"
+            style={{ height: 32, justifyContent: "center", paddingHorizontal: 14, borderRadius: 16, backgroundColor: o.ink }}
+            pressedStyle={{ opacity: 0.8 }}
           >
-            <Text className="text-sm font-semibold text-slate-700">Today</Text>
-          </Pressable>
+            <Text style={{ fontSize: 13, fontWeight: "600", color: o.onInk }}>Today</Text>
+          </Tap>
         )}
-        <Pressable
+        <Tap
           onPress={() => {
             setScheduling((v) => !v);
             setLockedTask(schedule);
             setSelectedTask(null);
           }}
           accessibilityLabel="Schedule tasks"
-          className={`mr-1 h-10 w-10 items-center justify-center rounded-full ${scheduling ? "bg-blue-600" : "active:bg-slate-100"}`}
+          accessibilityState={{ selected: scheduling }}
+          // On while scheduling: filled in the Calendar's blue.
+          style={[roundButton, scheduling && { backgroundColor: o.ink, borderColor: o.ink }]}
+          pressedStyle={scheduling ? { opacity: 0.8 } : { backgroundColor: o.pill }}
         >
-          <Ionicons name="time-outline" size={22} color={scheduling ? "#FFFFFF" : "#334155"} />
-        </Pressable>
-        <Pressable
+          <Ionicons name="time-outline" size={21} color={scheduling ? o.onInk : o.icon} />
+        </Tap>
+        <Tap
           onPress={() => setViewMenuOpen(true)}
           accessibilityLabel="Change view"
-          className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
+          style={roundButton}
+          pressedStyle={{ backgroundColor: o.pill }}
         >
-          <Ionicons name={viewOption.icon} size={22} color="#334155" />
-        </Pressable>
+          <Ionicons name={viewOption.icon} size={20} color={o.icon} />
+        </Tap>
       </View>
 
       {view !== "month" && (
@@ -431,21 +457,29 @@ function PhoneCalendarScreen() {
       ) : (
         <>
       {/* New event */}
-      <Pressable
+      <Tap
         onPress={() => newEvent(focusDate)}
         accessibilityLabel="New event"
-        className="absolute right-5 h-14 w-14 items-center justify-center rounded-full bg-blue-600 active:bg-blue-700"
         style={{
+          position: "absolute",
+          right: 20,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: o.ink,
           // Level with the floating home button.
           bottom: insets.bottom + (HOME_BAR_HEIGHT - 56) / 2,
-          shadowColor: "#1E3A8A",
-          shadowOpacity: 0.3,
+          shadowColor: o.fill,
+          shadowOpacity: 0.35,
           shadowRadius: 10,
           shadowOffset: { width: 0, height: 4 },
         }}
+        pressedStyle={{ opacity: 0.85 }}
       >
-        <Ionicons name="add" size={30} color="white" />
-      </Pressable>
+        <Ionicons name="add" size={30} color={o.onInk} />
+      </Tap>
 
       {/* The same centre home button as the other sections, floating */}
       <FloatingHomeButton />
@@ -454,27 +488,41 @@ function PhoneCalendarScreen() {
 
       {/* View menu */}
       <Modal visible={viewMenuOpen} transparent animationType="fade" onRequestClose={() => setViewMenuOpen(false)}>
-        <Pressable className="flex-1 bg-black/20" onPress={() => setViewMenuOpen(false)}>
+        <Pressable className="flex-1" style={{ backgroundColor: o.scrim }} onPress={() => setViewMenuOpen(false)}>
           <View
-            className="absolute right-3 w-52 overflow-hidden rounded-2xl border border-slate-200 bg-white"
-            style={{ top: insets.top + 52 }}
+            style={{
+              position: "absolute",
+              right: 16,
+              top: insets.top + 52,
+              width: 208,
+              overflow: "hidden",
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: o.border,
+              backgroundColor: o.surface,
+            }}
           >
-            {VIEW_OPTIONS.map((option) => (
-              <Pressable
-                key={option.value}
-                onPress={() => {
-                  setView(option.value);
-                  setViewMenuOpen(false);
-                }}
-                className="flex-row items-center border-b border-slate-100 px-4 py-3.5 active:bg-slate-50"
-              >
-                <Ionicons name={option.icon} size={19} color={option.value === view ? "#2563EB" : "#64748B"} />
-                <Text className={`ml-3 flex-1 text-base ${option.value === view ? "font-semibold text-blue-600" : "text-slate-800"}`}>
-                  {option.label}
-                </Text>
-                {option.value === view && <Ionicons name="checkmark" size={19} color="#2563EB" />}
-              </Pressable>
-            ))}
+            {VIEW_OPTIONS.map((option, i) => {
+              const on = option.value === view;
+              return (
+                <Tap
+                  key={option.value}
+                  onPress={() => {
+                    setView(option.value);
+                    setViewMenuOpen(false);
+                  }}
+                  accessibilityState={{ selected: on }}
+                  style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: i ? 1 : 0, borderTopColor: o.border }}
+                  pressedStyle={{ backgroundColor: o.pill }}
+                >
+                  <Ionicons name={option.icon} size={19} color={on ? o.ink : o.muted} />
+                  <Text style={{ marginLeft: 12, flex: 1, fontSize: 16, fontWeight: on ? "600" : "400", color: on ? o.ink : o.text }}>
+                    {option.label}
+                  </Text>
+                  {on && <Ionicons name="checkmark" size={19} color={o.ink} />}
+                </Tap>
+              );
+            })}
           </View>
         </Pressable>
       </Modal>

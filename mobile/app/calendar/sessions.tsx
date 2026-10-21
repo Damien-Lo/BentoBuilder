@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -8,8 +8,10 @@ import { TimePickerModal } from "@/src/components/calendar/CalendarSheets";
 import { addDays, durationLabel, minutesLabel, repeatLabel, shortDateLabel, untilAfter, WEEKDAYS_SHORT, weeklyDays } from "@/src/components/calendar/calendarUtils";
 import { WebSessionsScreen } from "@/src/components/calendar/web/WebKitchenTimes";
 import { DatePickerModal } from "@/src/components/forms";
+import { Tap } from "@/src/components/ui/Tap";
 import { createCalendarEvent, deleteCalendarEvent, getCalendars, getEventOccurrences, SESSION_TYPES, updateCalendarEvent, type EventOccurrence, type KitchenKind } from "@/src/services/calendarApi";
 import { loadSettings } from "@/src/services/settingsService";
+import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 
@@ -22,12 +24,19 @@ import { useWideWeb } from "@/src/utils/useWideWeb";
 export default function RegularSessionsScreen() {
   const { kind: kindParam } = useLocalSearchParams<{ kind?: string }>();
   const kind: KitchenKind = kindParam === "shop" ? "shop" : "prep";
-  // A desktop browser gets its own layout of the same thing.
-  return useWideWeb() ? <WebSessionsScreen key={kind} kind={kind} /> : <PhoneSessionsScreen key={kind} kind={kind} />;
+  // A desktop browser gets its own layout of the same thing, in its older
+  // look; the phone's is in Orbit's, in the Calendar's blue.
+  const wide = useWideWeb();
+  return (
+    <OrbitSection section="calendar">
+      <OrbitPage on={!wide}>{wide ? <WebSessionsScreen key={kind} kind={kind} /> : <PhoneSessionsScreen key={kind} kind={kind} />}</OrbitPage>
+    </OrbitSection>
+  );
 }
 
 function PhoneSessionsScreen({ kind }: { kind: KitchenKind }) {
   const router = useRouter();
+  const { colors: c, dark } = useOrbitTheme();
   const session = SESSION_TYPES.find((s) => s.value === kind)!;
   const plural = kind === "prep" ? "Prep sessions" : "Shopping trips";
   const today = todayStr();
@@ -130,61 +139,67 @@ function PhoneSessionsScreen({ kind }: { kind: KitchenKind }) {
 
   const ends = Number(times) >= 1 ? `after ${Number(times)} time${Number(times) === 1 ? "" : "s"}` : until ? `until ${shortDateLabel(until)} ${parseLocalDate(until).getFullYear()}` : "no end";
 
+  // Orbit's pieces, light or dark.
+  const card = { backgroundColor: c.surface, borderRadius: 18, borderWidth: 1, borderColor: c.border, overflow: "hidden" as const };
+  const line = { borderTopWidth: 1, borderTopColor: c.border };
+  const dangerSoft = dark ? "rgba(248,113,113,0.14)" : "#FEF2F2";
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
-      <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-3">
-        <Pressable className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100" onPress={() => router.back()} accessibilityLabel="Back">
-          <Ionicons name="chevron-back" size={26} color="#0F172A" />
-        </Pressable>
-        <View className="ml-1 flex-1">
-          <Text className="text-xl font-bold text-slate-950">{plural}</Text>
-          <Text className="text-xs text-slate-500">Your regular times, for the Kitchen calendar</Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>
+      {/* The way back over a large title, on the page itself */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4 }}>
+          <Tap onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }} pressedStyle={{ backgroundColor: c.pill }}>
+            <Ionicons name="chevron-back" size={22} color={c.text} />
+          </Tap>
         </View>
+        <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>{plural}</Text>
+        <Text style={{ marginTop: 2, fontSize: 14, color: c.muted }}>Your regular times, for the Kitchen calendar</Text>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 18, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
-        <Text className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">Regular times</Text>
-        <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+        <Eyebrow>Regular times</Eyebrow>
+        <View style={card}>
           {series == null ? (
-            <ActivityIndicator className="my-5" color="#2563EB" />
+            <ActivityIndicator style={{ marginVertical: 20 }} color={c.muted} />
           ) : series.length === 0 ? (
-            <Text className="px-4 py-3.5 text-sm leading-5 text-slate-500">None yet. Set one up below, or book single {plural.toLowerCase()} from the week plan.</Text>
+            <Text style={{ paddingHorizontal: 16, paddingVertical: 14, fontSize: 14, lineHeight: 20, color: c.muted }}>None yet. Set one up below, or book single {plural.toLowerCase()} from the week plan.</Text>
           ) : (
             series.map((item, index) => (
-              <View key={item._id} className={`flex-row items-center pl-4 pr-2 ${index > 0 ? "border-t border-slate-100" : ""} ${editing?._id === item._id ? "bg-blue-50" : ""}`} style={{ minHeight: 62 }}>
+              <View key={item._id} style={[{ flexDirection: "row", alignItems: "center", paddingLeft: 16, paddingRight: 8, minHeight: 62 }, index > 0 && line, editing?._id === item._id && { backgroundColor: c.accentSoft }]}>
                 {/* Tapped, its details fill the form below to be changed. */}
-                <Pressable onPress={() => edit(editing?._id === item._id ? null : item)} className="flex-1 py-2.5 active:opacity-60">
-                  <Text className="text-base font-semibold text-slate-900" numberOfLines={1}>
+                <Tap onPress={() => edit(editing?._id === item._id ? null : item)} style={{ flex: 1, paddingVertical: 10 }} pressedStyle={{ opacity: 0.6 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "600", color: c.text }} numberOfLines={1}>
                     {minutesLabel(item.startMinutes)}–{minutesLabel(item.endMinutes)}
-                    <Text className="font-normal text-slate-500"> · {durationLabel(item.endMinutes - item.startMinutes)}</Text>
+                    <Text style={{ fontWeight: "400", color: c.muted }}> · {durationLabel(item.endMinutes - item.startMinutes)}</Text>
                   </Text>
-                  <Text className="mt-0.5 text-xs text-blue-700" numberOfLines={1}>
+                  <Text style={{ marginTop: 2, fontSize: 12, color: c.ink }} numberOfLines={1}>
                     {repeatLabel(item.repeat ?? null, item.date)}
                     {item.repeat?.until ? "" : " · no end"}
                   </Text>
-                </Pressable>
-                <Pressable onPress={() => confirmStop(item)} hitSlop={6} accessibilityLabel="Remove this regular time" className="h-10 w-10 items-center justify-center rounded-full active:bg-red-50">
-                  <Ionicons name="trash-outline" size={19} color="#DC2626" />
-                </Pressable>
+                </Tap>
+                <Tap onPress={() => confirmStop(item)} hitSlop={6} accessibilityLabel="Remove this regular time" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" }} pressedStyle={{ backgroundColor: dangerSoft }}>
+                  <Ionicons name="trash-outline" size={19} color={c.danger} />
+                </Tap>
               </View>
             ))
           )}
         </View>
 
-        <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">{editing ? "Change this regular time" : "Add a regular time"}</Text>
-        <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
-          <View className="flex-row justify-between px-3 py-3">
+        <Eyebrow top={24}>{editing ? "Change this regular time" : "Add a regular time"}</Eyebrow>
+        <View style={card}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 12, paddingVertical: 12 }}>
             {order.map((d) => {
               const on = days.includes(d);
               return (
-                <Pressable
+                <Tap
                   key={d}
                   onPress={() => setDays((prev) => (on ? prev.filter((x) => x !== d) : [...prev, d]))}
                   accessibilityLabel={WEEKDAYS_SHORT[d]}
-                  className={`h-10 w-10 items-center justify-center rounded-full ${on ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"}`}
+                  style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: on ? c.ink : c.pill }}
                 >
-                  <Text className={`text-xs font-semibold ${on ? "text-white" : "text-slate-600"}`}>{WEEKDAYS_SHORT[d]}</Text>
-                </Pressable>
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: on ? c.onInk : c.onPill }}>{WEEKDAYS_SHORT[d]}</Text>
+                </Tap>
               );
             })}
           </View>
@@ -197,39 +212,39 @@ function PhoneSessionsScreen({ kind }: { kind: KitchenKind }) {
             onPress={() => setPicking("until")}
             onClear={until ? () => setUntil(null) : undefined}
           />
-          <View className="flex-row items-center border-t border-slate-100 px-4" style={{ minHeight: 54 }}>
-            <Ionicons name="repeat-outline" size={20} color="#64748B" />
-            <Text className="ml-3 flex-1 text-base text-slate-900">Or after</Text>
+          <View style={[{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, minHeight: 54 }, line]}>
+            <Ionicons name="repeat-outline" size={20} color={c.muted} />
+            <Text style={{ marginLeft: 12, flex: 1, fontSize: 16, color: c.text }}>Or after</Text>
             <TextInput
               value={times}
               onChangeText={(text) => setTimes(text.replace(/[^0-9]/g, ""))}
               placeholder="–"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={c.faint}
               keyboardType="number-pad"
               returnKeyType="done"
               accessibilityLabel="Number of times"
-              className="w-14 rounded-lg bg-slate-100 px-2 py-1.5 text-center text-base text-slate-900"
+              style={{ width: 56, borderRadius: 10, backgroundColor: c.pill, paddingHorizontal: 8, paddingVertical: 6, textAlign: "center", fontSize: 16, color: c.text }}
             />
-            <Text className="ml-2 text-base text-slate-500">times</Text>
+            <Text style={{ marginLeft: 8, fontSize: 16, color: c.muted }}>times</Text>
           </View>
         </View>
-        <Pressable onPress={() => void add()} disabled={saving} className={`mt-3 flex-row items-center justify-center rounded-2xl py-3.5 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}>
-          <Ionicons name={editing ? "checkmark" : "add"} size={18} color="#FFFFFF" />
-          <Text className="ml-1 font-semibold text-white">
+        <Tap onPress={() => void add()} disabled={saving} style={{ marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: c.ink, opacity: saving ? 0.5 : 1 }} pressedStyle={{ opacity: 0.85 }}>
+          <Ionicons name={editing ? "checkmark" : "add"} size={18} color={c.onInk} />
+          <Text style={{ marginLeft: 4, fontSize: 15, fontWeight: "600", color: c.onInk }}>
             {editing ? "Save changes" : "Add"}
             {days.length ? ` · ${[...days].sort((a, b) => order.indexOf(a) - order.indexOf(b)).map((d) => WEEKDAYS_SHORT[d]).join(", ")} · ${ends}` : ""}
           </Text>
-        </Pressable>
+        </Tap>
 
         {editing && (
-          <Pressable onPress={() => edit(null)} className="mt-2 items-center rounded-2xl bg-slate-100 py-3 active:bg-slate-200">
-            <Text className="font-semibold text-slate-700">Cancel</Text>
-          </Pressable>
+          <Tap onPress={() => edit(null)} style={{ marginTop: 8, alignItems: "center", borderRadius: 16, paddingVertical: 12, backgroundColor: c.pill }}>
+            <Text style={{ fontSize: 15, fontWeight: "600", color: c.onPill }}>Cancel</Text>
+          </Tap>
         )}
 
-        <View className="mt-5 flex-row rounded-2xl bg-blue-50 px-4 py-3">
-          <Ionicons name="information-circle-outline" size={18} color="#1D4ED8" style={{ marginTop: 1 }} />
-          <Text className="ml-2 flex-1 text-[13px] leading-5 text-blue-900">
+        <View style={{ marginTop: 20, flexDirection: "row", borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.pill }}>
+          <Ionicons name="information-circle-outline" size={18} color={c.muted} style={{ marginTop: 1 }} />
+          <Text style={{ marginLeft: 8, flex: 1, fontSize: 13, lineHeight: 20, color: c.onPill }}>
             {kind === "prep" ? "What to make in each session" : "What to buy on each trip"} is worked out from your meal plan. A single day can still be moved or skipped in the calendar.
           </Text>
         </View>
@@ -264,19 +279,26 @@ function PhoneSessionsScreen({ kind }: { kind: KitchenKind }) {
   );
 }
 
+// A small heading over a card.
+function Eyebrow({ top = 0, children }: { top?: number; children: ReactNode }) {
+  const { colors: c } = useOrbitTheme();
+  return <Text style={{ marginTop: top, marginBottom: 8, marginLeft: 4, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase", color: c.faint }}>{children}</Text>;
+}
+
 function Row({ icon, label, value, onPress, onClear }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; onPress: () => void; onClear?: () => void }) {
+  const { colors: c } = useOrbitTheme();
   return (
-    <Pressable onPress={onPress} className="flex-row items-center border-t border-slate-100 px-4 active:bg-slate-50" style={{ minHeight: 54 }}>
-      <Ionicons name={icon} size={20} color="#64748B" />
-      <Text className="ml-3 flex-1 text-base text-slate-900">{label}</Text>
-      <Text className="text-base font-medium text-blue-700">{value}</Text>
+    <Tap onPress={onPress} style={{ flexDirection: "row", alignItems: "center", borderTopWidth: 1, borderTopColor: c.border, paddingHorizontal: 16, minHeight: 54 }} pressedStyle={{ backgroundColor: c.pill }}>
+      <Ionicons name={icon} size={20} color={c.muted} />
+      <Text style={{ marginLeft: 12, flex: 1, fontSize: 16, color: c.text }}>{label}</Text>
+      <Text style={{ fontSize: 16, fontWeight: "500", color: c.ink }}>{value}</Text>
       {onClear ? (
-        <Pressable onPress={onClear} hitSlop={8} accessibilityLabel={`Clear ${label.toLowerCase()}`} className="ml-1.5">
-          <Ionicons name="close-circle" size={18} color="#94A3B8" />
+        <Pressable onPress={onClear} hitSlop={8} accessibilityLabel={`Clear ${label.toLowerCase()}`} style={{ marginLeft: 6 }}>
+          <Ionicons name="close-circle" size={18} color={c.faint} />
         </Pressable>
       ) : (
-        <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 6 }} />
+        <Ionicons name="chevron-forward" size={16} color={c.faint} style={{ marginLeft: 6 }} />
       )}
-    </Pressable>
+    </Tap>
   );
 }
