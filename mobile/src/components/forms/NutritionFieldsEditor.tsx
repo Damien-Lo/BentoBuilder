@@ -13,6 +13,7 @@ import { nutritionFieldLabel, type NutritionFormValues } from "@/src/utils/nutri
 
 import { FieldLabel } from "./FieldLabel";
 import { FormInput } from "./FormInput";
+import { nutrientColor } from "@/src/theme/nutrients";
 
 interface NutritionFieldsEditorProps {
   values: NutritionFormValues;
@@ -28,12 +29,12 @@ interface NutritionFieldsEditorProps {
 
 // Short labels and icons for the grid layout.
 const GRID_CORE: Partial<Record<NutritionField, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string }>> = {
-  calories: { label: "Calories", icon: "flame", color: "#F97316" },
-  protein: { label: "Protein", icon: "barbell", color: "#8B5CF6" },
-  carbs: { label: "Carbs", icon: "leaf", color: "#22C55E" },
-  fats: { label: "Fat", icon: "water", color: "#F59E0B" },
-  fiber: { label: "Fiber", icon: "nutrition", color: "#16A34A" },
-  sodium: { label: "Sodium", icon: "flask", color: "#64748B" },
+  calories: { label: "Calories", icon: "flame", color: nutrientColor("calories") },
+  protein: { label: "Protein", icon: "barbell", color: nutrientColor("protein") },
+  carbs: { label: "Carbs", icon: "leaf", color: nutrientColor("carbs") },
+  fats: { label: "Fat", icon: "water", color: nutrientColor("fats") },
+  fiber: { label: "Fiber", icon: "nutrition", color: nutrientColor("fiber") },
+  sodium: { label: "Sodium", icon: "flask", color: nutrientColor("sodium") },
 };
 
 const GRID_SHORT_LABELS: Partial<Record<NutritionField, string>> = {

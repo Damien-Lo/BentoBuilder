@@ -20,6 +20,7 @@ import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/util
 import { WEB_COMING_SOON } from "./nav";
 import { themeColor } from "./theme";
 import { BarChart, Button, Card, CardLink, Empty, GoalBar, Planned, Row, WEB, WebPage } from "./ui";
+import { nutrientColor } from "@/src/theme/nutrients";
 
 // Home in a desktop browser: everything about today and this week on one
 // page — the schedule, what's being eaten, tasks, the week's calories and
@@ -196,9 +197,9 @@ export function WebHomeScreen() {
             {(planned.calories ?? 0) > 0 && <Text style={{ marginLeft: 6, fontSize: 16, fontWeight: "600", color: WEB.faint }}>+{Math.round(planned.calories ?? 0)}</Text>}
             <Text style={{ marginLeft: 6, fontSize: 14, color: WEB.muted }}>kcal{settings.dailyCalorieLimit ? ` of ${settings.dailyCalorieLimit}` : ""}</Text>
           </View>
-          <GoalBar label="Protein" value={eaten.protein ?? 0} planned={planned.protein ?? 0} goal={settings.dailyProteinLimit} unit="g" />
-          <GoalBar label="Carbs" value={eaten.carbs ?? 0} planned={planned.carbs ?? 0} goal={settings.dailyCarbsLimit} unit="g" color="#D97706" />
-          <GoalBar label="Fats" value={eaten.fats ?? 0} planned={planned.fats ?? 0} goal={settings.dailyFatsLimit} unit="g" color="#DB2777" />
+          <GoalBar label="Protein" value={eaten.protein ?? 0} planned={planned.protein ?? 0} goal={settings.dailyProteinLimit} unit="g" color={nutrientColor("protein")} />
+          <GoalBar label="Carbs" value={eaten.carbs ?? 0} planned={planned.carbs ?? 0} goal={settings.dailyCarbsLimit} unit="g" color={nutrientColor("carbs")} />
+          <GoalBar label="Fats" value={eaten.fats ?? 0} planned={planned.fats ?? 0} goal={settings.dailyFatsLimit} unit="g" color={nutrientColor("fats")} />
           <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: WEB.line, paddingTop: 6 }}>
             {SLOTS.map((slot) => {
               const inSlot = todayEntries.filter((e) => e.slot === slot.id);

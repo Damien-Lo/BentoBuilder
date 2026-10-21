@@ -10,6 +10,7 @@ import { SettingsNumericInput, SettingsRow } from "@/src/components/forms";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
 import { getWeightEntries, type WeightEntry } from "@/src/services/weightEntryApi";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
+import { nutrientColor } from "@/src/theme/nutrients";
 
 // Nutrition in a desktop browser: the review page. What was eaten over the
 // last week, fortnight or month — a day at a time against the goal, the
@@ -140,12 +141,12 @@ export function WebNutritionScreen() {
         </Card>
 
         <Card title="Daily averages" subtitle="Against your goals" action={<CardLink label="Edit goals" onPress={() => setGoals(settings)} />} style={{ flex: 1, minWidth: 320 }}>
-          <GoalBar label="Calories" value={avg(total.calories)} goal={settings.dailyCalorieLimit} unit="kcal" />
-          <GoalBar label="Protein" value={avg(total.protein)} goal={settings.dailyProteinLimit} unit="g" />
-          <GoalBar label="Carbs" value={avg(total.carbs)} goal={settings.dailyCarbsLimit} unit="g" color="#D97706" />
-          <GoalBar label="Fats" value={avg(total.fats)} goal={settings.dailyFatsLimit} unit="g" color="#DB2777" />
-          <GoalBar label="Fiber" value={avg(total.fiber)} goal={settings.dailyFiberLimit} unit="g" color="#16A34A" />
-          <GoalBar label="Sodium" value={avg(total.sodium)} goal={settings.dailySodiumLimit} unit="mg" color="#7C3AED" />
+          <GoalBar label="Calories" value={avg(total.calories)} goal={settings.dailyCalorieLimit} unit="kcal" color={nutrientColor("calories")} />
+          <GoalBar label="Protein" value={avg(total.protein)} goal={settings.dailyProteinLimit} unit="g" color={nutrientColor("protein")} />
+          <GoalBar label="Carbs" value={avg(total.carbs)} goal={settings.dailyCarbsLimit} unit="g" color={nutrientColor("carbs")} />
+          <GoalBar label="Fats" value={avg(total.fats)} goal={settings.dailyFatsLimit} unit="g" color={nutrientColor("fats")} />
+          <GoalBar label="Fiber" value={avg(total.fiber)} goal={settings.dailyFiberLimit} unit="g" color={nutrientColor("fiber")} />
+          <GoalBar label="Sodium" value={avg(total.sodium)} goal={settings.dailySodiumLimit} unit="mg" color={nutrientColor("sodium")} />
         </Card>
       </Row>
 

@@ -37,6 +37,7 @@ import { stopUsualMeal } from "@/src/services/usualMealApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
 import { suggestMeals, type Dish, type Macros, type Suggestion, type Suggestions } from "@/src/utils/recommend";
+import { nutrientColor } from "@/src/theme/nutrients";
 
 // The planner in a desktop browser: the whole week at once. A column per
 // day and a row per meal, each cell holding what's planned or eaten, with
@@ -844,10 +845,10 @@ function Numbers({
           <Ionicons name="sparkles" size={10} color="#7C3AED" /> Suggesting towards <Text style={{ fontWeight: "700" }}>{Math.round(shifted.aim)} kcal</Text>: the week is {Math.abs(Math.round(shifted.carry))} kcal {shifted.carry > 0 ? "over" : "under"} so far
         </Text>
       )}
-      <GoalBar label="Calories" value={eaten.calories ?? 0} planned={planned.calories ?? 0} goal={goal(settings.dailyCalorieLimit)} unit="kcal" />
-      <GoalBar label="Protein" value={eaten.protein ?? 0} planned={planned.protein ?? 0} goal={goal(settings.dailyProteinLimit)} unit="g" />
-      <GoalBar label="Carbs" value={eaten.carbs ?? 0} planned={planned.carbs ?? 0} goal={goal(settings.dailyCarbsLimit)} unit="g" color="#D97706" />
-      <GoalBar label="Fats" value={eaten.fats ?? 0} planned={planned.fats ?? 0} goal={goal(settings.dailyFatsLimit)} unit="g" color="#DB2777" />
+      <GoalBar label="Calories" value={eaten.calories ?? 0} planned={planned.calories ?? 0} goal={goal(settings.dailyCalorieLimit)} unit="kcal" color={nutrientColor("calories")} />
+      <GoalBar label="Protein" value={eaten.protein ?? 0} planned={planned.protein ?? 0} goal={goal(settings.dailyProteinLimit)} unit="g" color={nutrientColor("protein")} />
+      <GoalBar label="Carbs" value={eaten.carbs ?? 0} planned={planned.carbs ?? 0} goal={goal(settings.dailyCarbsLimit)} unit="g" color={nutrientColor("carbs")} />
+      <GoalBar label="Fats" value={eaten.fats ?? 0} planned={planned.fats ?? 0} goal={goal(settings.dailyFatsLimit)} unit="g" color={nutrientColor("fats")} />
       {/* Where the suggestions on show would take it. */}
       {!!suggested && suggested.calories > 0 && (
         <View style={{ marginTop: 14, borderRadius: 10, borderWidth: 1, borderStyle: "dashed", borderColor: "#C4B5FD", backgroundColor: "#F5F3FF", paddingHorizontal: 10, paddingVertical: 8 }}>

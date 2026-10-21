@@ -2,17 +2,18 @@ import { Text, View } from "react-native";
 
 import type { NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
 import { TickRing } from "@/src/components/ui/TickRing";
+import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
 import { useOrbitTheme } from "@/src/theme/orbit";
 import type { DayNutrition } from "@/src/utils/mealPlan";
 
 // The day's nutrition on Log, in Orbit's look: calories as the home
 // screen's ring of marks, and beside it a short bar each for the macros and
-// sodium — eaten in ink, planned faded after it, and only what's over its
-// goal in amber. (The same figures as NutritionSummaryCard, which the Health
+// sodium in its own colour (theme/nutrients.ts) — eaten solid, planned
+// faded after it, and the number of what's over its goal in red. (The same figures as NutritionSummaryCard, which the Health
 // pages still use.)
 // (`untitled`: under a heading that already names it.)
 export function NutritionRings({ title, subtitle, confirmed, planned, limits, untitled = false }: { title: string; subtitle?: string; confirmed: DayNutrition; planned: DayNutrition; limits: NutritionLimits; untitled?: boolean }) {
-  const { colors: c } = useOrbitTheme();
+  const { colors: c, dark } = useOrbitTheme();
   const share = (value: number, limit: number | null) => (limit && limit > 0 ? value / limit : 0);
 
   const calLimit = limits.calories;
@@ -21,12 +22,12 @@ export function NutritionRings({ title, subtitle, confirmed, planned, limits, un
 
   // (Sodium only once there's any, or a limit for it.)
   const hasSodium = confirmed.sodium > 0 || planned.sodium > 0 || limits.sodium != null;
-  const rows = [
-    { label: "Protein", value: confirmed.protein, more: planned.protein, limit: limits.protein, unit: "g" },
-    { label: "Carbs", value: confirmed.carbs, more: planned.carbs, limit: limits.carbs, unit: "g" },
-    { label: "Fats", value: confirmed.fats, more: planned.fats, limit: limits.fats, unit: "g" },
-    { label: "Fiber", value: confirmed.fiber, more: planned.fiber, limit: limits.fiber, unit: "g" },
-    ...(hasSodium ? [{ label: "Sodium", value: confirmed.sodium, more: planned.sodium, limit: limits.sodium, unit: " mg" }] : []),
+  const rows: { key: MainNutrient; label: string; value: number; more: number; limit: number | null; unit: string }[] = [
+    { key: "protein", label: "Protein", value: confirmed.protein, more: planned.protein, limit: limits.protein, unit: "g" },
+    { key: "carbs", label: "Carbs", value: confirmed.carbs, more: planned.carbs, limit: limits.carbs, unit: "g" },
+    { key: "fats", label: "Fats", value: confirmed.fats, more: planned.fats, limit: limits.fats, unit: "g" },
+    { key: "fiber", label: "Fiber", value: confirmed.fiber, more: planned.fiber, limit: limits.fiber, unit: "g" },
+    ...(hasSodium ? [{ key: "sodium" as const, label: "Sodium", value: confirmed.sodium, more: planned.sodium, limit: limits.sodium, unit: " mg" }] : []),
   ];
 
   return (
@@ -47,16 +48,16 @@ export function NutritionRings({ title, subtitle, confirmed, planned, limits, un
           {planned.calories > 0 && <Text style={{ fontSize: 10, color: c.faint }}>+{Math.round(planned.calories)} planned</Text>}
         </View>
         <View style={{ flex: 1, marginLeft: 18, gap: rows.length > 4 ? 7 : 9 }}>
-          {rows.map(({ label, value, more, limit, unit }) => {
+          {rows.map(({ key, label, value, more, limit, unit }) => {
             const over = limit != null && value > limit;
             const eaten = Math.min(1, share(value, limit));
             const withPlanned = Math.min(1, share(value + more, limit));
-            const tone = over ? c.warning : c.fill;
+            const tone = nutrientColor(key, dark);
             return (
               <View key={label}>
                 <View style={{ flexDirection: "row", alignItems: "baseline" }}>
                   <Text style={{ flex: 1, fontSize: 12.5, fontWeight: "600", color: c.text }}>{label}</Text>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: over ? c.warning : c.text }}>{Math.round(value)}</Text>
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: over ? c.danger : c.text }}>{Math.round(value)}</Text>
                   <Text style={{ fontSize: 11, color: c.faint }}>
                     {limit != null ? ` / ${limit}${unit}` : unit}
                     {more > 0 ? ` +${Math.round(more)}` : ""}

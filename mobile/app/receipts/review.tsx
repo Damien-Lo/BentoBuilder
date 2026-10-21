@@ -109,6 +109,7 @@ import {
   saveReviewDraft,
   takePendingReceipt,
 } from "@/src/utils/receiptReviewStore";
+import { nutrientColor } from "@/src/theme/nutrients";
 
 interface ReviewRow {
   key: string;
@@ -517,12 +518,12 @@ const MAIN_NUTRIENT_CELLS: {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
 }[] = [
-  { field: "calories", label: "Calories", unit: "kcal", icon: "flame", color: "#F97316" },
-  { field: "protein", label: "Protein", unit: "g", icon: "barbell", color: "#8B5CF6" },
-  { field: "carbs", label: "Carbs", unit: "g", icon: "leaf", color: "#22C55E" },
-  { field: "fats", label: "Fat", unit: "g", icon: "water", color: "#F59E0B" },
-  { field: "fiber", label: "Fiber", unit: "g", icon: "nutrition", color: "#16A34A" },
-  { field: "sodium", label: "Sodium", unit: "mg", icon: "flask", color: "#64748B" },
+  { field: "calories", label: "Calories", unit: "kcal", icon: "flame", color: nutrientColor("calories") },
+  { field: "protein", label: "Protein", unit: "g", icon: "barbell", color: nutrientColor("protein") },
+  { field: "carbs", label: "Carbs", unit: "g", icon: "leaf", color: nutrientColor("carbs") },
+  { field: "fats", label: "Fat", unit: "g", icon: "water", color: nutrientColor("fats") },
+  { field: "fiber", label: "Fiber", unit: "g", icon: "nutrition", color: nutrientColor("fiber") },
+  { field: "sodium", label: "Sodium", unit: "mg", icon: "flask", color: nutrientColor("sodium") },
 ];
 
 // A picture for an item in the bottom list, from its category name — the

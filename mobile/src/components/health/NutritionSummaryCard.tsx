@@ -2,6 +2,7 @@ import { Text, View } from "react-native";
 
 import { hexToRgba, pct, type DayNutrition } from "@/src/utils/mealPlan";
 import type { CoreNutritionField } from "@/src/types/nutrition";
+import { nutrientColor } from "@/src/theme/nutrients";
 
 // Core-only on purpose — this card is the "main 6" summary; extended
 // nutrients (and any goals for them) belong to the secondary all-nutrients
@@ -32,10 +33,10 @@ export function NutritionSummaryCard({
   const calOverLimit = confirmedCalPct >= 1;
 
   const macros = [
-    { label: "Protein", confirmedValue: confirmed.protein, plannedValue: planned.protein, unit: "g", limit: limits.protein, bar: "#3B82F6" },
-    { label: "Carbs",   confirmedValue: confirmed.carbs,   plannedValue: planned.carbs,   unit: "g", limit: limits.carbs,   bar: "#F59E0B" },
-    { label: "Fats",    confirmedValue: confirmed.fats,    plannedValue: planned.fats,    unit: "g", limit: limits.fats,    bar: "#F43F5E" },
-    { label: "Fiber",   confirmedValue: confirmed.fiber,   plannedValue: planned.fiber,   unit: "g", limit: limits.fiber,   bar: "#10B981" },
+    { label: "Protein", confirmedValue: confirmed.protein, plannedValue: planned.protein, unit: "g", limit: limits.protein, bar: nutrientColor("protein") },
+    { label: "Carbs",   confirmedValue: confirmed.carbs,   plannedValue: planned.carbs,   unit: "g", limit: limits.carbs,   bar: nutrientColor("carbs") },
+    { label: "Fats",    confirmedValue: confirmed.fats,    plannedValue: planned.fats,    unit: "g", limit: limits.fats,    bar: nutrientColor("fats") },
+    { label: "Fiber",   confirmedValue: confirmed.fiber,   plannedValue: planned.fiber,   unit: "g", limit: limits.fiber,   bar: nutrientColor("fiber") },
   ] as const;
 
   const hasSodiumData = confirmed.sodium > 0 || planned.sodium > 0 || limits.sodium != null;
@@ -87,7 +88,8 @@ export function NutritionSummaryCard({
           const over = confirmedF >= 1;
           return (
             <View key={label} className="flex-1 items-center px-1">
-              <Text className="text-sm font-bold text-slate-800">
+              {/* (Over its goal: the number in red; the bar keeps its colour.) */}
+              <Text className="text-sm font-bold text-slate-800" style={over ? { color: "#DC2626" } : undefined}>
                 {confirmedValue}{unit}
                 {plannedValue > 0 && (
                   <Text className="text-slate-300"> +{plannedValue}{unit}</Text>
@@ -96,8 +98,8 @@ export function NutritionSummaryCard({
               <Text className="mt-0.5 text-xs text-slate-400">{label}</Text>
               {limit != null && (
                 <View className="mt-2 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100">
-                  <View style={{ height: 6, width: `${confirmedF * 100}%`, backgroundColor: over ? "#F87171" : bar }} />
-                  <View style={{ height: 6, width: `${plannedSegment * 100}%`, backgroundColor: hexToRgba(over ? "#F87171" : bar, 0.35) }} />
+                  <View style={{ height: 6, width: `${confirmedF * 100}%`, backgroundColor: bar }} />
+                  <View style={{ height: 6, width: `${plannedSegment * 100}%`, backgroundColor: hexToRgba(bar, 0.35) }} />
                 </View>
               )}
               {limit != null && (
@@ -122,7 +124,7 @@ export function NutritionSummaryCard({
               <>
                 <View className="flex-row items-center justify-between">
                   <Text className="text-xs font-semibold text-slate-500">Sodium</Text>
-                  <Text className="text-xs text-slate-400">
+                  <Text className="text-xs text-slate-400" style={over ? { color: "#DC2626", fontWeight: "700" } : undefined}>
                     {confirmed.sodium}
                     {planned.sodium > 0 && ` +${planned.sodium}`} mg
                     {limits.sodium != null && ` / ${limits.sodium} mg`}
@@ -130,8 +132,8 @@ export function NutritionSummaryCard({
                 </View>
                 {limits.sodium != null && (
                   <View className="mt-1.5 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100">
-                    <View style={{ height: 6, width: `${confirmedF * 100}%`, backgroundColor: over ? "#F87171" : "#A855F7" }} />
-                    <View style={{ height: 6, width: `${plannedSegment * 100}%`, backgroundColor: hexToRgba(over ? "#F87171" : "#A855F7", 0.35) }} />
+                    <View style={{ height: 6, width: `${confirmedF * 100}%`, backgroundColor: nutrientColor("sodium") }} />
+                    <View style={{ height: 6, width: `${plannedSegment * 100}%`, backgroundColor: hexToRgba(nutrientColor("sodium"), 0.35) }} />
                   </View>
                 )}
               </>

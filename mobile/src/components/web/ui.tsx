@@ -277,7 +277,7 @@ export function GoalBar({
         </Text>
       </View>
       <View style={{ marginTop: 5, height: 8, borderRadius: 4, backgroundColor: "#EEF2F7", overflow: "hidden", flexDirection: "row" }}>
-        <View style={{ width: pct(value), backgroundColor: over ? WEB.red : color }} />
+        <View style={{ width: pct(value), backgroundColor: color }} />
         <View style={{ width: pct(Math.min(planned, Math.max(0, (of ?? 0) - value))), backgroundColor: color, opacity: 0.3 }} />
       </View>
     </View>
