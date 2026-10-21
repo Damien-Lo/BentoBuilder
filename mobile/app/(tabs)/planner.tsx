@@ -71,7 +71,7 @@ import { addToMenu, menuLeft, menuName } from "@/src/services/menuApi";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { type NutritionLimits } from "@/src/components/health/NutritionSummaryCard";
 import { NutritionRings } from "@/src/components/planner/NutritionRings";
-import { PieceSizePicker } from "@/src/components/planner/PieceSizePicker";
+import { AmountPicker, PieceSizePicker } from "@/src/components/planner/PieceSizePicker";
 import { Tap } from "@/src/components/ui/Tap";
 import { OrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { NutritionDetailOverlay, type NutritionDetailPage } from "@/src/components/planner/NutritionDetailOverlay";
@@ -249,6 +249,8 @@ function PhonePlannerScreen() {
   const [pendingIngredient, setPendingIngredient] = useState<Ingredient | null>(null);
   // "How big?" on a planned meal's sheet, while it's being changed.
   const [pieceDraft, setPieceDraft] = useState<{ picked: string[]; sizes: PieceSizeInput[] } | null>(null);
+  // "How much?" there, likewise (the meal's sizes and amounts, being changed).
+  const [amountDraft, setAmountDraft] = useState<PieceSizeInput[] | null>(null);
   // A recipe waiting on how big its piece is to be (see handleAddRecipeEntry).
   const [pendingPieces, setPendingPieces] = useState<{ recipe: Recipe; servings: number; options: PieceChoice[]; picked: string[]; sizes: PieceSizeInput[]; menuItem?: string } | null>(null);
   const [pendingQuantity, setPendingQuantity] = useState("1");
@@ -742,13 +744,14 @@ function PhonePlannerScreen() {
   // A recipe that takes a whole piece (a steak, or a bag made from one),
   // planned ahead: how big is asked first — one of those in the pantry,
   // the planner's choice, or a weight typed in (see PieceSizePicker). Always
-  // asked, so the size is never silently assumed. (`pieces` / `sizes` are
-  // the answer; eaten now, the piece is asked for as it's logged.)
+  // asked, so the size is never silently assumed; likewise how much, for
+  // lines that ask (AmountPicker). (`pieces` / `sizes` are the answer; eaten
+  // now, both are asked for as it's logged.)
   async function handleAddRecipeEntry(recipe: Recipe, servings: number, pieces?: string[], menuItem?: string, sizes?: PieceSizeInput[]) {
     if (saving) return;
     if (!pieces && addStatus === "planned") {
       const draft: MealPlanEntry = { _id: "", date: selectedDate, slot: addSlot, status: "planned", recipe, recipeServings: servings };
-      if (kitchenPlan.pieceSlots(draft).length) {
+      if (kitchenPlan.pieceSlots(draft).length || kitchenPlan.amountSlots(draft).length) {
         setPendingPieces({ recipe, servings, options: kitchenPlan.pieceChoices(draft), picked: [], sizes: [], menuItem });
         return;
       }
@@ -1126,6 +1129,7 @@ function PhonePlannerScreen() {
 
   function handleOpenEntry(entry: MealPlanEntry) {
     setPieceDraft(null);
+    setAmountDraft(null);
     if (entry.recipe) {
       setEditEntry(entry);
       setEditQuantity(String(entry.recipeServings ?? 1));
@@ -2053,6 +2057,58 @@ function PhonePlannerScreen() {
                     </>
                   );
                 })()}
+                {/* Still to come, with lines that ask how much (the potatoes for
+                    fries): the amount it's counted at — folded until changed. */}
+                {(() => {
+                  const slots = kitchenPlan.amountSlots(editEntry);
+                  if (!slots.length) return null;
+                  const sizes = editEntry.pieceSizes ?? [];
+                  const heading = <Text style={eyebrow}>HOW MUCH?</Text>;
+                  if (!amountDraft) {
+                    return (
+                      <>
+                        {heading}
+                        <Tap onPress={() => setAmountDraft(sizes)} style={[card, { marginBottom: 20, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13 }]} pressedStyle={{ opacity: 0.8 }}>
+                          <View style={{ flex: 1 }}>
+                            {slots.map((slot) => {
+                              const typed = sizes.find((x) => x.ingredient === slot.ingredientId);
+                              return (
+                                <Text key={slot.ingredientId} style={{ fontSize: 15, color: oc.text }} numberOfLines={1}>
+                                  {slot.name}, {typed ? `${typed.amount} ${typed.unit}` : `${slot.amount} ${slot.unit}`}
+                                  <Text style={{ fontSize: 12, color: oc.faint }}>{typed ? "  · an amount you gave" : "  · the recipe's"}</Text>
+                                </Text>
+                              );
+                            })}
+                          </View>
+                          <Text style={{ marginLeft: 8, fontSize: 13, fontWeight: "600", color: oc.accent }}>Change</Text>
+                          <Ionicons name="chevron-forward" size={15} color={oc.accent} />
+                        </Tap>
+                      </>
+                    );
+                  }
+                  return (
+                    <>
+                      {heading}
+                      <AmountPicker slots={slots} sizes={amountDraft} caloriesFor={(next) => kitchenPlan.sizedCalories(editEntry, next)} onChange={setAmountDraft} />
+                      <View style={{ marginTop: 12, marginBottom: 20, flexDirection: "row", gap: 10 }}>
+                        <Tap onPress={() => setAmountDraft(null)} style={{ flex: 1, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: oc.pill }}>
+                          <Text style={{ fontSize: 15, fontWeight: "600", color: oc.onPill }}>Cancel</Text>
+                        </Tap>
+                        <Tap
+                          onPress={() => {
+                            const next = amountDraft;
+                            setAmountDraft(null);
+                            void choosePiece(editEntry, editEntry.pieces ?? [], next);
+                          }}
+                          style={{ flex: 1, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: oc.ink }}
+                          pressedStyle={{ opacity: 0.85 }}
+                        >
+                          <Text style={{ fontSize: 15, fontWeight: "600", color: oc.onInk }}>Save amount</Text>
+                        </Tap>
+                      </View>
+                    </>
+                  );
+                })()}
                 <Text style={eyebrow}>{isIngredient ? "QUANTITY EATEN" : "SERVINGS EATEN"}</Text>
                 {isIngredient ? (
                   <View style={{ marginBottom: 20, flexDirection: "row", gap: 8 }}>
@@ -2524,19 +2580,34 @@ function PhonePlannerScreen() {
               contentContainerStyle={{ padding: 16, paddingBottom: 40, ...(wideAdd ? { width: "100%", maxWidth: 640, alignSelf: "center" } : {}) }}
             >
               {addStepCard("book-outline", pendingPieces.recipe.name, `${pendingPieces.servings} serving${pendingPieces.servings === 1 ? "" : "s"}`)}
-              {o ? <Text style={sheetEyebrow}>HOW BIG?</Text> : <Text className="mb-1.5 text-sm font-semibold text-slate-700">How big?</Text>}
               {(() => {
                 // (The meal as it would be planned, for its calories at a size.)
                 const draft: MealPlanEntry = { _id: "", date: selectedDate, slot: addSlot, status: "planned", recipe: pendingPieces.recipe, recipeServings: pendingPieces.servings };
+                const pieceSlotsHere = kitchenPlan.pieceSlots(draft);
+                const amountSlotsHere = kitchenPlan.amountSlots(draft);
+                const heading = (text: string) => (o ? <Text style={sheetEyebrow}>{text.toUpperCase()}</Text> : <Text className="mb-1.5 text-sm font-semibold text-slate-700">{text}</Text>);
                 return (
-                  <PieceSizePicker
-                    slots={kitchenPlan.pieceSlots(draft)}
-                    choices={pendingPieces.options.map((c) => ({ ...c, chosen: pendingPieces.picked.includes(c.pantryItemId) }))}
-                    picked={pendingPieces.picked}
-                    sizes={pendingPieces.sizes}
-                    caloriesFor={(sizes) => kitchenPlan.sizedCalories(draft, sizes)}
-                    onChange={(picked, sizes) => setPendingPieces({ ...pendingPieces, picked, sizes })}
-                  />
+                  <>
+                    {pieceSlotsHere.length > 0 && (
+                      <>
+                        {heading("How big?")}
+                        <PieceSizePicker
+                          slots={pieceSlotsHere}
+                          choices={pendingPieces.options.map((c) => ({ ...c, chosen: pendingPieces.picked.includes(c.pantryItemId) }))}
+                          picked={pendingPieces.picked}
+                          sizes={pendingPieces.sizes}
+                          caloriesFor={(sizes) => kitchenPlan.sizedCalories(draft, sizes)}
+                          onChange={(picked, sizes) => setPendingPieces({ ...pendingPieces, picked, sizes })}
+                        />
+                      </>
+                    )}
+                    {amountSlotsHere.length > 0 && (
+                      <View style={{ marginTop: pieceSlotsHere.length ? 18 : 0 }}>
+                        {heading("How much?")}
+                        <AmountPicker slots={amountSlotsHere} sizes={pendingPieces.sizes} caloriesFor={(sizes) => kitchenPlan.sizedCalories(draft, sizes)} onChange={(sizes) => setPendingPieces({ ...pendingPieces, sizes })} />
+                      </View>
+                    )}
+                  </>
                 );
               })()}
               {/* Cancel goes back without adding anything; Add to plan adds it. */}
@@ -2559,7 +2630,7 @@ function PhonePlannerScreen() {
                 </Pressable>
               </View>
               <Text className="mt-1.5 text-xs text-slate-400" style={o && { marginTop: 8, paddingHorizontal: 4, lineHeight: 17, color: o.faint }}>
-                It can be changed from the meal later. Once it&apos;s eaten, the piece really used is logged.
+                It can be changed from the meal later. Once it&apos;s eaten, what you really used is logged.
               </Text>
             </ScrollView>
           ) : pendingIngredient ? (

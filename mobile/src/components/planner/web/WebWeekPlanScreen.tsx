@@ -12,8 +12,8 @@ import { DragSource, DropTarget } from "@/src/components/web/dragDrop";
 import { getWebScale } from "@/src/components/web/scale";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { type PieceChoice } from "@/src/components/planner/usePlanNeeds";
-import { PieceSizePicker } from "@/src/components/planner/PieceSizePicker";
-import type { PieceSlot } from "@/src/utils/pieceSizing";
+import { AmountPicker, PieceSizePicker } from "@/src/components/planner/PieceSizePicker";
+import type { AmountSlot, PieceSlot } from "@/src/utils/pieceSizing";
 import { noteSuggestions, recordSuggestion, settleSuggestions, type SuggestionAction } from "@/src/components/planner/suggestionRecord";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
@@ -196,8 +196,8 @@ export function WebWeekPlanScreen() {
       { label: entry.status === "confirmed" ? "Mark as not eaten" : "Mark as eaten", onPress: () => toggleEaten(entry) },
       { label: "Open", onPress: () => openItem(entry) },
       // Still to come, and takes a whole piece (a steak, or a bag made from
-      // one): how big, on a card of its own.
-      ...(plan.pieceSlots(entry).length ? [{ label: "Change how big…", onPress: () => setChoosing(entry) }] : []),
+      // one) or has lines that ask how much: on a card of its own.
+      ...(plan.pieceSlots(entry).length || plan.amountSlots(entry).length ? [{ label: plan.pieceSlots(entry).length ? "Change how big…" : "Change how much…", onPress: () => setChoosing(entry) }] : []),
       ...(usualId
         ? [
             { label: "Remove just this day", destructive: true, onPress: () => void deleteMealPlanEntry(entry._id).then(reload, fail) },
@@ -767,6 +767,7 @@ export function WebWeekPlanScreen() {
         <PieceChooser
           title={entryName(choosing)}
           slots={plan.pieceSlots(choosing)}
+          amountSlots={plan.amountSlots(choosing)}
           choices={plan.pieceChoices(choosing)}
           kept={choosing.pieces ?? []}
           keptSizes={choosing.pieceSizes ?? []}
@@ -907,7 +908,7 @@ function Legend({ color, border, dashed, label }: { color: string; border: strin
 // are, with what the meal comes to, the one it's counted at marked; or the
 // planner's choice. With one to choose, a click is the choice; with more,
 // they're saved together.
-function PieceChooser({ title, slots, choices, kept, keptSizes, caloriesFor, onChoose, onClose }: { title: string; slots: PieceSlot[]; choices: PieceChoice[]; kept: string[]; keptSizes: PieceSizeInput[]; caloriesFor: (sizes: PieceSizeInput[]) => number; onChoose: (pieces: string[], sizes: PieceSizeInput[]) => void; onClose: () => void }) {
+function PieceChooser({ title, slots, amountSlots, choices, kept, keptSizes, caloriesFor, onChoose, onClose }: { title: string; slots: PieceSlot[]; amountSlots: AmountSlot[]; choices: PieceChoice[]; kept: string[]; keptSizes: PieceSizeInput[]; caloriesFor: (sizes: PieceSizeInput[]) => number; onChoose: (pieces: string[], sizes: PieceSizeInput[]) => void; onClose: () => void }) {
   // How big a planned meal's piece is to be — the same choice as the phone's
   // (PieceSizePicker), saved together.
   const [picked, setPicked] = useState<string[]>(kept);
@@ -917,7 +918,7 @@ function PieceChooser({ title, slots, choices, kept, keptSizes, caloriesFor, onC
       <Pressable onPress={onClose} style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(15,23,42,0.45)", padding: 24 }}>
         <Pressable onPress={() => {}} style={{ width: "100%", maxWidth: 520, maxHeight: "86%", borderRadius: 18, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, overflow: "hidden" }}>
           <View style={{ paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10 }}>
-            <Text style={{ fontSize: 17, fontWeight: "700", color: WEB.text }}>How big?</Text>
+            <Text style={{ fontSize: 17, fontWeight: "700", color: WEB.text }}>{slots.length ? (amountSlots.length ? "How big, and how much?" : "How big?") : "How much?"}</Text>
             <Text numberOfLines={1} style={{ marginTop: 2, fontSize: 13, color: WEB.muted }}>
               {title}
             </Text>
@@ -934,6 +935,11 @@ function PieceChooser({ title, slots, choices, kept, keptSizes, caloriesFor, onC
                 setSizes(nextSizes);
               }}
             />
+            {amountSlots.length > 0 && (
+              <View style={{ marginTop: slots.length ? 14 : 0 }}>
+                <AmountPicker slots={amountSlots} sizes={sizes} caloriesFor={caloriesFor} onChange={setSizes} />
+              </View>
+            )}
           </ScrollView>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: WEB.border }}>
             <Text style={{ flex: 1, fontSize: 12, color: WEB.faint }}>Once it&apos;s eaten, the piece really used is logged.</Text>

@@ -12,7 +12,7 @@ import { getRecipes, type Recipe } from "@/src/services/recipeApi";
 import { loadSettings } from "@/src/services/settingsService";
 import type { PantryItem } from "@/src/types/pantry";
 import { todayStr } from "@/src/utils/mealPlan";
-import { caloriesWithSizes, pieceOptions, pieceSlots, sizePlanned, type PieceSlot } from "@/src/utils/pieceSizing";
+import { amountSlots, caloriesWithSizes, pieceOptions, pieceSlots, sizePlanned, type AmountSlot, type PieceSlot } from "@/src/utils/pieceSizing";
 import { computePlanNeeds, kitchenSessions, type BuyNeed, type KitchenIssue, type KitchenSession, type KitchenTask, type PrepNeed, type StockCheck } from "@/src/utils/planNeeds";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
@@ -74,7 +74,7 @@ interface Loaded {
 //
 // `sized` gives back plan entries with each meal still to come counted at
 // the pantry piece it would get (MealPlanEntry.sizedTo), for a day's totals.
-export function usePlanNeeds(): { ready: boolean; today: string; sessions: KitchenSession[]; prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[]; tasks: KitchenTask[]; issues: KitchenIssue[]; reload: () => void; sized: (entries: MealPlanEntry[]) => MealPlanEntry[]; upcoming: MealPlanEntry[]; pieceChoices: (entry: MealPlanEntry) => PieceChoice[]; pieceSlots: (entry: MealPlanEntry) => PieceSlot[]; sizedCalories: (entry: MealPlanEntry, sizes: PieceSizeInput[]) => number; onList: (need: BuyNeed) => boolean; listSynced: number; menu: MenuItem[] } {
+export function usePlanNeeds(): { ready: boolean; today: string; sessions: KitchenSession[]; prep: PrepNeed[]; buy: BuyNeed[]; checks: StockCheck[]; tasks: KitchenTask[]; issues: KitchenIssue[]; reload: () => void; sized: (entries: MealPlanEntry[]) => MealPlanEntry[]; upcoming: MealPlanEntry[]; pieceChoices: (entry: MealPlanEntry) => PieceChoice[]; pieceSlots: (entry: MealPlanEntry) => PieceSlot[]; amountSlots: (entry: MealPlanEntry) => AmountSlot[]; sizedCalories: (entry: MealPlanEntry, sizes: PieceSizeInput[]) => number; onList: (need: BuyNeed) => boolean; listSynced: number; menu: MenuItem[] } {
   const today = todayStr();
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
@@ -91,7 +91,7 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
   const [listSynced, setListSynced] = useState(0);
 
   const result = useMemo(() => {
-    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], planBuy: [] as BuyNeed[], checks: [], tasks: [], issues: [], reload, sized: (entries: MealPlanEntry[]) => entries, upcoming: [], pieceChoices: () => [], pieceSlots: () => [] as PieceSlot[], sizedCalories: () => 0, onList: () => false, listSynced, menu: [] as MenuItem[] };
+    if (!loaded) return { ready: false, today, sessions: [], prep: [], buy: [], planBuy: [] as BuyNeed[], checks: [], tasks: [], issues: [], reload, sized: (entries: MealPlanEntry[]) => entries, upcoming: [], pieceChoices: () => [], pieceSlots: () => [] as PieceSlot[], amountSlots: () => [] as AmountSlot[], sizedCalories: () => 0, onList: () => false, listSynced, menu: [] as MenuItem[] };
     const sessions = kitchenSessions(loaded.occurrences, today);
     // (Each meal with the piece it would get, so that's the one to thaw.)
     const sized = sizePlanned(loaded.entries, loaded.recipes, loaded.ingredients, loaded.pantry, loaded.conversions, today, loaded.dayGoal).entries;
@@ -134,12 +134,13 @@ export function usePlanNeeds(): { ready: boolean; today: string; sessions: Kitch
     // The whole pieces a planned meal takes, for asking how big (with what
     // it would come to at a size typed in).
     const slotsOf = (entry: MealPlanEntry): PieceSlot[] => (entry.recipe && entry.status === "planned" ? pieceSlots(entry.recipe, loaded.recipes, loaded.ingredients) : []);
+    const amountsOf = (entry: MealPlanEntry): AmountSlot[] => (entry.recipe && entry.status === "planned" ? amountSlots(entry.recipe, loaded.ingredients, entry.recipeServings ?? 1) : []);
     const sizedCalories = (entry: MealPlanEntry, sizes: PieceSizeInput[]) =>
       entry.recipe ? caloriesWithSizes(entry.recipe, sizes, loaded.pantry, loaded.recipes, loaded.ingredients, loaded.conversions, entry.recipeServings ?? 1) : 0;
     // What goes on the grocery list: what's needed by the next shopping
     // trip (or before any trip at all) — with no trip booked, the next week.
     const onList = (need: BuyNeed) => (nextTrip ? !need.session || need.session === nextTrip.id : need.neededBy <= addDays(today, 7));
-    return { ready: true, today, sessions, ...needs, planBuy: planOnly.buy, menu: loaded.menu, reload, upcoming, pieceChoices, pieceSlots: slotsOf, sizedCalories, onList, listSynced, sized: (entries: MealPlanEntry[]) => entries.map((e) => (sizes.has(e._id) ? { ...e, sizedTo: sizes.get(e._id) } : e)) };
+    return { ready: true, today, sessions, ...needs, planBuy: planOnly.buy, menu: loaded.menu, reload, upcoming, pieceChoices, pieceSlots: slotsOf, amountSlots: amountsOf, sizedCalories, onList, listSynced, sized: (entries: MealPlanEntry[]) => entries.map((e) => (sizes.has(e._id) ? { ...e, sizedTo: sizes.get(e._id) } : e)) };
   }, [loaded, today, reload, listSynced]);
 
   // The grocery list kept in step with the plan: whenever what's needed for

@@ -7,7 +7,7 @@ import type { PieceChoice } from "@/src/components/planner/usePlanNeeds";
 import { Tap } from "@/src/components/ui/Tap";
 import type { PieceSizeInput } from "@/src/services/mealPlanApi";
 import { useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
-import type { PieceSlot } from "@/src/utils/pieceSizing";
+import type { AmountSlot, PieceSlot } from "@/src/utils/pieceSizing";
 
 // "How big?" for a planned meal that takes a whole piece — a steak, a
 // fillet, or a bag made ahead from one: each piece of that kind in the
@@ -156,6 +156,104 @@ export function PieceSizePicker({
                   </Tap>
                 ))}
               </View>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// "How much?" for a planned meal's lines that ask (the potatoes for fries):
+// the recipe's amount, or another typed in — kept with the meal like a
+// piece's size, and filled in when it's confirmed as eaten. The same look
+// as How big?. (`sizes` holds every size and amount the meal has; only its
+// own lines are changed.)
+export function AmountPicker({
+  slots,
+  sizes,
+  caloriesFor,
+  onChange,
+}: {
+  slots: AmountSlot[];
+  sizes: PieceSizeInput[];
+  caloriesFor: (sizes: PieceSizeInput[]) => number;
+  onChange: (sizes: PieceSizeInput[]) => void;
+}) {
+  const page = useOrbitPage();
+  const { colors } = useOrbitTheme();
+  const c = page ?? colors;
+  const [typing, setTyping] = useState<Record<string, string>>(() => Object.fromEntries(sizes.map((s) => [s.ingredient, String(s.amount)])));
+  const option = (on: boolean) => ({ marginTop: 8, flexDirection: "row" as const, alignItems: "center" as const, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, backgroundColor: c.surface, borderWidth: on ? 1.5 : 1, borderColor: on ? c.ink : c.border });
+  const mark = (on: boolean) =>
+    on ? (
+      <View style={{ width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: c.ink }}>
+        <Ionicons name="checkmark" size={14} color={c.onInk} />
+      </View>
+    ) : (
+      <Ionicons name="ellipse-outline" size={22} color={c.faint} />
+    );
+
+  return (
+    <View style={{ gap: 14 }}>
+      {slots.map((slot) => {
+        const typed = sizes.find((s) => s.ingredient === slot.ingredientId);
+        const withoutThis = sizes.filter((s) => s.ingredient !== slot.ingredientId);
+        const text = typing[slot.ingredientId] ?? "";
+        const amount = Number(text);
+        const valid = Number.isFinite(amount) && amount > 0;
+        const setAmount = (value: string) => {
+          setTyping((prev) => ({ ...prev, [slot.ingredientId]: value }));
+          const n = Number(value);
+          if (Number.isFinite(n) && n > 0) onChange([...withoutThis, { ingredient: slot.ingredientId, amount: n, unit: slot.unit }]);
+        };
+        return (
+          <View key={slot.ingredientId} style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: "600", color: c.text }}>
+                {slot.name}
+              </Text>
+              <Text style={{ marginLeft: 8, fontSize: 12, color: c.faint }}>
+                Recipe: {slot.amount} {slot.unit}
+              </Text>
+            </View>
+
+            {/* The recipe's amount */}
+            <Tap onPress={() => onChange(withoutThis)} style={option(!typed)} pressedStyle={{ opacity: 0.8 }} accessibilityRole="radio" accessibilityState={{ selected: !typed }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: c.text }}>The recipe&apos;s amount</Text>
+                <Text style={{ marginTop: 1, fontSize: 12, color: c.muted }}>
+                  {slot.amount} {slot.unit}
+                </Text>
+              </View>
+              <Text style={{ marginRight: 10, fontSize: 13, fontWeight: "600", color: !typed ? c.text : c.muted }}>{caloriesFor(withoutThis)} kcal</Text>
+              {mark(!typed)}
+            </Tap>
+
+            {/* Another amount, typed in */}
+            <View style={option(!!typed)}>
+              <Tap onPress={() => valid && setAmount(text)} style={{ flex: 1 }} accessibilityRole="radio" accessibilityState={{ selected: !!typed }}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: c.text }}>Other amount</Text>
+                <Text style={{ marginTop: 1, fontSize: 12, color: c.muted }}>How much you&apos;ll have</Text>
+              </Tap>
+              <View style={{ width: 92, height: 38, marginRight: 10, flexDirection: "row", alignItems: "center", paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: typed ? c.ink : c.border, backgroundColor: c.canvas }}>
+                <TextInput
+                  value={text}
+                  onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, ""))}
+                  keyboardType="decimal-pad"
+                  placeholder={String(slot.amount)}
+                  placeholderTextColor={c.faint}
+                  accessibilityLabel={`${slot.name} amount`}
+                  style={{ flex: 1, minWidth: 0, textAlign: "right", fontSize: 15, color: c.text }}
+                />
+                <Text style={{ marginLeft: 3, fontSize: 13, color: c.muted }}>{slot.unit}</Text>
+              </View>
+              {mark(!!typed)}
+            </View>
+            {(typed || valid) && (
+              <Text style={{ marginTop: 6, marginLeft: 4, fontSize: 12, color: c.muted }}>
+                At {valid ? amount : typed?.amount} {slot.unit}: {caloriesFor([...withoutThis, { ingredient: slot.ingredientId, amount: valid ? amount : typed!.amount, unit: slot.unit }])} kcal
+              </Text>
             )}
           </View>
         );

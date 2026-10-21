@@ -200,10 +200,18 @@ export function useEntryConfirm({
     // The meal's own pieces first (kept for it, or the planner's pick it's
     // been counted at), and no question about what they cover.
     const own = entry.status === "planned" ? ((sized ? sized([entry])[0] : entry).sizedTo?.claims ?? entry.pieces ?? []) : [];
-    const { requirements, settled } = preferPieces(
+    const preferred = preferPieces(
       buildIngredientRequirements(entry, recipeMap, ingredientMap, allIngredients, pantryItems, conversions),
       own,
     );
+    const { settled } = preferred;
+    // An amount planned for a line that asks (MealPlanEntry.pieceSizes):
+    // what "Amount used" starts at, in place of the recipe's.
+    const planned = entry.status === "planned" ? (entry.pieceSizes ?? []) : [];
+    const requirements = preferred.requirements.map((r) => {
+      const typed = r.askAmount && planned.find((x) => x.ingredient === r.ingredientId && x.unit === r.askAmount!.unit);
+      return typed ? { ...r, askAmount: { ...r.askAmount!, quantity: typed.amount } } : r;
+    });
 
     if (requirements.some((r) => requirementNeedsResolution(r) && !settled.has(r.ingredientId))) {
       onStart?.(entry);

@@ -26,6 +26,8 @@ export interface PieceSize {
   claims: string[];
   // The piece, in a few words ("260 g chilean sea bass").
   piece?: string;
+  // An amount was typed in for a line that asks for one (askAmount).
+  amounts?: boolean;
 }
 
 // Which piece a meal gets, of those that would do: the one that brings the
@@ -140,10 +142,21 @@ export function pieceSizer(recipes: Recipe[], ingredients: Ingredient[], convers
     }
     // Something already made ahead from one particular piece (a bag from one
     // steak) carries its own figures: the dish counts at those.
+    let amounts = false;
     for (const line of recipe.ingredientList) {
       const ingredient = ingredientById.get(idOf(line.ingredient));
       if (!ingredient || line.matchMode === "wholePiece" || typedFor.has(ingredient._id)) continue;
       const { quantity, unit } = recipeLineToRow(line, ratio);
+      // A line that asks how much (the potatoes for fries), with an amount
+      // typed in: that amount, in place of the recipe's.
+      const typedAmount = line.askAmount ? typed.get(ingredient._id)?.[0] : undefined;
+      if (typedAmount) {
+        const real = scaleIngredientNutrition(ingredient, typedAmount.amount, typedAmount.unit, conversionsOf(ingredient));
+        const usual = scaleIngredientNutrition(ingredient, quantity, unit, conversionsOf(ingredient));
+        for (const m of MACROS) shift[m] += ((real[m] ?? 0) - (usual[m] ?? 0)) * (line.nutritionFactor ?? 1);
+        amounts = true;
+        continue;
+      }
       let left = quantity;
       while (left > 1e-6) {
         const item = choose(
@@ -163,7 +176,7 @@ export function pieceSizer(recipes: Recipe[], ingredients: Ingredient[], convers
         if (take <= 0) break;
       }
     }
-    return { shift, claims: used.map((p) => p._id), ...(piece ? { piece } : {}) };
+    return { shift, claims: used.map((p) => p._id), ...(piece ? { piece } : {}), ...(amounts ? { amounts } : {}) };
   };
 }
 
@@ -186,7 +199,7 @@ export function sizePlanned(entries: MealPlanEntry[], recipes: Recipe[], ingredi
     const room = dayGoal ? dayGoal * (SLOT_SHARE[entry.slot] ?? 0.3) : 0;
     const sized = size(entry.recipe!, stock, entry.recipeServings ?? 1, { calories: room ? Math.max(150, beside ? room - beside : room * MAIN_SHARE) : undefined, base, date: entry.date, pinned: entry.pieces, sizes: entry.pieceSizes });
     // (Nothing taken and no size given: as written.)
-    if (!sized.claims.length && !sized.piece) continue;
+    if (!sized.claims.length && !sized.piece && !sized.amounts) continue;
     sizes.set(entry, sized);
     stock = stock.filter((p) => !sized.claims.includes(p._id));
   }
@@ -269,4 +282,26 @@ export function caloriesWithSizes(recipe: Recipe, sizes: PieceSizeInput[], stock
   const size = pieceSizer(recipes, ingredients, conversions);
   const base = scaleRecipeNutrition(recipe, servings).calories ?? 0;
   return Math.max(0, Math.round(base + size(recipe, stock.filter((p) => (p.quantityAvailable ?? 0) > 0), servings, { sizes }).shift.calories));
+}
+
+// The lines of a recipe that ask how much (askAmount — the potatoes for
+// fries), for asking when it's planned: each with the amount the recipe
+// gives for `servings` (what it counts at when not told). An amount typed
+// in is kept with the meal like a piece's size (MealPlanEntry.pieceSizes).
+export interface AmountSlot {
+  ingredientId: string;
+  name: string;
+  amount: number;
+  unit: string;
+}
+
+export function amountSlots(recipe: Recipe, ingredients: Ingredient[], servings = 1): AmountSlot[] {
+  const ingredientById = new Map(ingredients.map((i) => [i._id, i]));
+  const ratio = servings / (recipe.servings || 1);
+  return recipe.ingredientList.flatMap((line) => {
+    const ingredient = ingredientById.get(idOf(line.ingredient));
+    if (!ingredient || line.matchMode === "wholePiece" || !line.askAmount) return [];
+    const { quantity, unit } = recipeLineToRow(line, ratio);
+    return [{ ingredientId: ingredient._id, name: ingredient.name, amount: round(quantity), unit }];
+  });
 }
