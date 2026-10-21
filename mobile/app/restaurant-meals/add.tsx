@@ -26,6 +26,8 @@ import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { useWideForm } from "@/src/components/forms/wideForm";
+import { Tap } from "@/src/components/ui/Tap";
+import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import { createTag, getTags, type SelectOption } from "@/src/services/optionsApi";
 import {
   createRestaurantMeal,
@@ -110,17 +112,19 @@ function DishCard({
   const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const priceSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const nutritionSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  // (On an Orbit page, in its colours.)
+  const o = useOrbitPage();
 
   return (
-    <View className="mb-3 rounded-2xl bg-slate-50 p-3">
+    <View className="mb-3 rounded-2xl bg-slate-50 p-3" style={o && { backgroundColor: o.canvas, borderWidth: 1, borderColor: o.border, borderRadius: 16 }}>
       <View className="flex-row items-center justify-between">
-        <Text className="text-sm font-bold text-slate-700">Dish {index + 1}</Text>
+        <Text className="text-sm font-bold text-slate-700" style={o && { color: o.text }}>Dish {index + 1}</Text>
         <View className="flex-row items-center gap-3">
           <Pressable hitSlop={8} onPress={() => onScanDish(dish.key)}>
-            <Ionicons name="camera-outline" size={20} color="#2563EB" />
+            <Ionicons name="camera-outline" size={20} color={o?.ink ?? "#2563EB"} />
           </Pressable>
           <Pressable hitSlop={8} onPress={() => removeDish(dish.key)}>
-            <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
+            <Ionicons name="close-circle-outline" size={20} color={o?.faint ?? "#94A3B8"} />
           </Pressable>
         </View>
       </View>
@@ -172,7 +176,17 @@ function DishCard({
   );
 }
 
+// A new restaurant (Kitchen → Eating Out): in the Kitchen's colours, and on
+// a phone in Orbit's look; a desktop browser keeps its own.
 export default function AddRestaurantMealPage() {
+  return (
+    <OrbitSection section="kitchen">
+      <AddRestaurantMeal />
+    </OrbitSection>
+  );
+}
+
+function AddRestaurantMeal() {
   const router = useRouter();
   // Set only when reached from the planner's add-to-plan flow (as opposed
   // to the Eating Out catalog's "+" or the Recipes tab shortcut) - in that
@@ -208,6 +222,9 @@ export default function AddRestaurantMealPage() {
   const tagsSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
   const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const layout = useWideForm();
+  // (On a phone, in Orbit's colours; null in a desktop browser.)
+  const { colors } = useOrbitTheme();
+  const o = layout.wide ? null : colors;
 
   useEffect(() => {
     let cancelled = false;
@@ -339,42 +356,59 @@ export default function AddRestaurantMealPage() {
 
   if (loadingOptions) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <OrbitPage on={!!o}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
       <KeyboardAvoidingView className="flex-1" style={layout.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        {/* Nav bar */}
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          <Pressable
-            disabled={saving}
-            className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-back" size={26} color="#0F172A" />
-          </Pressable>
+        {/* Nav bar: on a phone the way back and Save, round, over a large
+            title on the page itself; in a desktop browser its own bar */}
+        {o ? (
+          <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
+              <Tap disabled={saving} onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                <Ionicons name="chevron-back" size={22} color={o.text} />
+              </Tap>
+              <View style={{ flex: 1 }} />
+              <Tap disabled={saving} onPress={() => void handleSave()} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }} pressedStyle={{ opacity: 0.8 }}>
+                <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>{saving ? "Saving..." : fromPlanner ? "Save & Continue" : "Save"}</Text>
+              </Tap>
+            </View>
+            <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>Add Restaurant</Text>
+          </View>
+        ) : (
+          <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
+            <Pressable
+              disabled={saving}
+              className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
+              onPress={() => router.back()}
+            >
+              <Ionicons name="chevron-back" size={26} color="#0F172A" />
+            </Pressable>
 
-          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Add Restaurant</Text>
+            <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Add Restaurant</Text>
 
-          <Pressable
-            disabled={saving}
-            className={`rounded-xl px-4 py-2 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
-            onPress={() => void handleSave()}
-          >
-            <Text className="font-semibold text-white">
-              {saving ? "Saving..." : fromPlanner ? "Save & Continue" : "Save"}
-            </Text>
-          </Pressable>
-        </View>
+            <Pressable
+              disabled={saving}
+              className={`rounded-xl px-4 py-2 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+              onPress={() => void handleSave()}
+            >
+              <Text className="font-semibold text-white">
+                {saving ? "Saving..." : fromPlanner ? "Save & Continue" : "Save"}
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         <ScrollView
           ref={scrollRef}
           className="flex-1"
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80, paddingTop: 20 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80, paddingTop: o ? 16 : 20 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -439,33 +473,39 @@ export default function AddRestaurantMealPage() {
           ))}
 
           <View className="flex-row gap-3">
-            <Pressable
+            <Tap
               className="flex-1 flex-row items-center justify-center rounded-2xl border border-dashed border-blue-300 bg-blue-50 py-3.5 active:bg-blue-100"
+              style={o && { backgroundColor: o.pill, borderColor: o.faint, borderRadius: 16 }}
+              pressedStyle={o ? { opacity: 0.75 } : {}}
               onPress={() => setDishes((prev) => [...prev, newDishRow()])}
             >
-              <Ionicons name="add" size={20} color="#2563EB" />
-              <Text className="ml-2 font-semibold text-blue-700">Add dish</Text>
-            </Pressable>
-            <Pressable
+              <Ionicons name="add" size={20} color={o?.ink ?? "#2563EB"} />
+              <Text className="ml-2 font-semibold text-blue-700" style={o && { color: o.onPill }}>Add dish</Text>
+            </Tap>
+            <Tap
               className="flex-1 flex-row items-center justify-center rounded-2xl border border-dashed border-blue-300 bg-blue-50 py-3.5 active:bg-blue-100"
+              style={o && { backgroundColor: o.pill, borderColor: o.faint, borderRadius: 16 }}
+              pressedStyle={o ? { opacity: 0.75 } : {}}
               onPress={() => setScanTarget({ mode: "append" })}
             >
-              <Ionicons name="camera-outline" size={20} color="#2563EB" />
-              <Text className="ml-2 font-semibold text-blue-700">Scan a photo</Text>
-            </Pressable>
+              <Ionicons name="camera-outline" size={20} color={o?.ink ?? "#2563EB"} />
+              <Text className="ml-2 font-semibold text-blue-700" style={o && { color: o.onPill }}>Scan a photo</Text>
+            </Tap>
           </View>
         </FormCard>
           </View>
           </View>
 
           <View style={layout.actions}>
-          <Pressable
+          <Tap
             disabled={saving}
             onPress={() => void handleSave()}
             className={`mt-2 items-center rounded-2xl py-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+            style={o && { height: 52, paddingVertical: 0, justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }}
+            pressedStyle={o ? { opacity: 0.85 } : {}}
           >
-            <Text className="text-base font-semibold text-white">{saving ? "Saving..." : (fromPlanner ? "Save & continue" : "Save restaurant")}</Text>
-          </Pressable>
+            <Text className="text-base font-semibold text-white" style={o && { color: o.onInk }}>{saving ? "Saving..." : (fromPlanner ? "Save & continue" : "Save restaurant")}</Text>
+          </Tap>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -483,15 +523,16 @@ export default function AddRestaurantMealPage() {
       />
 
       <Modal visible={estimating} transparent animationType="fade">
-        <View className="flex-1 items-center justify-center bg-black/50">
-          <View className="items-center rounded-3xl bg-white px-8 py-6">
-            <ActivityIndicator size="large" />
-            <Text className="mt-3 text-base font-semibold text-slate-700">
+        <View className="flex-1 items-center justify-center bg-black/50" style={o && { backgroundColor: o.scrim }}>
+          <View className="items-center rounded-3xl bg-white px-8 py-6" style={o && { backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}>
+            <ActivityIndicator size="large" color={o?.muted} />
+            <Text className="mt-3 text-base font-semibold text-slate-700" style={o && { color: o.text }}>
               Estimating nutrition...
             </Text>
           </View>
         </View>
       </Modal>
     </SafeAreaView>
+    </OrbitPage>
   );
 }

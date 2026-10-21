@@ -4,9 +4,12 @@ import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CreatableStringDropdown, SegmentedToggle } from "@/src/components/forms";
+import { Tap } from "@/src/components/ui/Tap";
 import type { Ingredient } from "@/src/services/ingredientApi";
 import type { CourseEntry, CourseInput } from "@/src/services/mealApi";
 import type { Recipe } from "@/src/services/recipeApi";
+import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
+import { useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import { scaleIngredientNutrition } from "@/src/utils/mealPlan";
 import { getIngredientConversions, getRelatedUnits } from "@/src/utils/unitConversion";
 
@@ -163,6 +166,10 @@ export function MealCoursesEditor({
   ingredients: Ingredient[];
   onFieldFocus?: () => void;
 }) {
+  // (On an Orbit page, in its colours.)
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
+  const field = o && { backgroundColor: o.surface, borderColor: o.border, color: o.text };
   const [pickerCourseId, setPickerCourseId] = useState<string | null>(null);
   const [pickerKind, setPickerKind] = useState<CourseKind>("recipe");
   const [pickerSearch, setPickerSearch] = useState("");
@@ -220,27 +227,33 @@ export function MealCoursesEditor({
           : [];
 
         return (
-          <View key={course.id} className="mb-3 rounded-2xl bg-slate-50 p-3">
+          <View key={course.id} className="mb-3 rounded-2xl bg-slate-50 p-3" style={o && { backgroundColor: o.canvas, borderWidth: 1, borderColor: o.border, borderRadius: 16 }}>
             <View className="mb-3 flex-row items-center justify-between">
-              <Text className="text-sm font-bold text-slate-700">Course {index + 1}</Text>
-              <Pressable
+              <Text className="text-sm font-bold text-slate-700" style={o && { color: o.text }}>Course {index + 1}</Text>
+              <Tap
                 onPress={() => onChange(courses.filter((c) => c.id !== course.id))}
                 className="h-8 w-8 items-center justify-center rounded-full bg-white active:bg-red-100"
+                style={o && { backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
+                pressedStyle={o ? { backgroundColor: dark ? "rgba(248,113,113,0.14)" : "#FEF2F2" } : {}}
+                accessibilityLabel={`Remove course ${index + 1}`}
               >
-                <Ionicons name="close" size={16} color="#64748B" />
-              </Pressable>
+                <Ionicons name="close" size={16} color={o?.muted ?? "#64748B"} />
+              </Tap>
             </View>
 
-            <Text className="mb-1.5 text-xs font-semibold text-slate-500">
+            <Text className="mb-1.5 text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>
               {isIngredient ? "Ingredient" : "Recipe"}
             </Text>
-            <Pressable
+            <Tap
               className="mb-3 h-11 flex-row items-center rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-100"
+              style={o && { backgroundColor: o.surface, borderColor: o.border }}
+              pressedStyle={o ? { backgroundColor: o.pill } : {}}
               onPress={() => openPicker(course)}
             >
-              <Ionicons name={isIngredient ? "nutrition-outline" : "book-outline"} size={16} color="#64748B" />
+              <Ionicons name={isIngredient ? "nutrition-outline" : "book-outline"} size={16} color={o?.muted ?? "#64748B"} />
               <Text
                 className={`ml-2 flex-1 text-sm ${chosenName ? "text-slate-900" : "text-slate-400"}`}
+                style={o && { color: chosenName ? o.text : o.faint }}
                 numberOfLines={1}
               >
                 {chosenName ?? "Select a recipe or ingredient"}
@@ -257,16 +270,16 @@ export function MealCoursesEditor({
                     )
                   }
                 >
-                  <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                  <Ionicons name="close-circle" size={18} color={o?.faint ?? "#94A3B8"} />
                 </Pressable>
               ) : (
-                <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+                <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#94A3B8"} />
               )}
-            </Pressable>
+            </Tap>
 
             {isIngredient ? (
               <>
-                <Text className="mb-1.5 text-xs font-semibold text-slate-500">Amount</Text>
+                <Text className="mb-1.5 text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>Amount</Text>
                 <View className="flex-row gap-2">
                   <TextInput
                     value={course.quantity}
@@ -274,8 +287,9 @@ export function MealCoursesEditor({
                     onFocus={onFieldFocus}
                     keyboardType="decimal-pad"
                     placeholder="Amount"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={o?.faint ?? "#94A3B8"}
                     className="h-11 w-28 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950"
+                    style={field}
                   />
                   <View className="flex-1">
                     <CreatableStringDropdown
@@ -291,15 +305,16 @@ export function MealCoursesEditor({
               </>
             ) : (
               <>
-                <Text className="mb-1.5 text-xs font-semibold text-slate-500">Servings</Text>
+                <Text className="mb-1.5 text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>Servings</Text>
                 <TextInput
                   value={course.servings}
                   onChangeText={(v) => updateCourse(course.id, { servings: v })}
                   onFocus={onFieldFocus}
                   keyboardType="decimal-pad"
                   placeholder="1"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={o?.faint ?? "#94A3B8"}
                   className="h-11 w-28 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950"
+                  style={field}
                 />
               </>
             )}
@@ -307,13 +322,15 @@ export function MealCoursesEditor({
         );
       })}
 
-      <Pressable
+      <Tap
         className="flex-row items-center justify-center rounded-2xl border border-dashed border-blue-300 bg-blue-50 py-3.5 active:bg-blue-100"
+        style={o && { backgroundColor: o.pill, borderColor: o.faint, borderRadius: 16 }}
+        pressedStyle={o ? { opacity: 0.75 } : {}}
         onPress={() => onChange([...courses, makeCourse()])}
       >
-        <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
-        <Text className="ml-2 font-semibold text-blue-600">Add course</Text>
-      </Pressable>
+        <Ionicons name="add-circle-outline" size={20} color={o?.ink ?? "#2563EB"} />
+        <Text className="ml-2 font-semibold text-blue-600" style={o && { color: o.onPill }}>Add course</Text>
+      </Tap>
 
       {/* Recipe / ingredient picker */}
       <Modal
@@ -322,15 +339,33 @@ export function MealCoursesEditor({
         presentationStyle="pageSheet"
         onRequestClose={() => setPickerCourseId(null)}
       >
-        <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
-          <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-            <Text className="flex-1 text-lg font-bold text-slate-950">
-              {pickerKind === "recipe" ? "Select recipe" : "Select ingredient"}
-            </Text>
-            <Pressable onPress={() => setPickerCourseId(null)}>
-              <Text className="font-semibold text-blue-600">Cancel</Text>
-            </Pressable>
-          </View>
+        <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
+          {/* (On an Orbit page: a large title on the sheet itself, a round close beside it.) */}
+          {o ? (
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 }}>
+              <Text style={{ flex: 1, fontSize: 22, fontWeight: "800", letterSpacing: -0.4, color: o.text }}>
+                {pickerKind === "recipe" ? "Select recipe" : "Select ingredient"}
+              </Text>
+              <Tap
+                hitSlop={8}
+                onPress={() => setPickerCourseId(null)}
+                accessibilityLabel="Cancel"
+                style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
+                pressedStyle={{ backgroundColor: o.pill }}
+              >
+                <Ionicons name="close" size={19} color={o.text} />
+              </Tap>
+            </View>
+          ) : (
+            <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
+              <Text className="flex-1 text-lg font-bold text-slate-950">
+                {pickerKind === "recipe" ? "Select recipe" : "Select ingredient"}
+              </Text>
+              <Pressable onPress={() => setPickerCourseId(null)}>
+                <Text className="font-semibold text-blue-600">Cancel</Text>
+              </Pressable>
+            </View>
+          )}
 
           <View className="gap-3 px-4 py-3">
             <SegmentedToggle<CourseKind>
@@ -342,19 +377,20 @@ export function MealCoursesEditor({
               ] as const}
               onChange={setPickerKind}
             />
-            <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
-              <Ionicons name="search-outline" size={19} color="#64748B" />
+            <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 16 }}>
+              <Ionicons name="search-outline" size={19} color={o?.muted ?? "#64748B"} />
               <TextInput
                 value={pickerSearch}
                 onChangeText={setPickerSearch}
                 placeholder={pickerKind === "recipe" ? "Search recipes" : "Search ingredients"}
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 autoFocus
                 className="ml-3 flex-1 text-base text-slate-900"
+                style={o && { color: o.text }}
               />
               {pickerSearch.length > 0 && (
                 <Pressable onPress={() => setPickerSearch("")}>
-                  <Ionicons name="close-circle" size={19} color="#94A3B8" />
+                  <Ionicons name="close-circle" size={19} color={o?.faint ?? "#94A3B8"} />
                 </Pressable>
               )}
             </View>
@@ -418,29 +454,71 @@ function PickerRow({
   detail?: string;
   onPress: () => void;
 }) {
+  const o = useOrbitPage();
   return (
-    <Pressable
+    <Tap
       className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+      style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 }}
+      pressedStyle={o ? { backgroundColor: o.pill } : {}}
       onPress={onPress}
     >
-      <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
-        <Ionicons name={icon} size={18} color="#2563EB" />
+      <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.pill }}>
+        <Ionicons name={icon} size={18} color={o?.ink ?? "#2563EB"} />
       </View>
       <View className="ml-3 flex-1">
-        <Text className="font-semibold text-slate-900">{name}</Text>
-        {!!detail && <Text className="mt-0.5 text-sm text-slate-500">{detail}</Text>}
+        <Text className="font-semibold text-slate-900" style={o && { color: o.text }}>{name}</Text>
+        {!!detail && <Text className="mt-0.5 text-sm text-slate-500" style={o && { color: o.muted }}>{detail}</Text>}
       </View>
-      <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-    </Pressable>
+      <Ionicons name="chevron-forward" size={18} color={o?.faint ?? "#94A3B8"} />
+    </Tap>
   );
 }
 
 function PickerEmpty({ text }: { text: string }) {
+  const o = useOrbitPage();
   return (
     <View className="items-center py-16">
-      <Ionicons name="search-outline" size={42} color="#94A3B8" />
-      <Text className="mt-4 text-lg font-bold text-slate-900">{text}</Text>
-      <Text className="mt-2 text-center text-slate-500">Try a different search term.</Text>
+      <Ionicons name="search-outline" size={42} color={o?.faint ?? "#94A3B8"} />
+      <Text className="mt-4 text-lg font-bold text-slate-900" style={o && { color: o.text }}>{text}</Text>
+      <Text className="mt-2 text-center text-slate-500" style={o && { color: o.muted }}>Try a different search term.</Text>
+    </View>
+  );
+}
+
+// A meal's nutrition in Orbit's look (an Orbit page only — null elsewhere):
+// the calories large, the rest beside each other under them, each with its
+// nutrient's colour. Shared by the meal forms' summary and the meal's page.
+export function MealNutritionFigures({ totals }: { totals: MealFormTotals }) {
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
+  if (!o) return null;
+  const rest: [MainNutrient, string, string][] = [
+    ["protein", "Protein", "g"],
+    ["carbs", "Carbs", "g"],
+    ["fats", "Fats", "g"],
+    ["fiber", "Fiber", "g"],
+    ["sodium", "Sodium", "mg"],
+  ];
+  return (
+    <View>
+      <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+        <Text style={{ fontSize: 30, fontWeight: "800", letterSpacing: -0.6, color: o.text }}>{Math.round(totals.calories)}</Text>
+        <Text style={{ marginLeft: 5, fontSize: 14, color: o.muted }}>kcal</Text>
+      </View>
+      <View style={{ marginTop: 12, flexDirection: "row" }}>
+        {rest.map(([key, label, unit]) => (
+          <View key={key} style={{ flex: 1 }}>
+            <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 15, fontWeight: "700", color: o.text }}>
+              {unit === "mg" ? Math.round(totals[key]) : Math.round(totals[key] * 10) / 10}
+              <Text style={{ fontSize: 11, fontWeight: "400", color: o.faint }}>{unit === "mg" ? " mg" : unit}</Text>
+            </Text>
+            <View style={{ marginTop: 3, flexDirection: "row", alignItems: "center" }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: nutrientColor(key, dark) }} />
+              <Text style={{ marginLeft: 4, fontSize: 12, color: o.muted }}>{label}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }

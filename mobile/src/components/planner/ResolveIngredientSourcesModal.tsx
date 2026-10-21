@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+
 import type {
   AmountOverride,
   IngredientRequirement,
@@ -73,6 +75,12 @@ export function ResolveIngredientSourcesModal({
   onCancel,
   onConfirm,
 }: ResolveIngredientSourcesModalProps) {
+  // (On an Orbit page — see theme/orbit.tsx — in its colours; `warm`: the
+  // soft amber behind what isn't in the pantry.)
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
+  const warm = dark ? "rgba(251,191,36,0.12)" : "#FFFBEB";
+  const field = o && { backgroundColor: o.surface, borderColor: o.border, color: o.text };
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   // One text field per shortfall slot, keyed by ingredientId - e.g. needing
   // 2 steaks with only 1 in pantry leaves a shortfall of 1, so one field.
@@ -151,13 +159,13 @@ export function ResolveIngredientSourcesModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View className="flex-1 items-center justify-center bg-black/40 px-6">
+      <View className="flex-1 items-center justify-center bg-black/40 px-6" style={o && { backgroundColor: o.scrim, paddingHorizontal: 16 }}>
         <Pressable className="absolute inset-0" onPress={onCancel} />
 
-        <View className="max-h-[85%] w-full rounded-3xl bg-white">
+        <View className="max-h-[85%] w-full rounded-3xl bg-white" style={o && { backgroundColor: o.canvas, borderRadius: 28, overflow: "hidden" }}>
           <ScrollView contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
-            <Text className="text-lg font-bold text-slate-950">Confirm what you used</Text>
-            <Text className="mt-0.5 mb-5 text-sm text-slate-400">
+            <Text className="text-lg font-bold text-slate-950" style={o && { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: o.text }}>Confirm what you used</Text>
+            <Text className="mt-0.5 mb-5 text-sm text-slate-400" style={o && { lineHeight: 19, color: o.muted }}>
               Some ingredients need a bit more info — enter how much you used, pick a pantry
               source if there&apos;s more than one, or type a weight for anything not logged in.
               Anything left untouched uses the soonest-to-expire source automatically.
@@ -174,12 +182,12 @@ export function ResolveIngredientSourcesModal({
               const pieceWeightUnit = req.pieceWeightUnit || "g";
 
               return (
-                <View key={req.ingredientId} className="mb-5 rounded-2xl border border-slate-200 p-4">
+                <View key={req.ingredientId} className="mb-5 rounded-2xl border border-slate-200 p-4" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18, marginBottom: 14 }}>
                   <View className="flex-row items-center justify-between">
-                    <Text className="flex-1 font-semibold text-slate-900" numberOfLines={1}>
+                    <Text className="flex-1 font-semibold text-slate-900" numberOfLines={1} style={o && { fontSize: 15, color: o.text }}>
                       {req.ingredientName}
                     </Text>
-                    <Text className="ml-2 text-xs text-slate-400">
+                    <Text className="ml-2 text-xs text-slate-400" style={o && { color: o.faint }}>
                       {req.askAmount
                         ? `Recipe: ${formatAmount(req.askAmount.quantity)} ${req.askAmount.unit}`
                         : `Needs ${req.neededQuantity} ${req.unit}`}
@@ -188,7 +196,7 @@ export function ResolveIngredientSourcesModal({
 
                   {req.askAmount && (
                     <View className="mt-3 flex-row items-center">
-                      <Text className="text-sm text-slate-600">Amount used</Text>
+                      <Text className="text-sm text-slate-600" style={o && { color: o.muted }}>Amount used</Text>
                       <TextInput
                         value={amounts[req.ingredientId] ?? ""}
                         onChangeText={(text) => setAmounts((current) => ({ ...current, [req.ingredientId]: text }))}
@@ -196,15 +204,16 @@ export function ResolveIngredientSourcesModal({
                         keyboardType="decimal-pad"
                         selectTextOnFocus
                         placeholder={formatAmount(req.askAmount.quantity)}
-                        placeholderTextColor="#94A3B8"
+                        placeholderTextColor={o?.faint ?? "#94A3B8"}
                         className="ml-3 h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-base text-slate-950"
+                        style={field && { ...field, borderRadius: 14 }}
                       />
-                      <Text className="ml-2 text-sm text-slate-500">{req.askAmount.unit}</Text>
+                      <Text className="ml-2 text-sm text-slate-500" style={o && { color: o.muted }}>{req.askAmount.unit}</Text>
                     </View>
                   )}
 
                   {picked.length > 0 && req.groups.length > 1 && (
-                    <Text className="mt-1 text-xs font-medium text-slate-500">
+                    <Text className="mt-1 text-xs font-medium text-slate-500" style={o && { color: o.muted }}>
                       {remaining > 0
                         ? `Still needs ${remaining} ${req.unit} — pick another source below`
                         : "Fully covered by your picks"}
@@ -224,12 +233,14 @@ export function ResolveIngredientSourcesModal({
                             className={`mb-2 flex-row items-center rounded-2xl border px-3 py-2.5 ${
                               isSelected ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"
                             }`}
+                            // (Picked: ringed in ink, numbered in the order it drains.)
+                            style={o && { borderRadius: 14, backgroundColor: o.surface, borderWidth: isSelected ? 1.5 : 1, borderColor: isSelected ? o.ink : o.border }}
                           >
                             <View className="flex-1">
-                              <Text className="text-sm font-semibold text-slate-900" numberOfLines={1}>
+                              <Text className="text-sm font-semibold text-slate-900" numberOfLines={1} style={o && { color: o.text }}>
                                 {group.displayName}
                               </Text>
-                              <Text className="mt-0.5 text-xs text-slate-400">
+                              <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.muted }}>
                                 {req.matchMode === "wholePiece"
                                   ? `${group.totalAvailable} of ${group.members.length} qualify (${
                                       formatPieceWeights(group, pieceWeightUnit)
@@ -238,11 +249,11 @@ export function ResolveIngredientSourcesModal({
                               </Text>
                             </View>
                             {isSelected ? (
-                              <View className="h-6 w-6 items-center justify-center rounded-full bg-blue-600">
-                                <Text className="text-xs font-bold text-white">{order + 1}</Text>
+                              <View className="h-6 w-6 items-center justify-center rounded-full bg-blue-600" style={o && { backgroundColor: o.ink }}>
+                                <Text className="text-xs font-bold text-white" style={o && { color: o.onInk }}>{order + 1}</Text>
                               </View>
                             ) : (
-                              <Ionicons name="ellipse-outline" size={20} color="#CBD5E1" />
+                              <Ionicons name="ellipse-outline" size={20} color={o?.faint ?? "#CBD5E1"} />
                             )}
                           </Pressable>
                         );
@@ -251,13 +262,13 @@ export function ResolveIngredientSourcesModal({
                   )}
 
                   {manualSlots.length > 0 && (
-                    <View className="mt-3 rounded-2xl bg-amber-50 p-3">
-                      <Text className="text-xs font-semibold text-amber-800">
+                    <View className="mt-3 rounded-2xl bg-amber-50 p-3" style={o && { backgroundColor: warm, borderRadius: 14 }}>
+                      <Text className="text-xs font-semibold text-amber-800" style={o && { color: o.warning }}>
                         {req.groups.length > 0
                           ? `${manualSlots.length} more not in your pantry`
                           : "Nothing in your pantry qualifies"}
                       </Text>
-                      <Text className="mt-0.5 text-xs leading-4 text-amber-700">
+                      <Text className="mt-0.5 text-xs leading-4 text-amber-700" style={o && { color: o.muted }}>
                         Bought and used without logging it in? Pre-filled with this recipe&apos;s
                         usual size — adjust it to the real weight for accurate nutrition, or clear
                         it to skip. Either way, it won&apos;t be deducted from pantry since
@@ -265,7 +276,7 @@ export function ResolveIngredientSourcesModal({
                       </Text>
                       {manualSlots.map((value, index) => (
                         <View key={index} className="mt-2 flex-row items-center">
-                          <Text className="w-16 text-xs text-amber-700">
+                          <Text className="w-16 text-xs text-amber-700" style={o && { color: o.warning }}>
                             {req.unit.charAt(0).toUpperCase() + req.unit.slice(1)} {index + 1}
                           </Text>
                           <TextInput
@@ -274,10 +285,11 @@ export function ResolveIngredientSourcesModal({
                             editable={!saving}
                             keyboardType="decimal-pad"
                             placeholder="0"
-                            placeholderTextColor="#B45309"
+                            placeholderTextColor={o?.faint ?? "#B45309"}
                             className="ml-2 h-11 flex-1 rounded-2xl border border-amber-200 bg-white px-3 text-base text-slate-950"
+                            style={field && { ...field, borderRadius: 14 }}
                           />
-                          <Text className="ml-2 text-sm text-amber-700">{pieceWeightUnit}</Text>
+                          <Text className="ml-2 text-sm text-amber-700" style={o && { color: o.warning }}>{pieceWeightUnit}</Text>
                         </View>
                       ))}
                     </View>
@@ -291,8 +303,9 @@ export function ResolveIngredientSourcesModal({
                 disabled={saving}
                 onPress={onCancel}
                 className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+                style={o && { height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16, backgroundColor: o.pill }}
               >
-                <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+                <Text className="text-sm font-semibold text-slate-600" style={o && { fontSize: 15, color: o.onPill }}>Cancel</Text>
               </Pressable>
               <Pressable
                 disabled={saving}
@@ -300,8 +313,9 @@ export function ResolveIngredientSourcesModal({
                 className={`flex-1 items-center rounded-2xl py-3.5 ${
                   saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
                 }`}
+                style={o && { height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.35 : 1 }}
               >
-                <Text className="text-sm font-semibold text-white">
+                <Text className="text-sm font-semibold text-white" style={o && { fontSize: 15, color: o.onInk }}>
                   {saving ? "Confirming..." : "Confirm"}
                 </Text>
               </Pressable>

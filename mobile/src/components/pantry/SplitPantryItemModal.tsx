@@ -12,10 +12,12 @@ import {
 } from "react-native";
 
 import { DateTextInput, SearchableObjectDropdown } from "@/src/components/forms";
+import { Tap } from "@/src/components/ui/Tap";
 import { SplitSlider } from "./SplitSlider";
 import type { SelectOption } from "@/src/services/optionsApi";
 import { addIngredientToPantry, updatePantryItem } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
+import { useOrbitPage } from "@/src/theme/orbit";
 import { referenceId, referenceName } from "@/src/utils/pantryDefaults";
 
 interface SplitPantryItemModalProps {
@@ -47,6 +49,9 @@ export function SplitPantryItemModal({
   onClose,
   onSplit,
 }: SplitPantryItemModalProps) {
+  // (On an Orbit page — OrbitPage — in its colours, light or dark; the
+  // dropdowns in it follow by themselves.)
+  const o = useOrbitPage();
   const total = item?.quantityAvailable ?? 0;
 
   const [ratio, setRatio] = useState(0.5);
@@ -239,23 +244,26 @@ export function SplitPantryItemModal({
 
   const isMoveOnly = Number(leftText) === 0 || Number(rightText) === 0;
 
+  const label = o && { color: o.muted };
+  const field = o && { backgroundColor: o.surface, borderColor: o.border };
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View className="flex-1 items-center justify-center bg-black/40 px-6">
+        <View className="flex-1 items-center justify-center bg-black/40 px-6" style={o && { backgroundColor: o.scrim }}>
           <Pressable className="absolute inset-0" onPress={onClose} />
 
-          <View className="max-h-[85%] w-full rounded-3xl bg-white">
+          <View className="max-h-[85%] w-full rounded-3xl bg-white" style={o && { backgroundColor: o.canvas, borderRadius: 28 }}>
             <ScrollView
               contentContainerStyle={{ padding: 20 }}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <Text className="text-lg font-bold text-slate-950">Split entry</Text>
-              <Text className="mt-0.5 mb-5 text-sm text-slate-400">
+              <Text className="text-lg font-bold text-slate-950" style={o && { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: o.text }}>Split entry</Text>
+              <Text className="mt-0.5 mb-5 text-sm text-slate-400" style={o && { color: o.muted }}>
                 {ingredientName} — {total} {item?.quantityUnit}
               </Text>
 
@@ -263,36 +271,38 @@ export function SplitPantryItemModal({
 
               <View className="mt-4 flex-row items-center gap-3">
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-xs font-semibold text-slate-500">Left</Text>
-                  <View className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-3">
+                  <Text className="mb-1.5 text-xs font-semibold text-slate-500" style={label}>Left</Text>
+                  <View className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-3" style={field}>
                     <TextInput
                       value={leftText}
                       onChangeText={applyLeftText}
                       editable={!saving}
                       keyboardType="decimal-pad"
                       className="h-12 flex-1 text-base text-slate-950"
+                      style={o && { color: o.text }}
                     />
-                    <Text className="text-sm text-slate-400">{item?.quantityUnit}</Text>
+                    <Text className="text-sm text-slate-400" style={o && { color: o.faint }}>{item?.quantityUnit}</Text>
                   </View>
                 </View>
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-xs font-semibold text-slate-500">Right</Text>
-                  <View className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-3">
+                  <Text className="mb-1.5 text-xs font-semibold text-slate-500" style={label}>Right</Text>
+                  <View className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-3" style={field}>
                     <TextInput
                       value={rightText}
                       onChangeText={applyRightText}
                       editable={!saving}
                       keyboardType="decimal-pad"
                       className="h-12 flex-1 text-base text-slate-950"
+                      style={o && { color: o.text }}
                     />
-                    <Text className="text-sm text-slate-400">{item?.quantityUnit}</Text>
+                    <Text className="text-sm text-slate-400" style={o && { color: o.faint }}>{item?.quantityUnit}</Text>
                   </View>
                 </View>
               </View>
 
               <View className="mt-4 flex-row gap-3">
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-xs font-semibold text-slate-500">
+                  <Text className="mb-1.5 text-xs font-semibold text-slate-500" style={label}>
                     Left location
                   </Text>
                   <SearchableObjectDropdown<SelectOption>
@@ -313,7 +323,7 @@ export function SplitPantryItemModal({
                   />
                 </View>
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-xs font-semibold text-slate-500">
+                  <Text className="mb-1.5 text-xs font-semibold text-slate-500" style={label}>
                     Right location
                   </Text>
                   <SearchableObjectDropdown<SelectOption>
@@ -337,7 +347,7 @@ export function SplitPantryItemModal({
 
               <View className="mt-4 flex-row gap-3">
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-xs font-semibold text-slate-500">
+                  <Text className="mb-1.5 text-xs font-semibold text-slate-500" style={label}>
                     Left expiry
                   </Text>
                   <DateTextInput
@@ -345,10 +355,12 @@ export function SplitPantryItemModal({
                     onChangeText={setLeftExpiryDate}
                     editable={!saving}
                     className="h-12 rounded-2xl border border-slate-200 bg-white px-3 text-base text-slate-950"
+                    style={o && { ...field, color: o.text }}
+                    placeholderTextColor={o?.faint ?? "#94A3B8"}
                   />
                 </View>
                 <View className="flex-1">
-                  <Text className="mb-1.5 text-xs font-semibold text-slate-500">
+                  <Text className="mb-1.5 text-xs font-semibold text-slate-500" style={label}>
                     Right expiry
                   </Text>
                   <DateTextInput
@@ -356,30 +368,55 @@ export function SplitPantryItemModal({
                     onChangeText={setRightExpiryDate}
                     editable={!saving}
                     className="h-12 rounded-2xl border border-slate-200 bg-white px-3 text-base text-slate-950"
+                    style={o && { ...field, color: o.text }}
+                    placeholderTextColor={o?.faint ?? "#94A3B8"}
                   />
                 </View>
               </View>
 
-              <View className="mt-5 flex-row gap-3">
-                <Pressable
-                  disabled={saving}
-                  onPress={onClose}
-                  className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
-                >
-                  <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
-                </Pressable>
-                <Pressable
-                  disabled={saving}
-                  onPress={() => void handleConfirm()}
-                  className={`flex-1 items-center rounded-2xl py-3.5 ${
-                    saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
-                  }`}
-                >
-                  <Text className="text-sm font-semibold text-white">
-                    {saving ? "Saving..." : isMoveOnly ? "Move" : "Split"}
-                  </Text>
-                </Pressable>
-              </View>
+              {o ? (
+                <View style={{ marginTop: 20, flexDirection: "row", gap: 12 }}>
+                  <Tap
+                    disabled={saving}
+                    onPress={onClose}
+                    style={{ flex: 1, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.pill }}
+                    pressedStyle={{ opacity: 0.7 }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: "600", color: o.onPill }}>Cancel</Text>
+                  </Tap>
+                  <Tap
+                    disabled={saving}
+                    onPress={() => void handleConfirm()}
+                    style={{ flex: 1, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }}
+                    pressedStyle={{ opacity: 0.85 }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: o.onInk }}>
+                      {saving ? "Saving..." : isMoveOnly ? "Move" : "Split"}
+                    </Text>
+                  </Tap>
+                </View>
+              ) : (
+                <View className="mt-5 flex-row gap-3">
+                  <Pressable
+                    disabled={saving}
+                    onPress={onClose}
+                    className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+                  >
+                    <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={saving}
+                    onPress={() => void handleConfirm()}
+                    className={`flex-1 items-center rounded-2xl py-3.5 ${
+                      saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
+                    }`}
+                  >
+                    <Text className="text-sm font-semibold text-white">
+                      {saving ? "Saving..." : isMoveOnly ? "Move" : "Split"}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>

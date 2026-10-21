@@ -73,7 +73,6 @@ import { type NutritionLimits } from "@/src/components/health/NutritionSummaryCa
 import { NutritionRings } from "@/src/components/planner/NutritionRings";
 import { Tap } from "@/src/components/ui/Tap";
 import { OrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
-import { StatusBar } from "expo-status-bar";
 import { NutritionDetailOverlay, type NutritionDetailPage } from "@/src/components/planner/NutritionDetailOverlay";
 import {
   computeConfirmedRecipeNutrition,
@@ -141,12 +140,21 @@ export default function PlannerScreen() {
 
 function PhonePlannerScreen() {
   const router = useRouter();
-  // The day itself in Orbit's look, light or dark (`oc`: its colours). The
-  // sheets over it — adding, an entry's details, moving one — keep the
-  // older look for now.
+  // The day in Orbit's look, light or dark (`oc`: its colours), and the
+  // sheets over it — adding, an entry's details, moving one.
   const { colors: oc, dark } = useOrbitTheme();
   // The add sheet in a desktop browser (it opens from the week plan there).
   const wideAdd = useWideWeb();
+  // The add sheet and an item's info in Orbit's look on the phone (`o`);
+  // in a desktop browser they keep the older look, like the week plan.
+  const o = wideAdd ? null : oc;
+  // (Shared by those sheets: a small heading, a card, a field, the main button.)
+  const sheetEyebrow = { fontSize: 11, fontWeight: "700" as const, letterSpacing: 1.2, color: oc.faint, marginBottom: 8, marginLeft: 4 };
+  const sheetCard = { backgroundColor: oc.surface, borderRadius: 18, borderWidth: 1, borderColor: oc.border };
+  const sheetField = { height: 56, borderRadius: 16, borderWidth: 1, borderColor: oc.border, backgroundColor: oc.surface, paddingHorizontal: 16, fontSize: 16, color: oc.text };
+  const sheetPrimary = (off: boolean) => ({ height: 52, borderRadius: 16, alignItems: "center" as const, justifyContent: "center" as const, paddingVertical: 0, backgroundColor: oc.ink, opacity: off ? 0.35 : 1 });
+  // (Something not chosen yet, or a prep recipe: amber, soft.)
+  const amberSoft = dark ? "rgba(251,191,36,0.15)" : "#FEF3C7";
   const addGrid = wideAdd ? { numColumns: 3, columnWrapperStyle: { gap: 12 } } : {};
   // (Each card a third of its row, the last row's too.)
   const addCell: StyleProp<ViewStyle> = wideAdd ? { flexBasis: 0, flexGrow: 1, maxWidth: "32.6%", minWidth: 0 } : undefined;
@@ -252,7 +260,7 @@ function PhonePlannerScreen() {
         {!expanded && !!now && <Text className="text-sm text-slate-700" numberOfLines={1} style={orbit ? { color: oc.icon } : undefined}>{now}</Text>}
       </View>
       {!chosen && (
-        <View className="rounded-full bg-amber-100 px-2 py-0.5" style={orbit ? { backgroundColor: dark ? "rgba(251,191,36,0.15)" : "#FEF3C7" } : undefined}>
+        <View className="rounded-full bg-amber-100 px-2 py-0.5" style={orbit ? { backgroundColor: amberSoft } : undefined}>
           <Text className="text-[11px] font-bold text-amber-700" style={orbit ? { color: oc.warning } : undefined}>Not chosen</Text>
         </View>
       )}
@@ -1387,13 +1395,32 @@ function PhonePlannerScreen() {
   }
 
   // ── Expanded info overlay (meal / recipe / ingredient) ──
+  // (On the phone in Orbit's look, `o`; in a desktop browser, as it was.)
   function infoRow(label: string, value: string | number | null | undefined, unit = "") {
     if (value == null || value === "") return null;
     return (
-      <View className="flex-row items-center justify-between border-b border-slate-100 py-2.5">
-        <Text className="text-sm text-slate-500">{label}</Text>
-        <Text className="text-sm font-semibold text-slate-900">{value}{unit}</Text>
+      <View className="flex-row items-center justify-between border-b border-slate-100 py-2.5" style={o && { borderBottomColor: o.border, paddingHorizontal: 4 }}>
+        <Text className="text-sm text-slate-500" style={o && { color: o.muted }}>{label}</Text>
+        <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>{value}{unit}</Text>
       </View>
+    );
+  }
+
+  // A label on an item: its kind, category, brand, a tag.
+  function infoChip(key: string, label: string, className: string, textClassName: string) {
+    return (
+      <View key={key} className={`rounded-full px-2.5 py-1 ${className}`} style={o && { backgroundColor: o.pill }}>
+        <Text className={`text-xs font-semibold ${textClassName}`} style={o && { color: o.onPill }}>{label}</Text>
+      </View>
+    );
+  }
+
+  // A section's heading in the info sheet.
+  function infoHeading(label: string) {
+    return (
+      <Text className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400" style={o && { ...sheetEyebrow, marginTop: 20 }}>
+        {label}
+      </Text>
     );
   }
 
@@ -1402,33 +1429,23 @@ function PhonePlannerScreen() {
     return (
       <View>
         <View className="mb-4 flex-row flex-wrap gap-1.5">
-          <View className="rounded-full bg-slate-100 px-2.5 py-1">
-            <Text className="text-xs font-semibold text-slate-600">
-              {meal.type === "bento" ? "Bento Box" : "Course-based"}
-            </Text>
-          </View>
-          {(meal.tags ?? []).map(tag => (
-            <View key={tag._id} className="rounded-full bg-blue-50 px-2.5 py-1">
-              <Text className="text-xs font-semibold text-blue-700">{tag.name}</Text>
-            </View>
-          ))}
+          {infoChip("type", meal.type === "bento" ? "Bento Box" : "Course-based", "bg-slate-100", "text-slate-600")}
+          {(meal.tags ?? []).map(tag => infoChip(tag._id, tag.name, "bg-blue-50", "text-blue-700"))}
         </View>
 
         {!!meal.notes && (
-          <Text className="mb-4 text-sm leading-5 text-slate-600">{meal.notes}</Text>
+          <Text className="mb-4 text-sm leading-5 text-slate-600" style={o && { color: o.muted }}>{meal.notes}</Text>
         )}
 
         {infoRow("Total calories", kcal, kcal != null ? " kcal" : "")}
 
-        <Text className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">
-          Courses ({meal.courses?.length ?? 0})
-        </Text>
+        {infoHeading(`Courses (${meal.courses?.length ?? 0})`)}
         {(meal.courses ?? []).map(course => {
           const courseCal = courseNutrition(course, appSettings?.unitConversions ?? [])?.calories;
           return (
-            <View key={course._id} className="mb-2 rounded-2xl bg-slate-50 px-4 py-3">
-              <Text className="text-sm font-semibold text-slate-900">{course.label}</Text>
-              <Text className="mt-0.5 text-xs text-slate-500">
+            <View key={course._id} className="mb-2 rounded-2xl bg-slate-50 px-4 py-3" style={o && { ...sheetCard, borderRadius: 16 }}>
+              <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>{course.label}</Text>
+              <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>
                 {courseName(course)} · {courseAmountLabel(course)}
                 {courseCal != null && ` · ${Math.round(courseCal)} kcal`}
               </Text>
@@ -1444,15 +1461,11 @@ function PhonePlannerScreen() {
     return (
       <View>
         <View className="mb-4 flex-row flex-wrap gap-1.5">
-          {(recipe.mealCategory ?? []).map(cat => (
-            <View key={cat} className="rounded-full bg-slate-100 px-2.5 py-1">
-              <Text className="text-xs font-semibold capitalize text-slate-600">{cat}</Text>
-            </View>
-          ))}
+          {(recipe.mealCategory ?? []).map(cat => infoChip(cat, cat, "bg-slate-100", "capitalize text-slate-600"))}
         </View>
 
         {!!recipe.description && (
-          <Text className="mb-4 text-sm leading-5 text-slate-600">{recipe.description}</Text>
+          <Text className="mb-4 text-sm leading-5 text-slate-600" style={o && { color: o.muted }}>{recipe.description}</Text>
         )}
 
         {infoRow("Servings", recipe.servings ?? 1)}
@@ -1469,14 +1482,12 @@ function PhonePlannerScreen() {
 
         {recipe.ingredientList.length > 0 && (
           <>
-            <Text className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">
-              Ingredients
-            </Text>
+            {infoHeading("Ingredients")}
             {recipe.ingredientList.map((entry, i) => {
               const ing = entry.ingredient;
               const name = ing && typeof ing !== "string" ? ing.name : "…";
               return (
-                <Text key={i} className="py-1 text-sm text-slate-700">
+                <Text key={i} className="py-1 text-sm text-slate-700" style={o && { color: o.icon, paddingHorizontal: 4 }}>
                   • {entry.quantity}{entry.unit ? ` ${entry.unit}` : ""} {name}
                 </Text>
               );
@@ -1486,11 +1497,9 @@ function PhonePlannerScreen() {
 
         {recipe.instructions.length > 0 && (
           <>
-            <Text className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">
-              Instructions
-            </Text>
+            {infoHeading("Instructions")}
             {recipe.instructions.map((step, i) => (
-              <Text key={i} className="mb-2 text-sm leading-5 text-slate-700">
+              <Text key={i} className="mb-2 text-sm leading-5 text-slate-700" style={o && { color: o.icon, paddingHorizontal: 4 }}>
                 {i + 1}. {step}
               </Text>
             ))}
@@ -1507,20 +1516,12 @@ function PhonePlannerScreen() {
     return (
       <View>
         <View className="mb-4 flex-row flex-wrap gap-1.5">
-          {!!categoryName && (
-            <View className="rounded-full bg-slate-100 px-2.5 py-1">
-              <Text className="text-xs font-semibold text-slate-600">{categoryName}</Text>
-            </View>
-          )}
-          {!!brandName && (
-            <View className="rounded-full bg-slate-100 px-2.5 py-1">
-              <Text className="text-xs font-semibold text-slate-600">{brandName}</Text>
-            </View>
-          )}
+          {!!categoryName && infoChip("category", categoryName, "bg-slate-100", "text-slate-600")}
+          {!!brandName && infoChip("brand", brandName, "bg-slate-100", "text-slate-600")}
         </View>
 
         {!!ingredient.description && (
-          <Text className="mb-4 text-sm leading-5 text-slate-600">{ingredient.description}</Text>
+          <Text className="mb-4 text-sm leading-5 text-slate-600" style={o && { color: o.muted }}>{ingredient.description}</Text>
         )}
 
         {infoRow(
@@ -1550,28 +1551,22 @@ function PhonePlannerScreen() {
       <View>
         {tags.length > 0 && (
           <View className="mb-4 flex-row flex-wrap gap-1.5">
-            {tags.map(tag => (
-              <View key={tag._id} className="rounded-full bg-emerald-50 px-2.5 py-1">
-                <Text className="text-xs font-semibold text-emerald-700">{tag.name}</Text>
-              </View>
-            ))}
+            {tags.map(tag => infoChip(tag._id, tag.name, "bg-emerald-50", "text-emerald-700"))}
           </View>
         )}
 
         {!!restaurantMeal.notes && (
-          <Text className="mb-4 text-sm leading-5 text-slate-600">{restaurantMeal.notes}</Text>
+          <Text className="mb-4 text-sm leading-5 text-slate-600" style={o && { color: o.muted }}>{restaurantMeal.notes}</Text>
         )}
 
         {infoRow("Total calories", kcal, kcal != null ? " kcal" : "")}
 
-        <Text className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">
-          Dishes ({restaurantMeal.dishes.length})
-        </Text>
+        {infoHeading(`Dishes (${restaurantMeal.dishes.length})`)}
         {restaurantMeal.dishes.map(dish => (
-          <View key={dish._id} className="mb-2 rounded-2xl bg-slate-50 px-4 py-3">
-            <Text className="text-sm font-semibold text-slate-900">{dish.name}</Text>
+          <View key={dish._id} className="mb-2 rounded-2xl bg-slate-50 px-4 py-3" style={o && { ...sheetCard, borderRadius: 16 }}>
+            <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>{dish.name}</Text>
             {dish.nutrition?.calories != null && (
-              <Text className="mt-0.5 text-xs text-slate-500">{dish.nutrition.calories} kcal</Text>
+              <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>{dish.nutrition.calories} kcal</Text>
             )}
           </View>
         ))}
@@ -1590,42 +1585,65 @@ function PhonePlannerScreen() {
 
     return (
       <View className="absolute inset-0">
-        <Pressable className="absolute inset-0 bg-black/40" onPress={() => setInfoItem(null)} />
+        <Pressable className="absolute inset-0 bg-black/40" style={o && { backgroundColor: o.scrim }} onPress={() => setInfoItem(null)} />
+        <OrbitPage on={!!o}>
         <View
           className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl bg-white"
-          style={{ maxHeight: windowHeight * 0.75 }}
+          style={[{ maxHeight: windowHeight * 0.75 }, o && { backgroundColor: o.canvas, borderTopLeftRadius: 28, borderTopRightRadius: 28 }]}
         >
-          <View className="items-center pt-3">
-            <View className="h-1 w-10 rounded-full bg-slate-200" />
+          <View className="items-center pt-3" style={o && { paddingTop: 10 }}>
+            <View className="h-1 w-10 rounded-full bg-slate-200" style={o && { backgroundColor: o.track }} />
           </View>
-          <View className="flex-row items-center border-b border-slate-100 px-5 pb-4 pt-3">
-            <View className="h-11 w-11 items-center justify-center rounded-xl bg-blue-50">
-              <Ionicons name={icon} size={20} color="#2563EB" />
+          {o ? (
+            /* What it is, as a node like the day's timeline */
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 14, paddingBottom: 6 }}>
+              <View style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: o.node, borderWidth: 1, borderColor: o.nodeBorder }}>
+                <Ionicons name={icon} size={20} color={o.text} />
+              </View>
+              <Text numberOfLines={2} style={{ flex: 1, marginLeft: 12, fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: o.text }}>
+                {title}
+              </Text>
+              <Tap
+                hitSlop={8}
+                onPress={() => setInfoItem(null)}
+                accessibilityLabel="Close"
+                style={{ marginLeft: 8, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
+                pressedStyle={{ backgroundColor: o.pill }}
+              >
+                <Ionicons name="close" size={19} color={o.text} />
+              </Tap>
             </View>
-            <Text className="ml-3 flex-1 text-lg font-bold text-slate-950" numberOfLines={2}>
-              {title}
-            </Text>
-            <Pressable
-              hitSlop={10}
-              onPress={() => setInfoItem(null)}
-              className="ml-2 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
-            >
-              <Ionicons name="close" size={20} color="#64748B" />
-            </Pressable>
-          </View>
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 32 }}>
+          ) : (
+            <View className="flex-row items-center border-b border-slate-100 px-5 pb-4 pt-3">
+              <View className="h-11 w-11 items-center justify-center rounded-xl bg-blue-50">
+                <Ionicons name={icon} size={20} color="#2563EB" />
+              </View>
+              <Text className="ml-3 flex-1 text-lg font-bold text-slate-950" numberOfLines={2}>
+                {title}
+              </Text>
+              <Pressable
+                hitSlop={10}
+                onPress={() => setInfoItem(null)}
+                className="ml-2 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+              >
+                <Ionicons name="close" size={20} color="#64748B" />
+              </Pressable>
+            </View>
+          )}
+          <ScrollView contentContainerStyle={o ? { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 32 } : { padding: 20, paddingBottom: 32 }}>
             {infoItem.type === "meal" && renderMealInfo(infoItem.data)}
             {infoItem.type === "recipe" && renderRecipeInfo(infoItem.data)}
             {infoItem.type === "ingredient" && renderIngredientInfo(infoItem.data)}
             {infoItem.type === "restaurant" && renderRestaurantMealInfo(infoItem.data)}
             {infoLoading && (
               <View className="mt-3 flex-row items-center justify-center">
-                <ActivityIndicator size="small" color="#2563EB" />
-                <Text className="ml-2 text-xs text-slate-400">Loading full details…</Text>
+                <ActivityIndicator size="small" color={o?.muted ?? "#2563EB"} />
+                <Text className="ml-2 text-xs text-slate-400" style={o && { color: o.faint }}>Loading full details…</Text>
               </View>
             )}
           </ScrollView>
         </View>
+        </OrbitPage>
       </View>
     );
   }
@@ -1680,64 +1698,78 @@ function PhonePlannerScreen() {
       return { top: date === today ? "Today" : d.toLocaleDateString(undefined, { weekday: "short" }), day: d.getDate() };
     };
     const unchanged = moving.date === entry.date && moving.slot === entry.slot;
+    const chip = (on: boolean) => ({ backgroundColor: on ? oc.ink : oc.pill });
+    // (In Orbit's look, like the meal sheet it opens from; only on the phone.)
     return (
       <View className="absolute inset-0">
-        <Pressable className="absolute inset-0 bg-black/40" onPress={() => setMoving(null)} />
-        <View className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl bg-white pb-8">
-          <View className="items-center pt-3">
-            <View className="h-1 w-10 rounded-full bg-slate-200" />
+        <Pressable style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: oc.scrim }} onPress={() => setMoving(null)} accessibilityLabel="Close" />
+        <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, overflow: "hidden", paddingBottom: 32, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: oc.canvas }}>
+          <View style={{ alignItems: "center", paddingTop: 10 }}>
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: oc.track }} />
           </View>
-          <View className="flex-row items-center px-5 pb-2 pt-3">
-            <Text className="flex-1 text-lg font-bold text-slate-950" numberOfLines={2}>
+          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 14, paddingBottom: 6 }}>
+            <Text numberOfLines={2} style={{ flex: 1, fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: oc.text }}>
               Move {entryDisplayName(entry)}
             </Text>
-            <Pressable hitSlop={10} onPress={() => setMoving(null)} className="ml-2 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100">
-              <Ionicons name="close" size={20} color="#64748B" />
-            </Pressable>
+            <Tap
+              hitSlop={8}
+              onPress={() => setMoving(null)}
+              accessibilityLabel="Close"
+              style={{ marginLeft: 8, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: oc.surface, borderWidth: 1, borderColor: oc.border }}
+              pressedStyle={{ backgroundColor: oc.pill }}
+            >
+              <Ionicons name="close" size={19} color={oc.text} />
+            </Tap>
           </View>
 
-          <Text className="mb-2 mt-2 px-5 text-xs font-bold uppercase tracking-wide text-slate-400">Day</Text>
+          <Text style={[sheetEyebrow, { marginTop: 14, marginLeft: 24 }]}>DAY</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
             {days.map(date => {
               const on = moving.date === date;
               const { top, day } = dayChip(date);
               return (
-                <Pressable key={date} onPress={() => setMoving({ ...moving, date })} className={`w-14 items-center rounded-2xl py-2 ${on ? "bg-violet-600" : "bg-slate-100 active:bg-slate-200"}`}>
-                  <Text className={`text-[11px] font-semibold ${on ? "text-violet-100" : "text-slate-500"}`}>{top}</Text>
-                  <Text className={`mt-0.5 text-base font-bold ${on ? "text-white" : "text-slate-900"}`}>{day}</Text>
-                </Pressable>
+                <Tap key={date} onPress={() => setMoving({ ...moving, date })} accessibilityState={{ selected: on }} style={[{ width: 56, alignItems: "center", paddingVertical: 8, borderRadius: 16 }, chip(on)]}>
+                  <Text style={{ fontSize: 11, fontWeight: "600", color: on ? oc.onInk : oc.muted, opacity: on ? 0.85 : 1 }}>{top}</Text>
+                  <Text style={{ marginTop: 2, fontSize: 16, fontWeight: "700", color: on ? oc.onInk : oc.text }}>{day}</Text>
+                </Tap>
               );
             })}
           </ScrollView>
 
-          <Text className="mb-2 mt-5 px-5 text-xs font-bold uppercase tracking-wide text-slate-400">Meal</Text>
-          <View className="flex-row flex-wrap gap-2 px-5">
+          <Text style={[sheetEyebrow, { marginTop: 20, marginLeft: 24 }]}>MEAL</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 20 }}>
             {SLOTS.map(slot => {
               const on = moving.slot === slot.id;
               return (
-                <Pressable key={slot.id} onPress={() => setMoving({ ...moving, slot: slot.id })} className={`flex-row items-center rounded-full px-4 py-2 ${on ? "bg-violet-600" : "bg-slate-100 active:bg-slate-200"}`}>
-                  <Ionicons name={slot.icon} size={14} color={on ? "white" : slot.iconColor} />
-                  <Text className={`ml-1.5 text-sm font-semibold ${on ? "text-white" : "text-slate-700"}`}>{slot.label}</Text>
-                </Pressable>
+                <Tap key={slot.id} onPress={() => setMoving({ ...moving, slot: slot.id })} accessibilityState={{ selected: on }} style={[{ height: 36, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, borderRadius: 18 }, chip(on)]}>
+                  <Ionicons name={slot.icon} size={14} color={on ? oc.onInk : oc.onPill} />
+                  <Text style={{ marginLeft: 6, fontSize: 14, fontWeight: "600", color: on ? oc.onInk : oc.onPill }}>{slot.label}</Text>
+                </Tap>
               );
             })}
           </View>
 
-          <View className="mt-6 px-5">
-            <Pressable
+          <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
+            <Tap
               disabled={saving || unchanged}
               onPress={() => void handleMove(false)}
-              className={`items-center rounded-2xl py-4 ${saving || unchanged ? "bg-violet-300" : "bg-violet-600 active:bg-violet-700"}`}
+              style={sheetPrimary(saving || unchanged)}
+              pressedStyle={{ opacity: 0.85 }}
             >
-              <Text className="font-semibold text-white">
+              <Text style={{ fontSize: 16, fontWeight: "600", color: oc.onInk }}>
                 {unchanged ? "Pick a day or meal" : `Move to ${friendlyDayLabel(moving.date).toLowerCase() === "today" ? "today" : friendlyDayLabel(moving.date)}, ${SLOT_MAP[moving.slot].label.toLowerCase()}`}
               </Text>
-            </Pressable>
+            </Tap>
             {(entry.recipe || entry.meal) && (
-              <Pressable disabled={saving} onPress={() => void handleMove(true)} className="mt-3 flex-row items-center justify-center rounded-2xl border border-violet-200 py-4 active:bg-violet-50">
-                <Ionicons name="restaurant-outline" size={16} color="#7C3AED" />
-                <Text className="ml-2 font-semibold text-violet-700">Take it off the day, back on the menu</Text>
-              </Pressable>
+              <Tap
+                disabled={saving}
+                onPress={() => void handleMove(true)}
+                style={{ marginTop: 10, height: 52, borderRadius: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: oc.surface, borderWidth: 1, borderColor: oc.border, opacity: saving ? 0.5 : 1 }}
+                pressedStyle={{ backgroundColor: oc.pill }}
+              >
+                <Ionicons name="restaurant-outline" size={16} color={oc.text} />
+                <Text style={{ marginLeft: 8, fontSize: 15, fontWeight: "600", color: oc.text }}>Take it off the day, back on the menu</Text>
+              </Tap>
             )}
           </View>
         </View>
@@ -2166,6 +2198,85 @@ function PhonePlannerScreen() {
     );
   }
 
+  // The add sheet on one of its steps (an ingredient's amount, a
+  // restaurant's dishes, a recipe's piece), not its lists.
+  const addStep = !!(pendingIngredient || pendingRestaurantMeal || pendingPieces);
+  // Its Back, from a step to the lists.
+  function backInAddSheet() {
+    setPendingIngredient(null);
+    setPendingRestaurantMeal(null);
+    setPendingPieces(null);
+    setSelectedDishQuantities(new Map());
+    resetDishPickerDrafts();
+  }
+  // What a step is adding, at its top.
+  function addStepCard(icon: keyof typeof Ionicons.glyphMap, title: string, subtitle: string) {
+    return (
+      <View className="mb-5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4" style={o && { ...sheetCard, marginBottom: 20 }}>
+        <View className={`h-11 w-11 items-center justify-center rounded-full ${SLOT_MAP[addSlot].chipBg}`} style={o && { backgroundColor: o.pill }}>
+          <Ionicons name={icon} size={18} color={o?.icon ?? SLOT_MAP[addSlot].iconColor} />
+        </View>
+        <View className="ml-3 flex-1">
+          <Text className="font-semibold text-slate-900" style={o && { fontSize: 16, color: o.text }}>{title}</Text>
+          <Text className="mt-0.5 text-xs text-slate-400" style={o && { fontSize: 13, color: o.muted }}>{subtitle}</Text>
+        </View>
+      </View>
+    );
+  }
+  // A step's nutrition preview on the phone, as the meal sheet shows it:
+  // calories large, the rest beside each other.
+  function addStepNutrition(rows: [string, number | null | undefined, string][]) {
+    const fmt = (v: number | null | undefined, unit: string) => (v == null ? null : unit === "g" ? Math.round(v * 10) / 10 : Math.round(v));
+    const [[, calories], ...others] = rows;
+    const cal = fmt(calories, "kcal");
+    return (
+      <>
+        <Text style={sheetEyebrow}>NUTRITION</Text>
+        <View style={[sheetCard, { padding: 16, marginBottom: 20 }]}>
+          <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+            <Text style={{ fontSize: 30, fontWeight: "800", letterSpacing: -0.6, color: oc.text }}>{cal ?? "—"}</Text>
+            <Text style={{ marginLeft: 5, fontSize: 14, color: oc.muted }}>kcal</Text>
+          </View>
+          <View style={{ marginTop: 12, flexDirection: "row" }}>
+            {others.map(([label, value, unit]) => {
+              const now = fmt(value, unit);
+              return (
+                <View key={label} style={{ flex: 1 }}>
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 15, fontWeight: "700", color: oc.text }}>
+                    {now ?? "—"}
+                    {now != null && <Text style={{ fontSize: 11, fontWeight: "400", color: oc.faint }}>{unit === "mg" ? " mg" : unit}</Text>}
+                  </Text>
+                  <Text style={{ marginTop: 2, fontSize: 12, color: oc.muted }}>{label}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </>
+    );
+  }
+  // On the phone: a segment of the add sheet's switches (the chosen one in
+  // ink), a row in its lists, and that row's name.
+  const segment = (on: boolean) => ({ borderRadius: 11, backgroundColor: on ? oc.ink : "transparent" });
+  const listCard = { ...sheetCard, padding: 14 };
+  const listTitle = { fontSize: 15, color: oc.text };
+  // A dish's tick on the phone: a round one, as in the meal sheet.
+  function orbitCheck(checked: boolean) {
+    return (
+      <View style={{ width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: checked ? oc.ink : "transparent", borderWidth: checked ? 0 : 1.5, borderColor: oc.faint }}>
+        {checked && <Ionicons name="checkmark" size={14} color={oc.onInk} />}
+      </View>
+    );
+  }
+  // Its Cancel.
+  function cancelAddSheet() {
+    setShowAdd(false);
+    if (addForCalendar.current) {
+      addForCalendar.current = false;
+      leaveAddFlow();
+    }
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={{ backgroundColor: oc.canvas }}>
       <OrbitPage>
@@ -2376,50 +2487,71 @@ function PhonePlannerScreen() {
       </ScrollView>
       </OrbitPage>
 
-      {/* (The add sheet is light for now: the clock over it, dark.) */}
-      {showAdd && dark && <StatusBar style="dark" />}
-
       {/* ── Add-to-plan overlay ── plain absolutely-positioned View, no
           RN Modal and no navigation — sidesteps the navigation-context
-          crash entirely by never leaving this already-mounted screen. */}
+          crash entirely by never leaving this already-mounted screen.
+          (On the phone in Orbit's look, `o`; in a desktop browser, as it was.) */}
       {showAdd && (
-        <SafeAreaView className="absolute inset-0 bg-slate-50" edges={["top", "left", "right"]}>
+        <SafeAreaView className="absolute inset-0 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
+          <OrbitPage on={!!o}>
           {/* (In a desktop browser: a page's width, and the lists as grids.) */}
           <View style={wideAdd ? { flex: 1, width: "100%", maxWidth: 1180, alignSelf: "center" } : { flex: 1 }}>
           {/* Header */}
-          <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-            {pendingIngredient || pendingRestaurantMeal || pendingPieces ? (
-              <Pressable
-                onPress={() => {
-                  setPendingIngredient(null);
-                  setPendingRestaurantMeal(null);
-                  setPendingPieces(null);
-                  setSelectedDishQuantities(new Map());
-                  resetDishPickerDrafts();
-                }}
-                hitSlop={10}
-                className="-ml-2 flex-1 flex-row items-center px-2 py-2"
+          {o ? (
+            /* Back (from a step to the lists), the title, and close */
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10 }}>
+              {addStep && (
+                <Tap
+                  onPress={backInAddSheet}
+                  hitSlop={8}
+                  accessibilityLabel="Back"
+                  style={{ marginRight: 10, width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
+                  pressedStyle={{ backgroundColor: o.pill }}
+                >
+                  <Ionicons name="chevron-back" size={20} color={o.text} />
+                </Tap>
+              )}
+              <View style={{ flex: 1, marginLeft: addStep ? 0 : 4 }}>
+                <Text style={{ fontSize: 24, fontWeight: "800", letterSpacing: -0.4, color: o.text }}>Add to plan</Text>
+                {addStep && (
+                  <Text style={{ marginTop: 1, fontSize: 13, color: o.muted }}>
+                    {SLOT_MAP[addSlot].label} · {friendlyDayLabel(selectedDate)}
+                  </Text>
+                )}
+              </View>
+              <Tap
+                onPress={cancelAddSheet}
+                hitSlop={8}
+                accessibilityLabel="Cancel"
+                style={{ marginLeft: 8, width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
+                pressedStyle={{ backgroundColor: o.pill }}
               >
-                <Ionicons name="chevron-back" size={20} color="#2563EB" />
-                <Text className="ml-0.5 font-semibold text-blue-600">Back</Text>
+                <Ionicons name="close" size={20} color={o.text} />
+              </Tap>
+            </View>
+          ) : (
+            <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
+              {addStep ? (
+                <Pressable
+                  onPress={backInAddSheet}
+                  hitSlop={10}
+                  className="-ml-2 flex-1 flex-row items-center px-2 py-2"
+                >
+                  <Ionicons name="chevron-back" size={20} color="#2563EB" />
+                  <Text className="ml-0.5 font-semibold text-blue-600">Back</Text>
+                </Pressable>
+              ) : (
+                <Text className="flex-1 text-lg font-bold text-slate-950">Add to plan</Text>
+              )}
+              <Pressable
+                onPress={cancelAddSheet}
+                hitSlop={10}
+                className="-mr-2 px-2 py-2"
+              >
+                <Text className="font-semibold text-blue-600">Cancel</Text>
               </Pressable>
-            ) : (
-              <Text className="flex-1 text-lg font-bold text-slate-950">Add to plan</Text>
-            )}
-            <Pressable
-              onPress={() => {
-                setShowAdd(false);
-                if (addForCalendar.current) {
-                  addForCalendar.current = false;
-                  leaveAddFlow();
-                }
-              }}
-              hitSlop={10}
-              className="-mr-2 px-2 py-2"
-            >
-              <Text className="font-semibold text-blue-600">Cancel</Text>
-            </Pressable>
-          </View>
+            </View>
+          )}
 
           {pendingPieces ? (
             /* ── Which piece a recipe is to be made with ── */
@@ -2427,17 +2559,7 @@ function PhonePlannerScreen() {
               className="flex-1"
               contentContainerStyle={{ padding: 16, paddingBottom: 40, ...(wideAdd ? { width: "100%", maxWidth: 640, alignSelf: "center" } : {}) }}
             >
-              <View className="mb-5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4">
-                <View className={`h-11 w-11 items-center justify-center rounded-full ${SLOT_MAP[addSlot].chipBg}`}>
-                  <Ionicons name="book-outline" size={18} color={SLOT_MAP[addSlot].iconColor} />
-                </View>
-                <View className="ml-3 flex-1">
-                  <Text className="font-semibold text-slate-900">{pendingPieces.recipe.name}</Text>
-                  <Text className="mt-0.5 text-xs text-slate-400">
-                    {pendingPieces.servings} serving{pendingPieces.servings === 1 ? "" : "s"}
-                  </Text>
-                </View>
-              </View>
+              {addStepCard("book-outline", pendingPieces.recipe.name, `${pendingPieces.servings} serving${pendingPieces.servings === 1 ? "" : "s"}`)}
               {(() => {
                 const groups = pieceGroups(pendingPieces.options);
                 const many = groups.length > 1;
@@ -2450,32 +2572,33 @@ function PhonePlannerScreen() {
                 };
                 return (
                   <>
-                    <Text className="mb-1.5 text-sm font-semibold text-slate-700">{many ? "Which ones?" : "Which one?"}</Text>
+                    {o ? <Text style={sheetEyebrow}>{many ? "WHICH ONES" : "WHICH ONE"}</Text> : <Text className="mb-1.5 text-sm font-semibold text-slate-700">{many ? "Which ones?" : "Which one?"}</Text>}
                     {groups.map((g) => {
                       const expanded = !many || openPieces.includes(g.group);
                       const mine = g.choices.find((c) => pendingPieces.picked.includes(c.pantryItemId));
                       return (
                       <View key={g.group} className="mb-2">
-                        {many && pieceHeading(g.group, expanded, mine ? mine.label : "The planner's choice", !!mine)}
-                        {expanded && <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                        {many && pieceHeading(g.group, expanded, mine ? mine.label : "The planner's choice", !!mine, !!o)}
+                        {expanded && <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o && sheetCard}>
                           {g.choices.map((c, i) => (
                             <Pressable
                               key={c.pantryItemId}
                               disabled={saving}
                               onPress={() => pick(c)}
                               className={`flex-row items-center px-4 py-3.5 active:bg-slate-50 ${i > 0 ? "border-t border-slate-100" : ""}`}
+                              style={o && { borderTopColor: o.border, backgroundColor: "transparent" }}
                             >
-                              {many && <Ionicons name={pendingPieces.picked.includes(c.pantryItemId) ? "radio-button-on" : "radio-button-off"} size={20} color={pendingPieces.picked.includes(c.pantryItemId) ? "#2563EB" : "#94A3B8"} style={{ marginRight: 10 }} />}
+                              {many && <Ionicons name={pendingPieces.picked.includes(c.pantryItemId) ? "radio-button-on" : "radio-button-off"} size={20} color={pendingPieces.picked.includes(c.pantryItemId) ? (o?.ink ?? "#2563EB") : (o?.faint ?? "#94A3B8")} style={{ marginRight: 10 }} />}
                               <View className="flex-1">
-                                <Text className="text-base text-slate-900">{c.label}</Text>
+                                <Text className="text-base text-slate-900" style={o && { fontSize: 15, color: o.text }}>{c.label}</Text>
                                 {!!c.elsewhere && (
-                                  <Text className="text-xs text-slate-400">
+                                  <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>
                                     going to {shortDateLabel(c.elsewhere.date)} {c.elsewhere.slot}
                                   </Text>
                                 )}
                               </View>
-                              <Text className="text-sm font-semibold text-slate-600">{c.calories} kcal</Text>
-                              {!many && <Ionicons name="chevron-forward" size={16} color="#94A3B8" style={{ marginLeft: 6 }} />}
+                              <Text className="text-sm font-semibold text-slate-600" style={o && { fontSize: 13, color: o.muted }}>{c.calories} kcal</Text>
+                              {!many && <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#94A3B8"} style={{ marginLeft: 6 }} />}
                             </Pressable>
                           ))}
                           {/* Or none in particular: the planner's to choose. */}
@@ -2483,9 +2606,10 @@ function PhonePlannerScreen() {
                             <Pressable
                               onPress={() => setPendingPieces({ ...pendingPieces, picked: pendingPieces.picked.filter((id) => !g.choices.some((c) => c.pantryItemId === id)) })}
                               className="flex-row items-center border-t border-slate-100 px-4 py-3.5 active:bg-slate-50"
+                              style={o && { borderTopColor: o.border, backgroundColor: "transparent" }}
                             >
-                              <Ionicons name={mine ? "radio-button-off" : "radio-button-on"} size={20} color={mine ? "#94A3B8" : "#7C3AED"} style={{ marginRight: 10 }} />
-                              <Text className="flex-1 text-base text-violet-700">Let the planner choose</Text>
+                              <Ionicons name={mine ? "radio-button-off" : "radio-button-on"} size={20} color={mine ? (o?.faint ?? "#94A3B8") : (o?.accent ?? "#7C3AED")} style={{ marginRight: 10 }} />
+                              <Text className="flex-1 text-base text-violet-700" style={o && { fontSize: 15, color: o.accent }}>Let the planner choose</Text>
                             </Pressable>
                           )}
                         </View>}
@@ -2497,20 +2621,22 @@ function PhonePlannerScreen() {
                         disabled={saving}
                         onPress={() => void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, pendingPieces.picked, pendingPieces.menuItem)}
                         className={`mt-2 items-center rounded-2xl py-3.5 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+                        style={o && { ...sheetPrimary(saving), marginTop: 8 }}
                       >
-                        <Text className="font-semibold text-white">{saving ? "Adding…" : "Add to plan"}</Text>
+                        <Text className="font-semibold text-white" style={o && { fontSize: 16, color: o.onInk }}>{saving ? "Adding…" : "Add to plan"}</Text>
                       </Pressable>
                     )}
                     <Pressable
                       disabled={saving}
                       onPress={() => void handleAddRecipeEntry(pendingPieces.recipe, pendingPieces.servings, [], pendingPieces.menuItem)}
                       className="mt-2 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 py-3.5 active:bg-slate-50"
+                      style={o && { ...sheetCard, marginTop: 10 }}
                     >
-                      <Ionicons name="sparkles-outline" size={16} color="#7C3AED" />
-                      <Text className="ml-2 flex-1 text-base text-violet-700">Let the planner choose{many ? " all" : ""}</Text>
-                      <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+                      <Ionicons name="sparkles-outline" size={16} color={o?.accent ?? "#7C3AED"} />
+                      <Text className="ml-2 flex-1 text-base text-violet-700" style={o && { fontSize: 15, color: o.accent }}>Let the planner choose{many ? " all" : ""}</Text>
+                      <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#94A3B8"} />
                     </Pressable>
-                    <Text className="mt-1.5 text-xs text-slate-400">
+                    <Text className="mt-1.5 text-xs text-slate-400" style={o && { marginTop: 8, paddingHorizontal: 4, lineHeight: 17, color: o.faint }}>
                       {many ? "Any left unpicked are chosen by the planner: the best fit for the day, then the soonest to go." : "The planner picks the best fit for the day, then the soonest to go."} Either way it can be changed from the meal later.
                     </Text>
                   </>
@@ -2524,28 +2650,22 @@ function PhonePlannerScreen() {
               contentContainerStyle={{ padding: 16, paddingBottom: 40, ...(wideAdd ? { width: "100%", maxWidth: 640, alignSelf: "center" } : {}) }}
               keyboardShouldPersistTaps="handled"
             >
-              <View className="mb-5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4">
-                <View className={`h-11 w-11 items-center justify-center rounded-full ${SLOT_MAP[addSlot].chipBg}`}>
-                  <Ionicons name="nutrition-outline" size={18} color={SLOT_MAP[addSlot].iconColor} />
-                </View>
-                <View className="ml-3 flex-1">
-                  <Text className="font-semibold text-slate-900">{pendingIngredient.name}</Text>
-                  <Text className="mt-0.5 text-xs text-slate-400">
-                    Default portion: {pendingIngredient.defaultPortionAmount ?? 1}
-                    {pendingIngredient.defaultPortionUnit ? ` ${pendingIngredient.defaultPortionUnit}` : ""}
-                  </Text>
-                </View>
-              </View>
+              {addStepCard(
+                "nutrition-outline",
+                pendingIngredient.name,
+                `Default portion: ${pendingIngredient.defaultPortionAmount ?? 1}${pendingIngredient.defaultPortionUnit ? ` ${pendingIngredient.defaultPortionUnit}` : ""}`,
+              )}
 
-              <Text className="mb-1.5 text-sm font-semibold text-slate-700">Quantity</Text>
-              <View className="mb-6 flex-row gap-2">
+              {o ? <Text style={sheetEyebrow}>QUANTITY</Text> : <Text className="mb-1.5 text-sm font-semibold text-slate-700">Quantity</Text>}
+              <View className="mb-6 flex-row gap-2" style={o && { marginBottom: 20 }}>
                 <TextInput
                   value={pendingQuantity}
                   onChangeText={setPendingQuantity}
                   keyboardType="decimal-pad"
                   placeholder="1"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={o?.faint ?? "#94A3B8"}
                   className="h-14 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
+                  style={o && { ...sheetField, flex: 1 }}
                 />
                 <View className="flex-1">
                   <CreatableStringDropdown options={unitChoices(pendingIngredient)} selectedValue={pendingUnit} placeholder="unit" onSelect={setPendingUnit} height={56} />
@@ -2572,6 +2692,7 @@ function PhonePlannerScreen() {
                   ["Fiber",    n?.fiber,    "g"],
                   ["Sodium",   n?.sodium,   "mg"],
                 ];
+                if (o) return addStepNutrition(rows);
                 return (
                   <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                     {rows.map(([label, value, unit], i) => (
@@ -2594,9 +2715,10 @@ function PhonePlannerScreen() {
               <Pressable
                 disabled={saving}
                 className={`items-center rounded-2xl py-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+                style={o && sheetPrimary(saving)}
                 onPress={() => void handleAddIngredientEntry()}
               >
-                <Text className="font-semibold text-white">{saving ? "Adding…" : "Add to plan"}</Text>
+                <Text className="font-semibold text-white" style={o && { fontSize: 16, color: o.onInk }}>{saving ? "Adding…" : "Add to plan"}</Text>
               </Pressable>
             </ScrollView>
           ) : pendingRestaurantMeal ? (
@@ -2608,18 +2730,10 @@ function PhonePlannerScreen() {
               contentContainerStyle={{ padding: 16, paddingBottom: 40, ...(wideAdd ? { width: "100%", maxWidth: 640, alignSelf: "center" } : {}) }}
               keyboardShouldPersistTaps="handled"
             >
-              <View className="mb-5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4">
-                <View className={`h-11 w-11 items-center justify-center rounded-full ${SLOT_MAP[addSlot].chipBg}`}>
-                  <Ionicons name="restaurant-outline" size={18} color={SLOT_MAP[addSlot].iconColor} />
-                </View>
-                <View className="ml-3 flex-1">
-                  <Text className="font-semibold text-slate-900">{pendingRestaurantMeal.restaurantName}</Text>
-                  <Text className="mt-0.5 text-xs text-slate-400">Select what you actually ate</Text>
-                </View>
-              </View>
+              {addStepCard("restaurant-outline", pendingRestaurantMeal.restaurantName, "Select what you actually ate")}
 
-              <Text className="mb-1.5 text-sm font-semibold text-slate-700">Dishes</Text>
-              <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              {o ? <Text style={sheetEyebrow}>WHAT DID YOU GET?</Text> : <Text className="mb-1.5 text-sm font-semibold text-slate-700">Dishes</Text>}
+              <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o && { ...sheetCard, overflow: "hidden", marginBottom: 12 }}>
                 {pendingRestaurantMeal.dishes.map((dish, i) => {
                   const qty = selectedDishQuantities.get(dish._id);
                   const checked = qty != null;
@@ -2629,6 +2743,7 @@ function PhonePlannerScreen() {
                       className={`px-4 py-3.5 ${
                         i < pendingRestaurantMeal.dishes.length - 1 ? "border-b border-slate-100" : ""
                       }`}
+                      style={o && { borderBottomColor: o.border }}
                     >
                       <Pressable
                         className="flex-row items-center justify-between active:opacity-70"
@@ -2642,26 +2757,28 @@ function PhonePlannerScreen() {
                         }}
                       >
                         <View className="flex-1 flex-row items-center">
-                          <Ionicons
-                            name={checked ? "checkbox" : "square-outline"}
-                            size={22}
-                            color={checked ? "#2563EB" : "#94A3B8"}
-                          />
+                          {o ? orbitCheck(checked) : (
+                            <Ionicons
+                              name={checked ? "checkbox" : "square-outline"}
+                              size={22}
+                              color={checked ? "#2563EB" : "#94A3B8"}
+                            />
+                          )}
                           <View className="ml-3 flex-1">
-                            <Text className="font-semibold text-slate-900">{dish.name}</Text>
+                            <Text className="font-semibold text-slate-900" style={o && { fontSize: 15, color: o.text }}>{dish.name}</Text>
                             {dish.nutrition?.calories != null && (
-                              <Text className="mt-0.5 text-xs text-slate-400">{dish.nutrition.calories} kcal each</Text>
+                              <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.muted }}>{dish.nutrition.calories} kcal each</Text>
                             )}
                           </View>
                         </View>
                         {dish.price != null && (
-                          <Text className="text-sm font-semibold text-slate-500">${dish.price.toFixed(2)}</Text>
+                          <Text className="text-sm font-semibold text-slate-500" style={o && { color: o.muted }}>${dish.price.toFixed(2)}</Text>
                         )}
                       </Pressable>
 
                       {checked && (
                         <View className="mt-2 flex-row items-center justify-end">
-                          <Text className="mr-2 text-xs font-medium text-slate-400">Quantity</Text>
+                          <Text className="mr-2 text-xs font-medium text-slate-400" style={o && { color: o.faint }}>Quantity</Text>
                           <DishQuantityStepper
                             value={qty}
                             onChange={next =>
@@ -2694,34 +2811,35 @@ function PhonePlannerScreen() {
                           ? "border-b border-slate-100"
                           : ""
                       }`}
+                      style={o && { backgroundColor: o.accentSoft, borderBottomColor: o.border }}
                     >
                       <View className="flex-row items-center justify-between">
                         <View className="flex-1 flex-row items-center">
-                          <Ionicons name="checkbox" size={22} color="#2563EB" />
+                          {o ? orbitCheck(true) : <Ionicons name="checkbox" size={22} color="#2563EB" />}
                           <View className="ml-3 flex-1">
                             <View className="flex-row items-center">
-                              <Text className="font-semibold text-slate-900">{dish.name}</Text>
-                              <Text className="ml-1.5 text-[10px] font-bold uppercase tracking-wide text-blue-600">
+                              <Text className="font-semibold text-slate-900" style={o && { fontSize: 15, color: o.text }}>{dish.name}</Text>
+                              <Text className="ml-1.5 text-[10px] font-bold uppercase tracking-wide text-blue-600" style={o && { color: o.accent }}>
                                 New
                               </Text>
                             </View>
                             {dish.nutrition.calories != null && (
-                              <Text className="mt-0.5 text-xs text-slate-400">{dish.nutrition.calories} kcal each</Text>
+                              <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.muted }}>{dish.nutrition.calories} kcal each</Text>
                             )}
                           </View>
                         </View>
                         {!!dish.price.trim() && (
-                          <Text className="text-sm font-semibold text-slate-500">
+                          <Text className="text-sm font-semibold text-slate-500" style={o && { color: o.muted }}>
                             ${Number(dish.price).toFixed(2)}
                           </Text>
                         )}
-                        <Pressable hitSlop={8} className="ml-2" onPress={() => removeStagedDish(dish.key)}>
-                          <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
+                        <Pressable hitSlop={8} className="ml-2" onPress={() => removeStagedDish(dish.key)} accessibilityLabel="Remove">
+                          <Ionicons name="close-circle-outline" size={20} color={o?.faint ?? "#94A3B8"} />
                         </Pressable>
                       </View>
 
                       <View className="mt-2 flex-row items-center justify-end">
-                        <Text className="mr-2 text-xs font-medium text-slate-400">Quantity</Text>
+                        <Text className="mr-2 text-xs font-medium text-slate-400" style={o && { color: o.faint }}>Quantity</Text>
                         <DishQuantityStepper
                           value={qty}
                           onChange={next =>
@@ -2735,13 +2853,13 @@ function PhonePlannerScreen() {
               </View>
 
               {showAddDishForm ? (
-                <View className="mb-6 rounded-2xl border border-dashed border-slate-300 bg-white p-4">
+                <View className="mb-6 rounded-2xl border border-dashed border-slate-300 bg-white p-4" style={o && { ...sheetCard, borderStyle: "dashed", borderColor: o.orbit, marginBottom: 20 }}>
                   <View className="mb-2 flex-row items-center justify-between">
-                    <Text className="flex-1 text-xs font-semibold text-slate-500">
+                    <Text className="flex-1 text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>
                       Not on the menu yet — add what you ordered
                     </Text>
-                    <Pressable hitSlop={8} onPress={() => setShowDishScanModal(true)}>
-                      <Ionicons name="camera-outline" size={20} color="#2563EB" />
+                    <Pressable hitSlop={8} onPress={() => setShowDishScanModal(true)} accessibilityLabel="Estimate from a photo">
+                      <Ionicons name="camera-outline" size={20} color={o?.ink ?? "#2563EB"} />
                     </Pressable>
                   </View>
                   <FormInput value={newDishName} placeholder="Dish name" onChangeText={setNewDishName} />
@@ -2767,13 +2885,14 @@ function PhonePlannerScreen() {
                   {(newDishNutrition.protein != null
                     || newDishNutrition.carbs != null
                     || newDishNutrition.fats != null) && (
-                    <Text className="mt-2 text-xs text-slate-400">
+                    <Text className="mt-2 text-xs text-slate-400" style={o && { color: o.faint }}>
                       From photo estimate: {newDishNutrition.protein ?? "—"}g protein, {newDishNutrition.carbs ?? "—"}g carbs, {newDishNutrition.fats ?? "—"}g fat
                     </Text>
                   )}
                   <View className="mt-3 flex-row gap-3">
                     <Pressable
                       className="flex-1 items-center rounded-xl bg-slate-100 py-2.5 active:bg-slate-200"
+                      style={o && { height: 44, justifyContent: "center", paddingVertical: 0, borderRadius: 14, backgroundColor: o.pill }}
                       onPress={() => {
                         setShowAddDishForm(false);
                         setNewDishName("");
@@ -2782,26 +2901,28 @@ function PhonePlannerScreen() {
                         setNewDishNutrition({});
                       }}
                     >
-                      <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+                      <Text className="text-sm font-semibold text-slate-600" style={o && { color: o.onPill }}>Cancel</Text>
                     </Pressable>
                     <Pressable
                       disabled={!newDishName.trim()}
                       className={`flex-1 items-center rounded-xl py-2.5 ${
                         newDishName.trim() ? "bg-blue-600 active:bg-blue-700" : "bg-blue-300"
                       }`}
+                      style={o && { ...sheetPrimary(!newDishName.trim()), height: 44, borderRadius: 14 }}
                       onPress={addStagedDish}
                     >
-                      <Text className="text-sm font-semibold text-white">Add dish</Text>
+                      <Text className="text-sm font-semibold text-white" style={o && { color: o.onInk }}>Add dish</Text>
                     </Pressable>
                   </View>
                 </View>
               ) : (
                 <Pressable
                   className="mb-6 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3.5 active:bg-slate-100"
+                  style={o && { height: 50, paddingVertical: 0, borderRadius: 16, borderColor: o.orbit, backgroundColor: "transparent", marginBottom: 20 }}
                   onPress={() => setShowAddDishForm(true)}
                 >
-                  <Ionicons name="add" size={18} color="#2563EB" />
-                  <Text className="ml-2 font-semibold text-blue-700">Add a dish not on this list</Text>
+                  <Ionicons name="add" size={18} color={o?.ink ?? "#2563EB"} />
+                  <Text className="ml-2 font-semibold text-blue-700" style={o && { fontSize: 15, color: o.ink }}>Add a dish not on this list</Text>
                 </Pressable>
               )}
 
@@ -2831,6 +2952,7 @@ function PhonePlannerScreen() {
                   ["Sodium",   sumField("sodium"),  "mg"],
                 ];
                 const selected = [...selectedReal, ...selectedStaged];
+                if (o) return addStepNutrition(selected.length ? rows : rows.map(([label, , unit]): [string, null, string] => [label, null, unit]));
                 return (
                   <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                     {rows.map(([label, value, unit], i) => (
@@ -2855,9 +2977,10 @@ function PhonePlannerScreen() {
                 className={`items-center rounded-2xl py-4 ${
                   saving || selectedDishQuantities.size === 0 ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
                 }`}
+                style={o && sheetPrimary(saving || selectedDishQuantities.size === 0)}
                 onPress={() => void handleConfirmRestaurantVisit()}
               >
-                <Text className="font-semibold text-white">
+                <Text className="font-semibold text-white" style={o && { fontSize: 16, color: o.onInk }}>
                   {saving ? "Adding…" : selectedDishQuantities.size === 0 ? "Select at least one dish" : "Add to plan"}
                 </Text>
               </Pressable>
@@ -2865,8 +2988,8 @@ function PhonePlannerScreen() {
           ) : (
             <>
               {/* Date + slot row */}
-              <View className="bg-white px-4 pb-4 pt-3">
-                <Text className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <View className="bg-white px-4 pb-4 pt-3" style={o && { backgroundColor: "transparent", paddingTop: 4, paddingBottom: 12 }}>
+                <Text className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500" style={o && sheetEyebrow}>
                   {friendlyDayLabel(selectedDate)}
                 </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -2878,16 +3001,20 @@ function PhonePlannerScreen() {
                         className={`flex-row items-center rounded-full px-4 py-2 ${
                           addSlot === slot.id ? "bg-blue-600" : "bg-slate-100"
                         }`}
+                        // (On the phone: the chosen one in ink, the others plain.)
+                        style={o && { height: 36, paddingVertical: 0, backgroundColor: addSlot === slot.id ? o.ink : o.pill }}
+                        accessibilityState={{ selected: addSlot === slot.id }}
                       >
                         <Ionicons
                           name={slot.icon}
                           size={14}
-                          color={addSlot === slot.id ? "white" : slot.iconColor}
+                          color={o ? (addSlot === slot.id ? o.onInk : o.onPill) : addSlot === slot.id ? "white" : slot.iconColor}
                         />
                         <Text
                           className={`ml-1.5 text-sm font-semibold ${
                             addSlot === slot.id ? "text-white" : "text-slate-700"
                           }`}
+                          style={o && { color: addSlot === slot.id ? o.onInk : o.onPill }}
                         >
                           {slot.label}
                         </Text>
@@ -2898,8 +3025,8 @@ function PhonePlannerScreen() {
               </View>
 
               {/* Planned / Confirmed status toggle */}
-              <View className="border-b border-slate-100 bg-white px-4 pb-3">
-                <View className="flex-row rounded-xl bg-slate-100 p-1">
+              <View className="border-b border-slate-100 bg-white px-4 pb-3" style={o && { backgroundColor: "transparent", borderBottomWidth: 0, paddingBottom: 10 }}>
+                <View className="flex-row rounded-xl bg-slate-100 p-1" style={o && { backgroundColor: o.surface, borderWidth: 1, borderColor: o.border, borderRadius: 14, padding: 3 }}>
                   {(
                     [
                       ["planned", "Planned", "time-outline"],
@@ -2910,16 +3037,17 @@ function PhonePlannerScreen() {
                       key={status}
                       onPress={() => setAddStatus(status)}
                       className="flex-1 flex-row items-center justify-center rounded-lg py-2"
-                      style={addStatus === status ? styles.activePill : undefined}
+                      style={o ? segment(addStatus === status) : addStatus === status ? styles.activePill : undefined}
+                      accessibilityState={{ selected: addStatus === status }}
                     >
                       <Ionicons
                         name={icon}
                         size={14}
-                        color={addStatus === status ? "#0f172a" : "#64748b"}
+                        color={o ? (addStatus === status ? o.onInk : o.muted) : addStatus === status ? "#0f172a" : "#64748b"}
                       />
                       <Text
                         className="ml-1.5 text-sm font-semibold"
-                        style={addStatus === status ? styles.activePillText : styles.inactivePillText}
+                        style={o ? { color: addStatus === status ? o.onInk : o.muted } : addStatus === status ? styles.activePillText : styles.inactivePillText}
                       >
                         {label}
                       </Text>
@@ -2929,8 +3057,8 @@ function PhonePlannerScreen() {
               </View>
 
               {/* Meals / Recipes / Ingredients / Eating Out toggle */}
-              <View className="border-b border-slate-100 bg-white px-4 pb-3">
-                <View className="flex-row rounded-xl bg-slate-100 p-1">
+              <View className="border-b border-slate-100 bg-white px-4 pb-3" style={o && { backgroundColor: "transparent", borderBottomWidth: 0, paddingBottom: 10 }}>
+                <View className="flex-row rounded-xl bg-slate-100 p-1" style={o && { backgroundColor: o.surface, borderWidth: 1, borderColor: o.border, borderRadius: 14, padding: 3 }}>
                   {(
                     [
                       ["meal", "Meals"],
@@ -2943,11 +3071,12 @@ function PhonePlannerScreen() {
                       key={mode}
                       onPress={() => setAddMode(mode)}
                       className="flex-1 items-center rounded-lg py-2"
-                      style={addMode === mode ? styles.activePill : undefined}
+                      style={o ? segment(addMode === mode) : addMode === mode ? styles.activePill : undefined}
+                      accessibilityState={{ selected: addMode === mode }}
                     >
                       <Text
                         className="text-sm font-semibold"
-                        style={addMode === mode ? styles.activePillText : styles.inactivePillText}
+                        style={o ? { color: addMode === mode ? o.onInk : o.muted } : addMode === mode ? styles.activePillText : styles.inactivePillText}
                       >
                         {label}
                       </Text>
@@ -2957,9 +3086,9 @@ function PhonePlannerScreen() {
               </View>
 
               {/* Search */}
-              <View className="border-b border-slate-100 bg-white px-4 pb-3">
-                <View className="h-11 flex-row items-center rounded-2xl bg-slate-100 px-4">
-                  <Ionicons name="search-outline" size={18} color="#64748B" />
+              <View className="border-b border-slate-100 bg-white px-4 pb-3" style={o && { backgroundColor: "transparent", borderBottomWidth: 0, paddingBottom: 12 }}>
+                <View className="h-11 flex-row items-center rounded-2xl bg-slate-100 px-4" style={o && { height: 46, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border, borderRadius: 16 }}>
+                  <Ionicons name="search-outline" size={18} color={o?.muted ?? "#64748B"} />
                   <TextInput
                     value={
                       addMode === "meal" ? mealSearch
@@ -2979,8 +3108,9 @@ function PhonePlannerScreen() {
                       : addMode === "ingredient" ? "Search ingredients…"
                       : "Search restaurants or dishes…"
                     }
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={o?.faint ?? "#94A3B8"}
                     className="ml-3 flex-1 text-base text-slate-900"
+                    style={o && { color: o.text }}
                   />
                   {(
                     addMode === "meal" ? mealSearch
@@ -2995,8 +3125,9 @@ function PhonePlannerScreen() {
                         else if (addMode === "ingredient") setIngredientSearch("");
                         else setRestaurantSearch("");
                       }}
+                      accessibilityLabel="Clear search"
                     >
-                      <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                      <Ionicons name="close-circle" size={18} color={o?.faint ?? "#94A3B8"} />
                     </Pressable>
                   )}
                 </View>
@@ -3004,8 +3135,8 @@ function PhonePlannerScreen() {
 
               {/* What's on the menu, to put on this day (not while searching). */}
               {menuToPlace.length > 0 && !(addMode === "meal" ? mealSearch : addMode === "recipe" ? recipeSearch : addMode === "ingredient" ? ingredientSearch : restaurantSearch) && (
-                <View className="border-b border-slate-100 bg-white pb-3">
-                  <Text className="mb-2 px-4 text-xs font-bold uppercase tracking-wide text-violet-600">From your menu</Text>
+                <View className="border-b border-slate-100 bg-white pb-3" style={o && { backgroundColor: "transparent", borderBottomWidth: 0, paddingBottom: 4 }}>
+                  <Text className="mb-2 px-4 text-xs font-bold uppercase tracking-wide text-violet-600" style={o && { ...sheetEyebrow, marginLeft: 4 }}>From your menu</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }} keyboardShouldPersistTaps="handled">
                     {menuToPlace.map((item) => {
                       const kcal = item.recipe ? getRecipeKcal(item.recipe, 1) : item.meal ? getMealKcal(item.meal) : null;
@@ -3015,16 +3146,17 @@ function PhonePlannerScreen() {
                           disabled={saving}
                           onPress={() => void (item.recipe ? handleAddRecipeEntry(item.recipe, 1, undefined, item._id) : handleAddEntry(item.meal!, item._id))}
                           className="max-w-[220px] flex-row items-center rounded-2xl border border-violet-200 bg-violet-50 px-3 py-2 active:bg-violet-100"
+                          style={o && { ...sheetCard, borderRadius: 16, paddingVertical: 9 }}
                         >
                           <View className="flex-shrink">
-                            <Text numberOfLines={1} className="text-sm font-semibold text-slate-900">
+                            <Text numberOfLines={1} className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>
                               {menuName(item)}
                             </Text>
-                            <Text className="text-xs text-violet-700">
+                            <Text className="text-xs text-violet-700" style={o && { color: o.muted }}>
                               {kcal != null ? `${Math.round(kcal)} kcal a serving` : "On your menu"}
                             </Text>
                           </View>
-                          <Ionicons name="add-circle-outline" size={20} color="#7C3AED" style={{ marginLeft: 8 }} />
+                          <Ionicons name="add-circle-outline" size={20} color={o?.ink ?? "#7C3AED"} style={{ marginLeft: 8 }} />
                         </Pressable>
                       );
                     })}
@@ -3047,39 +3179,40 @@ function PhonePlannerScreen() {
                     return (
                       <Pressable
                         className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-                        style={addCell}
+                        style={[addCell, o && listCard]}
                         disabled={saving}
                         onPress={() => void handleAddEntry(meal)}
                       >
-                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
-                          <Ionicons name={slotCfg.icon} size={18} color={slotCfg.iconColor} />
+                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`} style={o && { backgroundColor: o.pill }}>
+                          <Ionicons name={slotCfg.icon} size={18} color={o?.icon ?? slotCfg.iconColor} />
                         </View>
                         <View className="ml-3 flex-1">
-                          <Text className="font-semibold text-slate-900">{meal.name}</Text>
-                          <Text className="mt-0.5 text-sm text-slate-400">
+                          <Text className="font-semibold text-slate-900" style={o && listTitle}>{meal.name}</Text>
+                          <Text className="mt-0.5 text-sm text-slate-400" style={o && { fontSize: 13, color: o.muted }}>
                             {meal.courses?.length ?? 0} {(meal.courses?.length ?? 0) === 1 ? "course" : "courses"}
                             {(meal.tags ?? []).length > 0 && ` · ${meal.tags!.map(t => t.name).join(", ")}`}
                           </Text>
                         </View>
                         {kcal != null && (
-                          <Text className="mr-2 text-sm font-semibold text-slate-500">{kcal} kcal</Text>
+                          <Text className="mr-2 text-sm font-semibold text-slate-500" style={o && { fontSize: 13, color: o.muted }}>{kcal} kcal</Text>
                         )}
                         <Pressable
                           hitSlop={8}
                           onPress={() => openMealInfo(meal)}
                           className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+                          style={o && { backgroundColor: "transparent" }}
                         >
-                          <Ionicons name="information-circle-outline" size={20} color="#94A3B8" />
+                          <Ionicons name="information-circle-outline" size={20} color={o?.faint ?? "#94A3B8"} />
                         </Pressable>
-                        <Ionicons name="add-circle-outline" size={22} color="#2563EB" />
+                        <Ionicons name="add-circle-outline" size={22} color={o?.ink ?? "#2563EB"} />
                       </Pressable>
                     );
                   }}
                   ListEmptyComponent={
                     <View className="items-center py-16">
-                      <Ionicons name="restaurant-outline" size={42} color="#94A3B8" />
-                      <Text className="mt-4 text-lg font-bold text-slate-900">No meals found</Text>
-                      <Text className="mt-2 text-center text-slate-500">
+                      <Ionicons name="restaurant-outline" size={42} color={o?.faint ?? "#94A3B8"} />
+                      <Text className="mt-4 text-lg font-bold text-slate-900" style={o && { color: o.text }}>No meals found</Text>
+                      <Text className="mt-2 text-center text-slate-500" style={o && { color: o.muted }}>
                         {mealSearch ? "Try a different search." : "Create meals in the Kitchen tab first."}
                       </Text>
                     </View>
@@ -3101,7 +3234,7 @@ function PhonePlannerScreen() {
                     const slotCfg = SLOT_MAP[addSlot];
                     const isPrep = producingRecipeIds.has(recipe._id);
                     return (
-                      <View className="mb-2 rounded-2xl border border-slate-200 bg-white p-4" style={addCell}>
+                      <View className="mb-2 rounded-2xl border border-slate-200 bg-white p-4" style={[addCell, o && listCard]}>
                         <Pressable
                           className="flex-row items-center active:opacity-70"
                           disabled={saving}
@@ -3111,51 +3244,53 @@ function PhonePlannerScreen() {
                             imageUrl={recipe.imageUrl}
                             size={44}
                             fallback={
-                              <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
-                                <Ionicons name="book-outline" size={18} color={slotCfg.iconColor} />
+                              <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`} style={o && { backgroundColor: o.pill }}>
+                                <Ionicons name="book-outline" size={18} color={o?.icon ?? slotCfg.iconColor} />
                               </View>
                             }
                           />
                           <View className="ml-3 flex-1">
                             <View className="flex-row items-center">
-                              <Text className="font-semibold text-slate-900">{recipe.name}</Text>
+                              <Text className="font-semibold text-slate-900" style={o && { ...listTitle, flexShrink: 1 }}>{recipe.name}</Text>
                               {isPrep && (
-                                <View className="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5">
-                                  <Text className="text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                                <View className="ml-1.5 rounded-full bg-amber-100 px-2 py-0.5" style={o && { backgroundColor: amberSoft }}>
+                                  <Text className="text-[10px] font-bold uppercase tracking-wide text-amber-700" style={o && { color: o.warning }}>
                                     Prep
                                   </Text>
                                 </View>
                               )}
                             </View>
-                            <Text className="mt-0.5 text-sm text-slate-400">
+                            <Text className="mt-0.5 text-sm text-slate-400" style={o && { fontSize: 13, color: o.muted }}>
                               {recipe.mealCategory?.join(", ") ?? "Recipe"}
                               {recipe.servings != null && ` · makes ${recipe.servings} servings`}
                             </Text>
                           </View>
                           {kcal != null && (
-                            <Text className="mr-2 text-sm font-semibold text-slate-500">{kcal} kcal</Text>
+                            <Text className="mr-2 text-sm font-semibold text-slate-500" style={o && { fontSize: 13, color: o.muted }}>{kcal} kcal</Text>
                           )}
                           <Pressable
                             hitSlop={8}
                             onPress={() => void openRecipeInfo(recipe)}
                             className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+                            style={o && { backgroundColor: "transparent" }}
                           >
-                            <Ionicons name="information-circle-outline" size={20} color="#94A3B8" />
+                            <Ionicons name="information-circle-outline" size={20} color={o?.faint ?? "#94A3B8"} />
                           </Pressable>
-                          <Ionicons name="add-circle-outline" size={22} color="#2563EB" />
+                          <Ionicons name="add-circle-outline" size={22} color={o?.ink ?? "#2563EB"} />
                         </Pressable>
 
-                        <View className="mt-2 flex-row items-center justify-end border-t border-slate-100 pt-2">
-                          <Text className="mr-2 text-xs font-medium text-slate-400">Add as</Text>
+                        <View className="mt-2 flex-row items-center justify-end border-t border-slate-100 pt-2" style={o && { borderTopColor: o.border, marginTop: 10, paddingTop: 10 }}>
+                          <Text className="mr-2 text-xs font-medium text-slate-400" style={o && { color: o.faint }}>Add as</Text>
                           <Pressable
                             hitSlop={8}
                             disabled={saving}
                             onPress={() => adjustAddServings(recipe, -1)}
                             className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                            style={o && { width: 30, height: 30, borderRadius: 15, backgroundColor: o.pill }}
                           >
-                            <Ionicons name="remove" size={14} color="#475569" />
+                            <Ionicons name="remove" size={14} color={o?.onPill ?? "#475569"} />
                           </Pressable>
-                          <Text className="mx-2 text-sm font-semibold text-slate-700">
+                          <Text className="mx-2 text-sm font-semibold text-slate-700" style={o && { color: o.text }}>
                             {addServings} {addServings === 1 ? "serving" : "servings"}
                           </Text>
                           <Pressable
@@ -3163,8 +3298,9 @@ function PhonePlannerScreen() {
                             disabled={saving}
                             onPress={() => adjustAddServings(recipe, 1)}
                             className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                            style={o && { width: 30, height: 30, borderRadius: 15, backgroundColor: o.pill }}
                           >
-                            <Ionicons name="add" size={14} color="#475569" />
+                            <Ionicons name="add" size={14} color={o?.onPill ?? "#475569"} />
                           </Pressable>
                         </View>
                       </View>
@@ -3172,9 +3308,9 @@ function PhonePlannerScreen() {
                   }}
                   ListEmptyComponent={
                     <View className="items-center py-16">
-                      <Ionicons name="book-outline" size={42} color="#94A3B8" />
-                      <Text className="mt-4 text-lg font-bold text-slate-900">No recipes found</Text>
-                      <Text className="mt-2 text-center text-slate-500">
+                      <Ionicons name="book-outline" size={42} color={o?.faint ?? "#94A3B8"} />
+                      <Text className="mt-4 text-lg font-bold text-slate-900" style={o && { color: o.text }}>No recipes found</Text>
+                      <Text className="mt-2 text-center text-slate-500" style={o && { color: o.muted }}>
                         {recipeSearch ? "Try a different search." : "Create recipes in the Kitchen tab first."}
                       </Text>
                     </View>
@@ -3197,38 +3333,39 @@ function PhonePlannerScreen() {
                     return (
                       <Pressable
                         className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-                        style={addCell}
+                        style={[addCell, o && listCard]}
                         disabled={saving}
                         onPress={() => openIngredientQuantityStep(ingredient)}
                       >
-                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
-                          <Ionicons name="nutrition-outline" size={18} color={slotCfg.iconColor} />
+                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`} style={o && { backgroundColor: o.pill }}>
+                          <Ionicons name="nutrition-outline" size={18} color={o?.icon ?? slotCfg.iconColor} />
                         </View>
                         <View className="ml-3 flex-1">
-                          <Text className="font-semibold text-slate-900">{ingredient.name}</Text>
-                          <Text className="mt-0.5 text-sm text-slate-400">
+                          <Text className="font-semibold text-slate-900" style={o && listTitle}>{ingredient.name}</Text>
+                          <Text className="mt-0.5 text-sm text-slate-400" style={o && { fontSize: 13, color: o.muted }}>
                             {portion}{ingredient.defaultPortionUnit ? ` ${ingredient.defaultPortionUnit}` : ""}
                           </Text>
                         </View>
                         {kcal != null && (
-                          <Text className="mr-2 text-sm font-semibold text-slate-500">{kcal} kcal</Text>
+                          <Text className="mr-2 text-sm font-semibold text-slate-500" style={o && { fontSize: 13, color: o.muted }}>{kcal} kcal</Text>
                         )}
                         <Pressable
                           hitSlop={8}
                           onPress={() => openIngredientInfo(ingredient)}
                           className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+                          style={o && { backgroundColor: "transparent" }}
                         >
-                          <Ionicons name="information-circle-outline" size={20} color="#94A3B8" />
+                          <Ionicons name="information-circle-outline" size={20} color={o?.faint ?? "#94A3B8"} />
                         </Pressable>
-                        <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+                        <Ionicons name="chevron-forward" size={20} color={o?.faint ?? "#94A3B8"} />
                       </Pressable>
                     );
                   }}
                   ListEmptyComponent={
                     <View className="items-center py-16">
-                      <Ionicons name="nutrition-outline" size={42} color="#94A3B8" />
-                      <Text className="mt-4 text-lg font-bold text-slate-900">No ingredients found</Text>
-                      <Text className="mt-2 text-center text-slate-500">
+                      <Ionicons name="nutrition-outline" size={42} color={o?.faint ?? "#94A3B8"} />
+                      <Text className="mt-4 text-lg font-bold text-slate-900" style={o && { color: o.text }}>No ingredients found</Text>
+                      <Text className="mt-2 text-center text-slate-500" style={o && { color: o.muted }}>
                         {ingredientSearch ? "Try a different search." : "Create ingredients in the Pantry tab first."}
                       </Text>
                     </View>
@@ -3247,19 +3384,20 @@ function PhonePlannerScreen() {
                   ListHeaderComponent={
                     <>
                       {filteredRestaurantMeals.length > 0 && (
-                        <Text className="mb-2 px-1 text-xs font-medium text-slate-400">
+                        <Text className="mb-2 px-1 text-xs font-medium text-slate-400" style={o && { color: o.faint }}>
                           Been here before? Tap it below — you&apos;ll pick just what you had.
                         </Text>
                       )}
                       <Pressable
                         className="mb-2 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3.5 active:bg-slate-100"
+                        style={o && { height: 50, paddingVertical: 0, borderRadius: 16, borderColor: o.orbit, backgroundColor: "transparent" }}
                         onPress={() => {
                           setShowAdd(false);
                           router.push({ pathname: "/restaurant-meals/add", params: { from: "planner" } });
                         }}
                       >
-                        <Ionicons name="add" size={18} color="#2563EB" />
-                        <Text className="ml-2 font-semibold text-blue-700">
+                        <Ionicons name="add" size={18} color={o?.ink ?? "#2563EB"} />
+                        <Text className="ml-2 font-semibold text-blue-700" style={o && { fontSize: 15, color: o.ink }}>
                           {restaurantSearch.trim() ? `Add "${restaurantSearch.trim()}" as a new restaurant` : "Add a new restaurant"}
                         </Text>
                       </Pressable>
@@ -3271,7 +3409,7 @@ function PhonePlannerScreen() {
                     return (
                       <Pressable
                         className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-                        style={addCell}
+                        style={[addCell, o && listCard]}
                         disabled={saving}
                         onPress={() => {
                           setSelectedDishQuantities(new Map());
@@ -3279,34 +3417,35 @@ function PhonePlannerScreen() {
                           setPendingRestaurantMeal(restaurantMeal);
                         }}
                       >
-                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`}>
-                          <Ionicons name="restaurant-outline" size={18} color={slotCfg.iconColor} />
+                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`} style={o && { backgroundColor: o.pill }}>
+                          <Ionicons name="restaurant-outline" size={18} color={o?.icon ?? slotCfg.iconColor} />
                         </View>
                         <View className="ml-3 flex-1">
-                          <Text className="font-semibold text-slate-900">{restaurantMeal.restaurantName}</Text>
-                          <Text className="mt-0.5 text-sm text-slate-400" numberOfLines={1}>
+                          <Text className="font-semibold text-slate-900" style={o && listTitle}>{restaurantMeal.restaurantName}</Text>
+                          <Text className="mt-0.5 text-sm text-slate-400" numberOfLines={1} style={o && { fontSize: 13, color: o.muted }}>
                             {restaurantMeal.dishes.map(d => d.name).join(", ") || "No dishes yet"}
                           </Text>
                         </View>
                         {kcal != null && (
-                          <Text className="mr-2 text-sm font-semibold text-slate-500">{kcal} kcal</Text>
+                          <Text className="mr-2 text-sm font-semibold text-slate-500" style={o && { fontSize: 13, color: o.muted }}>{kcal} kcal</Text>
                         )}
                         <Pressable
                           hitSlop={8}
                           onPress={() => openRestaurantInfo(restaurantMeal)}
                           className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+                          style={o && { backgroundColor: "transparent" }}
                         >
-                          <Ionicons name="information-circle-outline" size={20} color="#94A3B8" />
+                          <Ionicons name="information-circle-outline" size={20} color={o?.faint ?? "#94A3B8"} />
                         </Pressable>
-                        <Ionicons name="add-circle-outline" size={22} color="#2563EB" />
+                        <Ionicons name="add-circle-outline" size={22} color={o?.ink ?? "#2563EB"} />
                       </Pressable>
                     );
                   }}
                   ListEmptyComponent={
                     <View className="items-center py-16">
-                      <Ionicons name="restaurant-outline" size={42} color="#94A3B8" />
-                      <Text className="mt-4 text-lg font-bold text-slate-900">No restaurant meals yet</Text>
-                      <Text className="mt-2 text-center text-slate-500">
+                      <Ionicons name="restaurant-outline" size={42} color={o?.faint ?? "#94A3B8"} />
+                      <Text className="mt-4 text-lg font-bold text-slate-900" style={o && { color: o.text }}>No restaurant meals yet</Text>
+                      <Text className="mt-2 text-center text-slate-500" style={o && { color: o.muted }}>
                         {restaurantSearch ? "Try a different search." : "Log a visit above to see it here next time."}
                       </Text>
                     </View>
@@ -3316,6 +3455,7 @@ function PhonePlannerScreen() {
             </>
           )}
           </View>
+          </OrbitPage>
         </SafeAreaView>
       )}
 
@@ -3336,7 +3476,8 @@ function PhonePlannerScreen() {
         }}
       />
 
-      {confirmModals}
+      {/* (Rating and what was used, in Orbit's look on the phone too.) */}
+      <OrbitPage on={!!o}>{confirmModals}</OrbitPage>
 
       <PhotoCaptureModal
         visible={showDishScanModal}
@@ -3347,10 +3488,10 @@ function PhonePlannerScreen() {
       />
 
       <Modal visible={estimatingDish} transparent animationType="fade">
-        <View className="flex-1 items-center justify-center bg-black/50">
-          <View className="items-center rounded-3xl bg-white px-8 py-6">
-            <ActivityIndicator size="large" />
-            <Text className="mt-3 text-base font-semibold text-slate-700">Estimating nutrition...</Text>
+        <View className="flex-1 items-center justify-center bg-black/50" style={o && { backgroundColor: o.scrim }}>
+          <View className="items-center rounded-3xl bg-white px-8 py-6" style={o && { backgroundColor: o.surface, borderWidth: 1, borderColor: o.border, borderRadius: 24 }}>
+            <ActivityIndicator size="large" color={o?.muted} />
+            <Text className="mt-3 text-base font-semibold text-slate-700" style={o && { color: o.text }}>Estimating nutrition...</Text>
           </View>
         </View>
       </Modal>

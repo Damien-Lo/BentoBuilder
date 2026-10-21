@@ -3,6 +3,8 @@ import { Text, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 
+import { useOrbitPage } from "@/src/theme/orbit";
+
 interface RateSliderProps {
   value: number; // integer 1..10
   onChange: (value: number) => void;
@@ -19,6 +21,8 @@ const TRACK_HEIGHT = 6;
 // rating needs, with the current value shown right on the thumb.
 export function RateSlider({ value, onChange, disabled = false }: RateSliderProps) {
   const [trackWidth, setTrackWidth] = useState(0);
+  // (On an Orbit page: its track, filled in ink.)
+  const o = useOrbitPage();
 
   function handleLayout(event: LayoutChangeEvent) {
     setTrackWidth(event.nativeEvent.layout.width);
@@ -51,17 +55,17 @@ export function RateSlider({ value, onChange, disabled = false }: RateSliderProp
         className="justify-center"
         style={{ height: THUMB_SIZE, opacity: disabled ? 0.5 : 1 }}
       >
-        <View className="rounded-full bg-slate-200" style={{ height: TRACK_HEIGHT }} />
+        <View className="rounded-full bg-slate-200" style={[{ height: TRACK_HEIGHT }, o && { backgroundColor: o.track }]} />
         <View
           className="absolute rounded-full bg-blue-500"
-          style={{ height: TRACK_HEIGHT, width: `${ratio * 100}%` }}
+          style={[{ height: TRACK_HEIGHT, width: `${ratio * 100}%` }, o && { backgroundColor: o.ink }]}
         />
         <View
           pointerEvents="none"
           className="absolute items-center justify-center rounded-full border-2 border-blue-600 bg-white shadow"
-          style={{ width: THUMB_SIZE, height: THUMB_SIZE, left: thumbLeft }}
+          style={[{ width: THUMB_SIZE, height: THUMB_SIZE, left: thumbLeft }, o && { backgroundColor: o.surface, borderColor: o.ink }]}
         >
-          <Text className="text-[11px] font-bold text-blue-600">{clampedValue}</Text>
+          <Text className="text-[11px] font-bold text-blue-600" style={o && { color: o.text }}>{clampedValue}</Text>
         </View>
       </View>
     </GestureDetector>

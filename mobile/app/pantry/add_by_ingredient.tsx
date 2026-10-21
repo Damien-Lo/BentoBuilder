@@ -43,6 +43,8 @@ import { loadSettings } from "@/src/services/settingsService";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { useWideForm } from "@/src/components/forms/wideForm";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
+import { Tap } from "@/src/components/ui/Tap";
+import { OrbitPage, OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
   recentPantryEntries,
@@ -101,6 +103,8 @@ function splitPriceByWeight(
 type SelectedIngredientCardProps = {
   ingredient: Ingredient;
   onClear: () => void;
+  // The page's Orbit colours on a phone, or null for the older look.
+  o: OrbitColors | null;
 };
 
 function getReferenceName(
@@ -120,41 +124,56 @@ function getReferenceName(
 function SelectedIngredientCard({
   ingredient,
   onClear,
+  o,
 }: SelectedIngredientCardProps) {
   const brandName = getReferenceName(ingredient.brand);
   const categoryName = getReferenceName(ingredient.category);
 
   return (
-    <View className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+    <View className="rounded-2xl border border-blue-200 bg-blue-50 p-4" style={o && { backgroundColor: o.surface, borderColor: o.selectedRing, borderRadius: 20 }}>
       <View className="flex-row items-center">
-        <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-100">
-          <Ionicons name="nutrition-outline" size={24} color="#2563EB" />
+        <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-100" style={o && { backgroundColor: o.ink }}>
+          <Ionicons name="nutrition-outline" size={24} color={o?.onInk ?? "#2563EB"} />
         </View>
 
         <View className="ml-4 flex-1">
-          <Text className="text-lg font-bold text-slate-950">
+          <Text className="text-lg font-bold text-slate-950" style={o && { color: o.text }}>
             {ingredient.name}
           </Text>
 
           {(brandName || categoryName) && (
-            <Text className="mt-1 text-sm text-slate-500">
+            <Text className="mt-1 text-sm text-slate-500" style={o && { color: o.muted }}>
               {[brandName, categoryName].filter(Boolean).join(" • ")}
             </Text>
           )}
         </View>
 
-        <Pressable
-          className="h-10 w-10 items-center justify-center rounded-full bg-white"
-          onPress={onClear}
-        >
-          <Ionicons name="close" size={21} color="#475569" />
-        </Pressable>
+        {o ? (
+          <Tap onPress={onClear} accessibilityLabel="Choose another" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.pill }} pressedStyle={{ opacity: 0.7 }}>
+            <Ionicons name="close" size={21} color={o.onPill} />
+          </Tap>
+        ) : (
+          <Pressable
+            className="h-10 w-10 items-center justify-center rounded-full bg-white"
+            onPress={onClear}
+          >
+            <Ionicons name="close" size={21} color="#475569" />
+          </Pressable>
+        )}
       </View>
     </View>
   );
 }
 
 export default function AddPantryItemByIngredientScreen() {
+  return (
+    <OrbitSection section="kitchen">
+      <AddPantryItemByIngredient />
+    </OrbitSection>
+  );
+}
+
+function AddPantryItemByIngredient() {
   const router = useRouter();
   const { locationId, locationName, ingredientId, scannedQuantity, scannedQuantityUnit } = useLocalSearchParams<{
     locationId?: string;
@@ -213,6 +232,12 @@ export default function AddPantryItemByIngredientScreen() {
   // default to 0 and don't need to be listed here). Store is the only
   // dropdown-capable field on this page.
   const layout = useWideForm();
+  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
+  // desktop browser keeps the desktop's for now. The cards, fields,
+  // dropdowns and toggle in it follow by themselves (OrbitPage).
+  const { colors } = useOrbitTheme();
+  const o = layout.wide ? null : colors;
+  const field = o && { backgroundColor: o.surface, borderColor: o.border };
   const scrollRef = useRef<ScrollView>(null);
   const scrollAnchorRef = useRef<View>(null);
   const quantitySection = useScrollFocusSection(scrollRef, scrollAnchorRef);
@@ -581,10 +606,10 @@ export default function AddPantryItemByIngredientScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
 
-        <Text className="mt-4 text-base text-slate-500">
+        <Text className="mt-4 text-base text-slate-500" style={o && { color: o.muted }}>
           Loading ingredients...
         </Text>
       </SafeAreaView>
@@ -592,35 +617,50 @@ export default function AddPantryItemByIngredientScreen() {
   }
 
   return (
-    <>
-    <SafeAreaView className="flex-1 bg-slate-50">
+    <OrbitPage on={!!o}>
+    <SafeAreaView className="flex-1 bg-slate-50" style={o && { backgroundColor: o.canvas }}>
       <KeyboardAvoidingView
         className="flex-1"
         style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header */}
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          <Pressable
-            className="h-11 w-11 items-center justify-center rounded-full"
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-back" size={26} color="#0F172A" />
-          </Pressable>
-
-          <View className="ml-2 flex-1">
-            <Text className="text-xl font-bold text-slate-950">
-              Add to pantry
-            </Text>
-
-            <Text className="text-sm text-slate-500">
+        {/* Header (phone): the way back over a large title, on the page itself */}
+        {o ? (
+          <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4 }}>
+              <Tap onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                <Ionicons name="chevron-back" size={22} color={o.text} />
+              </Tap>
+            </View>
+            <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>Add to pantry</Text>
+            <Text style={{ marginTop: 2, fontSize: 14, color: o.muted }}>
               {locationName ? `Storing in ${locationName}` : "Choose an existing ingredient"}
             </Text>
           </View>
-        </View>
+        ) : (
+          // Header
+          <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
+            <Pressable
+              className="h-11 w-11 items-center justify-center rounded-full"
+              onPress={() => router.back()}
+            >
+              <Ionicons name="chevron-back" size={26} color="#0F172A" />
+            </Pressable>
+
+            <View className="ml-2 flex-1">
+              <Text className="text-xl font-bold text-slate-950">
+                Add to pantry
+              </Text>
+
+              <Text className="text-sm text-slate-500">
+                {locationName ? `Storing in ${locationName}` : "Choose an existing ingredient"}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {!selectedIngredient ? (
-          <View className="flex-1 px-5 pt-5">
+          <View className="flex-1 px-5 pt-5" style={o && { paddingHorizontal: 16, paddingTop: 16 }}>
             <SegmentedToggle<"ingredient" | "mealPrep">
               options={[
                 { value: "ingredient", label: "Ingredients" },
@@ -631,8 +671,8 @@ export default function AddPantryItemByIngredientScreen() {
             />
 
             {/* Search */}
-            <View className="mt-4 h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
-              <Ionicons name="search-outline" size={21} color="#64748B" />
+            <View className="mt-4 h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4" style={o && { ...field, height: 48, borderRadius: 16, paddingHorizontal: 14 }}>
+              <Ionicons name="search-outline" size={o ? 20 : 21} color={o?.muted ?? "#64748B"} />
 
               <TextInput
                 value={searchText}
@@ -640,20 +680,21 @@ export default function AddPantryItemByIngredientScreen() {
                 placeholder={
                   browseKind === "mealPrep" ? "Search meal preps" : "Search all ingredients"
                 }
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 autoCapitalize="none"
                 autoCorrect={false}
                 className="ml-3 flex-1 text-base text-slate-950"
+                style={o && { color: o.text }}
               />
 
               {searchText.length > 0 && (
                 <Pressable onPress={() => setSearchText("")}>
-                  <Ionicons name="close-circle" size={21} color="#94A3B8" />
+                  <Ionicons name="close-circle" size={21} color={o?.faint ?? "#94A3B8"} />
                 </Pressable>
               )}
             </View>
 
-            <Text className="mb-3 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500">
+            <Text className="mb-3 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500" style={o && { fontSize: 11, fontWeight: "700", letterSpacing: 1.2, color: o.faint, marginLeft: 4, marginBottom: 8 }}>
               {browseKind === "mealPrep" ? "Meal Preps" : "Ingredients"}
             </Text>
 
@@ -670,56 +711,81 @@ export default function AddPantryItemByIngredientScreen() {
 
                 const categoryName = getReferenceName(ingredient.category);
 
-                return (
+                const row = (
+                  <>
+                      <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.pill }}>
+                        <Ionicons
+                          name="nutrition-outline"
+                          size={18}
+                          color={o?.onPill ?? "#2563EB"}
+                        />
+                      </View>
+
+                      <View className="ml-3 flex-1">
+                        <Text className="text-base font-bold text-slate-950" style={o && { fontSize: 15, fontWeight: "600", color: o.text }}>
+                          {ingredient.name}
+                        </Text>
+
+                        {(brandName || categoryName) && (
+                          <Text className="mt-1 text-sm text-slate-500" style={o && { marginTop: 2, fontSize: 13, color: o.muted }}>
+                            {[brandName, categoryName]
+                              .filter(Boolean)
+                              .join(" • ")}
+                          </Text>
+                        )}
+                      </View>
+
+                      <Ionicons
+                        name="chevron-forward"
+                        size={o ? 18 : 21}
+                        color={o?.faint ?? "#94A3B8"}
+                      />
+                  </>
+                );
+
+                return o ? (
+                  <Tap
+                    onPress={() => handleSelectIngredient(ingredient)}
+                    style={{ marginBottom: 10, flexDirection: "row", alignItems: "center", borderRadius: 18, borderWidth: 1, borderColor: o.border, backgroundColor: o.surface, paddingHorizontal: 14, paddingVertical: 12 }}
+                    pressedStyle={{ backgroundColor: o.pill }}
+                  >
+                    {row}
+                  </Tap>
+                ) : (
                   <Pressable
                     className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
                     onPress={() => handleSelectIngredient(ingredient)}
                   >
-                    <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-                      <Ionicons
-                        name="nutrition-outline"
-                        size={18}
-                        color="#2563EB"
-                      />
-                    </View>
-
-                    <View className="ml-3 flex-1">
-                      <Text className="text-base font-bold text-slate-950">
-                        {ingredient.name}
-                      </Text>
-
-                      {(brandName || categoryName) && (
-                        <Text className="mt-1 text-sm text-slate-500">
-                          {[brandName, categoryName]
-                            .filter(Boolean)
-                            .join(" • ")}
-                        </Text>
-                      )}
-                    </View>
-
-                    <Ionicons
-                      name="chevron-forward"
-                      size={21}
-                      color="#94A3B8"
-                    />
+                    {row}
                   </Pressable>
                 );
               }}
               ListEmptyComponent={
                 <View className="items-center px-6 py-16">
-                  <Ionicons name="search-outline" size={44} color="#94A3B8" />
+                  <Ionicons name="search-outline" size={44} color={o?.faint ?? "#94A3B8"} />
 
-                  <Text className="mt-4 text-lg font-bold text-slate-950">
+                  <Text className="mt-4 text-lg font-bold text-slate-950" style={o && { color: o.text }}>
                     {browseKind === "mealPrep" ? "No meal preps found" : "No ingredients found"}
                   </Text>
 
-                  <Text className="mt-2 text-center text-slate-500">
+                  <Text className="mt-2 text-center text-slate-500" style={o && { color: o.muted }}>
                     {browseKind === "mealPrep"
                       ? "Meal preps come from a recipe's \"Prepares\" section, not created here — try another search, or check the Meal Preps tab on the pantry page."
                       : "Try another search, or create a new ingredient below."}
                   </Text>
 
-                  {browseKind === "ingredient" && (
+                  {browseKind === "ingredient" && (o ? (
+                    <Tap
+                      onPress={() => setShowCreateIngredient(true)}
+                      style={{ marginTop: 20, height: 48, flexDirection: "row", alignItems: "center", paddingHorizontal: 20, borderRadius: 16, backgroundColor: o.ink }}
+                      pressedStyle={{ opacity: 0.85 }}
+                    >
+                      <Ionicons name="add-circle-outline" size={18} color={o.onInk} />
+                      <Text style={{ marginLeft: 8, fontSize: 15, fontWeight: "600", color: o.onInk }}>
+                        Create &quot;{searchText.trim()}&quot;
+                      </Text>
+                    </Tap>
+                  ) : (
                     <Pressable
                       className="mt-5 flex-row items-center rounded-2xl bg-blue-600 px-5 py-3 active:bg-blue-700"
                       onPress={() => setShowCreateIngredient(true)}
@@ -729,16 +795,17 @@ export default function AddPantryItemByIngredientScreen() {
                         Create &quot;{searchText.trim()}&quot;
                       </Text>
                     </Pressable>
-                  )}
+                  ))}
                 </View>
               }
             />
           </View>
         ) : (
-          <View className="flex-1 px-5 pt-5">
+          <View className="flex-1 px-5 pt-5" style={o && { paddingHorizontal: 16, paddingTop: 16 }}>
           <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View ref={scrollAnchorRef} collapsable={false} />
             <SelectedIngredientCard
+              o={o}
               ingredient={selectedIngredient}
               onClear={() => {
                 setSelectedIngredient(null);
@@ -761,9 +828,9 @@ export default function AddPantryItemByIngredientScreen() {
                   onFocus={quantitySection.trigger}
                   keyboardType="decimal-pad"
                   placeholder="0"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={o?.faint ?? "#94A3B8"}
                   className="mr-3 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
-                  style={{ height: 56 }}
+                  style={[{ height: 56 }, o && { ...field, color: o.text }]}
                 />
 
                 <View className="flex-1">
@@ -794,8 +861,8 @@ export default function AddPantryItemByIngredientScreen() {
                 </View>
 
                 {selectedIngredient.pieceLabel && (
-                  <View className="ml-2 rounded-full bg-slate-100 px-2.5 py-2">
-                    <Text className="text-xs font-semibold text-slate-500">
+                  <View className="ml-2 rounded-full bg-slate-100 px-2.5 py-2" style={o && { backgroundColor: o.pill }}>
+                    <Text className="text-xs font-semibold text-slate-500" style={o && { color: o.onPill }}>
                       1× {selectedIngredient.pieceLabel}
                     </Text>
                   </View>
@@ -807,7 +874,7 @@ export default function AddPantryItemByIngredientScreen() {
                     hitSlop={8}
                     onPress={() => removeQuantityRow(index)}
                   >
-                    <Ionicons name="close-circle" size={22} color="#CBD5E1" />
+                    <Ionicons name="close-circle" size={22} color={o?.orbit ?? "#CBD5E1"} />
                   </Pressable>
                 )}
               </View>
@@ -817,8 +884,8 @@ export default function AddPantryItemByIngredientScreen() {
               className="mb-1 mt-1 flex-row items-center self-start active:opacity-60"
               onPress={addQuantityRow}
             >
-              <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
-              <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+              <Ionicons name="add-circle-outline" size={18} color={o?.accent ?? "#2563EB"} />
+              <Text className="ml-1.5 text-sm font-semibold text-blue-600" style={o && { color: o.accent }}>
                 {selectedIngredient.pieceLabel
                   ? `Add another ${selectedIngredient.pieceLabel}`
                   : "Add another entry"}
@@ -833,7 +900,7 @@ export default function AddPantryItemByIngredientScreen() {
             <FieldLabel text="Storage location" />
 
             {effectiveLocation && !storageLocationTouched ? (
-              <Text className="mb-2 text-xs leading-4 text-slate-500">
+              <Text className="mb-2 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                 Auto-filled from{" "}
                 {selectedIngredient.defaultStorageLocation
                   ? "this ingredient's default"
@@ -846,7 +913,7 @@ export default function AddPantryItemByIngredientScreen() {
             <View className="relative" style={{ zIndex: showLocationOptions ? 30 : 0 }}>
               <Pressable
                 className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
-                style={{ height: 56 }}
+                style={[{ height: 56 }, field]}
                 onPress={() => {
                   setShowLocationOptions((current) => !current);
                 }}
@@ -854,7 +921,7 @@ export default function AddPantryItemByIngredientScreen() {
                 <Ionicons
                   name="file-tray-stacked-outline"
                   size={21}
-                  color="#64748B"
+                  color={o?.muted ?? "#64748B"}
                 />
 
                 <Text
@@ -863,6 +930,7 @@ export default function AddPantryItemByIngredientScreen() {
                       ? "text-slate-950"
                       : "text-slate-400"
                   }`}
+                  style={o && { color: selectedStorageLocation ? o.text : o.faint }}
                 >
                   {selectedStorageLocation?.name ?? "Choose a storage location"}
                 </Text>
@@ -870,14 +938,14 @@ export default function AddPantryItemByIngredientScreen() {
                 <Ionicons
                   name={showLocationOptions ? "chevron-up" : "chevron-down"}
                   size={18}
-                  color="#64748B"
+                  color={o?.muted ?? "#64748B"}
                 />
               </Pressable>
 
               {showLocationOptions && (
                 <View
                   className="absolute left-0 right-0 top-16 z-50 max-h-60 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
-                  style={{ elevation: 20 }}
+                  style={[{ elevation: 20 }, field]}
                 >
                   <FlatList
                     data={storageLocations}
@@ -886,13 +954,14 @@ export default function AddPantryItemByIngredientScreen() {
                     renderItem={({ item: location }) => (
                       <Pressable
                         className="border-b border-slate-100 px-4 py-4"
+                        style={o && { borderBottomColor: o.border }}
                         onPress={() => {
                           setStorageLocationId(location._id);
                           setStorageLocationTouched(true);
                           setShowLocationOptions(false);
                         }}
                       >
-                        <Text className="text-base text-slate-800">
+                        <Text className="text-base text-slate-800" style={o && { color: location._id === storageLocationId ? o.ink : o.text }}>
                           {location.name}
                         </Text>
                       </Pressable>
@@ -930,7 +999,7 @@ export default function AddPantryItemByIngredientScreen() {
             </View>
 
             {effectiveExpiryDuration && !expiryTouched ? (
-              <Text className="mt-2 text-xs leading-4 text-slate-500">
+              <Text className="mt-2 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                 Expiry auto-filled from{" "}
                 {selectedIngredient.defaultExpiryDurationAmount != null
                   ? "this ingredient's default"
@@ -940,7 +1009,7 @@ export default function AddPantryItemByIngredientScreen() {
               </Text>
             ) : null}
 
-            <View className="mt-3 rounded-2xl bg-blue-50/60 px-3 pb-3 pt-1" {...expiryDurationSection.wrapperProps}>
+            <View className="mt-3 rounded-2xl bg-blue-50/60 px-3 pb-3 pt-1" {...expiryDurationSection.wrapperProps} style={[expiryDurationSection.wrapperProps.style, o && { backgroundColor: o.pill }]}>
             <FieldLabel text="Or set expiry from purchase date" />
             <DurationExpiryInput
               purchaseDate={purchaseDate}
@@ -993,7 +1062,7 @@ export default function AddPantryItemByIngredientScreen() {
                 </View>
                 </View>
                 {suggestedStore && !storeTouched ? (
-                  <Text className="mt-2 text-xs leading-4 text-slate-500">
+                  <Text className="mt-2 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                     Store auto-filled from recent purchase history.
                   </Text>
                 ) : null}
@@ -1003,8 +1072,8 @@ export default function AddPantryItemByIngredientScreen() {
                 className="mt-4 flex-row items-center self-start active:opacity-60"
                 onPress={() => setShowMoreDetails(true)}
               >
-                <Ionicons name="add-circle-outline" size={16} color="#2563EB" />
-                <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+                <Ionicons name="add-circle-outline" size={16} color={o?.accent ?? "#2563EB"} />
+                <Text className="ml-1.5 text-sm font-semibold text-blue-600" style={o && { color: o.accent }}>
                   Add store or price
                 </Text>
               </Pressable>
@@ -1017,10 +1086,11 @@ export default function AddPantryItemByIngredientScreen() {
               onChangeText={setNotes}
               onFocus={notesSection.trigger}
               placeholder="e.g. Half-used, keep away from the window"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={o?.faint ?? "#94A3B8"}
               multiline
               textAlignVertical="top"
               className="min-h-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
+              style={o && { ...field, color: o.text }}
             />
             </View>
             </FormCard>
@@ -1029,22 +1099,37 @@ export default function AddPantryItemByIngredientScreen() {
           </ScrollView>
 
             <View className="pb-6 pt-4" style={layout.actions}>
-              <Pressable
-                disabled={saving}
-                className={`items-center justify-center rounded-2xl ${
-                  saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
-                }`}
-                style={{ height: 56 }}
-                onPress={() => void handleSave()}
-              >
-                {saving ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="text-base font-bold text-white">
-                    Add to pantry
-                  </Text>
-                )}
-              </Pressable>
+              {o ? (
+                <Tap
+                  disabled={saving}
+                  onPress={() => void handleSave()}
+                  style={{ height: 56, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }}
+                  pressedStyle={{ opacity: 0.85 }}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={o.onInk} />
+                  ) : (
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: o.onInk }}>Add to pantry</Text>
+                  )}
+                </Tap>
+              ) : (
+                <Pressable
+                  disabled={saving}
+                  className={`items-center justify-center rounded-2xl ${
+                    saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
+                  }`}
+                  style={{ height: 56 }}
+                  onPress={() => void handleSave()}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text className="text-base font-bold text-white">
+                      Add to pantry
+                    </Text>
+                  )}
+                </Pressable>
+              )}
             </View>
           </View>
         )}
@@ -1061,6 +1146,6 @@ export default function AddPantryItemByIngredientScreen() {
         setShowCreateIngredient(false);
       }}
     />
-    </>
+    </OrbitPage>
   );
 }

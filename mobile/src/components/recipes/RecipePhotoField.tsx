@@ -5,7 +5,9 @@ import { useCallback, useRef, useState } from "react";
 import { Alert, Platform, Pressable, Text, View } from "react-native";
 
 import { showActions } from "@/src/components/todo/theme";
+import { Tap } from "@/src/components/ui/Tap";
 import { removeRecipePhoto, setRecipePhoto } from "@/src/services/recipeApi";
+import { useOrbitPage } from "@/src/theme/orbit";
 import { pastedImage, pastePhoto, pickPhoto, photoUri, preparePhoto, type PreparedPhoto } from "@/src/utils/photos";
 
 // A recipe's photo on its new and edit forms: taken, pasted (⌘V on the page,
@@ -20,6 +22,7 @@ export async function applyPhotoChange(recipeId: string, change: PhotoChange): P
 }
 
 export function RecipePhotoField({ current, change, onChange }: { current?: string | null; change: PhotoChange; onChange: (change: PhotoChange) => void }) {
+  const o = useOrbitPage();
   const [busy, setBusy] = useState(false);
   const preview = change.kind === "new" ? `data:image/jpeg;base64,${change.photo.base64}` : change.kind === "remove" ? null : photoUri(current);
 
@@ -67,15 +70,29 @@ export function RecipePhotoField({ current, change, onChange }: { current?: stri
     ]);
   }
 
+  // (On a page in Orbit's look, its colours, light or dark.)
   if (preview) {
     return (
       <View className="mb-4 mt-3">
-        <Image source={{ uri: preview }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 14, backgroundColor: "#E2E8F0" }} contentFit="cover" />
+        <Image source={{ uri: preview }} style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: o ? 18 : 14, backgroundColor: o?.pill ?? "#E2E8F0" }} contentFit="cover" />
         <Pressable onPress={choose} disabled={busy} accessibilityLabel="Change photo" className="absolute bottom-2.5 right-2.5 flex-row items-center rounded-full bg-black/55 px-3 py-1.5 active:opacity-70">
           <Ionicons name="camera-outline" size={15} color="#FFFFFF" />
           <Text className="ml-1.5 text-xs font-semibold text-white">{busy ? "Working…" : "Change"}</Text>
         </Pressable>
       </View>
+    );
+  }
+  if (o) {
+    return (
+      <Tap onPress={choose} disabled={busy} accessibilityLabel="Add a photo" style={{ marginTop: 12, marginBottom: 16, flexDirection: "row", alignItems: "center", borderRadius: 18, borderWidth: 1, borderStyle: "dashed", borderColor: o.faint, backgroundColor: o.surface, paddingHorizontal: 16, paddingVertical: 14 }} pressedStyle={{ backgroundColor: o.pill }}>
+        <View style={{ width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: o.pill }}>
+          <Ionicons name="camera-outline" size={19} color={o.onPill} />
+        </View>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={{ fontSize: 14, fontWeight: "600", color: o.text }}>{busy ? "Working…" : "Add a photo"}</Text>
+          <Text style={{ marginTop: 1, fontSize: 12, color: o.muted }}>{Platform.OS === "web" ? "Take, paste (⌘V) or choose one — optional" : "Take, paste or choose one — optional"}</Text>
+        </View>
+      </Tap>
     );
   }
   return (

@@ -3,7 +3,7 @@ import { usePaneDimensions } from "@/src/utils/pane";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { photoUri as photoSource } from "@/src/utils/photos";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,9 @@ import {
   Text,
   TextInput,
   View,
+  type PressableProps,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -109,7 +112,41 @@ import {
   saveReviewDraft,
   takePendingReceipt,
 } from "@/src/utils/receiptReviewStore";
-import { nutrientColor } from "@/src/theme/nutrients";
+import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
+import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { Tap } from "@/src/components/ui/Tap";
+
+// Something to tap. Elsewhere as before: its classes, and their active:
+// look while held. On an Orbit page (the phone) it also takes `orbit`, its
+// colours there, and `held`, how it looks while held (a light fade if
+// none) — an inline colour beats the active: class, and Pressable's style
+// function is dropped on the phone (see Tap).
+function Press({
+  orbit,
+  held,
+  style,
+  ...props
+}: Omit<PressableProps, "style" | "children"> & { style?: StyleProp<ViewStyle>; children?: ReactNode; orbit?: StyleProp<ViewStyle> | null | false; held?: StyleProp<ViewStyle> }) {
+  if (!orbit) return <Pressable {...props} style={style} />;
+  return <Tap {...props} style={[style, orbit]} pressedStyle={held} />;
+}
+
+// The tints the page's meaningful colours take on an Orbit page: the
+// light ones as the classes have them, soft ones in the dark.
+function orbitTones(o: OrbitColors, dark: boolean) {
+  return {
+    // Something missing, or to check.
+    warnBg: dark ? "rgba(251, 191, 36, 0.14)" : "#FFFBEB",
+    warnText: dark ? "#FCD34D" : "#92400E",
+    warnIcon: dark ? o.warning : "#D97706",
+    // A destructive button.
+    dangerBg: dark ? "rgba(248, 113, 113, 0.14)" : "#FEF2F2",
+    // The selected thing, in the section's colour.
+    inkSoft: dark ? "rgba(251, 146, 60, 0.14)" : "#FFF7ED",
+    // An empty checkbox.
+    boxOff: dark ? o.faint : "#CBD5E1",
+  };
+}
 
 interface ReviewRow {
   key: string;
@@ -512,7 +549,7 @@ const EXTENDED_SHORT_LABELS: Record<ExtendedNutritionField, string> = {
 
 // The six main nutrients, with the icon and colour each cell shows.
 const MAIN_NUTRIENT_CELLS: {
-  field: keyof ReceiptNutrition;
+  field: MainNutrient;
   label: string;
   unit: string;
   icon: keyof typeof Ionicons.glyphMap;
@@ -590,6 +627,8 @@ function NutritionCell({
   editable: boolean;
 }) {
   const [text, setText] = useState(value != null ? String(value) : "");
+  // (On the phone, in Orbit's colours.)
+  const o = useOrbitPage();
 
   useEffect(() => {
     setText((prev) => {
@@ -603,10 +642,11 @@ function NutritionCell({
       className={`rounded-xl border px-2 pb-1 pt-1.5 ${
         editable ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50"
       }`}
+      style={o && { borderColor: o.border, backgroundColor: editable ? o.surface : o.pill }}
     >
       <View className="flex-row items-center">
-        {icon && <Ionicons name={icon} size={11} color={editable ? iconColor : "#94A3B8"} />}
-        <Text numberOfLines={1} className={`flex-1 text-[11px] text-slate-500 ${icon ? "ml-1" : ""}`}>
+        {icon && <Ionicons name={icon} size={11} color={editable ? iconColor : o?.faint ?? "#94A3B8"} />}
+        <Text numberOfLines={1} className={`flex-1 text-[11px] text-slate-500 ${icon ? "ml-1" : ""}`} style={o && { color: o.muted }}>
           {label}
         </Text>
       </View>
@@ -622,13 +662,13 @@ function NutritionCell({
           editable={editable}
           keyboardType="decimal-pad"
           placeholder="—"
-          placeholderTextColor="#CBD5E1"
+          placeholderTextColor={o?.faint ?? "#CBD5E1"}
           className={`flex-1 py-0.5 text-[15px] font-medium ${editable ? "text-slate-950" : "text-slate-500"}`}
           // (In a browser an input keeps a default width; let it shrink so
           // the unit stays inside the box.)
-          style={{ minWidth: 0 }}
+          style={[{ minWidth: 0 }, o && { color: editable ? o.text : o.muted }]}
         />
-        <Text className="ml-1 text-[11px] text-slate-400" style={{ flexShrink: 0 }}>{unit}</Text>
+        <Text className="ml-1 text-[11px] text-slate-400" style={[{ flexShrink: 0 }, o && { color: o.faint }]}>{unit}</Text>
       </View>
     </View>
   );
@@ -644,18 +684,31 @@ function StatusBadge({ row, isNew, incomplete = false }: { row: ReviewRow; isNew
       : isNew
         ? { bg: "bg-violet-50", text: "text-violet-700", icon: "sparkles" as const, color: "#7C3AED", label: "New" }
         : { bg: "bg-emerald-50", text: "text-emerald-700", icon: "checkmark-circle" as const, color: "#059669", label: "Matched" };
+  // (On the phone in the dark: the same colours, as soft tints.)
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
+  const darkTone = !o || !dark
+    ? null
+    : row.submitted
+      ? { bg: o.pill, color: o.muted }
+      : incomplete
+        ? { bg: "rgba(251, 191, 36, 0.14)", color: "#FBBF24" }
+        : isNew
+          ? { bg: "rgba(167, 139, 250, 0.14)", color: "#A78BFA" }
+          : { bg: "rgba(52, 211, 153, 0.14)", color: "#34D399" };
 
   return (
-    <View className={`flex-row items-center rounded-full px-2 py-1 ${tone.bg}`}>
-      <Ionicons name={tone.icon} size={12} color={tone.color} />
-      <Text className={`ml-1 text-xs font-semibold ${tone.text}`}>{tone.label}</Text>
+    <View className={`flex-row items-center rounded-full px-2 py-1 ${tone.bg}`} style={darkTone && { backgroundColor: darkTone.bg }}>
+      <Ionicons name={tone.icon} size={12} color={darkTone?.color ?? tone.color} />
+      <Text className={`ml-1 text-xs font-semibold ${tone.text}`} style={darkTone && { color: darkTone.color }}>{tone.label}</Text>
     </View>
   );
 }
 
 function CardLabel({ children, first = false }: { children: string; first?: boolean }) {
+  const o = useOrbitPage();
   return (
-    <Text className={`mb-1.5 text-[13px] font-semibold text-slate-700 ${first ? "mt-3" : "mt-4"}`}>{children}</Text>
+    <Text className={`mb-1.5 text-[13px] font-semibold text-slate-700 ${first ? "mt-3" : "mt-4"}`} style={o && { color: o.icon }}>{children}</Text>
   );
 }
 
@@ -707,6 +760,14 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
   const [showMoreNutrients, setShowMoreNutrients] = useState(false);
   const [pickingExpiry, setPickingExpiry] = useState(false);
   const layout = useWideForm();
+  // On the phone, in Orbit's look (`o`: its colours, null in a desktop
+  // browser, which keeps its own).
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
+  const tones = o && orbitTones(o, dark);
+  const field = o && { backgroundColor: o.surface, borderColor: o.border, color: o.text };
+  // A small secondary button (Use duration, Scan label, More nutrients).
+  const softButton = o && { backgroundColor: o.pill };
 
   // Scrolls whichever field was just focused/opened into view within this
   // card's own ScrollView — nested inside the horizontal pager the way this
@@ -798,38 +859,41 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
   const expiryBlock = (
       <View {...expirySection.wrapperProps}>
         <View className="mb-1.5 mt-4 flex-row items-center">
-          <Text className="flex-1 text-[13px] font-semibold text-slate-700">Expiry date</Text>
+          <Text className="flex-1 text-[13px] font-semibold text-slate-700" style={o && { color: o.icon }}>Expiry date</Text>
           {row.expirySuggestion && !row.expiryTouched && row.expiryDate ? (
-            <View className="rounded-full bg-slate-100 px-2 py-0.5">
-              <Text className="text-[10px] font-medium text-slate-500">auto-filled</Text>
+            <View className="rounded-full bg-slate-100 px-2 py-0.5" style={o && { backgroundColor: o.pill }}>
+              <Text className="text-[10px] font-medium text-slate-500" style={o && { color: o.muted }}>auto-filled</Text>
             </View>
           ) : null}
         </View>
         <View className="flex-row gap-2">
-          <Pressable
+          <Press
             onPress={() => {
               expirySection.trigger();
               setPickingExpiry(true);
             }}
             className="flex-1 flex-row items-center rounded-xl border border-slate-200 bg-white px-3 active:bg-slate-50"
             style={{ height: 44 }}
+            orbit={o && { backgroundColor: o.surface, borderColor: o.border }}
+            held={o && { backgroundColor: o.pill }}
           >
-            <Ionicons name="calendar-outline" size={17} color="#64748B" />
-            <Text className={`ml-2 flex-1 text-sm ${row.expiryDate ? "text-slate-950" : "text-slate-400"}`}>
+            <Ionicons name="calendar-outline" size={17} color={o?.muted ?? "#64748B"} />
+            <Text className={`ml-2 flex-1 text-sm ${row.expiryDate ? "text-slate-950" : "text-slate-400"}`} style={o && { color: row.expiryDate ? o.text : o.faint }}>
               {formatDateDisplay(row.expiryDate) ?? "Pick a date"}
             </Text>
-            <Ionicons name="chevron-down" size={14} color="#64748B" />
-          </Pressable>
-          <Pressable
+            <Ionicons name="chevron-down" size={14} color={o?.muted ?? "#64748B"} />
+          </Press>
+          <Press
             className="flex-row items-center rounded-xl bg-blue-50 px-3 active:bg-blue-100"
             style={{ height: 44 }}
+            orbit={softButton}
             onPress={() => setShowDurationPicker((current) => !current)}
           >
-            <Ionicons name="time-outline" size={16} color="#1D4ED8" />
-            <Text className="ml-1.5 text-xs font-semibold text-blue-700">
+            <Ionicons name="time-outline" size={16} color={o?.onPill ?? "#1D4ED8"} />
+            <Text className="ml-1.5 text-xs font-semibold text-blue-700" style={o && { color: o.onPill }}>
               {showDurationPicker ? "Hide" : "Use duration"}
             </Text>
-          </Pressable>
+          </Press>
         </View>
 
         {showDurationPicker && (
@@ -852,11 +916,11 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             back to that ingredient's own catalog record on Confirm (see
             handleConfirm) rather than being a one-off, thrown away after this
             review the way it used to be. */}
-        <View className="mt-5 border-t border-slate-100 pt-4">
+        <View className="mt-5 border-t border-slate-100 pt-4" style={o && { borderTopColor: o.border }}>
           <View className="mb-2 flex-row items-center">
-            <Ionicons name="scale-outline" size={17} color="#2563EB" />
-            <Text className="ml-2 text-[13px] font-semibold text-slate-700">Unit conversions</Text>
-            <Text className="ml-1.5 text-[11px] text-slate-400">{row.unit || "unit"} ↔ other units</Text>
+            <Ionicons name="scale-outline" size={17} color={o?.ink ?? "#2563EB"} />
+            <Text className="ml-2 text-[13px] font-semibold text-slate-700" style={o && { color: o.icon }}>Unit conversions</Text>
+            <Text className="ml-1.5 text-[11px] text-slate-400" style={o && { color: o.faint }}>{row.unit || "unit"} ↔ other units</Text>
           </View>
           <UnitConversionsEditor
             compact
@@ -871,12 +935,13 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
   return (
     <View
       className={`flex-1 overflow-hidden rounded-3xl border bg-white ${row.error ? "border-red-300" : "border-slate-200"} ${row.submitted ? "opacity-50" : ""}`}
+      style={o && { borderRadius: 20, backgroundColor: o.surface, borderColor: row.error ? o.danger : o.border }}
     >
       {/* Pinned header — the receipt line and the name stay visible no
           matter how far the body below is scrolled, so it's always clear
           which item this card is. Kept to two rows so the body gets the
           room. */}
-      <View className="border-b border-slate-100 px-3.5 pb-3 pt-3">
+      <View className="border-b border-slate-100 px-3.5 pb-3 pt-3" style={o && { borderBottomColor: o.border }}>
         <View className="flex-row items-center gap-2">
           <Pressable
             disabled={row.submitted}
@@ -888,13 +953,18 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                   ? "border-blue-600 bg-blue-600"
                   : "border-slate-300"
             }`}
+            style={o && tones && (row.submitted
+              ? { borderColor: o.success, backgroundColor: o.success }
+              : row.checked
+                ? { borderColor: o.ink, backgroundColor: o.ink }
+                : { borderColor: tones.boxOff })}
             onPress={() => updateRow(row.key, { checked: !row.checked, error: undefined })}
           >
-            {(row.checked || row.submitted) && <Ionicons name="checkmark" size={16} color="white" />}
+            {(row.checked || row.submitted) && <Ionicons name="checkmark" size={16} color={o?.onInk ?? "white"} />}
           </Pressable>
 
-          <Ionicons name="receipt-outline" size={14} color="#94A3B8" />
-          <Text className="flex-1 text-xs text-slate-400" numberOfLines={1}>
+          <Ionicons name="receipt-outline" size={14} color={o?.faint ?? "#94A3B8"} />
+          <Text className="flex-1 text-xs text-slate-400" numberOfLines={1} style={o && { color: o.faint }}>
             “{row.lineItem.rawText}”
             {row.barcode ? ` · ${row.barcode}` : ""}
           </Text>
@@ -916,27 +986,30 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
               onTextChange={(value) => handleNameChange(row.key, value)}
               onSelect={(option) => applyIngredientMatch(row.key, option)}
               renderSubtitle={(option) => (
-                <Text className="mt-0.5 text-xs text-slate-500">
+                <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>
                   {option.isGeneric ? "Generic" : referenceName(option.brand) || "Specific"}
                   {referenceName(option.category) ? ` · ${referenceName(option.category)}` : ""}
                 </Text>
               )}
             />
           </View>
-          <Pressable
+          <Press
             accessibilityLabel="Scan barcode"
             className="h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white active:bg-slate-100"
+            orbit={o && { borderRadius: 14, backgroundColor: o.surface, borderColor: o.border }}
+            held={o && { backgroundColor: o.pill }}
             onPress={() => onScanBarcode(row.key)}
           >
-            <Ionicons name="barcode-outline" size={20} color="#334155" />
-          </Pressable>
-          <Pressable
+            <Ionicons name="barcode-outline" size={20} color={o?.icon ?? "#334155"} />
+          </Press>
+          <Press
             accessibilityLabel="Remove item"
             className="h-11 w-11 items-center justify-center rounded-xl bg-red-50 active:bg-red-100"
+            orbit={tones && { borderRadius: 14, backgroundColor: tones.dangerBg }}
             onPress={() => onDeleteRow(row.key, row.name)}
           >
-            <Ionicons name="trash-outline" size={19} color="#DC2626" />
-          </Pressable>
+            <Ionicons name="trash-outline" size={19} color={o?.danger ?? "#DC2626"} />
+          </Press>
         </View>
       </View>
 
@@ -967,29 +1040,35 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         <View style={layout.wide ? { flex: 1, minWidth: 0 } : undefined}>
 
         {!row.submitted && !isRowComplete && (
-          <View className="mt-3 flex-row items-start rounded-xl bg-amber-50 px-3 py-2.5">
-            <Ionicons name="alert-circle" size={16} color="#D97706" />
-            <Text className="ml-2 flex-1 text-xs font-medium leading-4 text-amber-800">
+          <View className="mt-3 flex-row items-start rounded-xl bg-amber-50 px-3 py-2.5" style={tones && { backgroundColor: tones.warnBg }}>
+            <Ionicons name="alert-circle" size={16} color={tones?.warnIcon ?? "#D97706"} />
+            <Text className="ml-2 flex-1 text-xs font-medium leading-4 text-amber-800" style={tones && { color: tones.warnText }}>
               Missing: {missingFields.join(", ")}
             </Text>
           </View>
         )}
 
         {!row.submitted && (
-          <Pressable
+          <Press
             className="mt-2.5 flex-row items-center self-start"
             hitSlop={6}
+            orbit={!!o && {}}
             onPress={() => onOpenGroceryLink(row.key)}
           >
             <Ionicons
               name="cart-outline"
               size={14}
-              color={linkedGroceryItem ? "#64748B" : hasPendingGroceryItems ? "#D97706" : "#94A3B8"}
+              color={
+                o && tones
+                  ? linkedGroceryItem ? o.muted : hasPendingGroceryItems ? tones.warnIcon : o.faint
+                  : linkedGroceryItem ? "#64748B" : hasPendingGroceryItems ? "#D97706" : "#94A3B8"
+              }
             />
             <Text
               className={`ml-1.5 text-xs font-medium ${
                 linkedGroceryItem ? "text-slate-600" : hasPendingGroceryItems ? "text-amber-700" : "text-slate-400"
               }`}
+              style={o && tones && { color: linkedGroceryItem ? o.muted : hasPendingGroceryItems ? o.warning : o.faint }}
             >
               {linkedGroceryItem
                 ? `Grocery list: ${linkedGroceryItem.name}`
@@ -997,7 +1076,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                   ? "Not on grocery list — tap to link"
                   : "Link to grocery list"}
             </Text>
-          </Pressable>
+          </Press>
         )}
 
         {/* How much was actually bought — feeds the pantry item's stock
@@ -1012,9 +1091,9 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
               onFocus={quantitySection.trigger}
               keyboardType="decimal-pad"
               placeholder="Qty"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={o?.faint ?? "#94A3B8"}
               className="flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-950"
-              style={{ height: 40 }}
+              style={[{ height: 40 }, field]}
             />
             <View className="flex-1">
               <CreatableStringDropdown
@@ -1047,7 +1126,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           const now = `${row.quantity} ${row.unit}`.trim();
           if (printed.toLowerCase() === now.toLowerCase()) return null;
           return (
-            <Text className="mt-1.5 text-[11px] text-slate-400">
+            <Text className="mt-1.5 text-[11px] text-slate-400" style={o && { color: o.faint }}>
               On the receipt: {printed}
               {li.packageQuantity != null ? ` (${li.packageQuantity} ${li.packageUnit ?? ""} each)` : ""} — check it&apos;s right.
             </Text>
@@ -1097,17 +1176,17 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         {!isNew && matchedIngredient && (
           <View className="mt-3 flex-row flex-wrap items-center gap-1.5">
             {!!referenceName(matchedIngredient.category) && (
-              <View className="flex-row items-center rounded-full bg-slate-100 px-2.5 py-1">
+              <View className="flex-row items-center rounded-full bg-slate-100 px-2.5 py-1" style={o && { backgroundColor: o.pill }}>
                 <Text className="mr-1 text-xs">{categoryEmoji(referenceName(matchedIngredient.category))}</Text>
-                <Text className="text-xs font-medium text-slate-600">{referenceName(matchedIngredient.category)}</Text>
+                <Text className="text-xs font-medium text-slate-600" style={o && { color: o.onPill }}>{referenceName(matchedIngredient.category)}</Text>
               </View>
             )}
-            <View className="rounded-full bg-slate-100 px-2.5 py-1">
-              <Text className="text-xs font-medium text-slate-600">
+            <View className="rounded-full bg-slate-100 px-2.5 py-1" style={o && { backgroundColor: o.pill }}>
+              <Text className="text-xs font-medium text-slate-600" style={o && { color: o.onPill }}>
                 {matchedIngredient.isGeneric ? "Generic" : referenceName(matchedIngredient.brand) || "Branded"}
               </Text>
             </View>
-            <Text className="text-[11px] text-slate-400">from your catalog</Text>
+            <Text className="text-[11px] text-slate-400" style={o && { color: o.faint }}>from your catalog</Text>
           </View>
         )}
 
@@ -1182,27 +1261,31 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             bought today." */}
         <View {...servingSizeSection.wrapperProps}>
           <View className="mt-4 flex-row items-center">
-            <Text className="flex-1 text-[13px] font-semibold text-slate-700">Serving size</Text>
+            <Text className="flex-1 text-[13px] font-semibold text-slate-700" style={o && { color: o.icon }}>Serving size</Text>
             {isNew && (
-              <Pressable
+              <Press
                 disabled={readingLabel}
                 onPress={() => onScanLabel(row.key)}
                 accessibilityLabel="Scan nutrition label"
                 className="h-8 flex-row items-center rounded-lg bg-blue-50 px-2.5 active:bg-blue-100"
+                orbit={softButton}
               >
                 {readingLabel ? (
-                  <ActivityIndicator size="small" color="#2563EB" />
+                  <ActivityIndicator size="small" color={o?.ink ?? "#2563EB"} />
                 ) : (
-                  <Ionicons name="camera-outline" size={15} color="#1D4ED8" />
+                  <Ionicons name="camera-outline" size={15} color={o?.onPill ?? "#1D4ED8"} />
                 )}
-                <Text className="ml-1.5 text-xs font-semibold text-blue-700">
+                <Text className="ml-1.5 text-xs font-semibold text-blue-700" style={o && { color: o.onPill }}>
                   {readingLabel ? "Reading…" : "Scan label"}
                 </Text>
-              </Pressable>
+              </Press>
             )}
           </View>
           <View className="mt-1.5 flex-row items-center">
-            <View className="w-28 flex-row items-center rounded-xl border border-slate-200 bg-white px-3" style={{ height: 40 }}>
+            <View
+              className="w-28 flex-row items-center rounded-xl border border-slate-200 bg-white px-3"
+              style={[{ height: 40 }, o && { borderColor: o.border, backgroundColor: isNew ? o.surface : o.pill }]}
+            >
               <TextInput
                 value={row.defaultPortionAmount}
                 editable={isNew}
@@ -1210,13 +1293,13 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                 onFocus={servingSizeSection.trigger}
                 keyboardType="decimal-pad"
                 placeholder="Amt"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 className={`flex-1 text-sm ${isNew ? "text-slate-950" : "text-slate-500"}`}
-                style={{ minWidth: 0 }}
+                style={[{ minWidth: 0 }, o && { color: isNew ? o.text : o.muted }]}
               />
-              <Text className="ml-1 text-sm text-slate-400" style={{ flexShrink: 0 }}>{servingUnit || "unit"}</Text>
+              <Text className="ml-1 text-sm text-slate-400" style={[{ flexShrink: 0 }, o && { color: o.faint }]}>{servingUnit || "unit"}</Text>
             </View>
-            <Text className="ml-2.5 flex-1 text-[11px] leading-4 text-slate-400">
+            <Text className="ml-2.5 flex-1 text-[11px] leading-4 text-slate-400" style={o && { color: o.faint }}>
               {isNew
                 ? servingUnit === row.unit
                   ? "Same unit as quantity bought. Nutrition below is per this amount."
@@ -1232,7 +1315,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                   label={cell.label}
                   unit={cell.unit}
                   icon={cell.icon}
-                  iconColor={cell.color}
+                  iconColor={o ? nutrientColor(cell.field, dark) : cell.color}
                   value={row.nutrition[cell.field]}
                   onChange={(value) => updateNutrient(cell.field, value)}
                   onFocus={servingSizeSection.trigger}
@@ -1246,20 +1329,24 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
               filled from a barcode scan, label photo or the AI estimate, so
               this is mostly for checking/correcting them. Same editability
               rule as the grid above. */}
-          <Pressable
+          <Press
             className="flex-row items-center rounded-xl bg-blue-50 px-3 py-2.5 active:bg-blue-100"
+            orbit={softButton}
             onPress={() => setShowMoreNutrients((current) => !current)}
           >
-            <Text className="text-xs font-semibold text-blue-700">More nutrients</Text>
-            <Text className="ml-1 flex-1 text-xs text-blue-500">
+            <Text className="text-xs font-semibold text-blue-700" style={o && { color: o.onPill }}>More nutrients</Text>
+            <Text className="ml-1 flex-1 text-xs text-blue-500" style={o && { color: o.muted }}>
               · {filledExtended} of {EXTENDED_NUTRITION_FIELDS.length} filled
             </Text>
-            <Ionicons name={showMoreNutrients ? "chevron-up" : "chevron-down"} size={15} color="#1D4ED8" />
-          </Pressable>
+            <Ionicons name={showMoreNutrients ? "chevron-up" : "chevron-down"} size={15} color={o?.onPill ?? "#1D4ED8"} />
+          </Press>
           {showMoreNutrients &&
             EXTENDED_NUTRITION_GROUPS.map((group) => (
               <View key={group.title} className="mt-2.5">
-                <Text className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <Text
+                  className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+                  style={o && { fontWeight: "700", letterSpacing: 1.2, color: o.faint }}
+                >
                   {group.title}
                 </Text>
                 <View className="-mx-1 flex-row flex-wrap">
@@ -1301,16 +1388,16 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
           // they relate: ask, rather than guess.)
           if (Number.isFinite(qty) && qty > 0 && !totalNutrition && servingUnit && row.unit && servingUnit.trim().toLowerCase() !== row.unit.trim().toLowerCase()) {
             return (
-              <View className="mt-2 flex-row items-start rounded-xl bg-amber-50 px-3 py-2">
-                <Ionicons name="scale-outline" size={14} color="#D97706" />
-                <Text className="ml-2 flex-1 text-[11px] leading-4 text-amber-800">
+              <View className="mt-2 flex-row items-start rounded-xl bg-amber-50 px-3 py-2" style={tones && { backgroundColor: tones.warnBg }}>
+                <Ionicons name="scale-outline" size={14} color={tones?.warnIcon ?? "#D97706"} />
+                <Text className="ml-2 flex-1 text-[11px] leading-4 text-amber-800" style={tones && { color: tones.warnText }}>
                   How much is 1 {row.unit.replace(/s$/, "")} in {servingUnit}? Add it under Unit conversions below to see the total for all {row.quantity} {row.unit}. It&apos;s saved to the ingredient.
                 </Text>
               </View>
             );
           }
           return (
-            <Text className="mt-2 text-[11px] text-slate-400">
+            <Text className="mt-2 text-[11px] text-slate-400" style={o && { color: o.faint }}>
               ≈ all {row.quantity || "?"} {row.unit}: {totalNutrition?.calories ?? "—"} kcal ·{" "}
               {totalNutrition?.protein ?? "—"} g protein · {totalNutrition?.carbs ?? "—"} g carbs ·{" "}
               {totalNutrition?.fats ?? "—"} g fat
@@ -1325,7 +1412,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
         </View>
         </View>
 
-        {row.error && <Text className="mt-2 text-xs text-red-600">{row.error}</Text>}
+        {row.error && <Text className="mt-2 text-xs text-red-600" style={o && { color: o.danger }}>{row.error}</Text>}
       </ScrollView>
 
       <DatePickerModal
@@ -1361,13 +1448,24 @@ function ReceiptRowSummary({
   const isNew = !row.matchedIngredientId;
   const missingFields = row.submitted ? [] : getMissingFields(row, hasPendingGroceryItems);
   const isRowComplete = missingFields.length === 0;
+  // (On the phone, in Orbit's colours: the one being looked at in the
+  // section's.)
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
+  const tones = o && orbitTones(o, dark);
 
   return (
-    <Pressable
+    <Press
       onPress={onPress}
       className={`mb-2 flex-row items-center rounded-2xl border px-3 py-2.5 ${
         row.error ? "border-red-300 bg-white" : isFocused ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white"
       } ${row.submitted ? "opacity-50" : ""}`}
+      orbit={o && tones && {
+        borderRadius: 18,
+        backgroundColor: !row.error && isFocused ? tones.inkSoft : o.surface,
+        borderColor: row.error ? o.danger : isFocused ? o.selectedRing : o.border,
+      }}
+      held={o && { opacity: row.submitted ? 0.4 : 0.8 }}
     >
       <Pressable
         disabled={row.submitted}
@@ -1379,25 +1477,30 @@ function ReceiptRowSummary({
               ? "border-blue-600 bg-blue-600"
               : "border-slate-300 bg-white"
         }`}
+        style={o && tones && (row.submitted
+          ? { borderColor: o.success, backgroundColor: o.success }
+          : row.checked
+            ? { borderColor: o.ink, backgroundColor: o.ink }
+            : { borderColor: tones.boxOff, backgroundColor: o.surface })}
         onPress={onToggleChecked}
       >
-        {(row.checked || row.submitted) && <Ionicons name="checkmark" size={16} color="white" />}
+        {(row.checked || row.submitted) && <Ionicons name="checkmark" size={16} color={o?.onInk ?? "white"} />}
       </Pressable>
 
-      <View className="ml-3 h-11 w-11 items-center justify-center rounded-xl bg-slate-100">
+      <View className="ml-3 h-11 w-11 items-center justify-center rounded-xl bg-slate-100" style={o && { borderRadius: 14, backgroundColor: o.pill }}>
         <Text className="text-2xl">{categoryEmoji(categoryName)}</Text>
       </View>
 
       <View className="ml-3 flex-1">
-        <Text className="text-[15px] font-semibold text-slate-900" numberOfLines={1}>
+        <Text className="text-[15px] font-semibold text-slate-900" numberOfLines={1} style={o && { color: o.text }}>
           {row.name || "Unnamed item"}
         </Text>
-        <Text className="mt-0.5 text-xs text-slate-500">
+        <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>
           {row.quantity} {row.unit}
           {row.price ? `  ·  $${row.price}` : ""}
         </Text>
         {!isRowComplete && (
-          <Text className="mt-0.5 text-[11px] font-medium text-amber-600" numberOfLines={1}>
+          <Text className="mt-0.5 text-[11px] font-medium text-amber-600" numberOfLines={1} style={o && { color: o.warning }}>
             Missing: {missingFields.join(", ")}
           </Text>
         )}
@@ -1406,12 +1509,21 @@ function ReceiptRowSummary({
       <View className="ml-2">
         <StatusBadge row={row} isNew={isNew} incomplete={!isRowComplete} />
       </View>
-      <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 6 }} />
-    </Pressable>
+      <Ionicons name="chevron-forward" size={16} color={o?.faint ?? "#CBD5E1"} style={{ marginLeft: 6 }} />
+    </Press>
   );
 }
 
+// A Kitchen page: in the Kitchen's own colour.
 export default function ReceiptReviewPage() {
+  return (
+    <OrbitSection section="kitchen">
+      <ReceiptReview />
+    </OrbitSection>
+  );
+}
+
+function ReceiptReview() {
   const router = useRouter();
   // A receipt saved on the server to review (see services/receiptApi.ts
   // drafts) — scanned on a phone, reviewed here, or the other way round. Its
@@ -1452,6 +1564,14 @@ export default function ReceiptReviewPage() {
   const { width: windowWidth, height: windowHeight } = usePaneDimensions();
   const pagerRef = useRef<FlatList<ReviewRow>>(null);
   const layout = useWideForm();
+  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
+  // desktop browser keeps the desktop's for now. The fields and dropdowns
+  // in it follow by themselves (OrbitPage).
+  const { colors, dark } = useOrbitTheme();
+  const o = layout.wide ? null : colors;
+  const card = o && { backgroundColor: o.surface, borderColor: o.border };
+  // A round button in the header, and on either side of "Item 2 of 5".
+  const roundButton = o && { alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border };
 
   // The item-list panel's draggable height (see the gesture + JSX further
   // down) — declared here, unconditionally, alongside the other hooks and
@@ -2543,27 +2663,29 @@ export default function ReceiptReviewPage() {
 
   if (loadError) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-8">
-        <Ionicons name="cloud-offline-outline" size={40} color="#94A3B8" />
-        <Text className="mt-3 text-center text-base font-semibold text-slate-700">
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-8" style={o && { backgroundColor: o.canvas }}>
+        <Ionicons name="cloud-offline-outline" size={40} color={o?.faint ?? "#94A3B8"} />
+        <Text className="mt-3 text-center text-base font-semibold text-slate-700" style={o && { color: o.text }}>
           Couldn&apos;t load this receipt
         </Text>
-        <Text className="mt-1 text-center text-sm text-slate-500">{loadError}</Text>
-        <Pressable
+        <Text className="mt-1 text-center text-sm text-slate-500" style={o && { color: o.muted }}>{loadError}</Text>
+        <Press
           className="mt-5 rounded-xl bg-blue-600 px-5 py-3 active:bg-blue-700"
+          orbit={o && { height: 52, justifyContent: "center", paddingHorizontal: 24, borderRadius: 16, backgroundColor: o.ink }}
+          held={o && { opacity: 0.85 }}
           onPress={() => setRetryToken((token) => token + 1)}
         >
-          <Text className="font-semibold text-white">Try again</Text>
-        </Pressable>
+          <Text className="font-semibold text-white" style={o && { fontSize: 16, color: o.onInk }}>Try again</Text>
+        </Press>
       </SafeAreaView>
     );
   }
 
   if (loading || !receipt) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-3 text-slate-500">Loading...</Text>
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.ink ?? "#2563EB"} />
+        <Text className="mt-3 text-slate-500" style={o && { color: o.muted }}>Loading...</Text>
       </SafeAreaView>
     );
   }
@@ -2630,8 +2752,8 @@ export default function ReceiptReviewPage() {
   const itemList = (
     <>
       <View className="flex-row items-center justify-between px-4 pb-2">
-        <Text className="flex-1 text-sm text-slate-500" numberOfLines={1}>
-          <Text className="font-bold text-slate-900">
+        <Text className="flex-1 text-sm text-slate-500" numberOfLines={1} style={o && { color: o.muted }}>
+          <Text className="font-bold text-slate-900" style={o && { color: o.text }}>
             {rows.length} item{rows.length === 1 ? "" : "s"}
           </Text>
           {" · "}
@@ -2646,7 +2768,7 @@ export default function ReceiptReviewPage() {
             );
           }}
         >
-          <Text className="text-sm font-semibold text-blue-600">
+          <Text className="text-sm font-semibold text-blue-600" style={o && { color: o.accent }}>
             {allSelectableChecked ? "Deselect all" : "Select all"}
           </Text>
         </Pressable>
@@ -2673,28 +2795,110 @@ export default function ReceiptReviewPage() {
           />
         ))}
 
-        <Pressable
+        <Press
           className="mt-1 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3 active:bg-slate-100"
+          orbit={o && { borderRadius: 18, borderColor: o.faint, backgroundColor: "transparent" }}
+          held={o && { backgroundColor: o.pill }}
           onPress={handleAddManualRow}
         >
-          <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
-          <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+          <Ionicons name="add-circle-outline" size={18} color={o?.ink ?? "#2563EB"} />
+          <Text className="ml-1.5 text-sm font-semibold text-blue-600" style={o && { color: o.ink }}>
             Add an item the receipt missed
           </Text>
-        </Pressable>
+        </Press>
       </ScrollView>
     </>
   );
 
   const focusedRow = rows[Math.min(focusedIndex, rows.length - 1)];
 
+  // (In a browser: which camera barcodes and labels use.)
+  const cameraSwitch = (
+    <View className="mr-3 flex-row items-center" style={o && { marginRight: 0 }}>
+      <Text className="mr-2 text-xs font-medium text-slate-500" style={o && { color: o.muted }}>Camera</Text>
+      <View className="flex-row rounded-xl bg-slate-100 p-1" style={o && { backgroundColor: o.pill }}>
+        {(
+          [
+            ["computer", "desktop-outline", "This computer"],
+            ["phone", "phone-portrait-outline", "My phone"],
+          ] as const
+        ).map(([mode, icon, text]) => (
+          <Pressable
+            key={mode}
+            onPress={() => setCameraMode(mode)}
+            accessibilityLabel={`Use ${text.toLowerCase()} for photos`}
+            className={`flex-row items-center rounded-lg px-3 py-1.5 ${cameraMode === mode ? "bg-white" : ""}`}
+            style={o && cameraMode === mode ? { backgroundColor: o.ink } : undefined}
+          >
+            <Ionicons name={icon} size={14} color={o ? (cameraMode === mode ? o.onInk : o.muted) : cameraMode === mode ? "#2563EB" : "#64748B"} />
+            <Text
+              className={`ml-1.5 text-xs font-semibold ${cameraMode === mode ? "text-blue-700" : "text-slate-500"}`}
+              style={o && { color: cameraMode === mode ? o.onInk : o.muted }}
+            >
+              {text}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+
   return (
+    <OrbitPage on={!layout.wide}>
     <SafeAreaView
       className="flex-1 bg-slate-50"
-      style={layout.wide ? { width: "100%", maxWidth: 1600, alignSelf: "center" } : undefined}
+      style={layout.wide ? { width: "100%", maxWidth: 1600, alignSelf: "center" } : o && { backgroundColor: o.canvas }}
       edges={["top", "left", "right"]}
     >
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        {/* Header (phone): the way back and the receipt's actions over a
+            large title, on the page itself. */}
+        {o ? (
+          <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginLeft: -4, minHeight: 40 }}>
+              <Tap
+                disabled={submitting}
+                onPress={() => router.back()}
+                accessibilityLabel="Back"
+                style={[roundButton, { width: 40, height: 40, borderRadius: 20 }]}
+                pressedStyle={{ backgroundColor: o.pill }}
+              >
+                <Ionicons name="chevron-back" size={22} color={o.text} />
+              </Tap>
+              <View style={{ flex: 1 }} />
+              {/* The receipt itself, to check the lines against. */}
+              {!!draftPhoto && (
+                <Tap
+                  accessibilityLabel="Show the receipt"
+                  onPress={() => setShowPhoto(true)}
+                  style={[roundButton, { width: 40, height: 40, borderRadius: 20 }]}
+                  pressedStyle={{ backgroundColor: o.pill }}
+                >
+                  <Ionicons name="receipt-outline" size={18} color={o.icon} />
+                </Tap>
+              )}
+              <Tap
+                disabled={submitting}
+                accessibilityLabel="Discard receipt"
+                onPress={handleDiscardReceipt}
+                style={[roundButton, { width: 40, height: 40, borderRadius: 20 }]}
+                pressedStyle={{ backgroundColor: o.pill }}
+              >
+                <Ionicons name="trash-outline" size={18} color={o.icon} />
+              </Tap>
+              <Tap
+                disabled={submitting}
+                onPress={() => void handleConfirm()}
+                style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: submitting ? 0.5 : 1 }}
+                pressedStyle={{ opacity: 0.8 }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: "700", color: o.onInk }}>{submitting ? "Adding..." : "Confirm"}</Text>
+              </Tap>
+            </View>
+            <Text style={{ marginTop: 10, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>Review Receipt</Text>
+            {Platform.OS === "web" && <View style={{ marginTop: 8, alignSelf: "flex-start" }}>{cameraSwitch}</View>}
+          </View>
+        ) : (
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
           <Pressable
             disabled={submitting}
@@ -2704,30 +2908,7 @@ export default function ReceiptReviewPage() {
             <Ionicons name="chevron-back" size={26} color="#0F172A" />
           </Pressable>
           <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Review Receipt</Text>
-          {/* (In a browser: which camera barcodes and labels use.) */}
-          {Platform.OS === "web" && (
-            <View className="mr-3 flex-row items-center">
-              <Text className="mr-2 text-xs font-medium text-slate-500">Camera</Text>
-              <View className="flex-row rounded-xl bg-slate-100 p-1">
-                {(
-                  [
-                    ["computer", "desktop-outline", "This computer"],
-                    ["phone", "phone-portrait-outline", "My phone"],
-                  ] as const
-                ).map(([mode, icon, text]) => (
-                  <Pressable
-                    key={mode}
-                    onPress={() => setCameraMode(mode)}
-                    accessibilityLabel={`Use ${text.toLowerCase()} for photos`}
-                    className={`flex-row items-center rounded-lg px-3 py-1.5 ${cameraMode === mode ? "bg-white" : ""}`}
-                  >
-                    <Ionicons name={icon} size={14} color={cameraMode === mode ? "#2563EB" : "#64748B"} />
-                    <Text className={`ml-1.5 text-xs font-semibold ${cameraMode === mode ? "text-blue-700" : "text-slate-500"}`}>{text}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          )}
+          {Platform.OS === "web" && cameraSwitch}
           {/* The receipt itself, to check the lines against. */}
           {!!draftPhoto && (
             <Pressable
@@ -2755,16 +2936,17 @@ export default function ReceiptReviewPage() {
             <Text className="font-semibold text-white">{submitting ? "Adding..." : "Confirm"}</Text>
           </Pressable>
         </View>
+        )}
 
         {/* Raised above the card pager below, so the store's options list
             draws over it. */}
         <View className="flex-row gap-2 px-4 pt-3" style={{ zIndex: 10 }}>
-          <View className="flex-1 flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 py-2">
-            <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100">
-              <Ionicons name="cart-outline" size={18} color="#475569" />
+          <View className="flex-1 flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 py-2" style={card && { ...card, borderRadius: 18 }}>
+            <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100" style={o && { backgroundColor: o.pill }}>
+              <Ionicons name="cart-outline" size={18} color={o?.icon ?? "#475569"} />
             </View>
             <View className="ml-2.5 flex-1">
-              <Text className="text-[11px] font-medium text-slate-500">Store</Text>
+              <Text className="text-[11px] font-medium text-slate-500" style={o && { color: o.muted }}>Store</Text>
               <SearchableObjectDropdown<SelectOption>
                 bare
                 options={stores}
@@ -2785,20 +2967,22 @@ export default function ReceiptReviewPage() {
             </View>
           </View>
 
-          <Pressable
+          <Press
             onPress={() => setPickingPurchaseDate(true)}
             className="flex-1 flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 py-2 active:bg-slate-50"
+            orbit={card && { ...card, borderRadius: 18 }}
+            held={o && { backgroundColor: o.pill }}
           >
-            <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100">
-              <Ionicons name="calendar-outline" size={18} color="#475569" />
+            <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100" style={o && { backgroundColor: o.pill }}>
+              <Ionicons name="calendar-outline" size={18} color={o?.icon ?? "#475569"} />
             </View>
             <View className="ml-2.5 flex-1">
-              <Text className="text-[11px] font-medium text-slate-500">Purchase date</Text>
-              <Text className="text-base text-slate-950" style={{ lineHeight: 26 }} numberOfLines={1}>
+              <Text className="text-[11px] font-medium text-slate-500" style={o && { color: o.muted }}>Purchase date</Text>
+              <Text className="text-base text-slate-950" style={[{ lineHeight: 26 }, o && { color: o.text }]} numberOfLines={1}>
                 {formatDateDisplay(purchaseDate) ?? "Pick a date"}
               </Text>
             </View>
-          </Pressable>
+          </Press>
         </View>
 
         {/* (In a desktop browser: the item list on the left, and the one
@@ -2811,7 +2995,7 @@ export default function ReceiptReviewPage() {
         ) : null}
         {rows.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
-            <Text className="text-center text-slate-500">
+            <Text className="text-center text-slate-500" style={o && { color: o.muted }}>
               No items left on this receipt — add one below, or discard the receipt.
             </Text>
           </View>
@@ -2845,27 +3029,31 @@ export default function ReceiptReviewPage() {
         ) : (
           <View className="flex-1 mt-3">
             <View className="mb-2 flex-row items-center justify-between px-4">
-              <Pressable
+              <Press
                 disabled={focusedIndex === 0}
                 accessibilityLabel="Previous item"
                 onPress={() => goToIndex(focusedIndex - 1)}
                 className="h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white active:bg-slate-100"
                 style={{ opacity: focusedIndex === 0 ? 0.35 : 1 }}
+                orbit={roundButton}
+                held={o && { backgroundColor: o.pill }}
               >
-                <Ionicons name="chevron-back" size={16} color="#334155" />
-              </Pressable>
-              <Text className="text-xs font-medium text-slate-500">
+                <Ionicons name="chevron-back" size={16} color={o?.icon ?? "#334155"} />
+              </Press>
+              <Text className="text-xs font-medium text-slate-500" style={o && { color: o.muted }}>
                 Item {focusedIndex + 1} of {rows.length} · swipe for next
               </Text>
-              <Pressable
+              <Press
                 disabled={focusedIndex >= rows.length - 1}
                 accessibilityLabel="Next item"
                 onPress={() => goToIndex(focusedIndex + 1)}
                 className="h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white active:bg-slate-100"
                 style={{ opacity: focusedIndex >= rows.length - 1 ? 0.35 : 1 }}
+                orbit={roundButton}
+                held={o && { backgroundColor: o.pill }}
               >
-                <Ionicons name="chevron-forward" size={16} color="#334155" />
-              </Pressable>
+                <Ionicons name="chevron-forward" size={16} color={o?.icon ?? "#334155"} />
+              </Press>
             </View>
             <FlatList<ReviewRow>
               ref={pagerRef}
@@ -2909,12 +3097,12 @@ export default function ReceiptReviewPage() {
 
       {layout.wide ? null : (
       <Animated.View
-          style={listPanelStyle}
+          style={[listPanelStyle, o && { borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: o.canvas, borderColor: o.border }]}
           className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl border border-slate-200 bg-white"
         >
           <GestureDetector gesture={listPanGesture}>
             <View className="items-center justify-center" style={{ height: LIST_HANDLE_AREA_HEIGHT }}>
-              <View className="h-1.5 w-10 rounded-full bg-slate-300" />
+              <View className="h-1.5 w-10 rounded-full bg-slate-300" style={o && { height: 4, backgroundColor: dark ? o.faint : o.orbit }} />
             </View>
           </GestureDetector>
 
@@ -2955,30 +3143,46 @@ export default function ReceiptReviewPage() {
       >
         <Pressable
           className="flex-1 items-center justify-end bg-black/40"
+          style={o && { backgroundColor: o.scrim }}
           onPress={() => setGroceryLinkRowKey(null)}
         >
           <Pressable
             className="max-h-[70%] w-full rounded-t-3xl bg-white pb-6 pt-4"
+            style={o && { borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: o.canvas, paddingTop: 10, paddingBottom: 32 }}
             onPress={(event) => event.stopPropagation()}
           >
-            <Text className="px-5 pb-3 text-base font-bold text-slate-950">
+            {o && (
+              <View style={{ alignItems: "center", paddingBottom: 14 }}>
+                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: o.track }} />
+              </View>
+            )}
+            <Text className="px-5 pb-3 text-base font-bold text-slate-950" style={o && { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: o.text, paddingBottom: 14 }}>
               Link to grocery list
             </Text>
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <Pressable
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              // (On the phone: the choices as one card.)
+              style={o && { marginHorizontal: 16, overflow: "hidden", borderRadius: 18, borderWidth: 1, borderColor: o.border, backgroundColor: o.surface }}
+            >
+              <Press
                 className="flex-row items-center border-t border-slate-100 px-5 py-4 active:bg-slate-50"
+                orbit={o && { borderTopWidth: 0, paddingHorizontal: 16, backgroundColor: o.surface }}
+                held={o && { backgroundColor: o.pill }}
                 onPress={() => {
                   if (groceryLinkRowKey) handleLinkGroceryItem(groceryLinkRowKey, null);
                   setGroceryLinkRowKey(null);
                 }}
               >
-                <Ionicons name="close-circle-outline" size={20} color="#64748B" />
-                <Text className="ml-2.5 text-sm font-medium text-slate-700">
+                <Ionicons name="close-circle-outline" size={20} color={o?.muted ?? "#64748B"} />
+                <Text className="ml-2.5 text-sm font-medium text-slate-700" style={o && { color: o.text }}>
                   Not on my list (bought extra)
                 </Text>
-              </Pressable>
+              </Press>
               {pendingGroceryItems.length === 0 ? (
-                <Text className="px-5 py-4 text-sm text-slate-400">
+                <Text
+                  className="px-5 py-4 text-sm text-slate-400"
+                  style={o && { paddingHorizontal: 16, color: o.faint, borderTopWidth: 1, borderTopColor: o.border }}
+                >
                   Nothing pending on your grocery list right now.
                 </Text>
               ) : (
@@ -2989,23 +3193,25 @@ export default function ReceiptReviewPage() {
                     (r) => r.key !== groceryLinkRowKey && r.matchedGroceryItemId === item._id,
                   );
                   return (
-                    <Pressable
+                    <Press
                       key={item._id}
                       className="flex-row items-center border-t border-slate-100 px-5 py-4 active:bg-slate-50"
+                      orbit={o && { paddingHorizontal: 16, borderTopColor: o.border, backgroundColor: o.surface }}
+                      held={o && { backgroundColor: o.pill }}
                       onPress={() => {
                         if (groceryLinkRowKey) handleLinkGroceryItem(groceryLinkRowKey, item._id);
                         setGroceryLinkRowKey(null);
                       }}
                     >
                       <View className="flex-1">
-                        <Text className="text-sm font-medium text-slate-900">{item.name}</Text>
-                        <Text className="mt-0.5 text-xs text-slate-400">
+                        <Text className="text-sm font-medium text-slate-900" style={o && { color: o.text }}>{item.name}</Text>
+                        <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.faint }}>
                           {item.quantity != null ? `${item.quantity} ${item.unit}`.trim() : "No quantity set"}
                           {claimedByOtherRow ? " · currently linked to another item on this receipt" : ""}
                         </Text>
                       </View>
-                      {isSelected && <Ionicons name="checkmark-circle" size={20} color="#2563EB" />}
-                    </Pressable>
+                      {isSelected && <Ionicons name="checkmark-circle" size={20} color={o?.ink ?? "#2563EB"} />}
+                    </Press>
                   );
                 })
               )}
@@ -3105,5 +3311,6 @@ export default function ReceiptReviewPage() {
         </Pressable>
       </Modal>
     </SafeAreaView>
+    </OrbitPage>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -8,11 +8,17 @@ import {
   ScrollView,
   Text,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { Tap } from "@/src/components/ui/Tap";
+import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
+import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 
 import {
   CreatableMultiTagDropdown,
@@ -200,6 +206,14 @@ function ingredientToForm(ingredient: Ingredient): FormState {
 }
 
 export default function IngredientDetailScreen() {
+  return (
+    <OrbitSection section="kitchen">
+      <IngredientDetail />
+    </OrbitSection>
+  );
+}
+
+function IngredientDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -264,6 +278,23 @@ export default function IngredientDetailScreen() {
   // capable fields only — see useScrollFocusSection for why plain
   // TextInput-style sections don't need one (they default to 0).
   const layout = useWideForm();
+  // On a phone, in Orbit's look, light or dark (`o`: its colours, the
+  // Kitchen's orange for the main things); a desktop browser keeps the
+  // desktop's for now. The cards and fields follow by themselves (OrbitPage).
+  const { colors, dark } = useOrbitTheme();
+  const o = layout.wide ? null : colors;
+  const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 };
+  // Soft backgrounds for the coloured chips, light / dark.
+  const tint = {
+    warning: dark ? "rgba(251,191,36,0.14)" : "#FFFBEB",
+    success: dark ? "rgba(52,211,153,0.14)" : "#ECFDF5",
+    danger: dark ? "rgba(248,113,113,0.14)" : "#FEF2F2",
+    violet: dark ? "rgba(139,92,246,0.18)" : "#F5F3FF",
+    violetText: dark ? "#C4B5FD" : "#6D28D9",
+    violetIcon: dark ? "#A78BFA" : "#7C3AED",
+  };
+  // A nutrient's colour on the phone (the dark shade in the dark).
+  const nutrientHue = (key: MainNutrient) => nutrientColor(key, dark);
   const scrollRef = useRef<ScrollView>(null);
   const scrollAnchorRef = useRef<View>(null);
 
@@ -972,9 +1003,9 @@ export default function IngredientDetailScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-3 text-slate-500">Loading ingredient...</Text>
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
+        <Text className="mt-3 text-slate-500" style={o && { color: o.muted }}>Loading ingredient...</Text>
       </SafeAreaView>
     );
   }
@@ -984,7 +1015,18 @@ export default function IngredientDetailScreen() {
       <SafeAreaView
         className="flex-1 bg-slate-50"
         edges={["top", "left", "right"]}
+        style={o && { backgroundColor: o.canvas }}
       >
+        {o ? (
+          <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
+              <Tap onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                <Ionicons name="chevron-back" size={22} color={o.text} />
+              </Tap>
+            </View>
+            <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>Ingredient</Text>
+          </View>
+        ) : (
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
           <Pressable
             className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
@@ -996,12 +1038,13 @@ export default function IngredientDetailScreen() {
             Ingredient
           </Text>
         </View>
+        )}
         <View className="flex-1 items-center justify-center px-8">
-          <Ionicons name="warning-outline" size={42} color="#94A3B8" />
-          <Text className="mt-4 text-lg font-bold text-slate-900">
+          <Ionicons name="warning-outline" size={42} color={o?.faint ?? "#94A3B8"} />
+          <Text className="mt-4 text-lg font-bold text-slate-900" style={o && { color: o.text }}>
             Could not load ingredient
           </Text>
-          <Text className="mt-2 text-center text-slate-500">
+          <Text className="mt-2 text-center text-slate-500" style={o && { color: o.muted }}>
             {error ?? "This ingredient could not be found."}
           </Text>
         </View>
@@ -1030,16 +1073,50 @@ export default function IngredientDetailScreen() {
         isInStock);
 
   return (
+    <OrbitPage on={!!o}>
     <SafeAreaView
       className="flex-1 bg-slate-50"
       edges={["top", "left", "right"]}
+      style={o && { backgroundColor: o.canvas }}
     >
       <KeyboardAvoidingView
         className="flex-1"
         style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
+        {/* Header (phone): the way back — or Cancel while editing — and
+            Edit / Save, over a large title, on the page itself */}
+        {o && (
+          <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
+              {isEditing ? (
+                <Tap disabled={saving} onPress={handleCancel} style={{ height: 40, justifyContent: "center", paddingHorizontal: 16, borderRadius: 20, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: o.muted }}>Cancel</Text>
+                </Tap>
+              ) : (
+                <Tap onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                  <Ionicons name="chevron-back" size={22} color={o.text} />
+                </Tap>
+              )}
+              <View style={{ flex: 1 }} />
+              {isEditing ? (
+                <Tap disabled={saving} onPress={() => void handleSave()} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }} pressedStyle={{ opacity: 0.8 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>{saving ? "Saving..." : "Save"}</Text>
+                </Tap>
+              ) : (
+                <Tap onPress={() => setIsEditing(true)} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.pill }} pressedStyle={{ opacity: 0.7 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: o.onPill }}>Edit</Text>
+                </Tap>
+              )}
+            </View>
+            <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }} numberOfLines={2}>
+              {ingredient.name}
+            </Text>
+          </View>
+        )}
+
         {/* Header */}
+        {!o && (
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
           {isEditing ? (
             <Pressable
@@ -1088,11 +1165,13 @@ export default function IngredientDetailScreen() {
             </Pressable>
           )}
         </View>
+        )}
 
         <ScrollView
           ref={scrollRef}
           className="flex-1"
           contentContainerClassName="px-5 pb-16 pt-5"
+          contentContainerStyle={o ? { paddingHorizontal: 16, paddingTop: 16 } : undefined}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           removeClippedSubviews={false}
@@ -1107,13 +1186,13 @@ export default function IngredientDetailScreen() {
             /* ── Edit form ── */
             <>
               {ingredient.isGeneric && (
-                <View className="mb-3 flex-row items-center rounded-2xl bg-violet-50 px-4 py-3">
-                  <Ionicons name="git-branch-outline" size={20} color="#7C3AED" />
+                <View className="mb-3 flex-row items-center rounded-2xl bg-violet-50 px-4 py-3" style={o && { backgroundColor: tint.violet, borderRadius: 18 }}>
+                  <Ionicons name="git-branch-outline" size={20} color={o ? tint.violetIcon : "#7C3AED"} />
                   <View className="ml-3 flex-1">
-                    <Text className="text-sm font-bold text-violet-700">
+                    <Text className="text-sm font-bold text-violet-700" style={o && { color: tint.violetText }}>
                       Generic ingredient
                     </Text>
-                    <Text className="mt-0.5 text-xs leading-4 text-violet-600">
+                    <Text className="mt-0.5 text-xs leading-4 text-violet-600" style={o && { color: tint.violetText }}>
                       It has no brand — its availability also includes any
                       specific/branded variants linked to it.
                     </Text>
@@ -1278,7 +1357,7 @@ export default function IngredientDetailScreen() {
                   )}
                 </View>
 
-                <Text className="mt-2 text-xs leading-4 text-slate-500">
+                <Text className="mt-2 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                   Piece label: only for things bought as individual pieces (a
                   steak, not ground beef), so the pantry shows &quot;3 steaks&quot;
                   instead of a total weight.
@@ -1306,16 +1385,17 @@ export default function IngredientDetailScreen() {
                 headerAccessory={
                   <Pressable
                     className="h-8 flex-row items-center rounded-lg bg-blue-50 px-2.5 active:bg-blue-100"
+                    style={o && { backgroundColor: o.pill, borderRadius: 16, paddingHorizontal: 12 }}
                     disabled={readingLabel}
                     onPress={() => setLabelCameraVisible(true)}
                     accessibilityLabel="Scan nutrition label"
                   >
                     {readingLabel ? (
-                      <ActivityIndicator size="small" color="#2563EB" />
+                      <ActivityIndicator size="small" color={o?.ink ?? "#2563EB"} />
                     ) : (
-                      <Ionicons name="camera-outline" size={15} color="#1D4ED8" />
+                      <Ionicons name="camera-outline" size={15} color={o?.ink ?? "#1D4ED8"} />
                     )}
-                    <Text className="ml-1.5 text-xs font-semibold text-blue-700">
+                    <Text className="ml-1.5 text-xs font-semibold text-blue-700" style={o && { color: o.onPill }}>
                       {readingLabel ? "Reading…" : "Scan label"}
                     </Text>
                   </Pressable>
@@ -1366,10 +1446,11 @@ export default function IngredientDetailScreen() {
                 {suggestedLocation && (
                   <Pressable
                     className="mt-2 flex-row items-center self-start rounded-full bg-blue-50 px-3 py-1.5 active:bg-blue-100"
+                    style={o && { backgroundColor: o.accentSoft }}
                     onPress={handleAutofillLocation}
                   >
-                    <Ionicons name="sparkles-outline" size={14} color="#2563EB" />
-                    <Text className="ml-1.5 text-xs font-semibold text-blue-600">
+                    <Ionicons name="sparkles-outline" size={14} color={o?.accent ?? "#2563EB"} />
+                    <Text className="ml-1.5 text-xs font-semibold text-blue-600" style={o && { color: o.accent }}>
                       Autofill: {suggestedLocation.name}
                     </Text>
                   </Pressable>
@@ -1407,10 +1488,11 @@ export default function IngredientDetailScreen() {
                 {suggestedExpiryDuration && (
                   <Pressable
                     className="mt-2 flex-row items-center self-start rounded-full bg-blue-50 px-3 py-1.5 active:bg-blue-100"
+                    style={o && { backgroundColor: o.accentSoft }}
                     onPress={handleAutofillExpiryDuration}
                   >
-                    <Ionicons name="sparkles-outline" size={14} color="#2563EB" />
-                    <Text className="ml-1.5 text-xs font-semibold text-blue-600">
+                    <Ionicons name="sparkles-outline" size={14} color={o?.accent ?? "#2563EB"} />
+                    <Text className="ml-1.5 text-xs font-semibold text-blue-600" style={o && { color: o.accent }}>
                       Autofill: {suggestedExpiryDuration.amount}{" "}
                       {suggestedExpiryDuration.unit}
                       {suggestedExpiryDuration.amount > 1 ? "s" : ""}
@@ -1434,76 +1516,78 @@ export default function IngredientDetailScreen() {
               </View>
 
               <View style={layout.actions}>
-              <Pressable
+              <OrbitPressable
                 disabled={saving}
                 onPress={() => void handleSave()}
                 className={`mt-2 items-center rounded-2xl py-4 ${
                   saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
                 }`}
+                orbitStyle={o && { marginTop: 8, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }}
               >
-                <Text className="text-base font-semibold text-white">
+                <Text className="text-base font-semibold text-white" style={o && { color: o.onInk }}>
                   {saving ? "Saving..." : "Save changes"}
                 </Text>
-              </Pressable>
+              </OrbitPressable>
 
-              <Pressable
+              <OrbitPressable
                 disabled={saving}
                 className="mt-3 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
+                orbitStyle={o && { marginTop: 12, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: tint.danger }}
                 onPress={handleDeleteIngredient}
               >
-                <Text className="font-semibold text-red-600">Delete ingredient</Text>
-              </Pressable>
+                <Text className="font-semibold text-red-600" style={o && { color: o.danger }}>Delete ingredient</Text>
+              </OrbitPressable>
               </View>
             </>
           ) : (
             /* ── Detail view ── */
             <>
               {/* Hero card */}
-              <View className="mb-4 items-center rounded-2xl border border-slate-200 bg-white px-6 py-8">
-                <View className="h-20 w-20 items-center justify-center rounded-full bg-blue-50">
+              <View className="mb-4 items-center rounded-2xl border border-slate-200 bg-white px-6 py-8" style={card}>
+                <View className="h-20 w-20 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.pill }}>
                   <Ionicons
                     name="nutrition-outline"
                     size={36}
-                    color="#2563EB"
+                    color={o?.ink ?? "#2563EB"}
                   />
                 </View>
 
-                <Text className="mt-4 text-center text-2xl font-bold text-slate-950">
+                <Text className="mt-4 text-center text-2xl font-bold text-slate-950" style={o && { color: o.text }}>
                   {ingredient.name}
                 </Text>
 
                 <View className="mt-3 flex-row flex-wrap justify-center">
                   {ingredient.productionRecipe ? (
-                    <View className="mr-2 rounded-full bg-blue-50 px-3 py-1">
-                      <Text className="text-sm font-medium text-blue-600">
+                    <View className="mr-2 rounded-full bg-blue-50 px-3 py-1" style={o && { backgroundColor: o.accentSoft }}>
+                      <Text className="text-sm font-medium text-blue-600" style={o && { color: o.accent }}>
                         Prepared
                       </Text>
                     </View>
                   ) : null}
                   {ingredient.isGeneric ? (
-                    <View className="mr-2 rounded-full bg-violet-50 px-3 py-1">
-                      <Text className="text-sm font-medium text-violet-600">
+                    <View className="mr-2 rounded-full bg-violet-50 px-3 py-1" style={o && { backgroundColor: tint.violet }}>
+                      <Text className="text-sm font-medium text-violet-600" style={o && { color: tint.violetText }}>
                         Generic
                       </Text>
                     </View>
                   ) : null}
                   {categoryName ? (
-                    <View className="mr-2 rounded-full bg-blue-50 px-3 py-1">
-                      <Text className="text-sm font-medium text-blue-700">
+                    <View className="mr-2 rounded-full bg-blue-50 px-3 py-1" style={o && { backgroundColor: o.pill }}>
+                      <Text className="text-sm font-medium text-blue-700" style={o && { color: o.onPill }}>
                         {categoryName}
                       </Text>
                     </View>
                   ) : null}
                   {brandName ? (
-                    <View className="mr-2 rounded-full bg-slate-100 px-3 py-1">
-                      <Text className="text-sm font-medium text-slate-600">
+                    <View className="mr-2 rounded-full bg-slate-100 px-3 py-1" style={o && { backgroundColor: o.pill }}>
+                      <Text className="text-sm font-medium text-slate-600" style={o && { color: o.muted }}>
                         {brandName}
                       </Text>
                     </View>
                   ) : null}
                   {selectedTags.map((tag) => (
-                    <View key={tag._id} className="mr-2 mt-2 rounded-full bg-slate-100 px-3 py-1">
-                      <Text className="text-sm font-medium text-slate-600">
+                    <View key={tag._id} className="mr-2 mt-2 rounded-full bg-slate-100 px-3 py-1" style={o && { backgroundColor: o.pill }}>
+                      <Text className="text-sm font-medium text-slate-600" style={o && { color: o.muted }}>
                         #{tag.name}
                       </Text>
                     </View>
@@ -1511,24 +1595,24 @@ export default function IngredientDetailScreen() {
                 </View>
 
                 {ingredient.description ? (
-                  <Text className="mt-3 text-center text-sm leading-5 text-slate-500">
+                  <Text className="mt-3 text-center text-sm leading-5 text-slate-500" style={o && { color: o.muted }}>
                     {ingredient.description}
                   </Text>
                 ) : null}
               </View>
 
               {/* Stock summary */}
-              <View className="mb-4 flex-row rounded-2xl border border-slate-200 bg-white px-5 py-4">
+              <View className="mb-4 flex-row rounded-2xl border border-slate-200 bg-white px-5 py-4" style={card}>
                 <View className="flex-1 items-center">
-                  <Text className="text-2xl font-bold text-slate-950">
+                  <Text className="text-2xl font-bold text-slate-950" style={o && { color: o.text }}>
                     {Math.round(totalQuantity * 100) / 100}
                   </Text>
-                  <Text className="mt-0.5 text-xs text-slate-500">
+                  <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>
                     {ingredient.defaultPortionUnit || "units"} total
                   </Text>
                 </View>
 
-                <View className="mx-4 w-px bg-slate-100" />
+                <View className="mx-4 w-px bg-slate-100" style={o && { backgroundColor: o.border }} />
 
                 <View className="flex-1 items-center justify-center">
                   <View
@@ -1541,8 +1625,30 @@ export default function IngredientDetailScreen() {
                             ? "bg-emerald-50"
                             : "bg-slate-100"
                     }`}
+                    style={
+                      o && {
+                        backgroundColor: isAlwaysAvailable
+                          ? o.accentSoft
+                          : isLowStock
+                            ? tint.warning
+                            : isInStock
+                              ? tint.success
+                              : o.pill,
+                      }
+                    }
                   >
                     <Text
+                      style={
+                        o && {
+                          color: isAlwaysAvailable
+                            ? o.accent
+                            : isLowStock
+                              ? o.warning
+                              : isInStock
+                                ? o.success
+                                : o.muted,
+                        }
+                      }
                       className={`text-sm font-semibold ${
                         isAlwaysAvailable
                           ? "text-blue-600"
@@ -1562,7 +1668,7 @@ export default function IngredientDetailScreen() {
                             : "Out of stock"}
                     </Text>
                   </View>
-                  <Text className="mt-1 text-xs text-slate-500">
+                  <Text className="mt-1 text-xs text-slate-500" style={o && { color: o.muted }}>
                     {ingredient.isGeneric
                       ? [
                           ingredientPantryItems.length > 0
@@ -1586,12 +1692,12 @@ export default function IngredientDetailScreen() {
 
                 {ingredient.defaultPortionAmount != null ? (
                   <>
-                    <View className="mx-4 w-px bg-slate-100" />
+                    <View className="mx-4 w-px bg-slate-100" style={o && { backgroundColor: o.border }} />
                     <View className="flex-1 items-center">
-                      <Text className="text-2xl font-bold text-slate-950">
+                      <Text className="text-2xl font-bold text-slate-950" style={o && { color: o.text }}>
                         {ingredient.defaultPortionAmount}
                       </Text>
-                      <Text className="mt-0.5 text-xs text-slate-500">
+                      <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>
                         {ingredient.defaultPortionUnit
                           ? `${ingredient.defaultPortionUnit} / serving`
                           : "per serving"}
@@ -1608,15 +1714,15 @@ export default function IngredientDetailScreen() {
               ingredient.defaultPortionAmount != null ||
               ingredient.defaultStorageLocation ||
               ingredient.defaultExpiryDurationAmount != null ? (
-                <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
-                  <Text className="mb-3 text-base font-bold text-slate-900">
+                <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4" style={card}>
+                  <Text className="mb-3 text-base font-bold text-slate-900" style={o && { color: o.text }}>
                     Details
                   </Text>
 
                   {brandName ? (
                     <View className="mb-2 flex-row items-center justify-between">
-                      <Text className="text-sm text-slate-500">Brand</Text>
-                      <Text className="text-sm font-medium text-slate-900">
+                      <Text className="text-sm text-slate-500" style={o && { color: o.muted }}>Brand</Text>
+                      <Text className="text-sm font-medium text-slate-900" style={o && { color: o.text }}>
                         {brandName}
                       </Text>
                     </View>
@@ -1624,8 +1730,8 @@ export default function IngredientDetailScreen() {
 
                   {categoryName ? (
                     <View className="mb-2 flex-row items-center justify-between">
-                      <Text className="text-sm text-slate-500">Category</Text>
-                      <Text className="text-sm font-medium text-slate-900">
+                      <Text className="text-sm text-slate-500" style={o && { color: o.muted }}>Category</Text>
+                      <Text className="text-sm font-medium text-slate-900" style={o && { color: o.text }}>
                         {categoryName}
                       </Text>
                     </View>
@@ -1633,10 +1739,10 @@ export default function IngredientDetailScreen() {
 
                   {ingredient.defaultPortionAmount != null ? (
                     <View className="mb-2 flex-row items-center justify-between">
-                      <Text className="text-sm text-slate-500">
+                      <Text className="text-sm text-slate-500" style={o && { color: o.muted }}>
                         Default portion
                       </Text>
-                      <Text className="text-sm font-medium text-slate-900">
+                      <Text className="text-sm font-medium text-slate-900" style={o && { color: o.text }}>
                         {ingredient.defaultPortionAmount}
                         {ingredient.defaultPortionUnit
                           ? ` ${ingredient.defaultPortionUnit}`
@@ -1647,8 +1753,8 @@ export default function IngredientDetailScreen() {
 
                   {ingredient.barcode ? (
                     <View className="mb-2 flex-row items-center justify-between">
-                      <Text className="text-sm text-slate-500">Barcode</Text>
-                      <Text className="text-sm font-medium text-slate-900">
+                      <Text className="text-sm text-slate-500" style={o && { color: o.muted }}>Barcode</Text>
+                      <Text className="text-sm font-medium text-slate-900" style={o && { color: o.text }}>
                         {ingredient.barcode}
                       </Text>
                     </View>
@@ -1656,8 +1762,8 @@ export default function IngredientDetailScreen() {
 
                   {ingredient.defaultStorageLocation ? (
                     <View className="mb-2 flex-row items-center justify-between">
-                      <Text className="text-sm text-slate-500">Default location</Text>
-                      <Text className="text-sm font-medium text-slate-900">
+                      <Text className="text-sm text-slate-500" style={o && { color: o.muted }}>Default location</Text>
+                      <Text className="text-sm font-medium text-slate-900" style={o && { color: o.text }}>
                         {getReferenceName(ingredient.defaultStorageLocation)}
                       </Text>
                     </View>
@@ -1665,8 +1771,8 @@ export default function IngredientDetailScreen() {
 
                   {ingredient.defaultExpiryDurationAmount != null ? (
                     <View className="flex-row items-center justify-between">
-                      <Text className="text-sm text-slate-500">Usually lasts</Text>
-                      <Text className="text-sm font-medium text-slate-900">
+                      <Text className="text-sm text-slate-500" style={o && { color: o.muted }}>Usually lasts</Text>
+                      <Text className="text-sm font-medium text-slate-900" style={o && { color: o.text }}>
                         {ingredient.defaultExpiryDurationAmount}{" "}
                         {ingredient.defaultExpiryDurationUnit}
                         {ingredient.defaultExpiryDurationAmount > 1 ? "s" : ""}
@@ -1678,8 +1784,8 @@ export default function IngredientDetailScreen() {
 
               {/* Unit conversions */}
               {ingredient.unitConversions && ingredient.unitConversions.length > 0 ? (
-                <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
-                  <Text className="mb-3 text-base font-bold text-slate-900">
+                <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4" style={card}>
+                  <Text className="mb-3 text-base font-bold text-slate-900" style={o && { color: o.text }}>
                     Unit conversions
                   </Text>
 
@@ -1690,10 +1796,10 @@ export default function IngredientDetailScreen() {
                         index < ingredient.unitConversions!.length - 1 ? "mb-2" : ""
                       }`}
                     >
-                      <Text className="text-sm text-slate-500">
+                      <Text className="text-sm text-slate-500" style={o && { color: o.muted }}>
                         1 {conversion.unit}
                       </Text>
-                      <Text className="text-sm font-medium text-slate-900">
+                      <Text className="text-sm font-medium text-slate-900" style={o && { color: o.text }}>
                         = {conversion.factor} {conversion.baseUnit}
                       </Text>
                     </View>
@@ -1703,56 +1809,56 @@ export default function IngredientDetailScreen() {
 
               {/* Nutrition */}
               {nutrition ? (
-                <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
-                  <Text className="mb-1 text-base font-bold text-slate-900">
+                <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4" style={card}>
+                  <Text className="mb-1 text-base font-bold text-slate-900" style={o && { color: o.text }}>
                     Nutrition
                   </Text>
-                  <Text className="mb-3 text-xs text-slate-400">
+                  <Text className="mb-3 text-xs text-slate-400" style={o && { color: o.faint }}>
                     Per {ingredient.defaultPortionAmount ?? 1} {ingredient.defaultPortionUnit || "serving"}
                   </Text>
 
-                  <View className="mb-3 items-center rounded-2xl bg-blue-50 py-3">
-                    <Text className={`text-3xl font-bold ${nutrition.calories != null ? "text-blue-700" : "text-blue-300"}`}>
+                  <View className="mb-3 items-center rounded-2xl bg-blue-50 py-3" style={o && { backgroundColor: o.pill }}>
+                    <Text className={`text-3xl font-bold ${nutrition.calories != null ? "text-blue-700" : "text-blue-300"}`} style={o && { color: nutrition.calories != null ? o.text : o.faint }}>
                       {nutrition.calories != null ? nutrition.calories : "N/A"}
                     </Text>
-                    <Text className="mt-0.5 text-xs font-medium text-blue-500">
+                    <Text className="mt-0.5 text-xs font-medium text-blue-500" style={o && { color: nutrientHue("calories") }}>
                       Calories
                     </Text>
                   </View>
 
                   <View className="flex-row">
-                    <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3">
-                      <Text className={`text-lg font-bold ${nutrition.protein != null ? "text-slate-900" : "text-slate-300"}`}>
+                    <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3" style={o && { backgroundColor: o.pill }}>
+                      <Text className={`text-lg font-bold ${nutrition.protein != null ? "text-slate-900" : "text-slate-300"}`} style={o && { color: nutrition.protein != null ? o.text : o.faint }}>
                         {nutrition.protein != null ? `${nutrition.protein}g` : "N/A"}
                       </Text>
-                      <Text className="mt-0.5 text-xs text-slate-500">Protein</Text>
+                      <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: nutrientHue("protein") }}>Protein</Text>
                     </View>
-                    <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3">
-                      <Text className={`text-lg font-bold ${nutrition.carbs != null ? "text-slate-900" : "text-slate-300"}`}>
+                    <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3" style={o && { backgroundColor: o.pill }}>
+                      <Text className={`text-lg font-bold ${nutrition.carbs != null ? "text-slate-900" : "text-slate-300"}`} style={o && { color: nutrition.carbs != null ? o.text : o.faint }}>
                         {nutrition.carbs != null ? `${nutrition.carbs}g` : "N/A"}
                       </Text>
-                      <Text className="mt-0.5 text-xs text-slate-500">Carbs</Text>
+                      <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: nutrientHue("carbs") }}>Carbs</Text>
                     </View>
-                    <View className="flex-1 items-center rounded-2xl bg-slate-50 py-3">
-                      <Text className={`text-lg font-bold ${nutrition.fats != null ? "text-slate-900" : "text-slate-300"}`}>
+                    <View className="flex-1 items-center rounded-2xl bg-slate-50 py-3" style={o && { backgroundColor: o.pill }}>
+                      <Text className={`text-lg font-bold ${nutrition.fats != null ? "text-slate-900" : "text-slate-300"}`} style={o && { color: nutrition.fats != null ? o.text : o.faint }}>
                         {nutrition.fats != null ? `${nutrition.fats}g` : "N/A"}
                       </Text>
-                      <Text className="mt-0.5 text-xs text-slate-500">Fats</Text>
+                      <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: nutrientHue("fats") }}>Fats</Text>
                     </View>
                   </View>
 
                   <View className="mt-2 flex-row">
-                    <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3">
-                      <Text className={`text-lg font-bold ${nutrition.fiber != null ? "text-slate-900" : "text-slate-300"}`}>
+                    <View className="mr-2 flex-1 items-center rounded-2xl bg-slate-50 py-3" style={o && { backgroundColor: o.pill }}>
+                      <Text className={`text-lg font-bold ${nutrition.fiber != null ? "text-slate-900" : "text-slate-300"}`} style={o && { color: nutrition.fiber != null ? o.text : o.faint }}>
                         {nutrition.fiber != null ? `${nutrition.fiber}g` : "N/A"}
                       </Text>
-                      <Text className="mt-0.5 text-xs text-slate-500">Fiber</Text>
+                      <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: nutrientHue("fiber") }}>Fiber</Text>
                     </View>
-                    <View className="flex-1 items-center rounded-2xl bg-slate-50 py-3">
-                      <Text className={`text-lg font-bold ${nutrition.sodium != null ? "text-slate-900" : "text-slate-300"}`}>
+                    <View className="flex-1 items-center rounded-2xl bg-slate-50 py-3" style={o && { backgroundColor: o.pill }}>
+                      <Text className={`text-lg font-bold ${nutrition.sodium != null ? "text-slate-900" : "text-slate-300"}`} style={o && { color: nutrition.sodium != null ? o.text : o.faint }}>
                         {nutrition.sodium != null ? `${nutrition.sodium}mg` : "N/A"}
                       </Text>
-                      <Text className="mt-0.5 text-xs text-slate-500">Sodium</Text>
+                      <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: nutrientHue("sodium") }}>Sodium</Text>
                     </View>
                   </View>
 
@@ -1770,33 +1876,35 @@ export default function IngredientDetailScreen() {
               for this can be satisfied by any specific/branded variant too,
               so availability below includes more than just its own entries. */}
           {!isEditing && ingredient.isGeneric && (
-            <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-6 py-6">
+            <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-6 py-6" style={card}>
               <View className="flex-row items-center">
-                <Ionicons name="git-branch-outline" size={22} color="#7C3AED" />
-                <Text className="ml-2 flex-1 font-semibold text-slate-700">
+                <Ionicons name="git-branch-outline" size={22} color={o ? tint.violetIcon : "#7C3AED"} />
+                <Text className="ml-2 flex-1 font-semibold text-slate-700" style={o && { color: o.text }}>
                   Includes specific/branded variants
                 </Text>
               </View>
-              <Text className="mt-2 text-sm leading-5 text-slate-500">
+              <Text className="mt-2 text-sm leading-5 text-slate-500" style={o && { color: o.muted }}>
                 Availability also counts any specific/branded ingredients
                 linked to this one, not just the entries below.
               </Text>
 
               {loadingAvailability ? (
-                <ActivityIndicator className="mt-4" color="#7C3AED" />
+                <ActivityIndicator className="mt-4" color={o ? tint.violetIcon : "#7C3AED"} />
               ) : (
                 !isAlwaysAvailable && ingredient.lowStockThreshold != null && (
                   <View
                     className={`mt-4 flex-row items-center self-start rounded-full px-3 py-1.5 ${
                       isLowStock ? "bg-amber-100" : "bg-slate-100"
                     }`}
+                    style={o && { backgroundColor: isLowStock ? tint.warning : o.pill }}
                   >
                     <Ionicons
                       name="alert-circle-outline"
                       size={14}
-                      color={isLowStock ? "#D97706" : "#94A3B8"}
+                      color={o ? (isLowStock ? o.warning : o.faint) : isLowStock ? "#D97706" : "#94A3B8"}
                     />
                     <Text
+                      style={o && { color: isLowStock ? o.warning : o.muted }}
                       className={`ml-1 text-xs font-semibold ${
                         isLowStock ? "text-amber-700" : "text-slate-500"
                       }`}
@@ -1814,22 +1922,23 @@ export default function IngredientDetailScreen() {
               the recipe screens, not editable here (avoids two UIs
               mutating the same relationship). */}
           {!isEditing && ingredient.productionRecipe ? (
-            <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-6 py-6">
+            <View className="mb-4 rounded-2xl border border-slate-200 bg-white px-6 py-6" style={card}>
               <View className="flex-row items-center">
-                <Ionicons name="flask-outline" size={22} color="#2563EB" />
-                <Text className="ml-2 flex-1 font-semibold text-slate-700">
+                <Ionicons name="flask-outline" size={22} color={o?.ink ?? "#2563EB"} />
+                <Text className="ml-2 flex-1 font-semibold text-slate-700" style={o && { color: o.text }}>
                   Made from {getReferenceName(ingredient.productionRecipe)}
                 </Text>
-                <View className="rounded-full bg-blue-50 px-2.5 py-1">
-                  <Text className="text-xs font-semibold text-blue-600">Recipe</Text>
+                <View className="rounded-full bg-blue-50 px-2.5 py-1" style={o && { backgroundColor: o.pill }}>
+                  <Text className="text-xs font-semibold text-blue-600" style={o && { color: o.onPill }}>Recipe</Text>
                 </View>
               </View>
-              <Text className="mt-2 text-sm leading-5 text-slate-500">
+              <Text className="mt-2 text-sm leading-5 text-slate-500" style={o && { color: o.muted }}>
                 Cooking that recipe deposits a batch of this here — its nutrition stays in
                 sync with the recipe automatically.
               </Text>
-              <Pressable
+              <OrbitPressable
                 className="mt-4 flex-row items-center justify-center rounded-2xl bg-blue-600 py-3 active:bg-blue-700"
+                orbitStyle={o && { marginTop: 16, height: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.ink }}
                 onPress={() =>
                   router.push({
                     pathname: "/recipes/[id]",
@@ -1837,9 +1946,9 @@ export default function IngredientDetailScreen() {
                   })
                 }
               >
-                <Text className="mr-1.5 text-sm font-semibold text-white">Go to recipe</Text>
-                <Ionicons name="arrow-forward" size={16} color="white" />
-              </Pressable>
+                <Text className="mr-1.5 text-sm font-semibold text-white" style={o && { color: o.onInk }}>Go to recipe</Text>
+                <Ionicons name="arrow-forward" size={16} color={o?.onInk ?? "white"} />
+              </OrbitPressable>
             </View>
           ) : null}
 
@@ -1847,7 +1956,7 @@ export default function IngredientDetailScreen() {
           {!isEditing && (
             <>
               <View className="mb-3 mt-2 flex-row items-center">
-                <Text className="flex-1 text-base font-bold text-slate-900">
+                <Text className="flex-1 text-base font-bold text-slate-900" style={o && { color: o.text }}>
                   Pantry entries
                 </Text>
                 {!isAlwaysAvailable && ingredient.lowStockThreshold != null && (
@@ -1855,13 +1964,15 @@ export default function IngredientDetailScreen() {
                     className={`flex-row items-center rounded-full px-2.5 py-1 ${
                       isLowStock ? "bg-amber-100" : "bg-slate-100"
                     }`}
+                    style={o && { backgroundColor: isLowStock ? tint.warning : o.pill }}
                   >
                     <Ionicons
                       name="alert-circle-outline"
                       size={13}
-                      color={isLowStock ? "#D97706" : "#94A3B8"}
+                      color={o ? (isLowStock ? o.warning : o.faint) : isLowStock ? "#D97706" : "#94A3B8"}
                     />
                     <Text
+                      style={o && { color: isLowStock ? o.warning : o.muted }}
                       className={`ml-1 text-xs font-semibold ${
                         isLowStock ? "text-amber-700" : "text-slate-500"
                       }`}
@@ -1874,16 +1985,16 @@ export default function IngredientDetailScreen() {
               </View>
 
               {displayedPantryItems.length === 0 ? (
-                <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-10">
+                <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-10" style={card}>
                   <Ionicons
                     name="file-tray-outline"
                     size={36}
-                    color="#94A3B8"
+                    color={o?.faint ?? "#94A3B8"}
                   />
-                  <Text className="mt-3 font-semibold text-slate-700">
+                  <Text className="mt-3 font-semibold text-slate-700" style={o && { color: o.text }}>
                     Not in pantry
                   </Text>
-                  <Text className="mt-1 text-center text-sm text-slate-500">
+                  <Text className="mt-1 text-center text-sm text-slate-500" style={o && { color: o.muted }}>
                     {currentIngredient?.isGeneric
                       ? "No entries yet — directly, or under any specific/branded variant."
                       : "This ingredient has no pantry entries yet."}
@@ -1915,8 +2026,10 @@ export default function IngredientDetailScreen() {
                           </Pressable>
                         )}
                       >
-                        <Pressable
+                        <OrbitPressable
                           className="rounded-2xl border border-slate-200 bg-white px-5 py-4 active:bg-slate-50"
+                          orbitStyle={o && { borderRadius: 16, borderWidth: 1, borderColor: o.border, backgroundColor: o.surface, paddingHorizontal: 20, paddingVertical: 16 }}
+                          pressedStyle={o ? { backgroundColor: o.pill } : undefined}
                           onPress={() =>
                             router.push({
                               pathname: "/pantry/edit/[id]",
@@ -1926,19 +2039,19 @@ export default function IngredientDetailScreen() {
                         >
                           <View className="flex-row items-center justify-between">
                             <View className="flex-row items-center">
-                              <View className="h-9 w-9 items-center justify-center rounded-full bg-blue-50">
+                              <View className="h-9 w-9 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.pill }}>
                                 <Ionicons
                                   name="file-tray-stacked-outline"
                                   size={16}
-                                  color="#2563EB"
+                                  color={o?.ink ?? "#2563EB"}
                                 />
                               </View>
                               <View>
-                                <Text className="ml-3 font-semibold text-slate-900">
+                                <Text className="ml-3 font-semibold text-slate-900" style={o && { color: o.text }}>
                                   {getLocationName(entry)}
                                 </Text>
                                 {currentIngredient?.isGeneric && (
-                                  <Text className="ml-3 mt-0.5 text-xs text-slate-400">
+                                  <Text className="ml-3 mt-0.5 text-xs text-slate-400" style={o && { color: o.faint }}>
                                     {getReferenceId(entry.ingredient as unknown) === id
                                       ? "Generic"
                                       : (entry.ingredient?.name ?? "Unknown product")}
@@ -1947,13 +2060,13 @@ export default function IngredientDetailScreen() {
                               </View>
                             </View>
                             <View className="flex-row items-center">
-                              <Text className="font-bold text-slate-900">
+                              <Text className="font-bold text-slate-900" style={o && { color: o.text }}>
                                 {entry.quantityAvailable} {entry.quantityUnit}
                               </Text>
                               <Ionicons
                                 name="chevron-forward"
                                 size={16}
-                                color="#CBD5E1"
+                                color={o?.faint ?? "#CBD5E1"}
                                 style={{ marginLeft: 6 }}
                               />
                             </View>
@@ -1961,18 +2074,19 @@ export default function IngredientDetailScreen() {
 
                           <View className="mt-3 flex-row">
                             <View className="flex-1">
-                              <Text className="text-xs text-slate-400">
+                              <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>
                                 Purchased
                               </Text>
-                              <Text className="mt-0.5 text-sm font-medium text-slate-700">
+                              <Text className="mt-0.5 text-sm font-medium text-slate-700" style={o && { color: o.text }}>
                                 {formatDate(entry.purchaseDate)}
                               </Text>
                             </View>
                             <View className="flex-1">
-                              <Text className="text-xs text-slate-400">
+                              <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>
                                 Expires
                               </Text>
                               <Text
+                                style={o && { color: isExpired ? o.danger : isExpiringSoon ? o.warning : o.text }}
                                 className={`mt-0.5 text-sm font-medium ${
                                   isExpired
                                     ? "text-red-600"
@@ -1990,8 +2104,10 @@ export default function IngredientDetailScreen() {
                                   className={`rounded-full px-2 py-0.5 ${
                                     isExpired ? "bg-red-50" : "bg-amber-50"
                                   }`}
+                                  style={o && { backgroundColor: isExpired ? tint.danger : tint.warning }}
                                 >
                                   <Text
+                                    style={o && { color: isExpired ? o.danger : o.warning }}
                                     className={`text-xs font-medium ${
                                       isExpired
                                         ? "text-red-600"
@@ -2005,15 +2121,15 @@ export default function IngredientDetailScreen() {
                             ) : null}
                             {entry.isFinished ? (
                               <View className="justify-center">
-                                <View className="rounded-full bg-slate-100 px-2 py-0.5">
-                                  <Text className="text-xs font-medium text-slate-500">
+                                <View className="rounded-full bg-slate-100 px-2 py-0.5" style={o && { backgroundColor: o.pill }}>
+                                  <Text className="text-xs font-medium text-slate-500" style={o && { color: o.muted }}>
                                     Finished
                                   </Text>
                                 </View>
                               </View>
                             ) : null}
                           </View>
-                        </Pressable>
+                        </OrbitPressable>
                       </ReanimatedSwipeable>
                     </View>
                   );
@@ -2021,7 +2137,7 @@ export default function IngredientDetailScreen() {
               )}
 
               {/* Quick-add new entry */}
-              <View className="mt-1 rounded-2xl border border-slate-200 bg-white px-5 py-4">
+              <View className="mt-1 rounded-2xl border border-slate-200 bg-white px-5 py-4" style={card}>
                 <View {...quickAddLocationSection.wrapperProps}>
                   <FieldLabel text="Storage location" />
                   <SearchableObjectDropdown<SelectOption>
@@ -2047,7 +2163,7 @@ export default function IngredientDetailScreen() {
                 </View>
 
                 {effectiveLocation && !quickAddLocationTouched ? (
-                  <Text className="mt-2 text-xs leading-4 text-slate-500">
+                  <Text className="mt-2 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                     Location auto-filled from{" "}
                     {currentIngredient?.defaultStorageLocation
                       ? "this ingredient's default"
@@ -2079,6 +2195,8 @@ export default function IngredientDetailScreen() {
                     <FieldLabel text="Purchase date" />
                     <DateTextInput
                       className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900"
+                      style={o && { backgroundColor: o.surface, borderColor: o.border, color: o.text }}
+                      placeholderTextColor={o?.faint ?? "#94A3B8"}
                       value={quickAddPurchaseDate}
                       onFocus={quickAddDatesSection.trigger}
                       onChangeText={setQuickAddPurchaseDate}
@@ -2088,6 +2206,8 @@ export default function IngredientDetailScreen() {
                     <FieldLabel text="Expiry date" />
                     <DateTextInput
                       className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900"
+                      style={o && { backgroundColor: o.surface, borderColor: o.border, color: o.text }}
+                      placeholderTextColor={o?.faint ?? "#94A3B8"}
                       value={quickAddExpiryDate}
                       onFocus={quickAddDatesSection.trigger}
                       onChangeText={(value) => {
@@ -2099,7 +2219,7 @@ export default function IngredientDetailScreen() {
                 </View>
 
                 {effectiveExpiryDuration && !quickAddExpiryTouched ? (
-                  <Text className="mt-2 text-xs leading-4 text-slate-500">
+                  <Text className="mt-2 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                     Expiry auto-filled from{" "}
                     {currentIngredient?.defaultExpiryDurationAmount != null
                       ? "this ingredient's default"
@@ -2153,7 +2273,7 @@ export default function IngredientDetailScreen() {
                         }}
                       />
                       {suggestedStore && !quickAddStoreTouched ? (
-                        <Text className="mt-1.5 text-xs leading-4 text-slate-400">
+                        <Text className="mt-1.5 text-xs leading-4 text-slate-400" style={o && { color: o.faint }}>
                           Auto-filled from recent purchase history.
                         </Text>
                       ) : null}
@@ -2173,8 +2293,8 @@ export default function IngredientDetailScreen() {
                     className="mt-2 flex-row items-center self-start active:opacity-60"
                     onPress={() => setQuickAddShowMoreDetails(true)}
                   >
-                    <Ionicons name="add-circle-outline" size={16} color="#2563EB" />
-                    <Text className="ml-1.5 text-sm font-semibold text-blue-600">
+                    <Ionicons name="add-circle-outline" size={16} color={o?.accent ?? "#2563EB"} />
+                    <Text className="ml-1.5 text-sm font-semibold text-blue-600" style={o && { color: o.accent }}>
                       Add store or price
                     </Text>
                   </Pressable>
@@ -2191,19 +2311,20 @@ export default function IngredientDetailScreen() {
                   />
                 </View>
 
-                <Pressable
+                <OrbitPressable
                   disabled={savingEntry}
                   className={`mt-3 items-center rounded-2xl py-3 ${
                     savingEntry
                       ? "bg-emerald-300"
                       : "bg-emerald-600 active:bg-emerald-700"
                   }`}
+                  orbitStyle={o && { marginTop: 12, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: savingEntry ? 0.5 : 1 }}
                   onPress={() => void handleQuickAdd()}
                 >
-                  <Text className="font-semibold text-white">
+                  <Text className="font-semibold text-white" style={o && { color: o.onInk }}>
                     {savingEntry ? "Adding..." : "Add entry"}
                   </Text>
-                </Pressable>
+                </OrbitPressable>
               </View>
             </>
           )}
@@ -2220,5 +2341,35 @@ export default function IngredientDetailScreen() {
         instructions="Fit the whole Nutrition Facts or Supplement Facts panel in frame, flat and in focus."
       />
     </SafeAreaView>
+    </OrbitPage>
+  );
+}
+
+// A pressable that's a Tap in the given look on an Orbit page (`orbitStyle`,
+// faded while held unless `pressedStyle` says otherwise), and the older
+// Pressable with its classes anywhere else.
+function OrbitPressable({
+  orbitStyle,
+  pressedStyle,
+  className,
+  children,
+  ...props
+}: Omit<ComponentProps<typeof Pressable>, "style" | "children"> & {
+  orbitStyle?: StyleProp<ViewStyle> | null;
+  pressedStyle?: StyleProp<ViewStyle>;
+  className?: string;
+  children?: ReactNode;
+}) {
+  if (orbitStyle) {
+    return (
+      <Tap {...props} style={orbitStyle} pressedStyle={pressedStyle ?? { opacity: 0.8 }}>
+        {children}
+      </Tap>
+    );
+  }
+  return (
+    <Pressable {...props} className={className}>
+      {children}
+    </Pressable>
   );
 }

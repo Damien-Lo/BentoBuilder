@@ -14,6 +14,10 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Tap } from "@/src/components/ui/Tap";
+import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
+import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+
 import {
   CreatableMultiTagDropdown,
   CreatableStringDropdown,
@@ -141,11 +145,13 @@ function StepRow({
   removeStep: (index: number) => void;
 }) {
   const stepSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
+  // (On the phone, in Orbit's look, light or dark.)
+  const o = useOrbitPage();
 
   return (
     <View className="mb-3 flex-row items-start">
-      <View className="mt-3 h-7 w-7 items-center justify-center rounded-full bg-blue-100">
-        <Text className="text-xs font-bold text-blue-700">{index + 1}</Text>
+      <View className="mt-3 h-7 w-7 items-center justify-center rounded-full bg-blue-100" style={o && { backgroundColor: o.pill }}>
+        <Text className="text-xs font-bold text-blue-700" style={o && { color: o.ink }}>{index + 1}</Text>
       </View>
 
       <View className="ml-3 flex-1" {...stepSection.wrapperProps}>
@@ -154,21 +160,30 @@ function StepRow({
           onChangeText={(text) => updateStep(index, text)}
           onFocus={stepSection.trigger}
           placeholder={`Step ${index + 1}`}
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor={o?.faint ?? "#94a3b8"}
           multiline
           className="rounded-2xl bg-white px-4 py-3 text-base text-slate-900"
-          style={{ minHeight: 56 }}
+          style={[{ minHeight: 56 }, o && { backgroundColor: o.surface, borderWidth: 1, borderColor: o.border, color: o.text }]}
         />
       </View>
 
       <Pressable className="ml-2 mt-3 p-1" onPress={() => removeStep(index)}>
-        <Ionicons name="trash-outline" size={20} color="#94A3B8" />
+        <Ionicons name="trash-outline" size={20} color={o?.faint ?? "#94A3B8"} />
       </Pressable>
     </View>
   );
 }
 
+// In the Kitchen's colour (on a phone, in Orbit's look).
 export default function AddRecipePage() {
+  return (
+    <OrbitSection section="kitchen">
+      <AddRecipe />
+    </OrbitSection>
+  );
+}
+
+function AddRecipe() {
   const router = useRouter();
 
   // Form fields
@@ -274,6 +289,18 @@ export default function AddRecipePage() {
   const pickerPieceWeightSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const layout = useWideForm();
+  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
+  // desktop browser keeps the desktop's for now. The fields, cards and
+  // switches follow by themselves (OrbitPage).
+  const { colors, dark } = useOrbitTheme();
+  const o = layout.wide ? null : colors;
+  // The row being edited, faintly in the section's colour; "Generic" in violet.
+  const soft = dark ? "rgba(251,146,60,0.14)" : "#FFF7ED";
+  const generic = o && { color: dark ? "#C4B5FD" : "#7C3AED" };
+  const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 };
+  // A choice in a row of them: the chosen one in the section's colour.
+  const segment = (chosen: boolean) => (o ? { backgroundColor: chosen ? o.ink : o.surface, borderLeftColor: o.border } : undefined);
+  const segmentText = (chosen: boolean) => (o ? { color: chosen ? o.onInk : o.muted } : undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -661,9 +688,9 @@ export default function AddRecipePage() {
 
   if (loadingOptions) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-3 text-slate-500">Loading ingredients...</Text>
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
+        <Text className="mt-3 text-slate-500" style={o && { color: o.muted }}>Loading ingredients...</Text>
       </SafeAreaView>
     );
   }
@@ -689,10 +716,11 @@ export default function AddRecipePage() {
 
     <Pressable
       className="mb-4 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-4 active:bg-slate-100"
+      style={o && { borderColor: o.faint, borderRadius: 16 }}
       onPress={() => setSteps((prev) => [...prev, ""])}
     >
-      <Ionicons name="add" size={20} color="#2563EB" />
-      <Text className="ml-2 font-semibold text-blue-700">Add step</Text>
+      <Ionicons name="add" size={20} color={o?.ink ?? "#2563EB"} />
+      <Text className="ml-2 font-semibold text-blue-700" style={o && { color: o.ink }}>Add step</Text>
     </Pressable>
 
     </FormCard>
@@ -724,14 +752,32 @@ export default function AddRecipePage() {
   );
 
   return (
-    <>
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <OrbitPage on={!!o}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
       <KeyboardAvoidingView
         className="flex-1"
         style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Nav bar */}
+        {/* Header (phone): the way back and Save over a large title, on the
+            page itself */}
+        {o && (
+          <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
+              <Tap onPress={() => router.back()} disabled={saving} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                <Ionicons name="chevron-back" size={22} color={o.text} />
+              </Tap>
+              <View style={{ flex: 1 }} />
+              <Tap disabled={saving} onPress={() => void handleSave()} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }} pressedStyle={{ opacity: 0.8 }}>
+                <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>{saving ? "Saving..." : "Save"}</Text>
+              </Tap>
+            </View>
+            <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>New Recipe</Text>
+          </View>
+        )}
+
+        {/* Nav bar (desktop) */}
+        {!o && (
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
           <Pressable
             disabled={saving}
@@ -757,6 +803,7 @@ export default function AddRecipePage() {
             </Text>
           </Pressable>
         </View>
+        )}
 
         <ScrollView
           ref={scrollRef}
@@ -789,7 +836,7 @@ export default function AddRecipePage() {
           </View>
 
           <FieldLabel text="Meal type" required={!producesIngredient} />
-          <View className="mt-1 mb-4 flex-row overflow-hidden rounded-2xl border border-slate-200">
+          <View className="mt-1 mb-4 flex-row overflow-hidden rounded-2xl border border-slate-200" style={o && { borderColor: o.border, borderRadius: 16 }}>
             {MEAL_CATEGORIES.map((cat, i) => {
               const selected = mealCategories.includes(cat.value);
               return (
@@ -798,6 +845,7 @@ export default function AddRecipePage() {
                   className={`flex-1 items-center py-3 ${
                     selected ? "bg-blue-600" : "bg-white"
                   } ${i > 0 ? "border-l border-slate-200" : ""}`}
+                  style={segment(selected)}
                   onPress={() =>
                     setMealCategories((prev) =>
                       prev.includes(cat.value)
@@ -810,6 +858,7 @@ export default function AddRecipePage() {
                     className={`text-xs font-semibold ${
                       selected ? "text-white" : "text-slate-600"
                     }`}
+                    style={segmentText(selected)}
                   >
                     {cat.label}
                   </Text>
@@ -819,17 +868,19 @@ export default function AddRecipePage() {
           </View>
 
           <FieldLabel text="Status" />
-          <View className="mt-1 mb-4 flex-row overflow-hidden rounded-2xl border border-slate-200">
+          <View className="mt-1 mb-4 flex-row overflow-hidden rounded-2xl border border-slate-200" style={o && { borderColor: o.border, borderRadius: 16 }}>
             <Pressable
               className={`flex-1 items-center py-3 ${
                 !isConfirmed ? "bg-blue-600" : "bg-white"
               }`}
+              style={segment(!isConfirmed)}
               onPress={() => setIsConfirmed(false)}
             >
               <Text
                 className={`text-xs font-semibold ${
                   !isConfirmed ? "text-white" : "text-slate-600"
                 }`}
+                style={segmentText(!isConfirmed)}
               >
                 Want to try
               </Text>
@@ -838,12 +889,14 @@ export default function AddRecipePage() {
               className={`flex-1 items-center border-l border-slate-200 py-3 ${
                 isConfirmed ? "bg-blue-600" : "bg-white"
               }`}
+              style={segment(isConfirmed)}
               onPress={() => setIsConfirmed(true)}
             >
               <Text
                 className={`text-xs font-semibold ${
                   isConfirmed ? "text-white" : "text-slate-600"
                 }`}
+                style={segmentText(isConfirmed)}
               >
                 Confirmed
               </Text>
@@ -950,7 +1003,7 @@ export default function AddRecipePage() {
                 value={producedItemIsMealPrep}
                 onChange={setProducedItemIsMealPrep}
               />
-              <Text className="mt-2 text-xs leading-4 text-slate-500">
+              <Text className="mt-2 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                 {producedItemIsMealPrep
                   ? "A finished dish you reheat and eat — kept out of the main Ingredients list, but still searchable as an ingredient if another recipe needs to finish it (e.g. adding an egg)."
                   : "A component other recipes can use (falling back to these ingredients if you're short), e.g. Dashi Stock."}
@@ -999,7 +1052,7 @@ export default function AddRecipePage() {
                   />
                 </View>
               </View>
-              <Text className="mt-2 text-xs leading-4 text-slate-500">
+              <Text className="mt-2 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                 e.g. 250 mL — this becomes {produceIngredientName.trim() || "the ingredient"}
                 &apos;s own portion size, so its nutrition (carried over automatically) means the
                 right thing.
@@ -1023,7 +1076,7 @@ export default function AddRecipePage() {
               that actually gets measured stay on the inner wrapper below. */}
           <View
             className="mb-3 mt-3 rounded-2xl bg-slate-50 p-3"
-            style={pickerIngredientSection.wrapperProps.style}
+            style={[pickerIngredientSection.wrapperProps.style, o && { backgroundColor: o.canvas, borderRadius: 18, borderWidth: 1, borderColor: o.border }]}
           >
             <View {...pickerIngredientSection.wrapperProps}>
               <FieldLabel text="Search ingredient" />
@@ -1051,7 +1104,7 @@ export default function AddRecipePage() {
                 onCreateNew={() => setShowCreateIngredient(true)}
                 renderSubtitle={(option) =>
                   option.isGeneric ? (
-                    <Text className="mt-0.5 text-xs font-medium text-violet-600">Generic</Text>
+                    <Text className="mt-0.5 text-xs font-medium text-violet-600" style={generic}>Generic</Text>
                   ) : null
                 }
               />
@@ -1088,8 +1141,8 @@ export default function AddRecipePage() {
                     />
                   </View>
                 ) : (
-                  <View className="mr-3 mb-1 rounded-2xl bg-slate-100 px-3 py-3">
-                    <Text className="text-sm text-slate-500">
+                  <View className="mr-3 mb-1 rounded-2xl bg-slate-100 px-3 py-3" style={o && { backgroundColor: o.pill }}>
+                    <Text className="text-sm text-slate-500" style={o && { color: o.onPill }}>
                       × {pickerSelected.unit}
                     </Text>
                   </View>
@@ -1098,9 +1151,10 @@ export default function AddRecipePage() {
 
               <Pressable
                 className="mb-1 rounded-2xl bg-blue-600 px-5 py-3 active:bg-blue-700"
+                style={o && { backgroundColor: o.ink, borderRadius: 16 }}
                 onPress={handleAddIngredient}
               >
-                <Text className="font-semibold text-white">
+                <Text className="font-semibold text-white" style={o && { color: o.onInk }}>
                   {editingRowKey ? "Update" : "Add"}
                 </Text>
               </Pressable>
@@ -1108,12 +1162,12 @@ export default function AddRecipePage() {
 
             {editingRowKey && (
               <Pressable className="mt-1 self-start" onPress={cancelEditingRow}>
-                <Text className="text-sm font-semibold text-slate-500">Cancel edit</Text>
+                <Text className="text-sm font-semibold text-slate-500" style={o && { color: o.muted }}>Cancel edit</Text>
               </Pressable>
             )}
 
             {pickerSelected?.unit && pickerUnit && pickerUnit !== pickerSelected.unit ? (
-              <Text className="mt-2 text-xs text-slate-400">
+              <Text className="mt-2 text-xs text-slate-400" style={o && { color: o.faint }}>
                 {(() => {
                   const converted = convertUnits(
                     Number(pickerQuantity) || 0,
@@ -1132,7 +1186,7 @@ export default function AddRecipePage() {
               className="mt-3 self-start"
               onPress={() => setShowNutritionFactor((prev) => !prev)}
             >
-              <Text className="text-xs font-semibold text-blue-600">
+              <Text className="text-xs font-semibold text-blue-600" style={o && { color: o.accent }}>
                 {pickerNutritionPercent !== "100"
                   ? `Counts ${pickerNutritionPercent}% toward nutrition`
                   : "Not fully eaten? Adjust nutrition %"}
@@ -1150,8 +1204,8 @@ export default function AddRecipePage() {
                     onChangeText={setPickerNutritionPercent}
                   />
                 </View>
-                <Text className="ml-1 text-sm text-slate-500">%</Text>
-                <Text className="ml-2 flex-1 text-xs leading-4 text-slate-400">
+                <Text className="ml-1 text-sm text-slate-500" style={o && { color: o.muted }}>%</Text>
+                <Text className="ml-2 flex-1 text-xs leading-4 text-slate-400" style={o && { color: o.faint }}>
                   of this line&apos;s nutrition counts toward the recipe — e.g. 10% for
                   something mostly rinsed or drained off
                 </Text>
@@ -1174,7 +1228,7 @@ export default function AddRecipePage() {
                 });
               }}
             >
-              <Text className="text-xs font-semibold text-blue-600">
+              <Text className="text-xs font-semibold text-blue-600" style={o && { color: o.accent }}>
                 {pickerMatchMode === "wholePiece"
                   ? "Matched as a whole piece — tap to switch back to an exact amount"
                   : "Naturally a whole piece (fillet, steak)? Match by piece instead"}
@@ -1183,7 +1237,7 @@ export default function AddRecipePage() {
 
             {pickerMatchMode === "wholePiece" && (
               <View className="mt-2">
-                <Text className="text-xs leading-4 text-slate-400">
+                <Text className="text-xs leading-4 text-slate-400" style={o && { color: o.faint }}>
                   Amount above is how many whole pieces this line needs — a real pantry
                   item whose own weight falls in this range is used whole, never split.
                 </Text>
@@ -1223,7 +1277,7 @@ export default function AddRecipePage() {
 
             {pickerMatchMode === "quantity" && (
               <Pressable className="mt-3 self-start" onPress={() => setPickerAskAmount((prev) => !prev)}>
-                <Text className="text-xs font-semibold text-blue-600">
+                <Text className="text-xs font-semibold text-blue-600" style={o && { color: o.accent }}>
                   {pickerAskAmount
                     ? "Asks for the real amount when cooking — tap to always use this amount"
                     : "Amount varies each time (e.g. weighed out)? Ask when cooking"}
@@ -1231,7 +1285,7 @@ export default function AddRecipePage() {
               </Pressable>
             )}
             {pickerMatchMode === "quantity" && pickerAskAmount && (
-              <Text className="mt-1 text-xs leading-4 text-slate-400">
+              <Text className="mt-1 text-xs leading-4 text-slate-400" style={o && { color: o.faint }}>
                 Confirming this recipe in the planner will ask how much you actually used, pre-filled
                 with the amount above — what you enter is what gets deducted from your pantry and
                 counted for nutrition.
@@ -1241,7 +1295,7 @@ export default function AddRecipePage() {
 
           {/* Added ingredient rows */}
           {ingredientRows.length > 0 && (
-            <View className="mb-3 overflow-hidden rounded-2xl border border-slate-100 bg-white">
+            <View className="mb-3 overflow-hidden rounded-2xl border border-slate-100 bg-white" style={card}>
               {ingredientRows.map((row, index) => (
                 <Pressable
                   key={row.key}
@@ -1250,26 +1304,27 @@ export default function AddRecipePage() {
                       ? "border-b border-slate-100"
                       : ""
                   } ${editingRowKey === row.key ? "bg-blue-50" : "active:bg-slate-50"}`}
+                  style={o && { borderBottomColor: o.border, backgroundColor: editingRowKey === row.key ? soft : o.surface }}
                   onPress={() => startEditingRow(row)}
                 >
-                  <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
-                    <Text className="text-xs font-bold text-blue-700">
+                  <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.pill }}>
+                    <Text className="text-xs font-bold text-blue-700" style={o && { color: o.ink }}>
                       {index + 1}
                     </Text>
                   </View>
 
                   <View className="ml-3 flex-1">
                     <View className="flex-row items-center">
-                      <Text className="font-semibold text-slate-900">
+                      <Text className="font-semibold text-slate-900" style={o && { color: o.text }}>
                         {row.ingredientName}
                       </Text>
                       {row.isGeneric && (
-                        <Text className="ml-1.5 text-xs font-medium text-violet-600">
+                        <Text className="ml-1.5 text-xs font-medium text-violet-600" style={generic}>
                           Generic
                         </Text>
                       )}
                     </View>
-                    <Text className="mt-0.5 text-sm text-slate-500">
+                    <Text className="mt-0.5 text-sm text-slate-500" style={o && { color: o.muted }}>
                       {row.quantity}{" "}
                       {row.unit
                         ? `× ${row.unit}`
@@ -1295,7 +1350,7 @@ export default function AddRecipePage() {
                     <Ionicons
                       name="close-circle-outline"
                       size={22}
-                      color="#94A3B8"
+                      color={o?.faint ?? "#94A3B8"}
                     />
                   </Pressable>
                 </Pressable>
@@ -1306,12 +1361,12 @@ export default function AddRecipePage() {
           {/* Nutrition summary */}
           {hasNutritionData && (
             <>
-              <Text className="mb-2 mt-1 text-xs font-bold uppercase tracking-wide text-slate-400">
+              <Text className="mb-2 mt-1 text-xs font-bold uppercase tracking-wide text-slate-400" style={o && { letterSpacing: 1.2, color: o.faint, marginLeft: 4 }}>
                 Estimated nutrition
                 {Number(servings) > 1 ? ` · per serving (${servings})` : ""}
               </Text>
 
-              <View className="mb-3 overflow-hidden rounded-2xl border border-slate-100 bg-white">
+              <View className="mb-3 overflow-hidden rounded-2xl border border-slate-100 bg-white" style={card}>
                 {(
                   [
                     ["Calories", perServingNutrition.calories, "kcal"],
@@ -1329,9 +1384,14 @@ export default function AddRecipePage() {
                       className={`flex-row items-center justify-between px-4 py-3 ${
                         i < arr.length - 1 ? "border-b border-slate-100" : ""
                       }`}
+                      style={o && { borderBottomColor: o.border }}
                     >
-                      <Text className="text-base text-slate-600">{label}</Text>
-                      <Text className="text-base font-semibold text-slate-900">
+                      {/* (Each main nutrient's own colour, on the phone.) */}
+                      <View className="flex-row items-center">
+                        {o && <View style={{ width: 8, height: 8, borderRadius: 4, marginRight: 10, backgroundColor: nutrientColor(label.toLowerCase() as MainNutrient, dark) }} />}
+                        <Text className="text-base text-slate-600" style={o && { color: o.icon }}>{label}</Text>
+                      </View>
+                      <Text className="text-base font-semibold text-slate-900" style={o && { color: o.text }}>
                         {value} {unit}
                       </Text>
                     </View>
@@ -1351,8 +1411,9 @@ export default function AddRecipePage() {
             disabled={saving}
             onPress={() => void handleSave()}
             className={`mt-2 items-center rounded-2xl py-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+            style={o && { height: 52, paddingVertical: 0, justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }}
           >
-            <Text className="text-base font-semibold text-white">{saving ? "Saving..." : "Save recipe"}</Text>
+            <Text className="text-base font-semibold text-white" style={o && { color: o.onInk }}>{saving ? "Saving..." : "Save recipe"}</Text>
           </Pressable>
           </View>
         </ScrollView>
@@ -1392,6 +1453,6 @@ export default function AddRecipePage() {
         setShowCreateProducedIngredient(false);
       }}
     />
-    </>
+    </OrbitPage>
   );
 }

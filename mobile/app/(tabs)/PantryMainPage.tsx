@@ -52,6 +52,8 @@ import { barcodesMatch } from "@/src/utils/barcode";
 import { loadSettings } from "@/src/services/settingsService";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 import { daysUntil } from "@/src/utils/date";
+import { Tap } from "@/src/components/ui/Tap";
+import { OrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 
 type ReferenceObject = {
   _id?: string;
@@ -192,6 +194,20 @@ export default function PantryMainPage() {
 function PhonePantryMainPage() {
   const router = useRouter();
   const { width: screenWidth } = usePaneDimensions();
+  // In Orbit's look, light or dark, in the Kitchen's colour (the tabs put
+  // it in its section); the item cards, split sheet and fields in it follow
+  // by themselves (OrbitPage).
+  const { colors: o, dark } = useOrbitTheme();
+  // Soft tints behind a badge or banner, in either theme.
+  const tint = (light: string, darkTint: string) => (dark ? darkTint : light);
+  const eyebrow = { fontSize: 11, fontWeight: "700" as const, letterSpacing: 1.2, color: o.faint };
+  const title = { fontSize: 28, fontWeight: "800" as const, letterSpacing: -0.5, color: o.text };
+  const card = { backgroundColor: o.surface, borderColor: o.border, borderWidth: 1, borderRadius: 18 };
+  // A small round button on the page (cart, list/grid), and a word in a pill (Edit, Collapse all).
+  const roundButton = { width: 40, height: 40, borderRadius: 20, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border };
+  const pillButton = { height: 40, borderRadius: 20, paddingHorizontal: 14, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: o.pill };
+  const generic = { backgroundColor: tint("#F5F3FF", "rgba(139,92,246,0.18)"), color: tint("#7C3AED", "#C4B5FD") };
+  const prepared = { backgroundColor: o.accentSoft, color: o.accent };
 
   const [addMenuVisible, setAddMenuVisible] = useState(false);
   const [pantryAddMenuVisible, setPantryAddMenuVisible] = useState(false);
@@ -757,16 +773,17 @@ function PhonePantryMainPage() {
         : isInStock
           ? "bg-emerald-500"
           : "bg-slate-300";
+    // (Out of stock: the theme's grey, which reads in the dark too.)
+    const statusDotStyle = !isAlwaysAvailable && !isInStock ? { backgroundColor: o.orbit } : undefined;
 
     const deleteAction = (
-      <Pressable
-        className={`items-center justify-center rounded-2xl bg-red-500 active:bg-red-600 ${
-          isChild ? "mb-2 w-16" : "mb-2.5 w-20"
-        }`}
+      <Tap
+        style={{ alignItems: "center", justifyContent: "center", borderRadius: isChild ? 16 : 18, backgroundColor: "#EF4444", marginBottom: isChild ? 8 : 10, width: isChild ? 64 : 80 }}
+        pressedStyle={{ backgroundColor: "#DC2626" }}
         onPress={() => handleDeleteIngredient(ingredientItem._id, ingredientItem.name)}
       >
         <Ionicons name="trash-outline" size={isChild ? 18 : 22} color="white" />
-      </Pressable>
+      </Tap>
     );
 
     // Both levels use the same compact "dot + quantity" status treatment —
@@ -774,9 +791,10 @@ function PhonePantryMainPage() {
     // repeating "In stock" text at every level.
     const stockValue = (
       <View className="flex-row items-center">
-        <View className={`mr-2 h-2 w-2 rounded-full ${statusDotColor}`} />
+        <View className={`mr-2 h-2 w-2 rounded-full ${statusDotColor}`} style={statusDotStyle} />
         <Text
           className={`text-sm font-medium ${isAlwaysAvailable ? "text-blue-600" : "text-slate-600"}`}
+          style={{ color: isAlwaysAvailable ? o.accent : o.icon }}
         >
           {isAlwaysAvailable
             ? "Always available"
@@ -800,8 +818,9 @@ function PhonePantryMainPage() {
           rightThreshold={40}
           renderLeftActions={() => deleteAction}
         >
-          <Pressable
-            className="mb-2 flex-row items-center rounded-2xl border border-slate-100 bg-white px-3.5 py-2.5 active:bg-slate-50"
+          <Tap
+            style={{ ...card, borderRadius: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10 }}
+            pressedStyle={{ backgroundColor: o.pill }}
             onPress={() => {
               router.push({
                 pathname: "/ingredients/edit/[id]",
@@ -811,19 +830,19 @@ function PhonePantryMainPage() {
           >
             <View className="flex-1">
               <View className="flex-row flex-wrap items-center">
-                <Text className="text-sm font-semibold text-slate-800" numberOfLines={1}>
+                <Text className="text-sm font-semibold text-slate-800" style={{ color: o.text }} numberOfLines={1}>
                   {ingredientItem.name}
                 </Text>
                 {ingredientItem.productionRecipe && (
-                  <View className="ml-2 rounded-full bg-blue-50 px-2 py-0.5">
-                    <Text className="text-[10px] font-bold uppercase tracking-wide text-blue-600">
+                  <View className="ml-2 rounded-full bg-blue-50 px-2 py-0.5" style={{ backgroundColor: prepared.backgroundColor }}>
+                    <Text className="text-[10px] font-bold uppercase tracking-wide text-blue-600" style={{ color: prepared.color }}>
                       Prepared
                     </Text>
                   </View>
                 )}
               </View>
               {subtitle ? (
-                <Text className="mt-0.5 text-xs text-slate-400" numberOfLines={1}>
+                <Text className="mt-0.5 text-xs text-slate-400" style={{ color: o.faint }} numberOfLines={1}>
                   {subtitle}
                 </Text>
               ) : null}
@@ -831,8 +850,8 @@ function PhonePantryMainPage() {
 
             {stockValue}
 
-            <Ionicons name="chevron-forward" size={16} color="#CBD5E1" style={{ marginLeft: 8 }} />
-          </Pressable>
+            <Ionicons name="chevron-forward" size={16} color={o.faint} style={{ marginLeft: 8 }} />
+          </Tap>
         </ReanimatedSwipeable>
       );
     }
@@ -844,8 +863,9 @@ function PhonePantryMainPage() {
         rightThreshold={40}
         renderLeftActions={() => deleteAction}
       >
-        <Pressable
-          className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 py-3"
+        <Tap
+          style={{ ...card, marginBottom: 10, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 }}
+          pressedStyle={{ backgroundColor: o.pill }}
           onPress={() => {
             router.push({
               pathname: "/ingredients/edit/[id]",
@@ -853,30 +873,31 @@ function PhonePantryMainPage() {
             });
           }}
         >
-          <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-            <Ionicons name="nutrition-outline" size={18} color="#2563EB" />
+          <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50" style={{ backgroundColor: o.pill }}>
+            <Ionicons name="nutrition-outline" size={18} color={o.onPill} />
           </View>
 
           <View className="ml-3 flex-1">
             <View className="flex-row flex-wrap items-center">
               <Text
                 className="text-base font-bold text-slate-900"
+                style={{ fontSize: 15, fontWeight: "600", color: o.text }}
                 numberOfLines={1}
               >
                 {ingredientItem.name}
               </Text>
 
               {ingredientItem.isGeneric && (
-                <View className="ml-2 rounded-full bg-violet-50 px-2 py-0.5">
-                  <Text className="text-[10px] font-bold uppercase tracking-wide text-violet-600">
+                <View className="ml-2 rounded-full bg-violet-50 px-2 py-0.5" style={{ backgroundColor: generic.backgroundColor }}>
+                  <Text className="text-[10px] font-bold uppercase tracking-wide text-violet-600" style={{ color: generic.color }}>
                     Generic
                   </Text>
                 </View>
               )}
 
               {ingredientItem.productionRecipe && (
-                <View className="ml-2 rounded-full bg-blue-50 px-2 py-0.5">
-                  <Text className="text-[10px] font-bold uppercase tracking-wide text-blue-600">
+                <View className="ml-2 rounded-full bg-blue-50 px-2 py-0.5" style={{ backgroundColor: prepared.backgroundColor }}>
+                  <Text className="text-[10px] font-bold uppercase tracking-wide text-blue-600" style={{ color: prepared.color }}>
                     Prepared
                   </Text>
                 </View>
@@ -892,6 +913,7 @@ function PhonePantryMainPage() {
                 return subtitle ? (
                   <Text
                     className="mt-1 text-sm text-slate-500"
+                    style={{ marginTop: 2, fontSize: 13, color: o.muted }}
                     numberOfLines={1}
                   >
                     {subtitle}
@@ -904,20 +926,20 @@ function PhonePantryMainPage() {
 
           <Ionicons
             name="chevron-forward"
-            size={20}
-            color="#94A3B8"
+            size={18}
+            color={o.faint}
             style={{ marginLeft: 10 }}
           />
-        </Pressable>
+        </Tap>
       </ReanimatedSwipeable>
     );
   }
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" />
-        <Text className="mt-3 text-slate-500">Loading pantry...</Text>
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={{ backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o.muted} />
+        <Text className="mt-3 text-slate-500" style={{ color: o.muted }}>Loading pantry...</Text>
       </SafeAreaView>
     );
   }
@@ -939,7 +961,8 @@ function PhonePantryMainPage() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50">
+    <OrbitPage>
+    <SafeAreaView className="flex-1 bg-slate-50" style={{ backgroundColor: o.canvas }}>
       <View className="flex-1">
         {/* Swipe horizontally between Pantry and All Ingredients */}
         <ScrollView
@@ -955,47 +978,46 @@ function PhonePantryMainPage() {
           <View style={{ width: screenWidth }} className="flex-1">
             <View className="px-5 pt-24">
               <View className="flex-row items-center">
-                <Text className="flex-1 text-3xl font-bold text-slate-950">
+                <Text className="flex-1 text-3xl font-bold text-slate-950" style={title}>
                   Your Pantry
                 </Text>
                 {pantryViewMode === "locations" && (
-                  <Pressable
-                    className={`mr-2 h-10 items-center justify-center rounded-full px-3 ${
-                      locationEditMode ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"
-                    }`}
+                  <Tap
+                    style={[pillButton, { marginRight: 8 }, locationEditMode && { backgroundColor: o.ink }]}
+                    pressedStyle={{ opacity: 0.7 }}
                     onPress={() => {
                       setLocationEditMode((v) => !v);
                       setIsAddingLocation(false);
                       setNewLocationName("");
                     }}
                   >
-                    <Text
-                      className={`text-sm font-semibold ${
-                        locationEditMode ? "text-white" : "text-slate-600"
-                      }`}
-                    >
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: locationEditMode ? o.onInk : o.onPill }}>
                       {locationEditMode ? "Done" : "Edit"}
                     </Text>
-                  </Pressable>
+                  </Tap>
                 )}
                 {pantryViewMode === "list" && expandedLocations.size > 0 && (
-                  <Pressable
-                    className="mr-2 h-10 items-center justify-center rounded-full bg-slate-100 px-3 active:bg-slate-200"
+                  <Tap
+                    style={[pillButton, { marginRight: 8 }]}
+                    pressedStyle={{ opacity: 0.7 }}
                     onPress={() => setExpandedLocations(new Set())}
                   >
-                    <Text className="text-sm font-semibold text-slate-600">
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: o.onPill }}>
                       Collapse all
                     </Text>
-                  </Pressable>
+                  </Tap>
                 )}
-                <Pressable
-                  className="mr-2 h-10 w-10 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                <Tap
+                  style={[roundButton, { marginRight: 8 }]}
+                  pressedStyle={{ backgroundColor: o.pill }}
                   onPress={() => router.push("/grocery-list")}
+                  accessibilityLabel="Grocery list"
                 >
-                  <Ionicons name="cart-outline" size={19} color="#475569" />
-                </Pressable>
-                <Pressable
-                  className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200"
+                  <Ionicons name="cart-outline" size={19} color={o.icon} />
+                </Tap>
+                <Tap
+                  style={roundButton}
+                  pressedStyle={{ backgroundColor: o.pill }}
                   onPress={() => {
                     setPantryViewMode((m) => m === "locations" ? "list" : "locations");
                     setLocationEditMode(false);
@@ -1005,38 +1027,39 @@ function PhonePantryMainPage() {
                   <Ionicons
                     name={pantryViewMode === "locations" ? "list-outline" : "apps-outline"}
                     size={20}
-                    color="#475569"
+                    color={o.icon}
                   />
-                </Pressable>
+                </Tap>
               </View>
 
-              <Text className="mt-1 text-base text-slate-500">
+              <Text className="mt-1 text-base text-slate-500" style={{ marginTop: 2, fontSize: 14, color: o.muted }}>
                 {pantryViewMode === "locations"
                   ? "Browse ingredients by storage location"
                   : "All pantry items grouped by location"}
               </Text>
 
               <View className="mt-3 flex-row items-center">
-                <View className="h-2 w-6 rounded-full bg-blue-600" />
-                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
-                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
-                <Text className="ml-3 text-xs font-medium text-slate-400">
+                <View className="h-2 w-6 rounded-full bg-blue-600" style={{ backgroundColor: o.ink }} />
+                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" style={{ backgroundColor: o.orbit }} />
+                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" style={{ backgroundColor: o.orbit }} />
+                <Text className="ml-3 text-xs font-medium text-slate-400" style={{ color: o.faint }}>
                   Swipe left for ingredients
                 </Text>
               </View>
 
               {expiredPantryItems.length > 0 && (
-                <Pressable
-                  className="mt-3 flex-row items-center rounded-2xl bg-red-50 px-4 py-3 active:bg-red-100"
+                <Tap
+                  style={{ marginTop: 12, flexDirection: "row", alignItems: "center", borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: tint("#FEF2F2", "rgba(248,113,113,0.14)") }}
+                  pressedStyle={{ opacity: 0.7 }}
                   onPress={revealExpiredItems}
                 >
-                  <Ionicons name="alert-circle" size={18} color="#DC2626" />
-                  <Text className="ml-2.5 flex-1 text-sm font-semibold text-red-700">
+                  <Ionicons name="alert-circle" size={18} color={o.danger} />
+                  <Text style={{ marginLeft: 10, flex: 1, fontSize: 14, fontWeight: "600", color: o.danger }}>
                     {expiredPantryItems.length} {expiredPantryItems.length === 1 ? "item" : "items"}{" "}
                     expired
                   </Text>
-                  <Ionicons name="chevron-forward" size={16} color="#DC2626" />
-                </Pressable>
+                  <Ionicons name="chevron-forward" size={16} color={o.danger} />
+                </Tap>
               )}
             </View>
 
@@ -1056,23 +1079,24 @@ function PhonePantryMainPage() {
 
                     return (
                       <View key={locationId} className="relative mb-4 w-[48%]">
-                        <Pressable
+                        <Tap
                           disabled={locationEditMode}
-                          className="h-44 justify-between rounded-2xl border border-slate-200 bg-white p-5"
+                          style={{ ...card, borderRadius: 20, height: 176, justifyContent: "space-between", padding: 20 }}
+                          pressedStyle={{ backgroundColor: o.pill }}
                           onPress={() =>
                             router.push({ pathname: "/pantry/location/[id]", params: { id: locationId, name: location.name } })
                           }
                         >
-                          <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
-                            <Ionicons name="file-tray-stacked-outline" size={20} color="#2563EB" />
+                          <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50" style={{ backgroundColor: o.pill }}>
+                            <Ionicons name="file-tray-stacked-outline" size={20} color={o.onPill} />
                           </View>
                           <View>
-                            <Text className="text-lg font-bold text-slate-900">{location.name}</Text>
-                            <Text className="mt-1 text-sm text-slate-500">
+                            <Text className="text-lg font-bold text-slate-900" style={{ color: o.text }}>{location.name}</Text>
+                            <Text className="mt-1 text-sm text-slate-500" style={{ color: o.muted }}>
                               {itemCount} {itemCount === 1 ? "item" : "items"}
                             </Text>
                           </View>
-                        </Pressable>
+                        </Tap>
 
                         {canDelete && (
                           <Pressable
@@ -1089,9 +1113,9 @@ function PhonePantryMainPage() {
 
                   {locationEditMode &&
                     (isAddingLocation ? (
-                      <View className="mb-4 h-44 w-[48%] justify-between rounded-2xl border-2 border-dashed border-blue-300 bg-blue-50 p-5">
-                        <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-100">
-                          <Ionicons name="file-tray-stacked-outline" size={20} color="#2563EB" />
+                      <View className="mb-4 h-44 w-[48%] justify-between rounded-2xl border-2 border-dashed border-blue-300 bg-blue-50 p-5" style={{ borderRadius: 20, borderColor: o.selectedRing, backgroundColor: o.surface }}>
+                        <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-100" style={{ backgroundColor: o.pill }}>
+                          <Ionicons name="file-tray-stacked-outline" size={20} color={o.ink} />
                         </View>
                         <View>
                           <TextInput
@@ -1100,37 +1124,43 @@ function PhonePantryMainPage() {
                             onSubmitEditing={() => void handleCreateLocation()}
                             autoFocus
                             placeholder="Location name"
-                            placeholderTextColor="#94A3B8"
+                            placeholderTextColor={o.faint}
                             returnKeyType="done"
                             className="text-base font-bold text-slate-900"
+                            style={{ color: o.text }}
                           />
                           <View className="mt-2 flex-row gap-2">
-                            <Pressable
+                            <Tap
                               disabled={savingLocation}
-                              className="h-8 w-8 items-center justify-center rounded-full bg-blue-600 active:bg-blue-700"
+                              style={{ width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: o.ink, opacity: savingLocation ? 0.5 : 1 }}
+                              pressedStyle={{ opacity: 0.8 }}
                               onPress={() => void handleCreateLocation()}
+                              accessibilityLabel="Add"
                             >
-                              <Ionicons name="checkmark" size={18} color="white" />
-                            </Pressable>
-                            <Pressable
-                              className="h-8 w-8 items-center justify-center rounded-full bg-white"
+                              <Ionicons name="checkmark" size={18} color={o.onInk} />
+                            </Tap>
+                            <Tap
+                              style={{ width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: o.pill }}
+                              pressedStyle={{ opacity: 0.7 }}
                               onPress={() => {
                                 setIsAddingLocation(false);
                                 setNewLocationName("");
                               }}
+                              accessibilityLabel="Cancel"
                             >
-                              <Ionicons name="close" size={18} color="#475569" />
-                            </Pressable>
+                              <Ionicons name="close" size={18} color={o.onPill} />
+                            </Tap>
                           </View>
                         </View>
                       </View>
                     ) : (
                       <Pressable
                         className="mb-4 h-44 w-[48%] items-center justify-center rounded-2xl border-2 border-dashed border-slate-300"
+                        style={{ borderRadius: 20, borderColor: o.orbit }}
                         onPress={() => setIsAddingLocation(true)}
                       >
-                        <Ionicons name="add-circle-outline" size={28} color="#94A3B8" />
-                        <Text className="mt-2 text-sm font-semibold text-slate-400">
+                        <Ionicons name="add-circle-outline" size={28} color={o.faint} />
+                        <Text className="mt-2 text-sm font-semibold text-slate-400" style={{ color: o.faint }}>
                           Add location
                         </Text>
                       </Pressable>
@@ -1144,10 +1174,10 @@ function PhonePantryMainPage() {
                 showsVerticalScrollIndicator={false}
               >
                 {groupedItems.length === 0 ? (
-                  <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
-                    <Ionicons name="file-tray-outline" size={42} color="#94A3B8" />
-                    <Text className="mt-4 text-lg font-bold text-slate-900">Pantry is empty</Text>
-                    <Text className="mt-2 text-center text-slate-500">Add items to get started.</Text>
+                  <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16" style={{ ...card, backgroundColor: "transparent", borderStyle: "dashed", paddingVertical: 40 }}>
+                    <Ionicons name="file-tray-outline" size={42} color={o.faint} />
+                    <Text className="mt-4 text-lg font-bold text-slate-900" style={{ color: o.text }}>Pantry is empty</Text>
+                    <Text className="mt-2 text-center text-slate-500" style={{ color: o.muted }}>Add items to get started.</Text>
                   </View>
                 ) : (
                   groupedItems.map((group) => {
@@ -1158,14 +1188,14 @@ function PhonePantryMainPage() {
                           className="mb-2.5 flex-row items-center justify-between py-1.5"
                           onPress={() => toggleLocation(group.id)}
                         >
-                          <Text className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                          <Text className="text-xs font-bold uppercase tracking-widest text-slate-400" style={{ ...eyebrow, marginLeft: 4 }}>
                             {group.name}
-                            <Text className="font-semibold text-slate-300"> · {group.items.length}</Text>
+                            <Text className="font-semibold text-slate-300" style={{ color: o.orbit }}> · {group.items.length}</Text>
                           </Text>
                           <Ionicons
                             name={isCollapsed ? "chevron-forward" : "chevron-down"}
                             size={16}
-                            color="#CBD5E1"
+                            color={o.faint}
                           />
                         </Pressable>
 
@@ -1193,12 +1223,12 @@ function PhonePantryMainPage() {
                               busy={busyPantryItemId === pantryItem._id}
                               rightBadge={
                                 expiryState === "expired" ? (
-                                  <View className="mr-3 rounded-full bg-red-100 px-2.5 py-1">
-                                    <Text className="text-xs font-semibold text-red-600">Expired</Text>
+                                  <View className="mr-3 rounded-full bg-red-100 px-2.5 py-1" style={{ backgroundColor: tint("#FEE2E2", "rgba(248,113,113,0.16)") }}>
+                                    <Text className="text-xs font-semibold text-red-600" style={{ color: o.danger }}>Expired</Text>
                                   </View>
                                 ) : expiryState === "soon" ? (
-                                  <View className="mr-3 rounded-full bg-amber-100 px-2.5 py-1">
-                                    <Text className="text-xs font-semibold text-amber-600">
+                                  <View className="mr-3 rounded-full bg-amber-100 px-2.5 py-1" style={{ backgroundColor: tint("#FEF3C7", "rgba(251,191,36,0.16)") }}>
+                                    <Text className="text-xs font-semibold text-amber-600" style={{ color: o.warning }}>
                                       {daysUntilExpiry === 0 ? "Today" : `${daysUntilExpiry}d`}
                                     </Text>
                                   </View>
@@ -1228,30 +1258,31 @@ function PhonePantryMainPage() {
           <View style={{ width: screenWidth }} className="flex-1">
             <View className="px-5 pt-24">
               <View className="flex-row items-center">
-                <Text className="flex-1 text-3xl font-bold text-slate-950">
+                <Text className="flex-1 text-3xl font-bold text-slate-950" style={title}>
                   All Your Ingredients
                 </Text>
                 {expandedCategories.size > 0 && (
-                  <Pressable
-                    className="h-10 items-center justify-center rounded-full bg-slate-100 px-3 active:bg-slate-200"
+                  <Tap
+                    style={pillButton}
+                    pressedStyle={{ opacity: 0.7 }}
                     onPress={() => setExpandedCategories(new Set())}
                   >
-                    <Text className="text-sm font-semibold text-slate-600">
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: o.onPill }}>
                       Collapse all
                     </Text>
-                  </Pressable>
+                  </Tap>
                 )}
               </View>
 
-              <Text className="mt-1 text-base text-slate-500">
+              <Text className="mt-1 text-base text-slate-500" style={{ marginTop: 2, fontSize: 14, color: o.muted }}>
                 View every ingredient in one list
               </Text>
 
               <View className="mt-3 flex-row items-center">
-                <View className="h-2 w-2 rounded-full bg-slate-300" />
-                <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
-                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
-                <Text className="ml-3 text-xs font-medium text-slate-400">
+                <View className="h-2 w-2 rounded-full bg-slate-300" style={{ backgroundColor: o.orbit }} />
+                <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" style={{ backgroundColor: o.ink }} />
+                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" style={{ backgroundColor: o.orbit }} />
+                <Text className="ml-3 text-xs font-medium text-slate-400" style={{ color: o.faint }}>
                   Swipe for pantry or meal preps
                 </Text>
               </View>
@@ -1267,18 +1298,18 @@ function PhonePantryMainPage() {
               showsVerticalScrollIndicator={false}
             >
               {filteredIngredients.length === 0 ? (
-                <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
+                <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16" style={{ ...card, backgroundColor: "transparent", borderStyle: "dashed", paddingVertical: 40 }}>
                   <Ionicons
                     name="nutrition-outline"
                     size={42}
-                    color="#94A3B8"
+                    color={o.faint}
                   />
 
-                  <Text className="mt-4 text-lg font-bold text-slate-900">
+                  <Text className="mt-4 text-lg font-bold text-slate-900" style={{ color: o.text }}>
                     No ingredients yet
                   </Text>
 
-                  <Text className="mt-2 text-center text-slate-500">
+                  <Text className="mt-2 text-center text-slate-500" style={{ color: o.muted }}>
                     Add an ingredient to start building your pantry.
                   </Text>
                 </View>
@@ -1291,14 +1322,14 @@ function PhonePantryMainPage() {
                       className="mb-2.5 flex-row items-center justify-between py-1.5"
                       onPress={() => toggleCategory(group.category)}
                     >
-                      <Text className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                      <Text className="text-xs font-bold uppercase tracking-widest text-slate-400" style={{ ...eyebrow, marginLeft: 4 }}>
                         {group.category}
-                        <Text className="font-semibold text-slate-300"> · {group.items.length}</Text>
+                        <Text className="font-semibold text-slate-300" style={{ color: o.orbit }}> · {group.items.length}</Text>
                       </Text>
                       <Ionicons
                         name={isCollapsed ? "chevron-forward" : "chevron-down"}
                         size={16}
-                        color="#CBD5E1"
+                        color={o.faint}
                       />
                     </Pressable>
 
@@ -1309,7 +1340,7 @@ function PhonePantryMainPage() {
                             {renderIngredientCard(parent)}
 
                             {children.length > 0 && (
-                              <View className="mb-1 ml-6 border-l-2 border-slate-100 pl-4">
+                              <View className="mb-1 ml-6 border-l-2 border-slate-100 pl-4" style={{ borderLeftColor: o.border }}>
                                 {children.map((child) => renderIngredientCard(child, true))}
                               </View>
                             )}
@@ -1327,30 +1358,31 @@ function PhonePantryMainPage() {
           <View style={{ width: screenWidth }} className="flex-1">
             <View className="px-5 pt-24">
               <View className="flex-row items-center">
-                <Text className="flex-1 text-3xl font-bold text-slate-950">
+                <Text className="flex-1 text-3xl font-bold text-slate-950" style={title}>
                   Meal Preps
                 </Text>
                 {expandedMealPrepCategories.size > 0 && (
-                  <Pressable
-                    className="h-10 items-center justify-center rounded-full bg-slate-100 px-3 active:bg-slate-200"
+                  <Tap
+                    style={pillButton}
+                    pressedStyle={{ opacity: 0.7 }}
                     onPress={() => setExpandedMealPrepCategories(new Set())}
                   >
-                    <Text className="text-sm font-semibold text-slate-600">
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: o.onPill }}>
                       Collapse all
                     </Text>
-                  </Pressable>
+                  </Tap>
                 )}
               </View>
 
-              <Text className="mt-1 text-base text-slate-500">
+              <Text className="mt-1 text-base text-slate-500" style={{ marginTop: 2, fontSize: 14, color: o.muted }}>
                 Batches you&apos;ve made ahead, ready to reheat
               </Text>
 
               <View className="mt-3 flex-row items-center">
-                <View className="h-2 w-2 rounded-full bg-slate-300" />
-                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" />
-                <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" />
-                <Text className="ml-3 text-xs font-medium text-slate-400">
+                <View className="h-2 w-2 rounded-full bg-slate-300" style={{ backgroundColor: o.orbit }} />
+                <View className="ml-2 h-2 w-2 rounded-full bg-slate-300" style={{ backgroundColor: o.orbit }} />
+                <View className="ml-2 h-2 w-6 rounded-full bg-blue-600" style={{ backgroundColor: o.ink }} />
+                <Text className="ml-3 text-xs font-medium text-slate-400" style={{ color: o.faint }}>
                   Swipe right for ingredients
                 </Text>
               </View>
@@ -1366,18 +1398,18 @@ function PhonePantryMainPage() {
               showsVerticalScrollIndicator={false}
             >
               {groupedMealPreps.length === 0 ? (
-                <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16">
+                <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16" style={{ ...card, backgroundColor: "transparent", borderStyle: "dashed", paddingVertical: 40 }}>
                   <Ionicons
                     name="flask-outline"
                     size={42}
-                    color="#94A3B8"
+                    color={o.faint}
                   />
 
-                  <Text className="mt-4 text-lg font-bold text-slate-900">
+                  <Text className="mt-4 text-lg font-bold text-slate-900" style={{ color: o.text }}>
                     No meal preps yet
                   </Text>
 
-                  <Text className="mt-2 text-center text-slate-500">
+                  <Text className="mt-2 text-center text-slate-500" style={{ color: o.muted }}>
                     Mark a recipe&apos;s &quot;Prepares&quot; section as &quot;Meal prep&quot; and cook a batch to see it here.
                   </Text>
                 </View>
@@ -1390,14 +1422,14 @@ function PhonePantryMainPage() {
                       className="mb-2.5 flex-row items-center justify-between py-1.5"
                       onPress={() => toggleMealPrepCategory(group.category)}
                     >
-                      <Text className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                      <Text className="text-xs font-bold uppercase tracking-widest text-slate-400" style={{ ...eyebrow, marginLeft: 4 }}>
                         {group.category}
-                        <Text className="font-semibold text-slate-300"> · {group.items.length}</Text>
+                        <Text className="font-semibold text-slate-300" style={{ color: o.orbit }}> · {group.items.length}</Text>
                       </Text>
                       <Ionicons
                         name={isCollapsed ? "chevron-forward" : "chevron-down"}
                         size={16}
-                        color="#CBD5E1"
+                        color={o.faint}
                       />
                     </Pressable>
 
@@ -1408,7 +1440,7 @@ function PhonePantryMainPage() {
                             {renderIngredientCard(parent)}
 
                             {children.length > 0 && (
-                              <View className="mb-1 ml-6 border-l-2 border-slate-100 pl-4">
+                              <View className="mb-1 ml-6 border-l-2 border-slate-100 pl-4" style={{ borderLeftColor: o.border }}>
                                 {children.map((child) => renderIngredientCard(child, true))}
                               </View>
                             )}
@@ -1427,6 +1459,7 @@ function PhonePantryMainPage() {
         {isSearchActive && (
           <Pressable
             className="absolute inset-0 z-10 bg-black/30"
+            style={{ backgroundColor: o.scrim }}
             onPress={closeSearch}
           />
         )}
@@ -1436,10 +1469,11 @@ function PhonePantryMainPage() {
           className={`absolute left-4 right-4 top-3 z-20 overflow-hidden rounded-3xl bg-white shadow-lg ${
             isSearchActive ? "bottom-4" : ""
           }`}
+          style={{ backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
         >
           <View className="flex-row items-center p-3">
-            <View className="h-12 flex-1 flex-row items-center rounded-2xl bg-slate-100 px-4">
-              <Ionicons name="search-outline" size={21} color="#64748b" />
+            <View className="h-12 flex-1 flex-row items-center rounded-2xl bg-slate-100 px-4" style={{ backgroundColor: o.pill, borderRadius: 16 }}>
+              <Ionicons name="search-outline" size={20} color={o.muted} />
 
               <TextInput
                 value={searchText}
@@ -1452,19 +1486,22 @@ function PhonePantryMainPage() {
                       ? "Search meal preps"
                       : "Search all ingredients"
                 }
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={o.faint}
                 className="ml-3 flex-1 text-base text-slate-900"
+                style={{ color: o.text }}
               />
 
               {searchText.length > 0 && (
                 <Pressable onPress={() => setSearchText("")}>
-                  <Ionicons name="close-circle" size={21} color="#94a3b8" />
+                  <Ionicons name="close-circle" size={21} color={o.faint} />
                 </Pressable>
               )}
             </View>
 
-            <Pressable
-              className="ml-3 h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
+            <Tap
+              style={{ marginLeft: 12, width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: o.ink }}
+              pressedStyle={{ opacity: 0.8 }}
+              accessibilityLabel="Add"
               onPress={() => {
                 if (activePage === "pantry") {
                   setPantryAddMenuVisible(true);
@@ -1473,14 +1510,14 @@ function PhonePantryMainPage() {
                 setAddMenuVisible(true);
               }}
             >
-              <Ionicons name="add" size={28} color="white" />
-            </Pressable>
+              <Ionicons name="add" size={28} color={o.onInk} />
+            </Tap>
           </View>
 
           {isSearchActive && (
-            <View className="flex-1 border-t border-slate-100 px-4 pb-4">
+            <View className="flex-1 border-t border-slate-100 px-4 pb-4" style={{ borderTopColor: o.border }}>
               <View className="flex-row items-center justify-between py-3">
-                <Text className="text-lg font-bold text-slate-900">
+                <Text className="text-lg font-bold text-slate-900" style={{ color: o.text }}>
                   {activePage === "pantry"
                     ? "Pantry"
                     : activePage === "mealPreps"
@@ -1489,7 +1526,7 @@ function PhonePantryMainPage() {
                 </Text>
 
                 <Pressable onPress={closeSearch}>
-                  <Text className="font-semibold text-blue-700">Cancel</Text>
+                  <Text className="font-semibold text-blue-700" style={{ color: o.accent }}>Cancel</Text>
                 </Pressable>
               </View>
 
@@ -1501,14 +1538,15 @@ function PhonePantryMainPage() {
                   showsVerticalScrollIndicator={false}
                   renderItem={({ item: group }) => (
                     <View className="mb-5">
-                      <Text className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+                      <Text className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500" style={{ ...eyebrow, marginLeft: 4 }}>
                         {group.name}
                       </Text>
 
                       {group.items.map((pantryItem) => (
-                        <Pressable
+                        <Tap
                           key={pantryItem._id}
-                          className="mb-2 flex-row items-center rounded-2xl bg-slate-50 p-3"
+                          style={{ marginBottom: 8, flexDirection: "row", alignItems: "center", borderRadius: 16, padding: 12, backgroundColor: o.canvas }}
+                          pressedStyle={{ backgroundColor: o.pill }}
                           onPress={() => {
                             closeSearch();
                             router.push({
@@ -1517,20 +1555,20 @@ function PhonePantryMainPage() {
                             });
                           }}
                         >
-                          <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
+                          <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50" style={{ backgroundColor: o.pill }}>
                             <Ionicons
                               name="nutrition-outline"
-                              size={21}
-                              color="#2563EB"
+                              size={20}
+                              color={o.onPill}
                             />
                           </View>
 
                           <View className="ml-3 flex-1">
-                            <Text className="font-semibold text-slate-900">
+                            <Text className="font-semibold text-slate-900" style={{ color: o.text }}>
                               {getIngredientName(pantryItem)}
                             </Text>
 
-                            <Text className="mt-0.5 text-sm text-slate-500">
+                            <Text className="mt-0.5 text-sm text-slate-500" style={{ color: o.muted }}>
                               {pantryItem.quantityAvailable}{" "}
                               {pantryItem.quantityUnit}
                             </Text>
@@ -1538,20 +1576,20 @@ function PhonePantryMainPage() {
 
                           <Ionicons
                             name="chevron-forward"
-                            size={20}
-                            color="#94a3b8"
+                            size={18}
+                            color={o.faint}
                           />
-                        </Pressable>
+                        </Tap>
                       ))}
                     </View>
                   )}
                   ListEmptyComponent={
                     <View className="items-center px-6 py-16">
-                      <Ionicons name="search-outline" size={42} color="#94a3b8" />
-                      <Text className="mt-4 text-lg font-bold text-slate-900">
+                      <Ionicons name="search-outline" size={42} color={o.faint} />
+                      <Text className="mt-4 text-lg font-bold text-slate-900" style={{ color: o.text }}>
                         No pantry items found
                       </Text>
-                      <Text className="mt-2 text-center text-slate-500">
+                      <Text className="mt-2 text-center text-slate-500" style={{ color: o.muted }}>
                         Try a different ingredient name, category, or location.
                       </Text>
                     </View>
@@ -1577,8 +1615,9 @@ function PhonePantryMainPage() {
                         : "";
 
                     return (
-                      <Pressable
-                        className="mb-2 flex-row items-center rounded-2xl bg-slate-50 p-3"
+                      <Tap
+                        style={{ marginBottom: 8, flexDirection: "row", alignItems: "center", borderRadius: 16, padding: 12, backgroundColor: o.canvas }}
+                        pressedStyle={{ backgroundColor: o.pill }}
                         onPress={() => {
                           closeSearch();
                           router.push({
@@ -1587,32 +1626,33 @@ function PhonePantryMainPage() {
                           });
                         }}
                       >
-                        <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
+                        <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50" style={{ backgroundColor: o.pill }}>
                           <Ionicons
                             name="nutrition-outline"
-                            size={21}
-                            color="#2563EB"
+                            size={20}
+                            color={o.onPill}
                           />
                         </View>
 
                         <View className="ml-3 flex-1">
                           <Text
                             className="font-semibold text-slate-900"
+                            style={{ color: o.text }}
                             numberOfLines={1}
                           >
                             {ingredient.name}
                           </Text>
 
                           {ingredient.productionRecipe ? (
-                            <Text className="mt-0.5 text-sm font-medium text-blue-600">
+                            <Text className="mt-0.5 text-sm font-medium text-blue-600" style={{ color: prepared.color }}>
                               Prepared{ingredient.isGeneric ? " · Generic" : ""}
                             </Text>
                           ) : ingredient.isGeneric ? (
-                            <Text className="mt-0.5 text-sm font-medium text-violet-600">
+                            <Text className="mt-0.5 text-sm font-medium text-violet-600" style={{ color: generic.color }}>
                               Generic
                             </Text>
                           ) : (
-                            <Text className="mt-0.5 text-sm text-slate-500">
+                            <Text className="mt-0.5 text-sm text-slate-500" style={{ color: o.muted }}>
                               {[brandName, categoryName].filter(Boolean).join(" · ")}
                             </Text>
                           )}
@@ -1620,19 +1660,19 @@ function PhonePantryMainPage() {
 
                         <Ionicons
                           name="chevron-forward"
-                          size={20}
-                          color="#94a3b8"
+                          size={18}
+                          color={o.faint}
                         />
-                      </Pressable>
+                      </Tap>
                     );
                   }}
                   ListEmptyComponent={
                     <View className="items-center px-6 py-16">
-                      <Ionicons name="search-outline" size={42} color="#94a3b8" />
-                      <Text className="mt-4 text-lg font-bold text-slate-900">
+                      <Ionicons name="search-outline" size={42} color={o.faint} />
+                      <Text className="mt-4 text-lg font-bold text-slate-900" style={{ color: o.text }}>
                         No ingredients found
                       </Text>
-                      <Text className="mt-2 text-center text-slate-500">
+                      <Text className="mt-2 text-center text-slate-500" style={{ color: o.muted }}>
                         Try searching by name, brand, or category.
                       </Text>
                     </View>
@@ -1650,81 +1690,84 @@ function PhonePantryMainPage() {
         animationType="fade"
         onRequestClose={() => setAddMenuVisible(false)}
       >
-        <View className="flex-1 justify-end bg-black/30">
+        <View className="flex-1 justify-end bg-black/30" style={{ backgroundColor: o.scrim }}>
           <Pressable
             className="absolute inset-0"
             onPress={() => setAddMenuVisible(false)}
           />
 
-          <View className="rounded-t-[32px] bg-white px-5 pb-10 pt-4">
-            <View className="mb-5 self-center h-1.5 w-12 rounded-full bg-slate-300" />
+          <View className="rounded-t-[32px] bg-white px-5 pb-10 pt-4" style={{ backgroundColor: o.canvas, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10 }}>
+            <View className="mb-5 self-center h-1.5 w-12 rounded-full bg-slate-300" style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: o.track, marginBottom: 18 }} />
 
-            <Text className="text-2xl font-bold text-slate-950">
+            <Text className="text-2xl font-bold text-slate-950" style={{ fontSize: 22, fontWeight: "800", letterSpacing: -0.3, color: o.text }}>
               Add ingredient
             </Text>
 
-            <Text className="mt-1 text-base text-slate-500">
+            <Text className="mt-1 text-base text-slate-500" style={{ fontSize: 14, color: o.muted }}>
               Choose how you would like to create a new ingredient.
             </Text>
 
-            <Pressable
-              className="mt-6 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+            <Tap
+              style={{ ...card, marginTop: 24, flexDirection: "row", alignItems: "center", padding: 16 }}
+              pressedStyle={{ backgroundColor: o.pill }}
               onPress={() => {
                 setAddMenuVisible(false);
                 router.push("/ingredients/add_manual");
               }}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="create-outline" size={27} color="#2563EB" />
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50" style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: o.pill }}>
+                <Ionicons name="create-outline" size={23} color={o.onPill} />
               </View>
 
               <View className="ml-4 flex-1">
-                <Text className="text-lg font-bold text-slate-900">
+                <Text className="text-lg font-bold text-slate-900" style={{ fontSize: 16, fontWeight: "700", color: o.text }}>
                   Add manually
                 </Text>
 
-                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                <Text className="mt-1 text-sm leading-5 text-slate-500" style={{ marginTop: 2, fontSize: 13, color: o.muted }}>
                   Enter the ingredient details, brand, category, and nutrition
                   information.
                 </Text>
               </View>
 
-              <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
-            </Pressable>
+              <Ionicons name="chevron-forward" size={20} color={o.faint} />
+            </Tap>
 
-            <Pressable
-              className="mt-3 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+            <Tap
+              style={{ ...card, marginTop: 12, flexDirection: "row", alignItems: "center", padding: 16 }}
+              pressedStyle={{ backgroundColor: o.pill }}
               onPress={() => {
                 setAddMenuVisible(false);
                 setScanContext("ingredient");
                 setScannerVisible(true);
               }}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="barcode-outline" size={29} color="#2563EB" />
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50" style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: o.pill }}>
+                <Ionicons name="barcode-outline" size={25} color={o.onPill} />
               </View>
 
               <View className="ml-4 flex-1">
-                <Text className="text-lg font-bold text-slate-900">
+                <Text className="text-lg font-bold text-slate-900" style={{ fontSize: 16, fontWeight: "700", color: o.text }}>
                   Scan barcode
                 </Text>
 
-                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                <Text className="mt-1 text-sm leading-5 text-slate-500" style={{ marginTop: 2, fontSize: 13, color: o.muted }}>
                   Scan a packaged product to fill in its information.
                 </Text>
               </View>
 
-              <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
-            </Pressable>
+              <Ionicons name="chevron-forward" size={20} color={o.faint} />
+            </Tap>
 
-            <Pressable
-              className="mt-5 items-center rounded-2xl bg-slate-100 py-4"
+            <Tap
+              style={{ marginTop: 20, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.pill }}
+              pressedStyle={{ opacity: 0.7 }}
               onPress={() => setAddMenuVisible(false)}
             >
-              <Text className="text-base font-semibold text-slate-700">
+              <Text style={{ fontSize: 16, fontWeight: "600", color: o.onPill }}>
                 Cancel
               </Text>
-            </Pressable>
+            </Tap>
           </View>
         </View>
       </Modal>
@@ -1736,84 +1779,88 @@ function PhonePantryMainPage() {
         animationType="fade"
         onRequestClose={() => setPantryAddMenuVisible(false)}
       >
-        <View className="flex-1 justify-end bg-black/30">
+        <View className="flex-1 justify-end bg-black/30" style={{ backgroundColor: o.scrim }}>
           <Pressable
             className="absolute inset-0"
             onPress={() => setPantryAddMenuVisible(false)}
           />
 
-          <View className="rounded-t-[32px] bg-white px-5 pb-10 pt-4">
-            <View className="mb-5 self-center h-1.5 w-12 rounded-full bg-slate-300" />
+          <View className="rounded-t-[32px] bg-white px-5 pb-10 pt-4" style={{ backgroundColor: o.canvas, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 10 }}>
+            <View className="mb-5 self-center h-1.5 w-12 rounded-full bg-slate-300" style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: o.track, marginBottom: 18 }} />
 
-            <Text className="text-2xl font-bold text-slate-950">Add pantry item</Text>
-            <Text className="mt-1 text-base text-slate-500">
+            <Text className="text-2xl font-bold text-slate-950" style={{ fontSize: 22, fontWeight: "800", letterSpacing: -0.3, color: o.text }}>Add pantry item</Text>
+            <Text className="mt-1 text-base text-slate-500" style={{ fontSize: 14, color: o.muted }}>
               Choose how you would like to add an item.
             </Text>
 
-            <Pressable
-              className="mt-6 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+            <Tap
+              style={{ ...card, marginTop: 24, flexDirection: "row", alignItems: "center", padding: 16 }}
+              pressedStyle={{ backgroundColor: o.pill }}
               onPress={() => {
                 setPantryAddMenuVisible(false);
                 router.push("/pantry/add_by_ingredient");
               }}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="create-outline" size={27} color="#2563EB" />
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50" style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: o.pill }}>
+                <Ionicons name="create-outline" size={23} color={o.onPill} />
               </View>
               <View className="ml-4 flex-1">
-                <Text className="text-lg font-bold text-slate-900">Add manually</Text>
-                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                <Text className="text-lg font-bold text-slate-900" style={{ fontSize: 16, fontWeight: "700", color: o.text }}>Add manually</Text>
+                <Text className="mt-1 text-sm leading-5 text-slate-500" style={{ marginTop: 2, fontSize: 13, color: o.muted }}>
                   Search or create an ingredient and set the quantity.
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
-            </Pressable>
+              <Ionicons name="chevron-forward" size={20} color={o.faint} />
+            </Tap>
 
-            <Pressable
-              className="mt-3 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+            <Tap
+              style={{ ...card, marginTop: 12, flexDirection: "row", alignItems: "center", padding: 16 }}
+              pressedStyle={{ backgroundColor: o.pill }}
               onPress={() => {
                 setPantryAddMenuVisible(false);
                 setScanContext("pantry");
                 setScannerVisible(true);
               }}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="barcode-outline" size={29} color="#2563EB" />
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50" style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: o.pill }}>
+                <Ionicons name="barcode-outline" size={25} color={o.onPill} />
               </View>
               <View className="ml-4 flex-1">
-                <Text className="text-lg font-bold text-slate-900">Scan barcode</Text>
-                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                <Text className="text-lg font-bold text-slate-900" style={{ fontSize: 16, fontWeight: "700", color: o.text }}>Scan barcode</Text>
+                <Text className="mt-1 text-sm leading-5 text-slate-500" style={{ marginTop: 2, fontSize: 13, color: o.muted }}>
                   Scan a product barcode to fill in its details.
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
-            </Pressable>
+              <Ionicons name="chevron-forward" size={20} color={o.faint} />
+            </Tap>
 
-            <Pressable
-              className="mt-3 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+            <Tap
+              style={{ ...card, marginTop: 12, flexDirection: "row", alignItems: "center", padding: 16 }}
+              pressedStyle={{ backgroundColor: o.pill }}
               onPress={() => {
                 setPantryAddMenuVisible(false);
                 setReceiptScannerVisible(true);
               }}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="receipt-outline" size={27} color="#2563EB" />
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50" style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: o.pill }}>
+                <Ionicons name="receipt-outline" size={23} color={o.onPill} />
               </View>
               <View className="ml-4 flex-1">
-                <Text className="text-lg font-bold text-slate-900">Scan receipt</Text>
-                <Text className="mt-1 text-sm leading-5 text-slate-500">
+                <Text className="text-lg font-bold text-slate-900" style={{ fontSize: 16, fontWeight: "700", color: o.text }}>Scan receipt</Text>
+                <Text className="mt-1 text-sm leading-5 text-slate-500" style={{ marginTop: 2, fontSize: 13, color: o.muted }}>
                   Photograph a receipt to auto-match or add ingredients and pantry items.
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
-            </Pressable>
+              <Ionicons name="chevron-forward" size={20} color={o.faint} />
+            </Tap>
 
-            <Pressable
-              className="mt-5 items-center rounded-2xl bg-slate-100 py-4"
+            <Tap
+              style={{ marginTop: 20, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.pill }}
+              pressedStyle={{ opacity: 0.7 }}
               onPress={() => setPantryAddMenuVisible(false)}
             >
-              <Text className="text-base font-semibold text-slate-700">Cancel</Text>
-            </Pressable>
+              <Text style={{ fontSize: 16, fontWeight: "600", color: o.onPill }}>Cancel</Text>
+            </Tap>
           </View>
         </View>
       </Modal>
@@ -1931,10 +1978,10 @@ function PhonePantryMainPage() {
       />
 
       <Modal visible={parsingReceipt} transparent animationType="fade">
-        <View className="flex-1 items-center justify-center bg-black/50">
-          <View className="items-center rounded-3xl bg-white px-8 py-6">
-            <ActivityIndicator size="large" />
-            <Text className="mt-3 text-base font-semibold text-slate-700">
+        <View className="flex-1 items-center justify-center bg-black/50" style={{ backgroundColor: o.scrim }}>
+          <View className="items-center rounded-3xl bg-white px-8 py-6" style={{ backgroundColor: o.surface }}>
+            <ActivityIndicator size="large" color={o.muted} />
+            <Text className="mt-3 text-base font-semibold text-slate-700" style={{ color: o.text }}>
               Reading receipt...
             </Text>
           </View>
@@ -1950,5 +1997,6 @@ function PhonePantryMainPage() {
         onSplit={handleSplitComplete}
       />
     </SafeAreaView>
+    </OrbitPage>
   );
 }

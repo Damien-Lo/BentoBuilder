@@ -6,6 +6,8 @@ import { addDays } from "@/src/components/calendar/calendarUtils";
 import { entryName } from "@/src/components/calendar/mealFood";
 import { createMealPlanEntry, getMealPlanRange, type MealPlanEntry, type MealSlot } from "@/src/services/mealPlanApi";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
+import { nutrientColor } from "@/src/theme/nutrients";
+import { useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
 
 type Hover = { hovered?: boolean };
@@ -24,6 +26,11 @@ type Macros = { calories?: number | null; protein?: number | null; carbs?: numbe
 export function PlanRecipeModal({ recipeId, recipeName, nutrition, visible, onClose, onPlanned }: { recipeId: string; recipeName: string; nutrition?: Macros | null; visible: boolean; onClose: () => void; onPlanned?: (date: string, slot: MealSlot) => void }) {
   const today = todayStr();
   const { width } = useWindowDimensions();
+  // (Opened from a page in Orbit's look, its colours, light or dark; `soft`
+  // the section's colour, faintly, behind what this recipe adds.)
+  const o = useOrbitPage();
+  const { dark } = useOrbitTheme();
+  const soft = dark ? "rgba(251,146,60,0.14)" : "#FFF7ED";
   const [start, setStart] = useState(today);
   const [servings, setServings] = useState(1);
   const [entries, setEntries] = useState<MealPlanEntry[] | null>(null);
@@ -81,51 +88,51 @@ export function PlanRecipeModal({ recipeId, recipeName, nutrition, visible, onCl
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View className="flex-1 items-center justify-center bg-black/40 px-4">
+      <View className="flex-1 items-center justify-center bg-black/40 px-4" style={o && { backgroundColor: o.scrim }}>
         <Pressable className="absolute inset-0" onPress={onClose} />
-        <View className="rounded-3xl bg-white py-5" style={{ width: cardWidth, maxHeight: "92%" }}>
+        <View className="rounded-3xl bg-white py-5" style={{ width: cardWidth, maxHeight: "92%", ...(o && { backgroundColor: o.canvas, borderRadius: 28 }) }}>
           {/* Header: what, how much, which week */}
           <View className="flex-row flex-wrap items-center gap-3 px-5 pb-3">
             <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 180 }}>
-              <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">Plan · pick a meal</Text>
+              <Text className="text-xs font-bold uppercase tracking-wide text-slate-400" style={o && { fontSize: 11, letterSpacing: 1.2, color: o.faint }}>Plan · pick a meal</Text>
               {/* (What one plate adds, at the servings chosen.) */}
-              <Text className="mt-0.5 text-lg font-bold text-slate-950" numberOfLines={1}>
+              <Text className="mt-0.5 text-lg font-bold text-slate-950" numberOfLines={1} style={o && { color: o.text, fontWeight: "800" }}>
                 {recipeName}
               </Text>
               {nutrition?.calories != null && (
-                <Text className="mt-0.5 text-xs text-slate-500">
-                  Adds <Text className="font-semibold text-blue-600">{r(add.calories)} kcal</Text> · P {r(add.protein)} g · C {r(add.carbs)} g · F {r(add.fats)} g
+                <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>
+                  Adds <Text className="font-semibold text-blue-600" style={o && { color: nutrientColor("calories", dark) }}>{r(add.calories)} kcal</Text> · P {r(add.protein)} g · C {r(add.carbs)} g · F {r(add.fats)} g
                 </Text>
               )}
             </View>
             <View className="flex-row items-center">
-              <Text className="mr-2 text-xs font-semibold text-slate-500">Servings</Text>
-              <Pressable hitSlop={8} disabled={servings <= 1} onPress={() => setServings((n) => Math.max(1, n - 1))} className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200">
-                <Ionicons name="remove" size={14} color={servings <= 1 ? "#CBD5E1" : "#475569"} />
+              <Text className="mr-2 text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>Servings</Text>
+              <Pressable hitSlop={8} disabled={servings <= 1} onPress={() => setServings((n) => Math.max(1, n - 1))} className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200" style={o && { width: 32, height: 32, borderRadius: 16, backgroundColor: o.pill }}>
+                <Ionicons name="remove" size={14} color={o ? (servings <= 1 ? o.faint : o.onPill) : servings <= 1 ? "#CBD5E1" : "#475569"} />
               </Pressable>
-              <Text className="mx-2 text-sm font-semibold text-slate-800">{servings}</Text>
-              <Pressable hitSlop={8} onPress={() => setServings((n) => n + 1)} className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200">
-                <Ionicons name="add" size={14} color="#475569" />
+              <Text className="mx-2 text-sm font-semibold text-slate-800" style={o && { color: o.text }}>{servings}</Text>
+              <Pressable hitSlop={8} onPress={() => setServings((n) => n + 1)} className="h-7 w-7 items-center justify-center rounded-full bg-slate-100 active:bg-slate-200" style={o && { width: 32, height: 32, borderRadius: 16, backgroundColor: o.pill }}>
+                <Ionicons name="add" size={14} color={o?.onPill ?? "#475569"} />
               </Pressable>
             </View>
             <View className="flex-row items-center">
               <Pressable hitSlop={8} disabled={start <= today} onPress={() => setStart((s) => (addDays(s, -DAYS) < today ? today : addDays(s, -DAYS)))} accessibilityLabel="Earlier week" className="h-8 w-8 items-center justify-center rounded-full active:bg-slate-100">
-                <Ionicons name="chevron-back" size={18} color={start <= today ? "#CBD5E1" : "#334155"} />
+                <Ionicons name="chevron-back" size={18} color={o ? (start <= today ? o.faint : o.icon) : start <= today ? "#CBD5E1" : "#334155"} />
               </Pressable>
-              <Text className="mx-1 text-sm font-semibold text-slate-700">{range}</Text>
+              <Text className="mx-1 text-sm font-semibold text-slate-700" style={o && { color: o.text }}>{range}</Text>
               <Pressable hitSlop={8} onPress={() => setStart((s) => addDays(s, DAYS))} accessibilityLabel="Next week" className="h-8 w-8 items-center justify-center rounded-full active:bg-slate-100">
-                <Ionicons name="chevron-forward" size={18} color="#334155" />
+                <Ionicons name="chevron-forward" size={18} color={o?.icon ?? "#334155"} />
               </Pressable>
             </View>
-            <Pressable hitSlop={10} onPress={onClose} accessibilityLabel="Close" className="h-8 w-8 items-center justify-center rounded-full active:bg-slate-100">
-              <Ionicons name="close" size={20} color="#64748B" />
+            <Pressable hitSlop={10} onPress={onClose} accessibilityLabel="Close" className="h-8 w-8 items-center justify-center rounded-full active:bg-slate-100" style={o && { width: 36, height: 36, borderRadius: 18, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}>
+              <Ionicons name="close" size={19} color={o?.text ?? "#64748B"} />
             </Pressable>
           </View>
 
           {/* The week */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
-            <View className="overflow-hidden rounded-2xl border border-slate-200">
-              <View className="flex-row border-b border-slate-200 bg-slate-50">
+            <View className="overflow-hidden rounded-2xl border border-slate-200" style={o && { borderRadius: 18, borderColor: o.border, backgroundColor: o.surface }}>
+              <View className="flex-row border-b border-slate-200 bg-slate-50" style={o && { borderBottomColor: o.border, backgroundColor: o.surface }}>
                 <View style={{ width: LABEL_WIDTH }} />
                 {days.map((d) => {
                   const day = parseLocalDate(d);
@@ -133,29 +140,29 @@ export function PlanRecipeModal({ recipeId, recipeName, nutrition, visible, onCl
                   const after = now.calories + add.calories;
                   const over = goal != null && after > goal;
                   return (
-                    <View key={d} style={{ width: column }} className="border-l border-slate-200 px-2 py-2">
-                      <Text className={`text-xs font-semibold ${d === today ? "text-blue-600" : "text-slate-500"}`}>
-                        {d === today ? "Today" : day.toLocaleDateString(undefined, { weekday: "short" })} <Text className={`text-base font-bold ${d === today ? "text-blue-600" : "text-slate-900"}`}>{day.getDate()}</Text>
+                    <View key={d} style={{ width: column, ...(o && { borderLeftColor: o.border }) }} className="border-l border-slate-200 px-2 py-2">
+                      <Text className={`text-xs font-semibold ${d === today ? "text-blue-600" : "text-slate-500"}`} style={o && { color: d === today ? o.ink : o.muted }}>
+                        {d === today ? "Today" : day.toLocaleDateString(undefined, { weekday: "short" })} <Text className={`text-base font-bold ${d === today ? "text-blue-600" : "text-slate-900"}`} style={o && { color: d === today ? o.ink : o.text }}>{day.getDate()}</Text>
                       </Text>
                       {entries !== null && (
                         <>
                           {/* So far, against the goal */}
-                          <Text className="mt-1 text-[11px] text-slate-500" numberOfLines={1}>
-                            <Text className="font-semibold text-slate-800">{r(now.calories)}</Text>
+                          <Text className="mt-1 text-[11px] text-slate-500" numberOfLines={1} style={o && { color: o.muted }}>
+                            <Text className="font-semibold text-slate-800" style={o && { color: goal != null && now.calories > goal ? o.danger : o.text }}>{r(now.calories)}</Text>
                             {goal != null ? ` / ${r(goal)}` : ""} kcal
                           </Text>
-                          <Text className="text-[10px] text-slate-400" numberOfLines={1}>
+                          <Text className="text-[10px] text-slate-400" numberOfLines={1} style={o && { color: o.faint }}>
                             P {r(now.protein)} · C {r(now.carbs)} · F {r(now.fats)}
                           </Text>
                           {/* With this recipe */}
                           {nutrition?.calories != null && (
-                            <View className="mt-1 rounded-md bg-blue-50 px-1.5 py-1">
-                              <Text className="text-[9px] font-bold uppercase tracking-wide text-blue-500">New total</Text>
-                              <Text className={`text-[11px] ${over ? "text-red-600" : "text-blue-700"}`} numberOfLines={1}>
+                            <View className="mt-1 rounded-md bg-blue-50 px-1.5 py-1" style={o && { backgroundColor: soft, borderRadius: 8 }}>
+                              <Text className="text-[9px] font-bold uppercase tracking-wide text-blue-500" style={o && { color: o.ink }}>New total</Text>
+                              <Text className={`text-[11px] ${over ? "text-red-600" : "text-blue-700"}`} numberOfLines={1} style={o && { color: over ? o.danger : o.text }}>
                                 <Text className="font-bold">{r(after)}</Text>
                                 {goal != null ? ` / ${r(goal)}` : ""} kcal
                               </Text>
-                              <Text className="text-[10px] text-blue-600" numberOfLines={1}>
+                              <Text className="text-[10px] text-blue-600" numberOfLines={1} style={o && { color: o.muted }}>
                                 P {r(now.protein + add.protein)} · C {r(now.carbs + add.carbs)} · F {r(now.fats + add.fats)}
                               </Text>
                             </View>
@@ -167,10 +174,10 @@ export function PlanRecipeModal({ recipeId, recipeName, nutrition, visible, onCl
                 })}
               </View>
               {SLOTS.map((slot, row) => (
-                <View key={slot.id} className={`flex-row ${row < SLOTS.length - 1 ? "border-b border-slate-200" : ""}`}>
+                <View key={slot.id} className={`flex-row ${row < SLOTS.length - 1 ? "border-b border-slate-200" : ""}`} style={o && row < SLOTS.length - 1 ? { borderBottomColor: o.border } : undefined}>
                   <View style={{ width: LABEL_WIDTH }} className="justify-center px-3 py-2">
                     <Ionicons name={slot.icon} size={15} color={slot.iconColor} />
-                    <Text className="mt-0.5 text-xs font-bold text-slate-700">{slot.label}</Text>
+                    <Text className="mt-0.5 text-xs font-bold text-slate-700" style={o && { color: o.text }}>{slot.label}</Text>
                   </View>
                   {days.map((d) => {
                     const here = (entries ?? []).filter((e) => e.date === d && e.slot === slot.id);
@@ -180,23 +187,32 @@ export function PlanRecipeModal({ recipeId, recipeName, nutrition, visible, onCl
                         key={key}
                         onPress={() => void place(d, slot.id)}
                         accessibilityLabel={`Plan for ${d}, ${slot.label}`}
-                        style={({ hovered }: Hover) => ({ width: column, minHeight: 92, padding: 6, borderLeftWidth: 1, borderLeftColor: "#E2E8F0", backgroundColor: hovered || saving === key ? "#EFF6FF" : "transparent" })}
+                        style={
+                          o
+                            ? { width: column, minHeight: 92, padding: 6, borderLeftWidth: 1, borderLeftColor: o.border, backgroundColor: saving === key ? soft : "transparent" }
+                            : ({ hovered }: Hover) => ({ width: column, minHeight: 92, padding: 6, borderLeftWidth: 1, borderLeftColor: "#E2E8F0", backgroundColor: hovered || saving === key ? "#EFF6FF" : "transparent" })
+                        }
                       >
                         {({ hovered }: Hover) => (
                           <>
                             {here.slice(0, 2).map((e) => (
-                              <Text key={e._id} numberOfLines={1} className={`mb-1 rounded-md px-1.5 py-0.5 text-[11px] ${e.status === "confirmed" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                              <Text
+                                key={e._id}
+                                numberOfLines={1}
+                                className={`mb-1 rounded-md px-1.5 py-0.5 text-[11px] ${e.status === "confirmed" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
+                                style={o && (e.status === "confirmed" ? { backgroundColor: dark ? "rgba(52,211,153,0.14)" : "#ECFDF5", color: o.success, borderRadius: 6, overflow: "hidden" } : { backgroundColor: o.pill, color: o.onPill, borderRadius: 6, overflow: "hidden" })}
+                              >
                                 {entryName(e)}
                               </Text>
                             ))}
-                            {here.length > 2 && <Text className="text-[10px] text-slate-400">+{here.length - 2} more</Text>}
+                            {here.length > 2 && <Text className="text-[10px] text-slate-400" style={o && { color: o.faint }}>+{here.length - 2} more</Text>}
                             <View className="mt-auto flex-row items-center justify-center rounded-lg py-1" style={{ opacity: hovered || saving === key || !here.length ? 1 : 0.55 }}>
                               {saving === key ? (
-                                <ActivityIndicator size="small" color="#2563EB" />
+                                <ActivityIndicator size="small" color={o?.ink ?? "#2563EB"} />
                               ) : (
                                 <>
-                                  <Ionicons name="add" size={13} color={hovered ? "#2563EB" : "#94A3B8"} />
-                                  <Text className={`ml-0.5 text-[11px] font-semibold ${hovered ? "text-blue-600" : "text-slate-400"}`}>Place here</Text>
+                                  <Ionicons name="add" size={13} color={o ? o.faint : hovered ? "#2563EB" : "#94A3B8"} />
+                                  <Text className={`ml-0.5 text-[11px] font-semibold ${hovered ? "text-blue-600" : "text-slate-400"}`} style={o && { color: o.faint }}>Place here</Text>
                                 </>
                               )}
                             </View>
@@ -209,7 +225,7 @@ export function PlanRecipeModal({ recipeId, recipeName, nutrition, visible, onCl
               ))}
             </View>
           </ScrollView>
-          {entries === null && <Text className="mt-2 px-5 text-xs text-slate-400">Loading what&apos;s planned…</Text>}
+          {entries === null && <Text className="mt-2 px-5 text-xs text-slate-400" style={o && { color: o.faint }}>Loading what&apos;s planned…</Text>}
         </View>
       </View>
     </Modal>

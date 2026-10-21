@@ -38,6 +38,8 @@ import { loadSettings } from "@/src/services/settingsService";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { formatDateDisplay, toDateOnly, todayDateInputString } from "@/src/utils/date";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
+import { Tap } from "@/src/components/ui/Tap";
+import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
 type ReferenceObject = { _id?: string; id?: string; name?: string };
@@ -106,6 +108,14 @@ function itemToForm(item: PantryItem): FormState {
 }
 
 export default function EditPantryItemScreen() {
+  return (
+    <OrbitSection section="kitchen">
+      <EditPantryItem />
+    </OrbitSection>
+  );
+}
+
+function EditPantryItem() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -183,6 +193,14 @@ export default function EditPantryItemScreen() {
   // default to 0 and don't need to be listed here). Store is the only
   // dropdown-capable field on this page.
   const layout = useWideForm();
+  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
+  // desktop browser keeps the desktop's for now. The cards, fields and
+  // dropdowns in it follow by themselves (OrbitPage).
+  const { colors, dark } = useOrbitTheme();
+  const o = layout.wide ? null : colors;
+  const field = o && { backgroundColor: o.surface, borderColor: o.border };
+  // Soft tints, in either theme.
+  const tint = (light: string, darkTint: string) => (dark ? darkTint : light);
   const scrollRef = useRef<ScrollView>(null);
   const scrollAnchorRef = useRef<View>(null);
   const quantitySection = useScrollFocusSection(scrollRef, scrollAnchorRef);
@@ -321,9 +339,9 @@ export default function EditPantryItemScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-3 text-slate-500">Loading...</Text>
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
+        <Text className="mt-3 text-slate-500" style={o && { color: o.muted }}>Loading...</Text>
       </SafeAreaView>
     );
   }
@@ -334,39 +352,59 @@ export default function EditPantryItemScreen() {
   const ingredientId = getIngredientId(item);
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50">
+    <OrbitPage on={!!o}>
+    <SafeAreaView className="flex-1 bg-slate-50" style={o && { backgroundColor: o.canvas }} edges={o ? ["top", "left", "right"] : undefined}>
       <KeyboardAvoidingView
         className="flex-1"
         style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header */}
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          <Pressable
-            className="h-11 items-center justify-center px-1 active:opacity-60"
-            onPress={() => router.back()}
-            disabled={saving}
-          >
-            <Text className="text-base font-medium text-slate-500">Cancel</Text>
-          </Pressable>
-
-          <Text
-            className="ml-2 flex-1 text-xl font-bold text-slate-950"
-            numberOfLines={1}
-          >
-            {ingredientName}
-          </Text>
-
-          <Pressable
-            disabled={saving}
-            className={`rounded-xl px-4 py-2 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
-            onPress={() => void handleSave()}
-          >
-            <Text className="font-semibold text-white">
-              {saving ? "Saving..." : "Save"}
+        {/* Header (phone): the way back and Save over a large title, on
+            the page itself */}
+        {o ? (
+          <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4 }}>
+              <Tap onPress={() => router.back()} disabled={saving} accessibilityLabel="Cancel" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                <Ionicons name="chevron-back" size={22} color={o.text} />
+              </Tap>
+              <View style={{ flex: 1 }} />
+              <Tap disabled={saving} onPress={() => void handleSave()} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }} pressedStyle={{ opacity: 0.8 }}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: o.onInk }}>{saving ? "Saving..." : "Save"}</Text>
+              </Tap>
+            </View>
+            <Text numberOfLines={2} style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>
+              {ingredientName}
             </Text>
-          </Pressable>
-        </View>
+          </View>
+        ) : (
+          // Header
+          <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
+            <Pressable
+              className="h-11 items-center justify-center px-1 active:opacity-60"
+              onPress={() => router.back()}
+              disabled={saving}
+            >
+              <Text className="text-base font-medium text-slate-500">Cancel</Text>
+            </Pressable>
+
+            <Text
+              className="ml-2 flex-1 text-xl font-bold text-slate-950"
+              numberOfLines={1}
+            >
+              {ingredientName}
+            </Text>
+
+            <Pressable
+              disabled={saving}
+              className={`rounded-xl px-4 py-2 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+              onPress={() => void handleSave()}
+            >
+              <Text className="font-semibold text-white">
+                {saving ? "Saving..." : "Save"}
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         <ScrollView
           ref={scrollRef}
@@ -381,30 +419,45 @@ export default function EditPantryItemScreen() {
         >
           <View ref={scrollAnchorRef} collapsable={false} />
           {/* Ingredient info link */}
-          {ingredientId ? (
-            <Pressable
-              className="mb-3 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-              onPress={() =>
-                router.push({
-                  pathname: "/ingredients/edit/[id]",
-                  params: { id: ingredientId },
-                })
-              }
-            >
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="nutrition-outline" size={18} color="#2563EB" />
-              </View>
-              <View className="ml-3 flex-1">
-                <Text className="text-sm font-semibold text-slate-900">
-                  {ingredientName}
-                </Text>
-                <Text className="mt-0.5 text-xs text-slate-400">
-                  Tap to view ingredient details
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-            </Pressable>
-          ) : null}
+          {ingredientId ? (() => {
+            const openIngredient = () =>
+              router.push({
+                pathname: "/ingredients/edit/[id]",
+                params: { id: ingredientId },
+              });
+            const link = (
+              <>
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.pill }}>
+                  <Ionicons name="nutrition-outline" size={18} color={o?.onPill ?? "#2563EB"} />
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>
+                    {ingredientName}
+                  </Text>
+                  <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.faint }}>
+                    Tap to view ingredient details
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={o?.faint ?? "#94A3B8"} />
+              </>
+            );
+            return o ? (
+              <Tap
+                onPress={openIngredient}
+                style={{ marginBottom: 12, flexDirection: "row", alignItems: "center", borderRadius: 20, borderWidth: 1, borderColor: o.border, backgroundColor: o.surface, padding: 16 }}
+                pressedStyle={{ backgroundColor: o.pill }}
+              >
+                {link}
+              </Tap>
+            ) : (
+              <Pressable
+                className="mb-3 flex-row items-center rounded-3xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+                onPress={openIngredient}
+              >
+                {link}
+              </Pressable>
+            );
+          })() : null}
 
           {/* (In a desktop browser: two columns.) */}
           <View style={layout.columns}>
@@ -443,7 +496,7 @@ export default function EditPantryItemScreen() {
             <View className="relative" style={{ zIndex: showLocationPicker ? 30 : 0 }}>
               <Pressable
                 className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
-                style={{ height: 56 }}
+                style={[{ height: 56 }, field]}
                 onPress={() => {
                   setShowLocationPicker((v) => !v);
                 }}
@@ -451,32 +504,34 @@ export default function EditPantryItemScreen() {
                 <Ionicons
                   name="file-tray-stacked-outline"
                   size={20}
-                  color="#64748B"
+                  color={o?.muted ?? "#64748B"}
                 />
                 <Text
                   className={`ml-3 flex-1 text-base ${form.storageLocationId ? "text-slate-950" : "text-slate-400"}`}
+                  style={o && { color: form.storageLocationId ? o.text : o.faint }}
                 >
                   {form.storageLocationName || "Choose a location"}
                 </Text>
                 <Ionicons
                   name={showLocationPicker ? "chevron-up" : "chevron-down"}
                   size={18}
-                  color="#64748B"
+                  color={o?.muted ?? "#64748B"}
                 />
               </Pressable>
 
               {showLocationPicker && (
                 <View
                   className="absolute left-0 right-0 top-16 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
-                  style={{ elevation: 20 }}
+                  style={[{ elevation: 20 }, field]}
                 >
                   {storageLocations.map((loc) => (
                     <Pressable
                       key={loc._id}
                       className="border-b border-slate-100 px-4 py-4"
+                      style={o && { borderBottomColor: o.border }}
                       onPress={() => pickLocation(loc)}
                     >
-                      <Text className="text-base text-slate-800">{loc.name}</Text>
+                      <Text className="text-base text-slate-800" style={o && { color: loc._id === form.storageLocationId ? o.ink : o.text }}>{loc.name}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -484,17 +539,25 @@ export default function EditPantryItemScreen() {
             </View>
 
             {/* Sealed, or opened: opening it changes how long it keeps. */}
-            <Pressable onPress={toggleOpened} accessibilityRole="checkbox" accessibilityLabel="Opened" className="mt-3 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 active:bg-slate-50" style={{ height: 52 }}>
-              <Ionicons name={form.openedDate ? "checkbox" : "square-outline"} size={20} color={form.openedDate ? "#2563EB" : "#64748B"} />
-              <Text className="ml-3 flex-1 text-base text-slate-900">Opened</Text>
-              <Text className="text-sm text-slate-500">{form.openedDate ? formatDateDisplay(form.openedDate) : "Still sealed"}</Text>
-            </Pressable>
+            {o ? (
+              <Tap onPress={toggleOpened} accessibilityRole="checkbox" accessibilityLabel="Opened" style={{ marginTop: 12, height: 52, flexDirection: "row", alignItems: "center", borderRadius: 16, borderWidth: 1, borderColor: o.border, backgroundColor: o.surface, paddingHorizontal: 16 }} pressedStyle={{ backgroundColor: o.pill }}>
+                <Ionicons name={form.openedDate ? "checkbox" : "square-outline"} size={20} color={form.openedDate ? o.ink : o.muted} />
+                <Text style={{ marginLeft: 12, flex: 1, fontSize: 16, color: o.text }}>Opened</Text>
+                <Text style={{ fontSize: 14, color: o.muted }}>{form.openedDate ? formatDateDisplay(form.openedDate) : "Still sealed"}</Text>
+              </Tap>
+            ) : (
+              <Pressable onPress={toggleOpened} accessibilityRole="checkbox" accessibilityLabel="Opened" className="mt-3 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 active:bg-slate-50" style={{ height: 52 }}>
+                <Ionicons name={form.openedDate ? "checkbox" : "square-outline"} size={20} color={form.openedDate ? "#2563EB" : "#64748B"} />
+                <Text className="ml-3 flex-1 text-base text-slate-900">Opened</Text>
+                <Text className="text-sm text-slate-500">{form.openedDate ? formatDateDisplay(form.openedDate) : "Still sealed"}</Text>
+              </Pressable>
+            )}
 
             {/* A change of state: what the new date is, and why. */}
             {move && (
-              <View className="mb-3 mt-3 flex-row rounded-2xl bg-violet-50 px-3 py-2.5">
-                <Ionicons name={move.kind === "thawed" ? "water-outline" : move.kind === "frozen" ? "snow-outline" : move.kind === "opened" ? "cut-outline" : "swap-horizontal"} size={17} color="#6D28D9" style={{ marginTop: 1 }} />
-                <Text className="ml-2 flex-1 text-[13px] leading-5 text-violet-900">
+              <View className="mb-3 mt-3 flex-row rounded-2xl bg-violet-50 px-3 py-2.5" style={o && { backgroundColor: tint("#F5F3FF", "rgba(139,92,246,0.18)") }}>
+                <Ionicons name={move.kind === "thawed" ? "water-outline" : move.kind === "frozen" ? "snow-outline" : move.kind === "opened" ? "cut-outline" : "swap-horizontal"} size={17} color={o ? tint("#6D28D9", "#C4B5FD") : "#6D28D9"} style={{ marginTop: 1 }} />
+                <Text className="ml-2 flex-1 text-[13px] leading-5 text-violet-900" style={o && { color: tint("#4C1D95", "#DDD6FE") }}>
                   {move.kind === "thawed" ? "Out of the freezer" : move.kind === "frozen" ? "Into the freezer" : move.kind === "opened" ? "Opened" : `Moved to ${form.storageLocationName}`}: the expiry date is now{" "}
                   <Text className="font-semibold">{formatDateDisplay(move.expiryDate)}</Text>, {move.days} day{move.days === 1 ? "" : "s"} from today (
                   {move.learned ? "what you\u2019ve given it before" : "a usual figure"}). Change it below if that isn&apos;t right.
@@ -527,7 +590,7 @@ export default function EditPantryItemScreen() {
               </View>
             </View>
 
-            <View className="mt-3 rounded-2xl bg-blue-50/60 px-3 pb-3 pt-1" {...expiryDurationSection.wrapperProps}>
+            <View className="mt-3 rounded-2xl bg-blue-50/60 px-3 pb-3 pt-1" {...expiryDurationSection.wrapperProps} style={[expiryDurationSection.wrapperProps.style, o && { backgroundColor: o.pill }]}>
               <FieldLabel text="Or set expiry from purchase date" />
               <DurationExpiryInput
                 purchaseDate={form.purchaseDate}
@@ -576,36 +639,60 @@ export default function EditPantryItemScreen() {
                 onChangeText={(v) => update("notes", v)}
                 onFocus={notesSection.trigger}
                 placeholder="Optional notes"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={o?.faint ?? "#94A3B8"}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
                 className="min-h-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-950"
+                style={o && { ...field, color: o.text }}
               />
             </View>
           </FormCard>
           </View>
           </View>
 
-          <View style={layout.actions}>
-          <Pressable
-            disabled={saving}
-            onPress={() => void handleSave()}
-            className={`mt-2 items-center rounded-2xl py-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
-          >
-            <Text className="text-base font-semibold text-white">{saving ? "Saving..." : "Save changes"}</Text>
-          </Pressable>
+          {o ? (
+            <View>
+              <Tap
+                disabled={saving}
+                onPress={() => void handleSave()}
+                style={{ marginTop: 8, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }}
+                pressedStyle={{ opacity: 0.85 }}
+              >
+                <Text style={{ fontSize: 16, fontWeight: "700", color: o.onInk }}>{saving ? "Saving..." : "Save changes"}</Text>
+              </Tap>
 
-          <Pressable
-            disabled={saving}
-            className="mt-3 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
-            onPress={handleDelete}
-          >
-            <Text className="font-semibold text-red-600">Delete pantry entry</Text>
-          </Pressable>
-          </View>
+              <Tap
+                disabled={saving}
+                onPress={handleDelete}
+                style={{ marginTop: 12, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: tint("#FEF2F2", "rgba(248,113,113,0.14)") }}
+                pressedStyle={{ opacity: 0.7 }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: "600", color: o.danger }}>Delete pantry entry</Text>
+              </Tap>
+            </View>
+          ) : (
+            <View style={layout.actions}>
+            <Pressable
+              disabled={saving}
+              onPress={() => void handleSave()}
+              className={`mt-2 items-center rounded-2xl py-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
+            >
+              <Text className="text-base font-semibold text-white">{saving ? "Saving..." : "Save changes"}</Text>
+            </Pressable>
+
+            <Pressable
+              disabled={saving}
+              className="mt-3 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
+              onPress={handleDelete}
+            >
+              <Text className="font-semibold text-red-600">Delete pantry entry</Text>
+            </Pressable>
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </OrbitPage>
   );
 }

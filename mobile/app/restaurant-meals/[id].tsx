@@ -17,6 +17,9 @@ import {
 import { getMealPlanHistoryForRestaurant, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { friendlyDayLabel, getRestaurantMealKcal } from "@/src/utils/mealPlan";
 import { useWideForm } from "@/src/components/forms/wideForm";
+import { Tap } from "@/src/components/ui/Tap";
+import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
+import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 
 function recentScoresFor(dish: Dish) {
   return (dish.scores ?? []).slice(-50);
@@ -29,10 +32,24 @@ function averageScoreFor(dish: Dish): number | null {
   return Math.round((sum / scores.length) * 10) / 10;
 }
 
+// A restaurant's page (Kitchen → Eating Out): its dishes, their ratings and
+// past visits. In the Kitchen's colours, and on a phone in Orbit's look; a
+// desktop browser keeps its own.
 export default function RestaurantMealDetailPage() {
+  return (
+    <OrbitSection section="kitchen">
+      <RestaurantMealDetail />
+    </OrbitSection>
+  );
+}
+
+function RestaurantMealDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const layout = useWideForm();
+  // (On a phone, in Orbit's colours; null in a desktop browser.)
+  const { colors, dark } = useOrbitTheme();
+  const o = layout.wide ? null : colors;
 
   const [restaurantMeal, setRestaurantMeal] = useState<RestaurantMeal | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -137,17 +154,17 @@ export default function RestaurantMealDetailPage() {
 
   if (isLoading && !restaurantMeal) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
       </SafeAreaView>
     );
   }
 
   if (error || !restaurantMeal) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-6">
-        <Ionicons name="alert-circle-outline" size={40} color="#94A3B8" />
-        <Text className="mt-3 text-center text-slate-500">{error ?? "Not found."}</Text>
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-6" style={o && { backgroundColor: o.canvas }}>
+        <Ionicons name="alert-circle-outline" size={40} color={o?.faint ?? "#94A3B8"} />
+        <Text className="mt-3 text-center text-slate-500" style={o && { color: o.muted }}>{error ?? "Not found."}</Text>
       </SafeAreaView>
     );
   }
@@ -156,8 +173,31 @@ export default function RestaurantMealDetailPage() {
     (t): t is SelectOption => typeof t !== "string",
   );
 
-  // Header card
-  const headerSection = (
+  // (Orbit's look, on a phone: headings over cards, and the green of a tag.)
+  const eyebrow = o && { fontSize: 11, fontWeight: "700" as const, letterSpacing: 1.2, color: o.faint, marginLeft: 4 };
+  const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 };
+  const tagChip = o && { backgroundColor: dark ? "rgba(52,211,153,0.14)" : "#ECFDF5" };
+  const NUTRIENT_KEY: Record<string, MainNutrient> = { Calories: "calories", Protein: "protein", Carbs: "carbs", Fats: "fats", Fiber: "fiber", Sodium: "sodium" };
+
+  // Header card (on a phone: the name as the page's large title, its tags
+  // and notes under it)
+  const headerSection = o ? (
+    <View>
+      <Text style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>{restaurantMeal.restaurantName}</Text>
+      {tags.length > 0 && (
+        <View style={{ marginTop: 10, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {tags.map((tag) => (
+            <View key={tag._id} style={[{ borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 }, tagChip]}>
+              <Text style={{ fontSize: 12, fontWeight: "600", color: o.success }}>{tag.name}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {restaurantMeal.notes ? (
+        <Text style={{ marginTop: 10, fontSize: 15, lineHeight: 22, color: o.muted }}>{restaurantMeal.notes}</Text>
+      ) : null}
+    </View>
+  ) : (
     <>
       <View className="rounded-2xl border border-slate-200 bg-white p-5">
         <View className="h-14 w-14 items-center justify-center rounded-full bg-orange-50">
@@ -186,9 +226,15 @@ export default function RestaurantMealDetailPage() {
   // Dishes
   const dishesSection = (
     <>
-      <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500">
-        Dishes ({restaurantMeal.dishes.length})
-      </Text>
+      {o ? (
+        <Text style={{ ...eyebrow, marginTop: 24, marginBottom: 8 }}>
+          DISHES <Text style={{ color: o.orbit }}>· {restaurantMeal.dishes.length}</Text>
+        </Text>
+      ) : (
+        <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500">
+          Dishes ({restaurantMeal.dishes.length})
+        </Text>
+      )}
 
       {restaurantMeal.dishes.map((dish) => {
         const recentScores = recentScoresFor(dish);
@@ -207,24 +253,26 @@ export default function RestaurantMealDetailPage() {
           : [];
 
         return (
-          <View key={dish._id} className="mb-4 rounded-2xl border border-slate-200 bg-white p-5">
+          <View key={dish._id} className="mb-4 rounded-2xl border border-slate-200 bg-white p-5" style={o && { ...card, padding: 16, marginBottom: 12 }}>
             <View className="flex-row items-center justify-between">
-              <Text className="flex-1 text-lg font-bold text-slate-900">{dish.name}</Text>
+              <Text className="flex-1 text-lg font-bold text-slate-900" style={o && { color: o.text }}>{dish.name}</Text>
               {dish.price != null && (
-                <Text className="ml-2 text-base font-semibold text-slate-500">
+                <Text className="ml-2 text-base font-semibold text-slate-500" style={o && { color: o.muted }}>
                   ${dish.price.toFixed(2)}
                 </Text>
               )}
             </View>
             {dish.notes ? (
-              <Text className="mt-1 text-sm leading-5 text-slate-600">{dish.notes}</Text>
+              <Text className="mt-1 text-sm leading-5 text-slate-600" style={o && { color: o.muted }}>{dish.notes}</Text>
             ) : null}
 
             {nutritionRows.length > 0 && (
               <View className="mt-3 flex-row flex-wrap gap-2">
                 {nutritionRows.map(([label, value, unit]) => (
-                  <View key={label} className="rounded-full bg-slate-100 px-2.5 py-1">
-                    <Text className="text-xs font-semibold text-slate-600">
+                  <View key={label} className="rounded-full bg-slate-100 px-2.5 py-1" style={o && { flexDirection: "row", alignItems: "center", backgroundColor: o.pill }}>
+                    {/* (On a phone, a dot in the nutrient's colour.) */}
+                    {o && <View style={{ width: 6, height: 6, borderRadius: 3, marginRight: 5, backgroundColor: nutrientColor(NUTRIENT_KEY[label], dark) }} />}
+                    <Text className="text-xs font-semibold text-slate-600" style={o && { color: o.onPill }}>
                       {value} {unit} {label}
                     </Text>
                   </View>
@@ -233,46 +281,48 @@ export default function RestaurantMealDetailPage() {
             )}
 
             {/* Rating */}
-            <View className="mt-4 flex-row items-center justify-between border-t border-slate-100 pt-4">
+            <View className="mt-4 flex-row items-center justify-between border-t border-slate-100 pt-4" style={o && { borderTopColor: o.border }}>
               <View>
-                <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">Rating</Text>
+                <Text className="text-xs font-bold uppercase tracking-wide text-slate-400" style={o && { fontSize: 11, letterSpacing: 1.2, color: o.faint }}>Rating</Text>
                 {averageScore != null ? (
                   <View className="mt-1.5 flex-row items-baseline">
-                    <Text className="text-xl font-bold text-slate-900">{averageScore}</Text>
-                    <Text className="ml-1 text-sm font-semibold text-slate-400">/ 10</Text>
-                    <Text className="ml-1.5 text-xs text-slate-400">
+                    <Text className="text-xl font-bold text-slate-900" style={o && { fontSize: 22, fontWeight: "800", color: o.text }}>{averageScore}</Text>
+                    <Text className="ml-1 text-sm font-semibold text-slate-400" style={o && { color: o.faint }}>/ 10</Text>
+                    <Text className="ml-1.5 text-xs text-slate-400" style={o && { color: o.faint }}>
                       · {recentScores.length} {recentScores.length === 1 ? "rating" : "ratings"}
                     </Text>
                   </View>
                 ) : (
-                  <Text className="mt-1.5 text-sm text-slate-400">Not rated yet</Text>
+                  <Text className="mt-1.5 text-sm text-slate-400" style={o && { color: o.faint }}>Not rated yet</Text>
                 )}
               </View>
 
-              <Pressable
+              <Tap
                 className="rounded-2xl bg-blue-600 px-4 py-2.5 active:bg-blue-700"
+                style={o && { backgroundColor: o.ink, borderRadius: 14, paddingHorizontal: 18 }}
+                pressedStyle={o ? { opacity: 0.85 } : {}}
                 onPress={() => setRateModalDishId(dish._id)}
               >
-                <Text className="text-sm font-semibold text-white">Rate</Text>
-              </Pressable>
+                <Text className="text-sm font-semibold text-white" style={o && { color: o.onInk }}>Rate</Text>
+              </Tap>
             </View>
 
             {recentScores.length > 0 && (
               <>
                 <Pressable className="mt-3 flex-row items-center" onPress={() => toggleHistory(dish._id)}>
-                  <Text className="text-xs font-semibold text-slate-500">
+                  <Text className="text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>
                     {showHistory ? "Hide history" : "Show history"}
                   </Text>
                   <Ionicons
                     name={showHistory ? "chevron-up" : "chevron-down"}
                     size={14}
-                    color="#64748B"
+                    color={o?.muted ?? "#64748B"}
                     style={{ marginLeft: 4 }}
                   />
                 </Pressable>
 
                 {showHistory && (
-                  <View className="mt-2 overflow-hidden rounded-2xl border border-slate-100">
+                  <View className="mt-2 overflow-hidden rounded-2xl border border-slate-100" style={o && { borderColor: o.border, borderRadius: 14 }}>
                     {recentScores.map((score, index) => (
                       <ReanimatedSwipeable
                         key={score._id}
@@ -291,11 +341,12 @@ export default function RestaurantMealDetailPage() {
                           className={`flex-row items-center justify-between bg-white px-3 py-2.5 ${
                             index < recentScores.length - 1 ? "border-b border-slate-100" : ""
                           }`}
+                          style={o && { backgroundColor: o.surface, borderBottomColor: o.border }}
                         >
-                          <Text className="text-sm text-slate-600">
+                          <Text className="text-sm text-slate-600" style={o && { color: o.muted }}>
                             {new Date(score.ratedAt).toLocaleDateString()}
                           </Text>
-                          <Text className="text-sm font-semibold text-slate-900">{score.value} / 10</Text>
+                          <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>{score.value} / 10</Text>
                         </View>
                       </ReanimatedSwipeable>
                     ))}
@@ -316,21 +367,28 @@ export default function RestaurantMealDetailPage() {
     <>
       <Pressable
         className="mb-2 mt-6 flex-row items-center justify-between"
+        style={o && { marginTop: 20, paddingVertical: 4 }}
         onPress={() => setVisitsExpanded((v) => !v)}
       >
-        <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
-          Past Visits ({visits.length})
-        </Text>
-        <Ionicons name={visitsExpanded ? "chevron-up" : "chevron-down"} size={18} color="#64748B" />
+        {o ? (
+          <Text style={eyebrow}>
+            PAST VISITS <Text style={{ color: o.orbit }}>· {visits.length}</Text>
+          </Text>
+        ) : (
+          <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+            Past Visits ({visits.length})
+          </Text>
+        )}
+        <Ionicons name={visitsExpanded ? "chevron-up" : "chevron-down"} size={18} color={o?.muted ?? "#64748B"} />
       </Pressable>
 
       {visitsExpanded && (
         visitsLoading ? (
-          <ActivityIndicator size="small" color="#2563EB" style={{ marginVertical: 12 }} />
+          <ActivityIndicator size="small" color={o?.muted ?? "#2563EB"} style={{ marginVertical: 12 }} />
         ) : visits.length === 0 ? (
-          <Text className="mb-4 text-sm text-slate-400">No visits logged yet.</Text>
+          <Text className="mb-4 text-sm text-slate-400" style={o && { color: o.faint, marginLeft: 4 }}>No visits logged yet.</Text>
         ) : (
-          <View className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <View className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={card}>
             {visits.map((visit, i) => {
               const isOpen = expandedVisitId === visit._id;
               const selections = visit.restaurantDishSelections ?? [];
@@ -338,36 +396,37 @@ export default function RestaurantMealDetailPage() {
               const orderedDishes = restaurantMeal.dishes.filter((d) => quantityByDish.has(d._id));
               const kcal = getRestaurantMealKcal(restaurantMeal, selections);
               return (
-                <View key={visit._id} className={i < visits.length - 1 ? "border-b border-slate-100" : ""}>
-                  <Pressable
+                <View key={visit._id} className={i < visits.length - 1 ? "border-b border-slate-100" : ""} style={o && { borderBottomColor: o.border }}>
+                  <Tap
                     className="flex-row items-center justify-between px-4 py-3.5 active:bg-slate-50"
+                    pressedStyle={o ? { backgroundColor: o.pill } : {}}
                     onPress={() => setExpandedVisitId(isOpen ? null : visit._id)}
                   >
                     <View className="flex-1">
-                      <Text className="font-semibold text-slate-900">{friendlyDayLabel(visit.date)}</Text>
-                      <Text className="mt-0.5 text-xs text-slate-400">
+                      <Text className="font-semibold text-slate-900" style={o && { color: o.text }}>{friendlyDayLabel(visit.date)}</Text>
+                      <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.muted }}>
                         {orderedDishes.length} {orderedDishes.length === 1 ? "dish" : "dishes"}
                         {kcal != null ? ` · ${kcal} kcal` : ""}
                       </Text>
                     </View>
-                    <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={16} color="#94A3B8" />
-                  </Pressable>
+                    <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={16} color={o?.faint ?? "#94A3B8"} />
+                  </Tap>
 
                   {isOpen && (
-                    <View className="bg-slate-50 px-4 pb-4">
+                    <View className="bg-slate-50 px-4 pb-4" style={o && { backgroundColor: o.canvas, paddingTop: 10, borderTopWidth: 1, borderTopColor: o.border }}>
                       {orderedDishes.length === 0 ? (
-                        <Text className="text-sm text-slate-400">Dish details no longer available.</Text>
+                        <Text className="text-sm text-slate-400" style={o && { color: o.faint }}>Dish details no longer available.</Text>
                       ) : (
                         orderedDishes.map((d) => {
                           const qty = quantityByDish.get(d._id) ?? 1;
                           return (
                             <View key={d._id} className="flex-row items-center justify-between py-1.5">
-                              <Text className="text-sm text-slate-700">
+                              <Text className="text-sm text-slate-700" style={o && { color: o.text }}>
                                 {d.name}
                                 {qty !== 1 ? ` ×${qty}` : ""}
                               </Text>
                               {d.nutrition?.calories != null && (
-                                <Text className="text-xs text-slate-400">
+                                <Text className="text-xs text-slate-400" style={o && { color: o.muted }}>
                                   {Math.round(d.nutrition.calories * qty)} kcal
                                 </Text>
                               )}
@@ -375,7 +434,7 @@ export default function RestaurantMealDetailPage() {
                           );
                         })
                       )}
-                      <Text className="mt-2 text-xs font-semibold text-slate-400">
+                      <Text className="mt-2 text-xs font-semibold text-slate-400" style={o && { color: o.faint }}>
                         {visit.status === "confirmed" ? "Confirmed" : "Planned"}
                       </Text>
                     </View>
@@ -390,9 +449,26 @@ export default function RestaurantMealDetailPage() {
   );
 
   return (
-    <>
-      <SafeAreaView className="flex-1 bg-slate-50" style={layout.wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : undefined}>
-        {/* Nav bar */}
+    <OrbitPage on={!!o}>
+      <SafeAreaView className="flex-1 bg-slate-50" style={layout.wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : o && { backgroundColor: o.canvas }}>
+        {/* Nav bar: on a phone round buttons on the page itself (the name's
+            the large title in the page); in a desktop browser its own bar */}
+        {o ? (
+          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingTop: 4 }}>
+            <Tap onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+              <Ionicons name="chevron-back" size={22} color={o.text} />
+            </Tap>
+            <View style={{ flex: 1 }} />
+            <Tap
+              onPress={() => router.push({ pathname: "/restaurant-meals/edit/[id]", params: { id: restaurantMeal._id } })}
+              accessibilityLabel="Edit restaurant"
+              style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
+              pressedStyle={{ backgroundColor: o.pill }}
+            >
+              <Ionicons name="create-outline" size={20} color={o.ink} />
+            </Tap>
+          </View>
+        ) : (
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
           <Pressable
             className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
@@ -414,10 +490,11 @@ export default function RestaurantMealDetailPage() {
             <Ionicons name="create-outline" size={24} color="#2563EB" />
           </Pressable>
         </View>
+        )}
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 60, paddingTop: 20 }}
+          contentContainerStyle={{ paddingHorizontal: o ? 16 : 20, paddingBottom: 60, paddingTop: o ? 12 : 20 }}
         >
           {/* (In a desktop browser: the restaurant and its visits on the left, the menu beside them.) */}
           {layout.wide ? (
@@ -447,6 +524,6 @@ export default function RestaurantMealDetailPage() {
         onClose={() => setRateModalDishId(null)}
         onSubmit={(value) => void handleAddScore(value)}
       />
-    </>
+    </OrbitPage>
   );
 }

@@ -74,6 +74,9 @@ import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import { MoreNutrientsPanel } from "@/src/components/nutrition/MoreNutrientsPanel";
 import { addNutrition, divideNutritionTotals, emptyNutritionTotals, scaleNutrition } from "@/src/utils/nutrition";
+import { Tap } from "@/src/components/ui/Tap";
+import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
+import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 
 const MEAL_CATEGORY_LABEL: Record<string, string> = {
   breakfast: "Breakfast",
@@ -115,6 +118,8 @@ function NestedIngredientList({
   recipeMap: Map<string, Recipe>;
 }) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  // (On the phone, in Orbit's look, light or dark.)
+  const o = useOrbitPage();
 
   function toggle(index: number) {
     setExpanded((prev) => {
@@ -135,7 +140,7 @@ function NestedIngredientList({
         const isWholePiece = line.matchMode === "wholePiece";
 
         return (
-          <View key={index} className="border-t border-slate-100">
+          <View key={index} className="border-t border-slate-100" style={o && { borderTopColor: o.border }}>
             <Pressable
               className="flex-row items-center py-2"
               disabled={!childRecipe}
@@ -143,13 +148,13 @@ function NestedIngredientList({
             >
               <View className="w-4 items-center">
                 {childRecipe && (
-                  <Ionicons name={isExpanded ? "chevron-down" : "chevron-forward"} size={13} color="#94A3B8" />
+                  <Ionicons name={isExpanded ? "chevron-down" : "chevron-forward"} size={13} color={o?.faint ?? "#94A3B8"} />
                 )}
               </View>
-              <Text className="ml-1.5 flex-1 text-sm text-slate-700" numberOfLines={1}>
+              <Text className="ml-1.5 flex-1 text-sm text-slate-700" numberOfLines={1} style={o && { color: o.text }}>
                 {ingredient?.name ?? "Unknown ingredient"}
               </Text>
-              <Text className="ml-2 text-xs text-slate-400">
+              <Text className="ml-2 text-xs text-slate-400" style={o && { color: o.faint }}>
                 {line.quantity}
                 {line.unit ? ` ${line.unit}` : ""}
                 {isWholePiece ? ` (${line.pieceMinWeight}-${line.pieceMaxWeight}${line.pieceWeightUnit})` : ""}
@@ -193,7 +198,16 @@ function fillBatch(slots: PieceSlot[], taken: string[]): string[] {
   });
 }
 
+// In the Kitchen's colour (on a phone, in Orbit's look).
 export default function RecipeDetailPage() {
+  return (
+    <OrbitSection section="kitchen">
+      <RecipeDetail />
+    </OrbitSection>
+  );
+}
+
+function RecipeDetail() {
   const {
     id,
     loggedCalories,
@@ -287,6 +301,11 @@ export default function RecipeDetailPage() {
   // not chosen yet). A piece goes into one batch only.
   const wide = useWideWeb();
   const layout = useWideForm();
+  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
+  // desktop browser keeps the desktop's for now.
+  const { colors, dark } = useOrbitTheme();
+  const o = wide ? null : colors;
+  const tint = (light: string, darkTint: string) => (dark ? darkTint : light);
   // From the top bar: on the menu (see services/menuApi.ts), or straight
   // onto a day. `planNotice` says where it went, for a few seconds.
   const [menuItem, setMenuItem] = useState<MenuItem | null>(null);
@@ -751,26 +770,27 @@ export default function RecipeDetailPage() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" />
-        <Text className="mt-3 text-slate-500">Loading recipe...</Text>
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted} />
+        <Text className="mt-3 text-slate-500" style={o && { color: o.muted }}>Loading recipe...</Text>
       </SafeAreaView>
     );
   }
 
   if (error || !recipe) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <Ionicons name="alert-circle-outline" size={42} color="#94A3B8" />
-        <Text className="mt-4 text-lg font-bold text-slate-900">
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <Ionicons name="alert-circle-outline" size={42} color={o?.faint ?? "#94A3B8"} />
+        <Text className="mt-4 text-lg font-bold text-slate-900" style={o && { color: o.text }}>
           Could not load recipe
         </Text>
-        <Text className="mt-2 text-center text-slate-500 px-8">{error}</Text>
+        <Text className="mt-2 text-center text-slate-500 px-8" style={o && { color: o.muted }}>{error}</Text>
         <Pressable
           className="mt-6 rounded-2xl bg-slate-200 px-6 py-3"
+          style={o && { backgroundColor: o.pill, borderRadius: 16 }}
           onPress={() => router.back()}
         >
-          <Text className="font-semibold text-slate-700">Go back</Text>
+          <Text className="font-semibold text-slate-700" style={o && { color: o.onPill }}>Go back</Text>
         </Pressable>
       </SafeAreaView>
     );
@@ -787,6 +807,8 @@ export default function RecipeDetailPage() {
     (s) => s.trim().length > 0,
   );
 
+  // (Each main nutrient's own colour, on the phone: by its label.)
+  const nutrientKey = (label: string) => label.toLowerCase() as MainNutrient;
   const nutritionRows: [string, number, string][] = displayedNutrition
     ? ([
         ["Calories", displayedNutrition.calories, "kcal"],
@@ -842,14 +864,22 @@ export default function RecipeDetailPage() {
     ]);
   }
 
+  // Orbit pieces the sections share (phone only).
+  const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 20 };
+  const eyebrow = o && { fontSize: 12, letterSpacing: 1.2, color: o.faint };
+  const chip = o && { backgroundColor: o.pill };
+  const chipText = o && { color: o.onPill };
+  const segment = (chosen: boolean) => (o ? { backgroundColor: chosen ? o.ink : o.surface, borderLeftColor: o.border } : undefined);
+  const segmentText = (chosen: boolean) => (o ? { color: chosen ? o.onInk : o.muted } : undefined);
+
   const headerSection = (
     <>
         {/* Header card */}
-        <View className="rounded-2xl border border-slate-200 bg-white p-5">
+        <View className="rounded-2xl border border-slate-200 bg-white p-5" style={card}>
           {/* Its photo, if it has one; adding, changing or removing it from the corner. */}
           {photoUri(recipe.imageUrl) ? (
             <View>
-              <Image source={{ uri: photoUri(recipe.imageUrl)! }} style={{ width: "100%", aspectRatio: layout.wide ? 16 / 9 : 4 / 3, borderRadius: 16, backgroundColor: "#E2E8F0" }} contentFit="cover" transition={150} />
+              <Image source={{ uri: photoUri(recipe.imageUrl)! }} style={{ width: "100%", aspectRatio: layout.wide ? 16 / 9 : 4 / 3, borderRadius: 16, backgroundColor: o?.pill ?? "#E2E8F0" }} contentFit="cover" transition={150} />
               <Pressable onPress={handlePhoto} disabled={photoBusy} accessibilityLabel="Change photo" className="absolute bottom-3 right-3 flex-row items-center rounded-full bg-black/55 px-3 py-1.5 active:opacity-70">
                 <Ionicons name="camera-outline" size={15} color="#FFFFFF" />
                 <Text className="ml-1.5 text-xs font-semibold text-white">{photoBusy ? "Saving…" : "Change"}</Text>
@@ -857,28 +887,30 @@ export default function RecipeDetailPage() {
             </View>
           ) : (
             <View className="flex-row items-start justify-between">
-              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="book-outline" size={26} color="#2563EB" />
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50" style={chip}>
+                <Ionicons name="book-outline" size={26} color={o?.ink ?? "#2563EB"} />
               </View>
-              <Pressable onPress={handlePhoto} disabled={photoBusy} accessibilityLabel="Add photo" className="flex-row items-center rounded-full bg-slate-100 px-3 py-1.5 active:bg-slate-200">
-                <Ionicons name="camera-outline" size={15} color="#475569" />
-                <Text className="ml-1.5 text-xs font-semibold text-slate-600">{photoBusy ? "Saving…" : "Add photo"}</Text>
+              <Pressable onPress={handlePhoto} disabled={photoBusy} accessibilityLabel="Add photo" className="flex-row items-center rounded-full bg-slate-100 px-3 py-1.5 active:bg-slate-200" style={chip}>
+                <Ionicons name="camera-outline" size={15} color={o?.onPill ?? "#475569"} />
+                <Text className="ml-1.5 text-xs font-semibold text-slate-600" style={chipText}>{photoBusy ? "Saving…" : "Add photo"}</Text>
               </Pressable>
             </View>
           )}
 
-          <Text className="mt-4 text-2xl font-bold text-slate-900">{recipe.name}</Text>
+          <Text className="mt-4 text-2xl font-bold text-slate-900" style={o && { fontWeight: "800", letterSpacing: -0.4, color: o.text }}>{recipe.name}</Text>
 
           <View className="mt-3 flex-row flex-wrap gap-2">
             <View
               className={`rounded-full px-3 py-1 ${
                 recipe.isConfirmed ? "bg-blue-50" : "bg-slate-100"
               }`}
+              style={o && { backgroundColor: recipe.isConfirmed ? o.ink : o.pill }}
             >
               <Text
                 className={`text-xs font-semibold ${
                   recipe.isConfirmed ? "text-blue-600" : "text-slate-500"
                 }`}
+                style={o && { color: recipe.isConfirmed ? o.onInk : o.muted }}
               >
                 {recipe.isConfirmed ? "Confirmed" : "Want to try"}
               </Text>
@@ -888,40 +920,40 @@ export default function RecipeDetailPage() {
               ? recipe.mealCategory
               : [recipe.mealCategory]
             ).map((cat) => (
-              <View key={cat} className="rounded-full bg-blue-100 px-3 py-1">
-                <Text className="text-xs font-semibold text-blue-700">
+              <View key={cat} className="rounded-full bg-blue-100 px-3 py-1" style={chip}>
+                <Text className="text-xs font-semibold text-blue-700" style={chipText}>
                   {MEAL_CATEGORY_LABEL[cat] ?? cat}
                 </Text>
               </View>
             ))}
 
             {recipeCategoryName ? (
-              <View className="rounded-full bg-slate-100 px-3 py-1">
-                <Text className="text-xs font-semibold text-slate-600">
+              <View className="rounded-full bg-slate-100 px-3 py-1" style={chip}>
+                <Text className="text-xs font-semibold text-slate-600" style={chipText}>
                   {recipeCategoryName}
                 </Text>
               </View>
             ) : null}
 
-            <View className="rounded-full bg-slate-100 px-3 py-1">
-              <Text className="text-xs font-semibold text-slate-600">
+            <View className="rounded-full bg-slate-100 px-3 py-1" style={chip}>
+              <Text className="text-xs font-semibold text-slate-600" style={chipText}>
                 {servings} {servings === 1 ? "serving" : "servings"}
               </Text>
             </View>
 
             {recipe.prepTimeMinutes != null && (
-              <View className="flex-row items-center rounded-full bg-slate-100 px-3 py-1">
-                <Ionicons name="cut-outline" size={12} color="#475569" />
-                <Text className="ml-1 text-xs font-semibold text-slate-600">
+              <View className="flex-row items-center rounded-full bg-slate-100 px-3 py-1" style={chip}>
+                <Ionicons name="cut-outline" size={12} color={o?.onPill ?? "#475569"} />
+                <Text className="ml-1 text-xs font-semibold text-slate-600" style={chipText}>
                   {recipe.prepTimeMinutes} min prep
                 </Text>
               </View>
             )}
 
             {recipe.cookTimeMinutes != null && (
-              <View className="flex-row items-center rounded-full bg-slate-100 px-3 py-1">
-                <Ionicons name="flame-outline" size={12} color="#475569" />
-                <Text className="ml-1 text-xs font-semibold text-slate-600">
+              <View className="flex-row items-center rounded-full bg-slate-100 px-3 py-1" style={chip}>
+                <Ionicons name="flame-outline" size={12} color={o?.onPill ?? "#475569"} />
+                <Text className="ml-1 text-xs font-semibold text-slate-600" style={chipText}>
                   {recipe.cookTimeMinutes} min cook
                 </Text>
               </View>
@@ -930,14 +962,14 @@ export default function RecipeDetailPage() {
             {(recipe.tags ?? [])
               .filter((tag): tag is SelectOption => typeof tag !== "string")
               .map((tag) => (
-                <View key={tag._id} className="rounded-full bg-emerald-100 px-3 py-1">
-                  <Text className="text-xs font-semibold text-emerald-700">{tag.name}</Text>
+                <View key={tag._id} className="rounded-full bg-emerald-100 px-3 py-1" style={o && { backgroundColor: tint("#ECFDF5", "rgba(52,211,153,0.14)") }}>
+                  <Text className="text-xs font-semibold text-emerald-700" style={o && { color: o.success }}>{tag.name}</Text>
                 </View>
               ))}
           </View>
 
           {recipe.description ? (
-            <Text className="mt-4 text-base leading-6 text-slate-600">
+            <Text className="mt-4 text-base leading-6 text-slate-600" style={o && { color: o.icon }}>
               {recipe.description}
             </Text>
           ) : null}
@@ -952,11 +984,11 @@ export default function RecipeDetailPage() {
                 className="mt-3 flex-row items-center self-start active:opacity-60"
                 accessibilityLabel={link.search ? `Search for ${link.label}` : `Open ${link.label}`}
               >
-                <Ionicons name={link.search ? "search-outline" : "link-outline"} size={15} color="#2563EB" />
-                <Text className="ml-1.5 text-sm font-semibold text-blue-600" numberOfLines={1}>
+                <Ionicons name={link.search ? "search-outline" : "link-outline"} size={15} color={o?.accent ?? "#2563EB"} />
+                <Text className="ml-1.5 text-sm font-semibold text-blue-600" numberOfLines={1} style={o && { color: o.accent }}>
                   {link.label}
                 </Text>
-                <Ionicons name="open-outline" size={13} color="#2563EB" style={{ marginLeft: 4 }} />
+                <Ionicons name="open-outline" size={13} color={o?.accent ?? "#2563EB"} style={{ marginLeft: 4 }} />
               </Pressable>
             );
           })()}
@@ -967,16 +999,16 @@ export default function RecipeDetailPage() {
     <>
         {/* Prepares an ingredient */}
         {producedIngredient && (
-          <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+          <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5" style={[card, o && { marginTop: 16 }]}>
             <View className="flex-row items-center">
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-                <Ionicons name="flask-outline" size={20} color="#2563EB" />
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50" style={chip}>
+                <Ionicons name="flask-outline" size={20} color={o?.ink ?? "#2563EB"} />
               </View>
               <View className="ml-3 flex-1">
-                <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+                <Text className="text-sm font-bold uppercase tracking-wide text-slate-500" style={eyebrow}>
                   Prepares
                 </Text>
-                <Text className="mt-0.5 text-base font-semibold text-slate-900">
+                <Text className="mt-0.5 text-base font-semibold text-slate-900" style={o && { color: o.text }}>
                   {producedIngredient.name}
                 </Text>
               </View>
@@ -993,10 +1025,10 @@ export default function RecipeDetailPage() {
               className="mt-4 flex-row items-center"
             >
               <View className="flex-1 pr-3">
-                <Text className="text-base font-medium text-slate-900">Made ahead</Text>
-                <Text className="mt-0.5 text-xs leading-4 text-slate-500">Prepped in advance and kept, so it goes on your prep list. Leave off for things cooked at the meal.</Text>
+                <Text className="text-base font-medium text-slate-900" style={o && { color: o.text }}>Made ahead</Text>
+                <Text className="mt-0.5 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>Prepped in advance and kept, so it goes on your prep list. Leave off for things cooked at the meal.</Text>
               </View>
-              <View className={`h-7 w-12 justify-center rounded-full px-1 ${recipe.madeAhead ? "bg-blue-600" : "bg-slate-200"}`}>
+              <View className={`h-7 w-12 justify-center rounded-full px-1 ${recipe.madeAhead ? "bg-blue-600" : "bg-slate-200"}`} style={o && { backgroundColor: recipe.madeAhead ? o.ink : o.track }}>
                 <View className="h-5 w-5 rounded-full bg-white" style={{ transform: [{ translateX: recipe.madeAhead ? 20 : 0 }] }} />
               </View>
             </Pressable>
@@ -1006,9 +1038,10 @@ export default function RecipeDetailPage() {
               className={`mt-4 items-center rounded-2xl py-3.5 ${
                 cooking ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
               }`}
+              style={o && { height: 52, paddingVertical: 0, justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: cooking ? 0.5 : 1 }}
               onPress={handleCook}
             >
-              <Text className="text-sm font-semibold text-white">Cook & make a batch</Text>
+              <Text className="text-sm font-semibold text-white" style={o && { fontSize: 15, color: o.onInk }}>Cook & make a batch</Text>
             </Pressable>
           </View>
         )}
@@ -1017,30 +1050,31 @@ export default function RecipeDetailPage() {
   const ratingSection = (
     <>
         {/* Rating */}
-        <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+        <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5" style={[card, o && { marginTop: 16 }]}>
           <View className="flex-row items-center justify-between">
             <View>
-              <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+              <Text className="text-sm font-bold uppercase tracking-wide text-slate-500" style={eyebrow}>
                 Rating
               </Text>
               {averageScore != null ? (
                 <View className="mt-2 flex-row items-baseline">
-                  <Text className="text-2xl font-bold text-slate-900">{averageScore}</Text>
-                  <Text className="ml-1 text-base font-semibold text-slate-400">/ 10</Text>
-                  <Text className="ml-1.5 text-sm text-slate-400">
+                  <Text className="text-2xl font-bold text-slate-900" style={o && { fontWeight: "800", color: o.text }}>{averageScore}</Text>
+                  <Text className="ml-1 text-base font-semibold text-slate-400" style={o && { color: o.faint }}>/ 10</Text>
+                  <Text className="ml-1.5 text-sm text-slate-400" style={o && { color: o.faint }}>
                     · {recentScores.length} {recentScores.length === 1 ? "rating" : "ratings"}
                   </Text>
                 </View>
               ) : (
-                <Text className="mt-2 text-sm text-slate-400">Not rated yet</Text>
+                <Text className="mt-2 text-sm text-slate-400" style={o && { color: o.faint }}>Not rated yet</Text>
               )}
             </View>
 
             <Pressable
               className="rounded-2xl bg-blue-600 px-4 py-2.5 active:bg-blue-700"
+              style={o && { height: 40, paddingVertical: 0, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink }}
               onPress={() => setShowRateModal(true)}
             >
-              <Text className="text-sm font-semibold text-white">Rate</Text>
+              <Text className="text-sm font-semibold text-white" style={o && { color: o.onInk }}>Rate</Text>
             </Pressable>
           </View>
 
@@ -1050,19 +1084,19 @@ export default function RecipeDetailPage() {
                 className="mt-4 flex-row items-center"
                 onPress={() => setShowAllScores((v) => !v)}
               >
-                <Text className="text-xs font-semibold text-slate-500">
+                <Text className="text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>
                   {showAllScores ? "Hide history" : "Show history"}
                 </Text>
                 <Ionicons
                   name={showAllScores ? "chevron-up" : "chevron-down"}
                   size={14}
-                  color="#64748B"
+                  color={o?.muted ?? "#64748B"}
                   style={{ marginLeft: 4 }}
                 />
               </Pressable>
 
               {showAllScores && (
-                <View className="mt-2 overflow-hidden rounded-2xl border border-slate-100">
+                <View className="mt-2 overflow-hidden rounded-2xl border border-slate-100" style={o && { borderColor: o.border }}>
                   {recentScores.map((score, index) => (
                     <ReanimatedSwipeable
                       key={score._id}
@@ -1081,11 +1115,12 @@ export default function RecipeDetailPage() {
                         className={`flex-row items-center justify-between bg-white px-3 py-2.5 ${
                           index < recentScores.length - 1 ? "border-b border-slate-100" : ""
                         }`}
+                        style={o && { backgroundColor: o.surface, borderBottomColor: o.border }}
                       >
-                        <Text className="text-sm text-slate-600">
+                        <Text className="text-sm text-slate-600" style={o && { color: o.muted }}>
                           {new Date(score.ratedAt).toLocaleDateString()}
                         </Text>
-                        <Text className="text-sm font-semibold text-slate-900">
+                        <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>
                           {score.value} / 10
                         </Text>
                       </View>
@@ -1103,33 +1138,35 @@ export default function RecipeDetailPage() {
         {/* Ingredients */}
         {recipe.ingredientList.length > 0 && (
           <>
-            <View className="flex-row items-center justify-between mt-6 mb-2">
-              <Text className="text-sm font-bold uppercase tracking-wide text-slate-500">
+            <View className="flex-row items-center justify-between mt-6 mb-2" style={o && { marginTop: 24, marginLeft: 4 }}>
+              <Text className="text-sm font-bold uppercase tracking-wide text-slate-500" style={eyebrow}>
                 Ingredients
               </Text>
 
-              <View className="flex-row overflow-hidden rounded-xl border border-slate-200">
+              <View className="flex-row overflow-hidden rounded-xl border border-slate-200" style={o && { borderColor: o.border, borderRadius: 12 }}>
                 <Pressable
                   className={`px-3 py-1.5 ${showPerServing ? "bg-blue-600" : "bg-white"}`}
+                  style={segment(showPerServing)}
                   onPress={() => setShowPerServing(true)}
                 >
-                  <Text className={`text-xs font-semibold ${showPerServing ? "text-white" : "text-slate-600"}`}>
+                  <Text className={`text-xs font-semibold ${showPerServing ? "text-white" : "text-slate-600"}`} style={segmentText(showPerServing)}>
                     Per serving
                   </Text>
                 </Pressable>
 
                 <Pressable
                   className={`px-3 py-1.5 border-l border-slate-200 ${!showPerServing ? "bg-blue-600" : "bg-white"}`}
+                  style={segment(!showPerServing)}
                   onPress={() => setShowPerServing(false)}
                 >
-                  <Text className={`text-xs font-semibold ${!showPerServing ? "text-white" : "text-slate-600"}`}>
+                  <Text className={`text-xs font-semibold ${!showPerServing ? "text-white" : "text-slate-600"}`} style={segmentText(!showPerServing)}>
                     Full recipe
                   </Text>
                 </Pressable>
               </View>
             </View>
 
-            <View className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+            <View className="rounded-2xl border border-slate-200 bg-white overflow-hidden" style={card}>
               {recipe.ingredientList.map((entry, index) => {
                 const displayQty = showPerServing
                   ? round1(entry.quantity / Math.max(1, servings))
@@ -1182,6 +1219,7 @@ export default function RecipeDetailPage() {
                   <View
                     key={index}
                     className={index < recipe.ingredientList.length - 1 ? "border-b border-slate-100" : ""}
+                    style={o && { borderBottomColor: o.border }}
                   >
                     <Pressable
                       className="flex-row items-center px-4 py-3"
@@ -1195,11 +1233,11 @@ export default function RecipeDetailPage() {
                         })
                       }
                     >
-                      <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50">
-                        <Ionicons name="nutrition-outline" size={15} color="#2563EB" />
+                      <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={chip}>
+                        <Ionicons name="nutrition-outline" size={15} color={o?.ink ?? "#2563EB"} />
                       </View>
 
-                      <Text className="ml-3 flex-1 text-base text-slate-800">
+                      <Text className="ml-3 flex-1 text-base text-slate-800" style={o && { color: o.text }}>
                         {getIngredientName(entry.ingredient)}
                       </Text>
 
@@ -1207,13 +1245,13 @@ export default function RecipeDetailPage() {
                         <Ionicons
                           name={isRowExpanded ? "chevron-down" : "chevron-forward"}
                           size={16}
-                          color="#94A3B8"
+                          color={o?.faint ?? "#94A3B8"}
                           style={{ marginRight: 6 }}
                         />
                       )}
 
                       <View className="items-end">
-                        <Text className="text-sm font-semibold text-slate-500">
+                        <Text className="text-sm font-semibold text-slate-500" style={o && { color: o.muted }}>
                           {displayQty}
                           {entry.unit ? ` × ${entry.unit}` : ""}
                           {isWholePiece
@@ -1255,14 +1293,14 @@ export default function RecipeDetailPage() {
                               (entry.nutritionFactor ?? 1),
                           );
                           return (
-                            <Text className="mt-0.5 text-xs text-slate-400">{kcal} kcal</Text>
+                            <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.faint }}>{kcal} kcal</Text>
                           );
                         })()}
                       </View>
                     </Pressable>
 
                     {/* Pantry availability bar */}
-                    <View className="h-[3px] w-full bg-slate-100">
+                    <View className="h-[3px] w-full bg-slate-100" style={o && { backgroundColor: o.track }}>
                       <View
                         className={
                           barState === "green"
@@ -1275,7 +1313,7 @@ export default function RecipeDetailPage() {
                     </View>
 
                     {isRowExpanded && childRecipe && (
-                      <View className="bg-slate-50 px-4 py-2">
+                      <View className="bg-slate-50 px-4 py-2" style={o && { backgroundColor: o.canvas }}>
                         <NestedIngredientList
                           ingredientList={childRecipe.ingredientList}
                           ingredientMap={ingredientMap}
@@ -1299,21 +1337,21 @@ export default function RecipeDetailPage() {
             its assumed/authored amounts, not what was actually used. */}
         {loggedNutrition && (
           <>
-            <Text className="text-sm font-bold uppercase tracking-wide text-slate-500 mt-6 mb-2">
+            <Text className="text-sm font-bold uppercase tracking-wide text-slate-500 mt-6 mb-2" style={o && { ...eyebrow, marginTop: 24, marginLeft: 4 }}>
               Your Logged Meal
             </Text>
-            <View className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
-              <Text className="text-xs leading-4 text-blue-700">
+            <View className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3" style={o && { borderRadius: 20, borderColor: o.border, backgroundColor: o.surface }}>
+              <Text className="text-xs leading-4 text-blue-700" style={o && { color: o.muted }}>
                 Based on the real ingredients/weights you confirmed — not this recipe&apos;s
                 general estimate below.
               </Text>
               <View className="mt-2 flex-row flex-wrap gap-x-4 gap-y-1">
-                <Text className="text-sm font-semibold text-blue-900">
+                <Text className="text-sm font-semibold text-blue-900" style={o && { color: nutrientColor("calories", dark) }}>
                   {Math.round(loggedNutrition.calories)} cal
                 </Text>
-                <Text className="text-sm text-blue-800">{round1(loggedNutrition.protein)}g protein</Text>
-                <Text className="text-sm text-blue-800">{round1(loggedNutrition.carbs)}g carbs</Text>
-                <Text className="text-sm text-blue-800">{round1(loggedNutrition.fats)}g fat</Text>
+                <Text className="text-sm text-blue-800" style={o && { color: nutrientColor("protein", dark) }}>{round1(loggedNutrition.protein)}g protein</Text>
+                <Text className="text-sm text-blue-800" style={o && { color: nutrientColor("carbs", dark) }}>{round1(loggedNutrition.carbs)}g carbs</Text>
+                <Text className="text-sm text-blue-800" style={o && { color: nutrientColor("fats", dark) }}>{round1(loggedNutrition.fats)}g fat</Text>
               </View>
             </View>
           </>
@@ -1325,25 +1363,29 @@ export default function RecipeDetailPage() {
         {/* Nutrition */}
         {nutritionRows.length > 0 && (
           <>
-            <Text className="text-sm font-bold uppercase tracking-wide text-slate-500 mt-6 mb-2">
+            <Text className="text-sm font-bold uppercase tracking-wide text-slate-500 mt-6 mb-2" style={o && { ...eyebrow, marginTop: 24, marginLeft: 4 }}>
               Nutrition{loggedNutrition ? " (recipe estimate)" : ""}
             </Text>
 
-            <View className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+            <View className="rounded-2xl border border-slate-200 bg-white overflow-hidden" style={card}>
               {nutritionRows.map(([label, value, unit], index) => (
                 <View
                   key={label}
                   className={`flex-row items-center justify-between px-4 py-3 ${
                     index < nutritionRows.length - 1 ? "border-b border-slate-100" : ""
                   }`}
+                  style={o && { borderBottomColor: o.border }}
                 >
-                  <Text className="text-base text-slate-600">{label}</Text>
-                  <Text className="text-base font-semibold text-slate-900">
+                  <View className="flex-row items-center">
+                    {o && <View style={{ width: 8, height: 8, borderRadius: 4, marginRight: 10, backgroundColor: nutrientColor(nutrientKey(label), dark) }} />}
+                    <Text className="text-base text-slate-600" style={o && { color: o.icon }}>{label}</Text>
+                  </View>
+                  <Text className="text-base font-semibold text-slate-900" style={o && { color: o.text }}>
                     {value} {unit}
                   </Text>
                 </View>
               ))}
-              <View className="border-t border-slate-100 p-3">
+              <View className="border-t border-slate-100 p-3" style={o && { borderTopColor: o.border }}>
                 <MoreNutrientsPanel nutrition={displayedAllNutrition} />
               </View>
             </View>
@@ -1362,17 +1404,17 @@ export default function RecipeDetailPage() {
         {/* Instructions */}
         {filledInstructions.length > 0 && (
           <>
-            <Text className="mb-3 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500">
+            <Text className="mb-3 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500" style={o && { ...eyebrow, marginTop: 24, marginLeft: 4 }}>
               Instructions
             </Text>
 
             {filledInstructions.map((step, index) => (
               <View key={index} className="mb-3 flex-row items-start">
-                <View className="mt-0.5 h-7 w-7 items-center justify-center rounded-full bg-blue-600">
-                  <Text className="text-xs font-bold text-white">{index + 1}</Text>
+                <View className="mt-0.5 h-7 w-7 items-center justify-center rounded-full bg-blue-600" style={o && { backgroundColor: o.ink }}>
+                  <Text className="text-xs font-bold text-white" style={o && { color: o.onInk }}>{index + 1}</Text>
                 </View>
 
-                <Text className="ml-3 flex-1 text-base leading-6 text-slate-800">
+                <Text className="ml-3 flex-1 text-base leading-6 text-slate-800" style={o && { color: o.text }}>
                   {step}
                 </Text>
               </View>
@@ -1386,21 +1428,49 @@ export default function RecipeDetailPage() {
         {/* Notes */}
         {recipe.notes ? (
           <>
-            <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500">
+            <Text className="mb-2 mt-6 text-sm font-bold uppercase tracking-wide text-slate-500" style={o && { ...eyebrow, marginTop: 24, marginLeft: 4 }}>
               Notes
             </Text>
-            <View className="rounded-2xl border border-slate-200 bg-white p-5">
-              <Text className="text-base leading-6 text-slate-600">{recipe.notes}</Text>
+            <View className="rounded-2xl border border-slate-200 bg-white p-5" style={card}>
+              <Text className="text-base leading-6 text-slate-600" style={o && { color: o.icon }}>{recipe.notes}</Text>
             </View>
           </>
         ) : null}
     </>
   );
 
+  // A round button in the header (phone).
+  const roundButton = o && { width: 40, height: 40, borderRadius: 20, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border };
+
   return (
-    <>
-    <SafeAreaView className="flex-1 bg-slate-50" style={layout.wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : undefined}>
-      {/* Nav bar */}
+    <OrbitPage on={!!o}>
+    <SafeAreaView className="flex-1 bg-slate-50" style={layout.wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : o && { backgroundColor: o.canvas }}>
+      {/* Header (phone): the way back, and on the right the menu, a day
+          and editing, as round buttons on the page itself — the recipe's
+          name is the card's title just under them */}
+      {o && roundButton && (
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4 }}>
+          <View style={{ marginLeft: -4 }}>
+            <Tap onPress={() => router.back()} accessibilityLabel="Back" style={roundButton} pressedStyle={{ backgroundColor: o.pill }}>
+              <Ionicons name="chevron-back" size={22} color={o.text} />
+            </Tap>
+          </View>
+          <View style={{ flex: 1 }} />
+          {/* On the menu, or onto a day. */}
+          <Tap onPress={menuPressed} accessibilityLabel={menuItem ? "On your menu" : "Add to menu"} style={roundButton} pressedStyle={{ backgroundColor: o.pill }}>
+            <Ionicons name={menuItem ? "checkmark" : "restaurant-outline"} size={18} color={menuItem ? o.ink : o.icon} />
+          </Tap>
+          <Tap onPress={() => setPlanning(true)} accessibilityLabel="Plan on a day" style={[roundButton, { marginLeft: 8, backgroundColor: o.ink, borderColor: o.ink }]} pressedStyle={{ opacity: 0.85 }}>
+            <Ionicons name="calendar-outline" size={18} color={o.onInk} />
+          </Tap>
+          <Tap onPress={() => router.push({ pathname: "/recipes/edit/[id]", params: { id } })} accessibilityLabel="Edit" style={[roundButton, { marginLeft: 8 }]} pressedStyle={{ backgroundColor: o.pill }}>
+            <Ionicons name="create-outline" size={19} color={o.icon} />
+          </Tap>
+        </View>
+      )}
+
+      {/* Nav bar (desktop) */}
+      {!o && (
       <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
         <Pressable
           className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
@@ -1441,18 +1511,23 @@ export default function RecipeDetailPage() {
           <Ionicons name="create-outline" size={24} color="#2563EB" />
         </Pressable>
       </View>
+      )}
 
       {!!planNotice && (
-        <Pressable onPress={() => router.navigate("/planner")} className="flex-row items-center border-b border-blue-100 bg-blue-50 px-5 py-2.5">
-          <Ionicons name="checkmark-circle" size={16} color="#2563EB" />
-          <Text className="ml-2 flex-1 text-sm text-blue-800">{planNotice}</Text>
-          <Text className="text-sm font-semibold text-blue-700">Open planner</Text>
+        <Pressable
+          onPress={() => router.navigate("/planner")}
+          className="flex-row items-center border-b border-blue-100 bg-blue-50 px-5 py-2.5"
+          style={o && { marginHorizontal: 16, marginTop: 8, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderBottomWidth: 1, borderColor: o.border, backgroundColor: o.surface }}
+        >
+          <Ionicons name="checkmark-circle" size={16} color={o?.success ?? "#2563EB"} />
+          <Text className="ml-2 flex-1 text-sm text-blue-800" style={o && { color: o.text }}>{planNotice}</Text>
+          <Text className="text-sm font-semibold text-blue-700" style={o && { color: o.accent }}>Open planner</Text>
         </Pressable>
       )}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 60, paddingTop: 20 }}
+        contentContainerStyle={{ paddingHorizontal: o ? 16 : 20, paddingBottom: 60, paddingTop: o ? 12 : 20 }}
       >
         {layout.wide ? (
           <View style={layout.columns}>
@@ -1486,6 +1561,7 @@ export default function RecipeDetailPage() {
       </ScrollView>
     </SafeAreaView>
 
+    {/* (Its sheets in the same colours; inside the page so they see them.) */}
     <PlanRecipeModal
       recipeId={String(id)}
       recipeName={recipe.name}
@@ -1517,12 +1593,13 @@ export default function RecipeDetailPage() {
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1 items-center justify-center bg-black/40 px-6"
+        style={o && { backgroundColor: o.scrim }}
       >
         <Pressable className="absolute inset-0" onPress={handleCancelBatch} />
 
-        <View className="w-full rounded-3xl bg-white p-5" style={wide ? { maxWidth: batchSlots.length ? 980 : 520 } : undefined}>
-          <Text className="text-lg font-bold text-slate-950">Make a batch</Text>
-          <Text className="mt-0.5 mb-5 text-sm text-slate-400">
+        <View className="w-full rounded-3xl bg-white p-5" style={wide ? { maxWidth: batchSlots.length ? 980 : 520 } : o && { backgroundColor: o.canvas, borderRadius: 28 }}>
+          <Text className="text-lg font-bold text-slate-950" style={o && { fontWeight: "800", color: o.text }}>Make a batch</Text>
+          <Text className="mt-0.5 mb-5 text-sm text-slate-400" style={o && { color: o.muted }}>
             {producedIngredient?.name ?? "This ingredient"} will be added to your pantry.
           </Text>
 
@@ -1530,14 +1607,14 @@ export default function RecipeDetailPage() {
           {batchSlots.length > 0 && !wide && (
             <View className="mb-4">
               {batches.map((batch, batchIndex) => (
-                <View key={batchIndex} className="mb-2.5 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <View key={batchIndex} className="mb-2.5 rounded-2xl border border-slate-200 bg-slate-50 p-3" style={o && { borderRadius: 18, borderColor: o.border, backgroundColor: o.surface }}>
                   <View className="mb-1 flex-row items-center">
-                    <Text className="flex-1 text-sm font-bold text-slate-900">
+                    <Text className="flex-1 text-sm font-bold text-slate-900" style={o && { color: o.text }}>
                       {madeUnit.charAt(0).toUpperCase() + madeUnit.slice(1)} {batchIndex + 1}
                     </Text>
                     {batches.length > 1 && (
                       <Pressable hitSlop={8} onPress={() => setBatches((prev) => prev.filter((_, i) => i !== batchIndex))} accessibilityLabel={`Remove ${madeUnit} ${batchIndex + 1}`}>
-                        <Ionicons name="close-circle" size={20} color="#CBD5E1" />
+                        <Ionicons name="close-circle" size={20} color={o?.orbit ?? "#CBD5E1"} />
                       </Pressable>
                     )}
                   </View>
@@ -1552,15 +1629,16 @@ export default function RecipeDetailPage() {
                           onPress={() => setOpenSlot(openSlot === key ? null : key)}
                           accessibilityLabel={`${slot.name} for ${madeUnit} ${batchIndex + 1}`}
                           className={`flex-row items-center rounded-xl border bg-white px-3 py-2.5 ${openSlot === key ? "border-blue-500" : chosen ? "border-slate-200" : "border-amber-400"}`}
+                          style={o && { borderRadius: 14, backgroundColor: o.canvas, borderColor: openSlot === key ? o.ink : chosen ? o.border : o.warning }}
                         >
-                          <Text numberOfLines={1} className="flex-1 text-sm text-slate-500">
+                          <Text numberOfLines={1} className="flex-1 text-sm text-slate-500" style={o && { color: o.muted }}>
                             {slot.name}
                           </Text>
-                          <Text className={`text-sm font-semibold ${chosen ? "text-slate-900" : "text-amber-600"}`}>{chosen ? `${round1(chosen.quantityAvailable)} ${chosen.quantityUnit}` : `Choose a ${slot.unit}`}</Text>
-                          <Ionicons name={openSlot === key ? "chevron-up" : "chevron-down"} size={16} color="#64748B" style={{ marginLeft: 6 }} />
+                          <Text className={`text-sm font-semibold ${chosen ? "text-slate-900" : "text-amber-600"}`} style={o && { color: chosen ? o.text : o.warning }}>{chosen ? `${round1(chosen.quantityAvailable)} ${chosen.quantityUnit}` : `Choose a ${slot.unit}`}</Text>
+                          <Ionicons name={openSlot === key ? "chevron-up" : "chevron-down"} size={16} color={o?.muted ?? "#64748B"} style={{ marginLeft: 6 }} />
                         </Pressable>
                         {openSlot === key && (
-                          <View className="mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                          <View className="mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white" style={o && { borderRadius: 14, borderColor: o.border, backgroundColor: o.surface }}>
                             {options.map((piece) => (
                               <Pressable
                                 key={piece._id}
@@ -1570,15 +1648,16 @@ export default function RecipeDetailPage() {
                                 }}
                                 accessibilityLabel={`${round1(piece.quantityAvailable)} ${piece.quantityUnit} ${slot.unit}`}
                                 className="flex-row items-center border-b border-slate-100 px-3 py-2.5 active:bg-slate-50"
+                                style={o && { borderBottomColor: o.border }}
                               >
-                                <Text className="flex-1 text-sm font-medium text-slate-900">
+                                <Text className="flex-1 text-sm font-medium text-slate-900" style={o && { color: o.text }}>
                                   {round1(piece.quantityAvailable)} {piece.quantityUnit}
                                 </Text>
-                                {!!piece.expiryDate && <Text className="text-xs text-slate-500">dated {piece.expiryDate.slice(0, 10)}</Text>}
-                                {piece._id === batch[slotIndex] && <Ionicons name="checkmark" size={15} color="#2563EB" style={{ marginLeft: 6 }} />}
+                                {!!piece.expiryDate && <Text className="text-xs text-slate-500" style={o && { color: o.muted }}>dated {piece.expiryDate.slice(0, 10)}</Text>}
+                                {piece._id === batch[slotIndex] && <Ionicons name="checkmark" size={15} color={o?.ink ?? "#2563EB"} style={{ marginLeft: 6 }} />}
                               </Pressable>
                             ))}
-                            {options.length === 0 && <Text className="px-3 py-2.5 text-sm text-slate-500">None left: the others are in use above.</Text>}
+                            {options.length === 0 && <Text className="px-3 py-2.5 text-sm text-slate-500" style={o && { color: o.muted }}>None left: the others are in use above.</Text>}
                           </View>
                         )}
                       </View>
@@ -1586,7 +1665,7 @@ export default function RecipeDetailPage() {
                   })}
                   {/* What every batch also takes. */}
                   {otherLines.length > 0 && (
-                    <Text numberOfLines={2} className="mt-2 text-xs leading-4 text-slate-500">
+                    <Text numberOfLines={2} className="mt-2 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                       plus {otherLines.join(", ")}
                     </Text>
                   )}
@@ -1597,10 +1676,10 @@ export default function RecipeDetailPage() {
                 disabled={!canAddBatch}
                 className={`flex-row items-center self-start ${canAddBatch ? "active:opacity-60" : "opacity-40"}`}
               >
-                <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
-                <Text className="ml-1.5 text-sm font-semibold text-blue-600">{canAddBatch ? `Add another ${madeUnit}` : `No more to make another ${madeUnit} from`}</Text>
+                <Ionicons name="add-circle-outline" size={18} color={o?.accent ?? "#2563EB"} />
+                <Text className="ml-1.5 text-sm font-semibold text-blue-600" style={o && { color: o.accent }}>{canAddBatch ? `Add another ${madeUnit}` : `No more to make another ${madeUnit} from`}</Text>
               </Pressable>
-              <Text className="mt-1.5 text-xs leading-4 text-slate-500">
+              <Text className="mt-1.5 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>
                 Makes {batches.length} {madeUnit}
                 {batches.length === 1 ? "" : "s"}, each its own pantry entry, counted at the size of what went into it.
               </Text>
@@ -1728,7 +1807,7 @@ export default function RecipeDetailPage() {
               style={{ height: 56 }}
               className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
             />
-            <Text className="ml-3 text-base font-semibold text-slate-500">
+            <Text className="ml-3 text-base font-semibold text-slate-500" style={o && { color: o.muted }}>
               {producedIngredient?.defaultPortionUnit || "serving"}
             </Text>
           </View>
@@ -1757,7 +1836,8 @@ export default function RecipeDetailPage() {
             <FieldLabel text="Expiry date" />
             <DateTextInput
               value={batchExpiryDate}
-              style={{ height: 56 }}
+              style={[{ height: 56 }, o && { backgroundColor: o.surface, borderColor: o.border, color: o.text }]}
+              placeholderTextColor={o?.faint ?? "#94A3B8"}
               className="rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
               onChangeText={setBatchExpiryDate}
             />
@@ -1773,18 +1853,20 @@ export default function RecipeDetailPage() {
           <View className="mt-5 flex-row gap-3">
             <Pressable
               className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+              style={o && { height: 52, paddingVertical: 0, justifyContent: "center", borderRadius: 16, backgroundColor: o.pill }}
               onPress={handleCancelBatch}
             >
-              <Text className="text-sm font-semibold text-slate-700">Cancel</Text>
+              <Text className="text-sm font-semibold text-slate-700" style={o && { fontSize: 15, color: o.onPill }}>Cancel</Text>
             </Pressable>
             <Pressable
               disabled={cooking}
               className={`flex-1 items-center rounded-2xl py-3.5 ${
                 cooking ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
               }`}
+              style={o && { height: 52, paddingVertical: 0, justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: cooking ? 0.5 : 1 }}
               onPress={() => void handleConfirmBatch()}
             >
-              <Text className="text-sm font-semibold text-white">
+              <Text className="text-sm font-semibold text-white" style={o && { fontSize: 15, color: o.onInk }}>
                 {cooking ? "Saving..." : "Add to pantry"}
               </Text>
             </Pressable>
@@ -1792,6 +1874,6 @@ export default function RecipeDetailPage() {
         </View>
       </KeyboardAvoidingView>
     </Modal>
-    </>
+    </OrbitPage>
   );
 }

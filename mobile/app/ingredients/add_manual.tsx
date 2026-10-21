@@ -17,6 +17,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Tap } from "@/src/components/ui/Tap";
+import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+
 import {
   CreatableMultiTagDropdown,
   CreatableStringDropdown,
@@ -291,6 +294,14 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
 }
 
 export default function AddManualPantryItemScreen() {
+  return (
+    <OrbitSection section="kitchen">
+      <AddManualPantryItem />
+    </OrbitSection>
+  );
+}
+
+function AddManualPantryItem() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     scannedName?: string;
@@ -413,6 +424,11 @@ export default function AddManualPantryItemScreen() {
   // every one after it; plain text fields default to 0 and don't need to be
   // listed here).
   const layout = useWideForm();
+  // On a phone, in Orbit's look, light or dark (`o`: its colours, the
+  // Kitchen's orange for the main things); a desktop browser keeps the
+  // desktop's for now. The cards and fields follow by themselves (OrbitPage).
+  const { colors } = useOrbitTheme();
+  const o = layout.wide ? null : colors;
   const scrollRef = useRef<ScrollView>(null);
   const scrollAnchorRef = useRef<View>(null);
   const nameSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 130);
@@ -1267,24 +1283,51 @@ export default function AddManualPantryItemScreen() {
 
   if (loadingOptions) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
 
-        <Text className="mt-3 text-slate-500">Loading form options...</Text>
+        <Text className="mt-3 text-slate-500" style={o && { color: o.muted }}>Loading form options...</Text>
       </SafeAreaView>
     );
   }
 
   return (
+    <OrbitPage on={!!o}>
     <SafeAreaView
       className="flex-1 bg-slate-50"
       edges={["top", "left", "right"]}
+      style={o && { backgroundColor: o.canvas }}
     >
       <KeyboardAvoidingView
         className="flex-1"
         style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
+        {/* Header (phone): the way back and Save, over a large title, on
+            the page itself */}
+        {o && (
+          <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
+              <Tap disabled={saving} onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+                <Ionicons name="chevron-back" size={22} color={o.text} />
+              </Tap>
+              <View style={{ flex: 1 }} />
+              <Tap disabled={saving} onPress={() => void handleSave()} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }} pressedStyle={{ opacity: 0.8 }}>
+                <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>{saving ? "Saving..." : "Save"}</Text>
+              </Tap>
+            </View>
+            <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }} numberOfLines={1}>
+              {isResolvingGroceryItem ? "Log purchase" : "Add Ingredient"}
+            </Text>
+            {isResolvingGroceryItem && (
+              <Text style={{ marginTop: 2, fontSize: 14, color: o.muted }} numberOfLines={1}>
+                Completing &quot;{params.prefillName}&quot; from your grocery list
+              </Text>
+            )}
+          </View>
+        )}
+
+        {!o && (
         <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
           <Pressable
             disabled={saving}
@@ -1317,6 +1360,7 @@ export default function AddManualPantryItemScreen() {
             </Text>
           </Pressable>
         </View>
+        )}
 
         <ScrollView
           ref={scrollRef}
@@ -1652,16 +1696,17 @@ export default function AddManualPantryItemScreen() {
             headerAccessory={
               <Pressable
                 className="h-8 flex-row items-center rounded-lg bg-blue-50 px-2.5 active:bg-blue-100"
+                style={o && { backgroundColor: o.pill, borderRadius: 16, paddingHorizontal: 12 }}
                 disabled={readingLabel}
                 onPress={() => setLabelCameraVisible(true)}
                 accessibilityLabel="Scan nutrition label"
               >
                 {readingLabel ? (
-                  <ActivityIndicator size="small" color="#2563EB" />
+                  <ActivityIndicator size="small" color={o?.ink ?? "#2563EB"} />
                 ) : (
-                  <Ionicons name="camera-outline" size={15} color="#1D4ED8" />
+                  <Ionicons name="camera-outline" size={15} color={o?.ink ?? "#1D4ED8"} />
                 )}
-                <Text className="ml-1.5 text-xs font-semibold text-blue-700">
+                <Text className="ml-1.5 text-xs font-semibold text-blue-700" style={o && { color: o.onPill }}>
                   {readingLabel ? "Reading…" : "Scan label"}
                 </Text>
               </Pressable>
@@ -1842,6 +1887,7 @@ export default function AddManualPantryItemScreen() {
                 <View
                   className="mt-3 rounded-2xl bg-blue-50/60 px-3 pb-3 pt-1"
                   {...expiryDurationSection.wrapperProps}
+                  style={[expiryDurationSection.wrapperProps.style, o && { backgroundColor: o.pill }]}
                 >
                   <FieldLabel text="Or set expiry from purchase date" />
                   <DurationExpiryInput
@@ -1891,6 +1937,18 @@ export default function AddManualPantryItemScreen() {
           </View>
 
           <View style={layout.actions}>
+          {o ? (
+            <Tap
+              disabled={saving}
+              onPress={() => void handleSave()}
+              style={{ marginTop: 8, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }}
+              pressedStyle={{ opacity: 0.8 }}
+            >
+              <Text style={{ fontSize: 16, fontWeight: "600", color: o.onInk }}>
+                {saving ? "Saving..." : isResolvingGroceryItem ? "Save & log purchase" : "Save ingredient"}
+              </Text>
+            </Tap>
+          ) : (
           <Pressable
             disabled={saving}
             onPress={() => void handleSave()}
@@ -1902,6 +1960,7 @@ export default function AddManualPantryItemScreen() {
               {saving ? "Saving..." : isResolvingGroceryItem ? "Save & log purchase" : "Save ingredient"}
             </Text>
           </Pressable>
+          )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1920,6 +1979,7 @@ export default function AddManualPantryItemScreen() {
         instructions="Fit the whole Nutrition Facts or Supplement Facts panel in frame, flat and in focus."
       />
     </SafeAreaView>
+    </OrbitPage>
   );
 }
 
@@ -1939,27 +1999,47 @@ function ScanActionCard({
   disabled?: boolean;
   onPress: () => void;
 }) {
+  // (On an Orbit page: its card, the icon in the section's colour.)
+  const o = useOrbitPage();
+  const content = (
+    <>
+      <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.pill }}>
+        {loading ? <ActivityIndicator size="small" color={o?.ink ?? "#2563EB"} /> : <Ionicons name={icon} size={22} color={o?.ink ?? "#2563EB"} />}
+      </View>
+      <View className="ml-2.5 flex-1">
+        <Text className="text-sm font-bold text-slate-950" style={o && { color: o.text }} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text className="mt-0.5 text-[11px] leading-4 text-slate-500" style={o && { color: o.muted }} numberOfLines={2}>
+          {subtitle}
+        </Text>
+      </View>
+    </>
+  );
+  if (o) {
+    return (
+      <Tap
+        disabled={disabled}
+        onPress={onPress}
+        style={{ flex: 1, flexDirection: "row", alignItems: "center", borderRadius: 20, borderWidth: 1, borderColor: o.border, backgroundColor: o.surface, paddingHorizontal: 12, paddingVertical: 12 }}
+        pressedStyle={{ backgroundColor: o.pill }}
+      >
+        {content}
+      </Tap>
+    );
+  }
   return (
     <Pressable
       disabled={disabled}
       onPress={onPress}
       className="flex-1 flex-row items-center rounded-3xl border border-slate-200 bg-white px-3 py-3 active:bg-slate-50"
     >
-      <View className="h-11 w-11 items-center justify-center rounded-full bg-blue-50">
-        {loading ? <ActivityIndicator size="small" color="#2563EB" /> : <Ionicons name={icon} size={22} color="#2563EB" />}
-      </View>
-      <View className="ml-2.5 flex-1">
-        <Text className="text-sm font-bold text-slate-950" numberOfLines={1}>
-          {title}
-        </Text>
-        <Text className="mt-0.5 text-[11px] leading-4 text-slate-500" numberOfLines={2}>
-          {subtitle}
-        </Text>
-      </View>
+      {content}
     </Pressable>
   );
 }
 
 function HelpText({ children }: { children: ReactNode }) {
-  return <Text className="mt-2 text-xs leading-4 text-slate-500">{children}</Text>;
+  const o = useOrbitPage();
+  return <Text className="mt-2 text-xs leading-4 text-slate-500" style={o && { color: o.muted }}>{children}</Text>;
 }

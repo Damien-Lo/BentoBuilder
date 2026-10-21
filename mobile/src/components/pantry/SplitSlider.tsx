@@ -3,6 +3,8 @@ import { View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 
+import { useOrbitPage } from "@/src/theme/orbit";
+
 interface SplitSliderProps {
   ratio: number; // 0..1, fraction going to the left side
   onChange: (ratio: number) => void;
@@ -16,6 +18,8 @@ const TRACK_HEIGHT = 6;
 // already dependencies for the swipe-to-delete rows) instead of pulling in
 // a native slider package that would need a fresh dev-client build.
 export function SplitSlider({ ratio, onChange, disabled = false }: SplitSliderProps) {
+  // (On an Orbit page: its track, and the fill and thumb in the section's colour.)
+  const o = useOrbitPage();
   const [trackWidth, setTrackWidth] = useState(0);
 
   function handleLayout(event: LayoutChangeEvent) {
@@ -49,20 +53,23 @@ export function SplitSlider({ ratio, onChange, disabled = false }: SplitSliderPr
       >
         <View
           className="rounded-full bg-slate-200"
-          style={{ height: TRACK_HEIGHT }}
+          style={[{ height: TRACK_HEIGHT }, o && { backgroundColor: o.track }]}
         />
         <View
           className="absolute rounded-full bg-blue-500"
-          style={{ height: TRACK_HEIGHT, width: `${clampedRatio * 100}%` }}
+          style={[{ height: TRACK_HEIGHT, width: `${clampedRatio * 100}%` }, o && { backgroundColor: o.fill }]}
         />
         <View
           pointerEvents="none"
           className="absolute rounded-full border-2 border-blue-600 bg-white shadow"
-          style={{
-            width: THUMB_SIZE,
-            height: THUMB_SIZE,
-            left: thumbLeft,
-          }}
+          style={[
+            {
+              width: THUMB_SIZE,
+              height: THUMB_SIZE,
+              left: thumbLeft,
+            },
+            o && { borderColor: o.ink, backgroundColor: o.surface },
+          ]}
         />
       </View>
     </GestureDetector>

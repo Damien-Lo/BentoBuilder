@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 
+import { useOrbitPage } from "@/src/theme/orbit";
+
 import { RateSlider } from "./RateSlider";
 
 interface RateAndConfirmModalProps {
@@ -48,6 +50,8 @@ export function RateAndConfirmModal({
   onNeverAsk,
 }: RateAndConfirmModalProps) {
   const [value, setValue] = useState(5);
+  // (On an Orbit page — see theme/orbit.tsx — in its colours.)
+  const o = useOrbitPage();
 
   useEffect(() => {
     if (visible) setValue(5);
@@ -57,16 +61,16 @@ export function RateAndConfirmModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={dismiss}>
-      <View className="flex-1 items-center justify-center bg-black/40 px-6">
+      <View className="flex-1 items-center justify-center bg-black/40 px-6" style={o && { backgroundColor: o.scrim }}>
         <Pressable className="absolute inset-0" onPress={dismiss} />
 
-        <View className="w-full rounded-3xl bg-white p-5">
-          <Text className="text-lg font-bold text-slate-950" numberOfLines={1}>
+        <View className="w-full rounded-3xl bg-white p-5" style={o && { backgroundColor: o.canvas, borderRadius: 28 }}>
+          <Text className="text-lg font-bold text-slate-950" numberOfLines={1} style={o && { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: o.text }}>
             Rate {itemName}
           </Text>
-          <Text className="mt-0.5 mb-6 text-sm text-slate-400">How was it, out of 10?</Text>
+          <Text className="mt-0.5 mb-6 text-sm text-slate-400" style={o && { color: o.muted }}>How was it, out of 10?</Text>
 
-          <Text className="mb-3 text-center text-3xl font-bold text-blue-600">{value}</Text>
+          <Text className="mb-3 text-center text-3xl font-bold text-blue-600" style={o && { fontSize: 40, fontWeight: "800", letterSpacing: -0.8, color: o.text }}>{value}</Text>
           <RateSlider value={value} onChange={setValue} disabled={saving} />
 
           <View className="mt-6 flex-row gap-3">
@@ -75,8 +79,9 @@ export function RateAndConfirmModal({
                 disabled={saving}
                 onPress={onCancel}
                 className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+                style={o && { height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16, backgroundColor: o.pill }}
               >
-                <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+                <Text className="text-sm font-semibold text-slate-600" style={o && { fontSize: 15, color: o.onPill }}>Cancel</Text>
               </Pressable>
             )}
             <Pressable
@@ -85,19 +90,20 @@ export function RateAndConfirmModal({
               className={`flex-1 items-center rounded-2xl py-3.5 ${
                 saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
               }`}
+              style={o && { height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.35 : 1 }}
             >
-              <Text className="text-sm font-semibold text-white">
+              <Text className="text-sm font-semibold text-white" style={o && { fontSize: 15, color: o.onInk }}>
                 {saving ? "Saving..." : "Rate & Confirm"}
               </Text>
             </Pressable>
           </View>
 
           <Pressable disabled={saving} onPress={onSkip} className="mt-3 items-center py-1 active:opacity-60">
-            <Text className="text-sm font-semibold text-blue-600">Skip rating, just confirm</Text>
+            <Text className="text-sm font-semibold text-blue-600" style={o && { color: o.accent }}>Skip rating, just confirm</Text>
           </Pressable>
           {onNeverAsk && (
             <Pressable disabled={saving} onPress={onNeverAsk} className="mt-1 items-center py-1 active:opacity-60">
-              <Text className="text-xs text-slate-400">Don&apos;t ask about this again</Text>
+              <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>Don&apos;t ask about this again</Text>
             </Pressable>
           )}
         </View>
