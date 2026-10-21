@@ -4,6 +4,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { CreatableStringDropdown } from "./CreatableStringDropdown";
 import { UnitFamilyDropdown } from "./UnitFamilyDropdown";
+import { useOrbitPage } from "@/src/theme/orbit";
 import {
   convertAmountForUnitChange,
   getRelatedUnits,
@@ -72,6 +73,11 @@ export function QuantityServingInput({
   customUnitConversions = [],
   onFocus,
 }: QuantityServingInputProps) {
+  // (On an Orbit page, in its colours: fields as its cards, the chosen mode
+  // in the section's colour.)
+  const o = useOrbitPage();
+  const field = o && { backgroundColor: o.surface, borderColor: o.border, color: o.text };
+  const placeholder = o?.faint ?? "#94A3B8";
   const hasPortionInfo =
     defaultPortionAmount != null && defaultPortionAmount > 0 && !!defaultPortionUnit;
 
@@ -180,14 +186,16 @@ export function QuantityServingInput({
   return (
     <View>
       {hasPortionInfo && (
-        <View className="mb-2 flex-row rounded-xl border border-slate-200 bg-white p-1">
+        <View className="mb-2 flex-row rounded-xl border border-slate-200 bg-white p-1" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 14 }}>
           <Pressable
             disabled={disabled}
             onPress={() => setMode("servings")}
             className={`flex-1 items-center rounded-lg py-2 ${mode === "servings" ? "bg-blue-600" : ""}`}
+            style={o && mode === "servings" ? { backgroundColor: o.ink, borderRadius: 10 } : undefined}
           >
             <Text
               className={`text-xs font-semibold ${mode === "servings" ? "text-white" : "text-slate-600"}`}
+              style={o && { color: mode === "servings" ? o.onInk : o.muted }}
             >
               # of servings
             </Text>
@@ -196,9 +204,11 @@ export function QuantityServingInput({
             disabled={disabled}
             onPress={() => setMode("total")}
             className={`flex-1 items-center rounded-lg py-2 ${mode === "total" ? "bg-blue-600" : ""}`}
+            style={o && mode === "total" ? { backgroundColor: o.ink, borderRadius: 10 } : undefined}
           >
             <Text
               className={`text-xs font-semibold ${mode === "total" ? "text-white" : "text-slate-600"}`}
+              style={o && { color: mode === "total" ? o.onInk : o.muted }}
             >
               Total amount
             </Text>
@@ -216,15 +226,15 @@ export function QuantityServingInput({
               editable={!disabled}
               keyboardType="decimal-pad"
               placeholder="0"
-              placeholderTextColor="#94A3B8"
-              style={{ height: 56 }}
+              placeholderTextColor={placeholder}
+              style={[{ height: 56 }, field]}
               className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
             />
-            <Text className="ml-3 text-sm text-slate-500">
+            <Text className="ml-3 text-sm text-slate-500" style={o && { color: o.muted }}>
               × {defaultPortionAmount} {defaultPortionUnit} / serving
             </Text>
           </View>
-          <Text className="mt-1.5 text-xs text-slate-400">
+          <Text className="mt-1.5 text-xs text-slate-400" style={o && { color: o.faint }}>
             {computedTotal != null
               ? `= ${computedTotal} ${defaultPortionUnit} total`
               : `Enter a number of servings`}
@@ -239,8 +249,8 @@ export function QuantityServingInput({
             editable={!disabled}
             keyboardType="decimal-pad"
             placeholder="0"
-            placeholderTextColor="#94A3B8"
-            style={{ height: 56 }}
+            placeholderTextColor={placeholder}
+            style={[{ height: 56 }, field]}
             className="mr-3 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base text-slate-950"
           />
           <View className="flex-1">
@@ -268,14 +278,15 @@ export function QuantityServingInput({
 
       {onChangeEntryCount && (
         <View className="mt-3">
-          <Text className="mb-1.5 text-xs font-semibold text-slate-500">Number of entries</Text>
+          <Text className="mb-1.5 text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>Number of entries</Text>
           <View className="flex-row items-center">
             <Pressable
               disabled={disabled}
               onPress={() => adjustEntryCount(-1)}
               className="h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white active:bg-slate-50"
+              style={o && { backgroundColor: o.surface, borderColor: o.border }}
             >
-              <Ionicons name="remove" size={18} color="#475569" />
+              <Ionicons name="remove" size={18} color={o?.icon ?? "#475569"} />
             </Pressable>
             <TextInput
               value={entryCount}
@@ -283,19 +294,21 @@ export function QuantityServingInput({
               onFocus={onFocus}
               editable={!disabled}
               keyboardType="number-pad"
+              style={field}
               className="mx-2 h-11 w-16 rounded-2xl border border-slate-200 bg-white text-center text-base text-slate-950"
             />
             <Pressable
               disabled={disabled}
               onPress={() => adjustEntryCount(1)}
               className="h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white active:bg-slate-50"
+              style={o && { backgroundColor: o.surface, borderColor: o.border }}
             >
-              <Ionicons name="add" size={18} color="#475569" />
+              <Ionicons name="add" size={18} color={o?.icon ?? "#475569"} />
             </Pressable>
           </View>
 
           {parsedEntryCount > 1 && !isPerEntryMode && (
-            <Text className="mt-1.5 text-xs text-slate-400">
+            <Text className="mt-1.5 text-xs text-slate-400" style={o && { color: o.faint }}>
               Creates {parsedEntryCount} separate pantry entries of{" "}
               {mode === "servings" && computedTotal != null
                 ? `${computedTotal} ${defaultPortionUnit}`
@@ -310,7 +323,7 @@ export function QuantityServingInput({
               className="mt-2 self-start"
               onPress={toggleDifferentWeights}
             >
-              <Text className="text-xs font-semibold text-blue-600">
+              <Text className="text-xs font-semibold text-blue-600" style={o && { color: o.accent }}>
                 {isPerEntryMode
                   ? "Same weight for all — tap to switch back"
                   : "Different weight per piece? (e.g. a few fillets of different sizes)"}
@@ -322,7 +335,7 @@ export function QuantityServingInput({
             <View className="mt-2">
               {Array.from({ length: parsedEntryCount }, (_, index) => (
                 <View key={index} className="mt-1.5 flex-row items-center">
-                  <Text className="w-16 text-xs text-slate-500">Piece {index + 1}</Text>
+                  <Text className="w-16 text-xs text-slate-500" style={o && { color: o.muted }}>Piece {index + 1}</Text>
                   <TextInput
                     value={perEntryAmounts?.[index] ?? ""}
                     onChangeText={(value) => updatePerEntryAmount(index, value)}
@@ -330,10 +343,11 @@ export function QuantityServingInput({
                     editable={!disabled}
                     keyboardType="decimal-pad"
                     placeholder="0"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={placeholder}
+                    style={field}
                     className="ml-2 h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-base text-slate-950"
                   />
-                  <Text className="ml-2 text-sm text-slate-500">{effectiveUnit}</Text>
+                  <Text className="ml-2 text-sm text-slate-500" style={o && { color: o.muted }}>{effectiveUnit}</Text>
                 </View>
               ))}
             </View>

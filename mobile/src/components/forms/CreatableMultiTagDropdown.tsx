@@ -4,6 +4,8 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import type { SelectOption } from "@/src/types/options";
 
+import { useOrbitPage } from "@/src/theme/orbit";
+
 import { keepFocus } from "./keepFocus";
 
 interface CreatableMultiTagDropdownProps {
@@ -94,6 +96,8 @@ export function CreatableMultiTagDropdown({
     setOpen(false);
   }
 
+  // (On an Orbit page, in its colours: chosen tags in the section's.)
+  const o = useOrbitPage();
   return (
     <View style={{ width: "100%", zIndex: open ? 1000 : 1, elevation: open ? 20 : 0 }}>
       {/* Selected tag chips */}
@@ -103,13 +107,14 @@ export function CreatableMultiTagDropdown({
             <View
               key={tag._id || tag.name}
               className="flex-row items-center rounded-full bg-blue-100 px-3 py-1"
+              style={o && { backgroundColor: o.ink }}
             >
-              <Text className="mr-1 text-sm font-medium text-blue-700">
+              <Text className="mr-1 text-sm font-medium text-blue-700" style={o && { color: o.onInk }}>
                 {tag.name}
               </Text>
               {!disabled && (
                 <Pressable hitSlop={8} onPress={() => onRemove(tag._id)}>
-                  <Ionicons name="close-circle" size={16} color="#1D4ED8" />
+                  <Ionicons name="close-circle" size={16} color={o?.onInk ?? "#1D4ED8"} />
                 </Pressable>
               )}
             </View>
@@ -119,7 +124,7 @@ export function CreatableMultiTagDropdown({
 
       {/* Input row */}
       <View
-        style={{ height: 56 }}
+        style={[{ height: 56 }, o && { backgroundColor: o.surface, borderColor: open ? o.ink : o.border }]}
         className={`flex-row items-center rounded-2xl border bg-white px-4 ${
           disabled
             ? "border-slate-100 opacity-60"
@@ -128,16 +133,17 @@ export function CreatableMultiTagDropdown({
               : "border-slate-200"
         }`}
       >
-        <Ionicons name="pricetag-outline" size={20} color="#64748B" />
+        <Ionicons name="pricetag-outline" size={20} color={o?.muted ?? "#64748B"} />
 
         <TextInput
           value={query}
           editable={!disabled}
           placeholder={placeholder}
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor={o?.faint ?? "#94A3B8"}
           autoCapitalize="words"
           autoCorrect={false}
           className="ml-3 flex-1 text-base text-slate-950"
+          style={o && { color: o.text }}
           onFocus={() => {
             if (!disabled) {
               setOpen(true);
@@ -151,7 +157,7 @@ export function CreatableMultiTagDropdown({
 
         {query.length > 0 && !disabled ? (
           <Pressable hitSlop={10} onPress={() => { setQuery(""); setOpen(true); }}>
-            <Ionicons name="close-circle" size={20} color="#94A3B8" />
+            <Ionicons name="close-circle" size={20} color={o?.faint ?? "#94A3B8"} />
           </Pressable>
         ) : (
           <Pressable
@@ -162,7 +168,7 @@ export function CreatableMultiTagDropdown({
             <Ionicons
               name={open ? "chevron-up" : "chevron-down"}
               size={18}
-              color="#64748B"
+              color={o?.muted ?? "#64748B"}
             />
           </Pressable>
         )}
@@ -175,9 +181,10 @@ export function CreatableMultiTagDropdown({
             <Pressable
               key={option._id}
               className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 active:bg-slate-100"
+              style={o && { backgroundColor: o.pill, borderColor: o.pill }}
               onPress={() => onAdd(option)}
             >
-              <Text className="text-sm text-slate-600">{option.name}</Text>
+              <Text className="text-sm text-slate-600" style={o && { color: o.onPill }}>{option.name}</Text>
             </Pressable>
           ))}
         </View>
@@ -188,7 +195,7 @@ export function CreatableMultiTagDropdown({
         <View
           {...keepFocus}
           className="absolute left-0 right-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
-          style={{ top: selectedItems.length > 0 ? undefined : 60, maxHeight: 240, zIndex: 1001, elevation: 20 }}
+          style={{ top: selectedItems.length > 0 ? undefined : 60, maxHeight: 240, zIndex: 1001, elevation: 20, ...(o && { backgroundColor: o.surface, borderColor: o.border }) }}
         >
           <ScrollView
             nestedScrollEnabled
@@ -199,9 +206,10 @@ export function CreatableMultiTagDropdown({
               <Pressable
                 key={option._id}
                 className="flex-row items-center border-b border-slate-100 px-4 py-4 active:bg-slate-50"
+                style={o && { borderBottomColor: o.border }}
                 onPress={() => handleSelect(option)}
               >
-                <Text className="flex-1 text-base text-slate-900">
+                <Text className="flex-1 text-base text-slate-900" style={o && { color: o.text }}>
                   {option.name}
                 </Text>
               </Pressable>
@@ -209,7 +217,7 @@ export function CreatableMultiTagDropdown({
 
             {filteredOptions.length === 0 && (
               <View className="px-4 py-5">
-                <Text className="text-center text-sm text-slate-500">
+                <Text className="text-center text-sm text-slate-500" style={o && { color: o.muted }}>
                   {normalizedQuery
                     ? "No matching tags — press return to add it"
                     : "No matching tags"}

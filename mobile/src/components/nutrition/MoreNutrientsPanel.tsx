@@ -8,6 +8,7 @@ import {
   NUTRITION_FIELD_META,
   type PartialNutrition,
 } from "@/src/types/nutrition";
+import { useOrbitPage } from "@/src/theme/orbit";
 
 function formatAmount(value: number, decimals: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: decimals });
@@ -19,6 +20,8 @@ function formatAmount(value: number, decimals: number): string {
 // the daily value. Unknown values show "—", never 0.
 export function MoreNutrientsPanel({ nutrition }: { nutrition: PartialNutrition | null | undefined }) {
   const [expanded, setExpanded] = useState(false);
+  // (On an Orbit page, in its colours.)
+  const o = useOrbitPage();
   const values = nutrition ?? {};
   const known = EXTENDED_NUTRITION_FIELDS.filter((field) => values[field] != null).length;
 
@@ -27,19 +30,20 @@ export function MoreNutrientsPanel({ nutrition }: { nutrition: PartialNutrition 
       <Pressable
         onPress={() => setExpanded((current) => !current)}
         className="flex-row items-center rounded-xl bg-blue-50 px-3 py-2.5 active:bg-blue-100"
+        style={o && { backgroundColor: o.pill, borderRadius: 14 }}
       >
-        <Ionicons name="list-outline" size={15} color="#1D4ED8" />
-        <Text className="ml-2 text-sm font-semibold text-blue-700">All nutrients & vitamins</Text>
-        <Text className="ml-1 flex-1 text-sm text-blue-500">
+        <Ionicons name="list-outline" size={15} color={o?.ink ?? "#1D4ED8"} />
+        <Text className="ml-2 text-sm font-semibold text-blue-700" style={o && { color: o.text }}>All nutrients & vitamins</Text>
+        <Text className="ml-1 flex-1 text-sm text-blue-500" style={o && { color: o.muted }}>
           · {known} of {EXTENDED_NUTRITION_FIELDS.length}
         </Text>
-        <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={16} color="#1D4ED8" />
+        <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={16} color={o?.muted ?? "#1D4ED8"} />
       </Pressable>
 
       {expanded &&
         EXTENDED_NUTRITION_GROUPS.map((group) => (
           <View key={group.title} className="mt-3">
-            <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <Text className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400" style={o && { color: o.faint }}>
               {group.title}
             </Text>
             {group.fields.map((field, index) => {
@@ -51,15 +55,16 @@ export function MoreNutrientsPanel({ nutrition }: { nutrition: PartialNutrition 
                   className={`flex-row items-center py-2 ${
                     index < group.fields.length - 1 ? "border-b border-slate-100" : ""
                   }`}
+                  style={o && { borderBottomColor: o.border }}
                 >
-                  <Text className="flex-1 text-sm text-slate-600">{meta.label}</Text>
+                  <Text className="flex-1 text-sm text-slate-600" style={o && { color: o.muted }}>{meta.label}</Text>
                   {value != null ? (
                     <>
-                      <Text className="text-sm font-semibold text-slate-900">
+                      <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>
                         {formatAmount(value, meta.decimals)} {meta.unit}
                       </Text>
                       {meta.dailyValue ? (
-                        <Text className="w-14 text-right text-xs text-slate-400">
+                        <Text className="w-14 text-right text-xs text-slate-400" style={o && { color: o.faint }}>
                           {Math.round((value / meta.dailyValue) * 100)}% DV
                         </Text>
                       ) : (
@@ -68,7 +73,7 @@ export function MoreNutrientsPanel({ nutrition }: { nutrition: PartialNutrition 
                     </>
                   ) : (
                     <>
-                      <Text className="text-sm text-slate-300">—</Text>
+                      <Text className="text-sm text-slate-300" style={o && { color: o.faint }}>—</Text>
                       <View className="w-14" />
                     </>
                   )}

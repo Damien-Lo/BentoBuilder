@@ -19,6 +19,7 @@ import { SearchableObjectDropdown } from "./SearchableObjectDropdown";
 import { ToggleRow } from "./ToggleRow";
 
 import { createIngredient, type Ingredient } from "@/src/services/ingredientApi";
+import { useOrbitPage } from "@/src/theme/orbit";
 import {
   createCategory,
   createStorageLocation,
@@ -57,6 +58,9 @@ export function CreateGenericIngredientModal({
   onClose,
   onCreated,
 }: CreateGenericIngredientModalProps) {
+  // (Opened from a page in Orbit's look, its colours, light or dark; the
+  // fields in it follow by themselves.)
+  const o = useOrbitPage();
   const [name, setName] = useState(initialName);
   const [categories, setCategories] = useState<SelectOption[]>([]);
   const [categoryId, setCategoryId] = useState("");
@@ -187,17 +191,17 @@ export function CreateGenericIngredientModal({
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View className="flex-1 items-center justify-center bg-black/40 px-6">
+        <View className="flex-1 items-center justify-center bg-black/40 px-6" style={o && { backgroundColor: o.scrim }}>
           <Pressable className="absolute inset-0" onPress={onClose} />
 
-          <View className="max-h-[85%] w-full rounded-3xl bg-white">
+          <View className="max-h-[85%] w-full rounded-3xl bg-white" style={o && { backgroundColor: o.canvas, borderRadius: 28 }}>
             <ScrollView
               contentContainerStyle={{ padding: 20 }}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <Text className="text-lg font-bold text-slate-950">{title}</Text>
-              <Text className="mt-0.5 mb-5 text-sm text-slate-400">{description}</Text>
+              <Text className="text-lg font-bold text-slate-950" style={o && { color: o.text, fontWeight: "800" }}>{title}</Text>
+              <Text className="mt-0.5 mb-5 text-sm text-slate-400" style={o && { color: o.muted }}>{description}</Text>
 
               <FieldLabel text="Name" />
               <FormInput value={name} placeholder="e.g. Soy Sauce" onChangeText={setName} />
@@ -294,8 +298,9 @@ export function CreateGenericIngredientModal({
                   disabled={saving}
                   onPress={onClose}
                   className="flex-1 items-center rounded-2xl bg-slate-100 py-3.5 active:bg-slate-200"
+                  style={o && { backgroundColor: o.pill, height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16 }}
                 >
-                  <Text className="text-sm font-semibold text-slate-600">Cancel</Text>
+                  <Text className="text-sm font-semibold text-slate-600" style={o && { color: o.onPill, fontSize: 15 }}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   disabled={saving}
@@ -303,8 +308,9 @@ export function CreateGenericIngredientModal({
                   className={`flex-1 items-center rounded-2xl py-3.5 ${
                     saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
                   }`}
+                  style={o && { backgroundColor: o.ink, opacity: saving ? 0.5 : 1, height: 52, justifyContent: "center", paddingVertical: 0, borderRadius: 16 }}
                 >
-                  <Text className="text-sm font-semibold text-white">
+                  <Text className="text-sm font-semibold text-white" style={o && { color: o.onInk, fontSize: 15 }}>
                     {saving ? "Creating..." : "Create"}
                   </Text>
                 </Pressable>

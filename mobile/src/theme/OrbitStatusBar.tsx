@@ -3,8 +3,11 @@ import { StatusBar } from "expo-status-bar";
 
 import { useOrbitTheme } from "@/src/theme/orbit";
 
-// The pages redesigned in Orbit's look, which go dark in dark mode.
-const ORBIT_PAGES = new Set(["/", "/plan", "/planner", "/grocery-list", "/menu", "/kitchen/needs"]);
+// The pages redesigned in Orbit's look, which go dark in dark mode: these
+// paths exactly, and everything under the prefixes (a recipe's page is
+// "/recipes/<its id>").
+const ORBIT_PAGES = new Set(["/", "/plan", "/planner", "/grocery-list", "/menu", "/RecipesMainPage", "/PantryMainPage"]);
+const ORBIT_PREFIXES = ["/kitchen/", "/recipes/", "/pantry/", "/ingredients/", "/meals/", "/restaurant-meals", "/receipts"];
 
 // The phone's clock and battery, readable over the page showing: light over
 // a redesigned page in dark mode, dark over everything else — the pages not
@@ -13,5 +16,6 @@ const ORBIT_PAGES = new Set(["/", "/plan", "/planner", "/grocery-list", "/menu",
 export function OrbitStatusBar() {
   const { dark } = useOrbitTheme();
   const path = usePathname();
-  return <StatusBar style={dark && ORBIT_PAGES.has(path) ? "light" : "dark"} />;
+  const orbit = ORBIT_PAGES.has(path) || ORBIT_PREFIXES.some((prefix) => path.startsWith(prefix));
+  return <StatusBar style={dark && orbit ? "light" : "dark"} />;
 }

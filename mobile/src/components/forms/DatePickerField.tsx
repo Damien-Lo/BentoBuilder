@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Pressable, Text } from "react-native";
 
+import { useOrbitPage } from "@/src/theme/orbit";
 import { formatDateDisplay } from "@/src/utils/date";
 
 import { DatePickerModal } from "./DatePickerModal";
@@ -30,6 +31,7 @@ export function DatePickerField({
 }: DatePickerFieldProps) {
   const [open, setOpen] = useState(false);
   const display = formatDateDisplay(value);
+  const o = useOrbitPage();
 
   return (
     <>
@@ -39,18 +41,18 @@ export function DatePickerField({
           setOpen(true);
         }}
         className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 active:bg-slate-50"
-        style={{ height: 56 }}
+        style={[{ height: 56 }, o && { backgroundColor: o.surface, borderColor: o.border }]}
       >
-        <Ionicons name="calendar-outline" size={18} color="#64748B" />
-        <Text numberOfLines={1} className={`ml-2 flex-1 text-base ${display ? "text-slate-950" : "text-slate-400"}`}>
+        <Ionicons name="calendar-outline" size={18} color={o?.muted ?? "#64748B"} />
+        <Text numberOfLines={1} className={`ml-2 flex-1 text-base ${display ? "text-slate-950" : "text-slate-400"}`} style={o && { color: display ? o.text : o.faint }}>
           {display ?? placeholder}
         </Text>
         {clearable && value ? (
           <Pressable hitSlop={10} onPress={() => onChange("")}>
-            <Ionicons name="close-circle" size={18} color="#94A3B8" />
+            <Ionicons name="close-circle" size={18} color={o?.faint ?? "#94A3B8"} />
           </Pressable>
         ) : (
-          <Ionicons name="chevron-down" size={16} color="#64748B" />
+          <Ionicons name="chevron-down" size={16} color={o?.muted ?? "#64748B"} />
         )}
       </Pressable>
       <DatePickerModal

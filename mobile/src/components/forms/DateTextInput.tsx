@@ -1,5 +1,7 @@
 import { TextInput, type TextInputProps } from "react-native";
 
+import { useOrbitPage } from "@/src/theme/orbit";
+
 interface DateTextInputProps
   extends Omit<TextInputProps, "value" | "onChangeText" | "keyboardType" | "maxLength"> {
   value: string;
@@ -22,9 +24,12 @@ export function DateTextInput({
   value,
   onChangeText,
   placeholder = "YYYY-MM-DD",
-  placeholderTextColor = "#94A3B8",
+  placeholderTextColor,
+  style,
   ...props
 }: DateTextInputProps) {
+  // (On an Orbit page, in its colours; what the caller passes still wins.)
+  const o = useOrbitPage();
   function handleChangeText(newText: string) {
     const prevDigits = value.replace(/\D/g, "");
     const newDigits = newText.replace(/\D/g, "").slice(0, 8);
@@ -47,7 +52,8 @@ export function DateTextInput({
       value={value}
       onChangeText={handleChangeText}
       placeholder={placeholder}
-      placeholderTextColor={placeholderTextColor}
+      placeholderTextColor={placeholderTextColor ?? o?.faint ?? "#94A3B8"}
+      style={[o && { backgroundColor: o.surface, borderColor: o.border, color: o.text }, style]}
       keyboardType="number-pad"
       maxLength={10}
     />
