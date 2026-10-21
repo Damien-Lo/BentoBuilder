@@ -99,8 +99,10 @@ export const DARK: OrbitColors = {
 };
 
 export type Appearance = "system" | "light" | "dark";
-// The orb's colour: the assistant's blue, or a section's own (its agent's).
-export type OrbHue = "blue" | "orange";
+// The orb's colour: the main one — every section's colour together, the
+// assistant as a whole (home, and anywhere outside a section) — or a
+// section's own (its agent's).
+export type OrbHue = "main" | "blue" | "orange";
 const KEY = "orbit.appearance";
 
 interface ThemeValue {
@@ -110,7 +112,7 @@ interface ThemeValue {
   colors: OrbitColors;
   orbHue: OrbHue;
 }
-const ThemeContext = createContext<ThemeValue>({ appearance: "system", setAppearance: () => {}, dark: false, colors: LIGHT, orbHue: "blue" });
+const ThemeContext = createContext<ThemeValue>({ appearance: "system", setAppearance: () => {}, dark: false, colors: LIGHT, orbHue: "main" });
 export const useOrbitTheme = () => useContext(ThemeContext);
 
 export function OrbitThemeProvider({ children }: { children: ReactNode }) {
@@ -127,7 +129,7 @@ export function OrbitThemeProvider({ children }: { children: ReactNode }) {
   }, []);
   const value = useMemo(() => {
     const dark = Platform.OS !== "web" && (appearance === "dark" || (appearance === "system" && system === "dark"));
-    return { appearance, setAppearance, dark, colors: dark ? DARK : LIGHT, orbHue: "blue" as OrbHue };
+    return { appearance, setAppearance, dark, colors: dark ? DARK : LIGHT, orbHue: "main" as OrbHue };
   }, [appearance, system, setAppearance]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
@@ -153,8 +155,10 @@ export type Section = "kitchen";
 const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark: Partial<OrbitColors> }> = {
   kitchen: {
     orb: "orange",
-    light: { ink: "#EA580C", onInk: "#FFFFFF", fill: "#F97316", selectedRing: "#FDBA74", orbGlow: "rgba(234, 88, 12, 0.45)" },
-    dark: { ink: "#FB923C", onInk: "#0D0F14", fill: "#FB923C", selectedRing: "#F97316", orbGlow: "rgba(251, 146, 60, 0.55)" },
+    // (SECTION_PALETTE.kitchen: buttons in its darker shade on the light
+    // theme, for white text; the colour itself for rings, and in the dark.)
+    light: { ink: "#C2471A", onInk: "#FFFFFF", fill: "#F28A3C", selectedRing: "#F7AE6E", orbGlow: "rgba(242, 138, 60, 0.45)" },
+    dark: { ink: "#F28A3C", onInk: "#0D0F14", fill: "#F28A3C", selectedRing: "#C2471A", orbGlow: "rgba(242, 138, 60, 0.55)" },
   },
 };
 
@@ -167,18 +171,27 @@ export function OrbitSection({ section, children }: { section: Section; children
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
-// Each section's own colour — its agent's — where it's shown outside the
-// section, e.g. its node on the home screen's orbit. (Light / dark shade;
-// Kitchen's is the one its pages use. Gym, when it's a section: red.)
-const SECTION_HUES: Record<string, { light: string; dark: string }> = {
-  kitchen: { light: "#EA580C", dark: "#FB923C" }, // orange
-  calendar: { light: "#7C3AED", dark: "#A78BFA" }, // purple
-  tasks: { light: "#2563EB", dark: "#60A5FA" }, // blue
-  health: { light: "#16A34A", dark: "#4ADE80" }, // green
-  nutrition: { light: "#0D9488", dark: "#2DD4BF" }, // teal (for now: not yet decided)
+// Every section's colour — its agent's — in four shades, from Claude
+// Design's orb sheet (design/Orb reference …pdf, Oct 2026): a pale tint
+// (backgrounds), the colour itself (its orb, rings, the dark theme's
+// accent), a darker one (buttons with white text on them, in the light
+// theme), and the deepest (the orb's shading). The main orb is all eight.
+export type SectionId = "kitchen" | "nutrition" | "health" | "calendar" | "tasks" | "home" | "documents" | "gym";
+export const SECTION_PALETTE: Record<SectionId, { tint: string; base: string; dark: string; deep: string }> = {
+  kitchen: { tint: "#FFE0C2", base: "#F28A3C", dark: "#C2471A", deep: "#B8325A" }, // meals, recipes, pantry, groceries
+  nutrition: { tint: "#DDF5C8", base: "#7CC86A", dark: "#2E8A4A", deep: "#1F6E6A" },
+  health: { tint: "#FFD6DC", base: "#F2667A", dark: "#B3264A", deep: "#8E2B8A" },
+  calendar: { tint: "#CFE5FF", base: "#5FA2F2", dark: "#2C5DC9", deep: "#3A3FB8" },
+  tasks: { tint: "#E2DBFF", base: "#A08CF7", dark: "#5A44C9", deep: "#2F4FB8" },
+  home: { tint: "#CBF5EE", base: "#3FC1B0", dark: "#137A73", deep: "#1F5FA0" },
+  documents: { tint: "#FFF1C7", base: "#F2C34A", dark: "#B07A12", deep: "#B8551E" },
+  gym: { tint: "#FAD6F5", base: "#E36BD6", dark: "#8E2BA0", deep: "#4A3BB8" },
 };
 
+// A section's colour where it's shown outside the section — its node on the
+// home screen's orbit: the darker shade on the light theme (to read on
+// white), the colour itself on the dark.
 export function sectionColor(id: string, dark: boolean): string | null {
-  const hue = SECTION_HUES[id];
-  return hue ? (dark ? hue.dark : hue.light) : null;
+  const shades = SECTION_PALETTE[id as SectionId];
+  return shades ? (dark ? shades.base : shades.dark) : null;
 }

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Platform, Pressable, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 
-import { useOrbitTheme, type OrbHue, type OrbitColors } from "@/src/theme/orbit";
+import { SECTION_PALETTE, useOrbitTheme, type OrbHue, type OrbitColors } from "@/src/theme/orbit";
 
 // Orbit's mascot: the assistant, as a glowing orb — big on the home
 // screen, small floating over the sections (FloatingOrb).
@@ -13,12 +13,24 @@ import { useOrbitTheme, type OrbHue, type OrbitColors } from "@/src/theme/orbit"
 // one. It breathes slowly (unless motion is turned down).
 // (The same light as the browser's gradient: from the edge, deep blue, to
 // the bright spot at 36% across, 30% down.)
-// (Blue: the assistant's; orange: the Kitchen's — the orb takes the hue of
-// the section it's in, from useOrbitTheme().)
-const HUES: Record<OrbHue, { stops: [number, string][]; glow: { light: string; dark: string } }> = {
+// (A section's orb is one hue — the Kitchen's orange — and takes it from
+// useOrbitTheme(); the main one is all of them: MainOrb, below. Shades from
+// Claude Design's orb sheet, Oct 2026.)
+const HUES: Record<Exclude<OrbHue, "main">, { stops: [number, string][]; glow: { light: string; dark: string } }> = {
   blue: { stops: [[0, "#EFF6FF"], [0.2, "#93C5FD"], [0.52, "#3B82F6"], [1, "#1E3A8A"]], glow: { light: "#2563EB", dark: "#3B82F6" } },
-  orange: { stops: [[0, "#FFF7ED"], [0.2, "#FDBA74"], [0.52, "#F97316"], [1, "#7C2D12"]], glow: { light: "#EA580C", dark: "#F97316" } },
+  orange: { stops: [[0, SECTION_PALETTE.kitchen.tint], [0.24, "#F7AE6E"], [0.52, SECTION_PALETTE.kitchen.base], [0.86, SECTION_PALETTE.kitchen.dark], [1, SECTION_PALETTE.kitchen.deep]], glow: { light: SECTION_PALETTE.kitchen.base, dark: SECTION_PALETTE.kitchen.base } },
 };
+
+// The main orb's colours: every section's hue in turn round it (from 210°,
+// as in the design), and three soft patches over them.
+const P = SECTION_PALETTE;
+const SWEEP = [P.calendar, P.tasks, P.gym, P.health, P.kitchen, P.documents, P.nutrition, P.home].map((s) => s.base);
+const PATCHES: { color: string; x: number; y: number; d: number }[] = [
+  { color: P.home.base, x: 0.3, y: 0.3, d: 0.62 }, // teal
+  { color: P.kitchen.base, x: 0.72, y: 0.28, d: 0.56 }, // tangerine
+  { color: P.tasks.base, x: 0.36, y: 0.74, d: 0.66 }, // violet
+];
+const rgba = (hex: string, a: number) => `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, ${a})`;
 // (A browser's gradient reaches to the far corner, so the near edge stays
 // light: the same here.)
 const REACH = 0.78;
@@ -31,8 +43,14 @@ function shade(r: number, STOPS: [number, string][]) {
   return `rgb(${mix(1)}, ${mix(3)}, ${mix(5)})`;
 }
 export function OrbSphere({ size, onPress, onLongPress, label = "Ask or add something", colors, dark }: { size: number; onPress?: () => void; onLongPress?: () => void; label?: string; colors: OrbitColors; dark: boolean }) {
+  const { orbHue } = useOrbitTheme();
+  if (orbHue === "main") return <MainOrb size={size} onPress={onPress} onLongPress={onLongPress} label={label} dark={dark} />;
+  return <HueOrb hue={HUES[orbHue]} size={size} onPress={onPress} onLongPress={onLongPress} label={label} colors={colors} dark={dark} />;
+}
+
+// A section's orb: one hue, lit from the top left.
+function HueOrb({ hue, size, onPress, onLongPress, label, colors, dark }: { hue: (typeof HUES)["blue"]; size: number; onPress?: () => void; onLongPress?: () => void; label: string; colors: OrbitColors; dark: boolean }) {
   const still = useReducedMotion();
-  const hue = HUES[useOrbitTheme().orbHue];
   const stops = hue.stops;
   const breath = useSharedValue(1);
   useEffect(() => {
@@ -66,3 +84,87 @@ export function OrbSphere({ size, onPress, onLongPress, label = "Ask or add some
   );
 }
 
+
+// The main orb: every section's colour at once, turning slowly underneath a
+// fixed light, so it stays a sphere while the colour moves (once round every
+// 24 s; still when motion is turned down). Three layers, as in the design:
+// the colours round it, three soft patches over them (these two turn), and
+// a white highlight with a darker edge on top. On the phone, with no
+// gradients to draw with, each soft patch is a stack of faint circles.
+function MainOrb({ size, onPress, onLongPress, label, dark }: { size: number; onPress?: () => void; onLongPress?: () => void; label: string; dark: boolean }) {
+  const still = useReducedMotion();
+  const breath = useSharedValue(1);
+  const spin = useSharedValue(0);
+  useEffect(() => {
+    if (still) return;
+    breath.value = withRepeat(withTiming(1.035, { duration: 2600, easing: Easing.inOut(Easing.sin) }), -1, true);
+    spin.value = withRepeat(withTiming(360, { duration: 24000, easing: Easing.linear }), -1, false);
+  }, [still, breath, spin]);
+  const breathing = useAnimatedStyle(() => ({ transform: [{ scale: breath.value }] }));
+  const turning = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
+  const web = Platform.OS === "web";
+  const fill = { position: "absolute" as const, left: 0, top: 0, width: size, height: size };
+
+  // A soft round patch of colour: faint circles, each smaller, piling up to
+  // the colour at its middle.
+  // (Many, each very faint, so no ring shows where one ends.)
+  const layers = 18;
+  const patch = (key: string, color: string, cx: number, cy: number, d: number, strength: number) =>
+    Array.from({ length: layers }, (_, k) => {
+      const di = d * (1 - k / layers);
+      return <View key={`${key}-${k}`} style={{ position: "absolute", width: di, height: di, borderRadius: di / 2, left: cx - di / 2, top: cy - di / 2, backgroundColor: rgba(color, strength) }} />;
+    });
+
+  return (
+    <Pressable onPress={onPress} onLongPress={onLongPress} accessibilityRole="button" accessibilityLabel={label}>
+      <Animated.View
+        style={[
+          { width: size, height: size, borderRadius: size / 2, overflow: "hidden", backgroundColor: "#B9A6EC" },
+          web
+            ? ({ boxShadow: `0 18px ${dark ? 70 : 50}px rgba(160, 140, 247, ${dark ? 0.55 : 0.45})` } as object)
+            : { shadowColor: "#A08CF7", shadowOpacity: dark ? 0.75 : 0.5, shadowRadius: dark ? 34 : 26, shadowOffset: { width: 0, height: 12 } },
+          breathing,
+        ]}
+      >
+        {/* The colours, turning */}
+        <Animated.View
+          style={[
+            fill,
+            web
+              ? ({
+                  backgroundImage: [
+                    ...PATCHES.map((p) => `radial-gradient(circle at ${p.x * 100}% ${p.y * 100}%, ${rgba(p.color, 0.85)}, ${rgba(p.color, 0)} ${p.d * 70}%)`),
+                    `conic-gradient(from 210deg, ${[...SWEEP, SWEEP[0]].join(", ")})`,
+                  ].join(", "),
+                } as object)
+              : undefined,
+            turning,
+          ]}
+        >
+          {!web && (
+            <>
+              {SWEEP.map((color, i) => {
+                const a = ((210 + i * 45) * Math.PI) / 180;
+                return patch(`s${i}`, color, size / 2 + Math.sin(a) * size * 0.4, size / 2 - Math.cos(a) * size * 0.4, size * 0.8, 0.12);
+              })}
+              {PATCHES.map((p, i) => patch(`p${i}`, p.color, p.x * size, p.y * size, p.d * size, 0.09))}
+            </>
+          )}
+        </Animated.View>
+
+        {/* The light, still: a highlight at the top left, a darker edge */}
+        {web ? (
+          <View style={[fill, { backgroundImage: `radial-gradient(circle at 36% 30%, rgba(255,255,255,0.75), rgba(255,255,255,0) 42%), radial-gradient(circle at 50% 50%, rgba(30,20,60,0) 62%, rgba(30,20,60,0.24) 100%)` } as object]} />
+        ) : (
+          <>
+            {patch("light", "#FFFFFF", size * 0.36, size * 0.3, size * 0.6, 0.055)}
+            {/* (The edge darkens gradually: rings, each thinner, adding up towards the rim.) */}
+            {Array.from({ length: 10 }, (_, j) => (
+              <View key={`edge-${j}`} style={[fill, { borderRadius: size / 2, borderWidth: size * (0.16 - j * 0.015), borderColor: "rgba(40, 24, 80, 0.028)" }]} />
+            ))}
+          </>
+        )}
+      </Animated.View>
+    </Pressable>
+  );
+}
