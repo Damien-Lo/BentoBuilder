@@ -876,6 +876,16 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
               />
             </Pressable>
           )}
+          {/* (A mouse can't swipe: on the desktop, delete is a button.) */}
+          {wide && (
+            <Pressable
+              onPress={() => void handleDeleteItem(item._id)}
+              accessibilityLabel={`Delete ${item.name}`}
+              style={({ hovered }: { hovered?: boolean }) => ({ marginLeft: 2, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? (o?.pill ?? "#F1F5F9") : "transparent" })}
+            >
+              {({ hovered }: { hovered?: boolean }) => <Ionicons name="trash-outline" size={17} color={hovered ? (o?.danger ?? "#DC2626") : placeholder} />}
+            </Pressable>
+          )}
         </View>
       </ReanimatedSwipeable>
     );

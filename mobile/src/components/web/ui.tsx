@@ -122,15 +122,17 @@ export function Stat({
   tone?: "default" | "good" | "warn" | "bad";
   icon?: IconName;
 }) {
-  const color = tone === "bad" ? WEB.red : tone === "warn" ? WEB.amber : tone === "good" ? WEB.green : WEB.text;
+  // (On an Orbit page: its card, a bolder number, its own warning colours.)
+  const o = useOrbitPage();
+  const color = tone === "bad" ? (o?.danger ?? WEB.red) : tone === "warn" ? (o?.warning ?? WEB.amber) : tone === "good" ? (o?.success ?? WEB.green) : (o?.text ?? WEB.text);
   return (
-    <View style={{ flex: 1, minWidth: 150, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, borderRadius: 16, padding: 16 }}>
+    <View style={{ flex: 1, minWidth: 150, backgroundColor: o?.surface ?? WEB.card, borderWidth: 1, borderColor: o?.border ?? WEB.border, borderRadius: o ? 18 : 16, padding: 16 }}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
-        {!!icon && <Ionicons name={icon} size={14} color={WEB.muted} style={{ marginRight: 6 }} />}
-        <Text style={{ fontSize: 12, fontWeight: "600", color: WEB.muted }}>{label}</Text>
+        {!!icon && <Ionicons name={icon} size={14} color={o?.muted ?? WEB.muted} style={{ marginRight: 6 }} />}
+        <Text style={{ fontSize: 12, fontWeight: "600", color: o?.muted ?? WEB.muted }}>{label}</Text>
       </View>
-      <Text style={{ marginTop: 6, fontSize: 26, fontWeight: "700", color }}>{value}</Text>
-      {!!sub && <Text style={{ marginTop: 2, fontSize: 12, color: WEB.faint }}>{sub}</Text>}
+      <Text style={{ marginTop: 6, fontSize: o ? 28 : 26, fontWeight: o ? "800" : "700", color }}>{value}</Text>
+      {!!sub && <Text style={{ marginTop: 2, fontSize: 12, color: o?.faint ?? WEB.faint }}>{sub}</Text>}
     </View>
   );
 }
@@ -138,6 +140,7 @@ export function Stat({
 // Space held for something that's planned but not built: says what will go
 // there, so the layout already accounts for it.
 export function Planned({ icon, title, text, minHeight = 150, style }: { icon: IconName; title: string; text: string; minHeight?: number; style?: StyleProp<ViewStyle> }) {
+  const o = useOrbitPage();
   return (
     <View
       style={[
@@ -146,23 +149,23 @@ export function Planned({ icon, title, text, minHeight = 150, style }: { icon: I
           alignItems: "center",
           justifyContent: "center",
           padding: 18,
-          borderRadius: 16,
+          borderRadius: o ? 18 : 16,
           borderWidth: 1.5,
           borderStyle: "dashed",
-          borderColor: "#CBD5E1",
-          backgroundColor: "#FBFCFE",
+          borderColor: o?.orbit ?? "#CBD5E1",
+          backgroundColor: o ? "transparent" : "#FBFCFE",
         },
         style,
       ]}
     >
-      <Ionicons name={icon} size={24} color={WEB.faint} />
+      <Ionicons name={icon} size={24} color={o?.faint ?? WEB.faint} />
       <View style={{ marginTop: 8, flexDirection: "row", alignItems: "center" }}>
-        <Text style={{ fontSize: 14, fontWeight: "700", color: WEB.body }}>{title}</Text>
-        <View style={{ marginLeft: 8, borderRadius: 999, backgroundColor: "#E2E8F0", paddingHorizontal: 7, paddingVertical: 1 }}>
-          <Text style={{ fontSize: 10, fontWeight: "700", color: WEB.muted }}>PLANNED</Text>
+        <Text style={{ fontSize: 14, fontWeight: "700", color: o?.text ?? WEB.body }}>{title}</Text>
+        <View style={{ marginLeft: 8, borderRadius: 999, backgroundColor: o?.pill ?? "#E2E8F0", paddingHorizontal: 7, paddingVertical: 1 }}>
+          <Text style={{ fontSize: 10, fontWeight: "700", color: o?.muted ?? WEB.muted }}>PLANNED</Text>
         </View>
       </View>
-      <Text style={{ marginTop: 4, maxWidth: 380, textAlign: "center", fontSize: 12, lineHeight: 17, color: WEB.muted }}>{text}</Text>
+      <Text style={{ marginTop: 4, maxWidth: 380, textAlign: "center", fontSize: 12, lineHeight: 17, color: o?.muted ?? WEB.muted }}>{text}</Text>
     </View>
   );
 }
@@ -173,12 +176,15 @@ export function Button({
   onPress,
   kind = "secondary",
   small,
+  disabled,
 }: {
   label: string;
   icon?: IconName;
   onPress: () => void;
   kind?: "primary" | "secondary";
   small?: boolean;
+  // Greyed, and does nothing (while something's saving, say).
+  disabled?: boolean;
 }) {
   const primary = kind === "primary";
   // (On an Orbit page: the primary filled in its accent, the other white
@@ -188,6 +194,7 @@ export function Button({
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       style={({ hovered }: Hover) => ({
         flexDirection: "row",
         alignItems: "center",
@@ -199,7 +206,7 @@ export function Button({
         backgroundColor: o
           ? primary ? o.ink : hovered ? o.pill : o.surface
           : primary ? (hovered ? WEB.blueDark : WEB.blue) : hovered ? "#F1F5F9" : "#FFFFFF",
-        opacity: o && primary && hovered ? 0.88 : 1,
+        opacity: disabled ? 0.5 : o && primary && hovered ? 0.88 : 1,
       })}
     >
       {!!icon && <Ionicons name={icon} size={small ? 14 : 16} color={ink} style={{ marginRight: 6 }} />}
@@ -208,7 +215,8 @@ export function Button({
   );
 }
 
-export function IconButton({ icon, label, onPress, size = 34, color = WEB.body }: { icon: IconName; label: string; onPress: () => void; size?: number; color?: string }) {
+export function IconButton({ icon, label, onPress, size = 34, color }: { icon: IconName; label: string; onPress: () => void; size?: number; color?: string }) {
+  const o = useOrbitPage();
   return (
     <Pressable
       onPress={onPress}
@@ -219,10 +227,10 @@ export function IconButton({ icon, label, onPress, size = 34, color = WEB.body }
         borderRadius: size / 2,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: hovered ? "#E2E8F0" : "transparent",
+        backgroundColor: hovered ? (o?.track ?? "#E2E8F0") : "transparent",
       })}
     >
-      <Ionicons name={icon} size={Math.round(size * 0.52)} color={color} />
+      <Ionicons name={icon} size={Math.round(size * 0.52)} color={color ?? o?.icon ?? WEB.body} />
     </Pressable>
   );
 }
@@ -274,6 +282,8 @@ export function GoalBar({
   unit: string;
   color?: string;
 }) {
+  // (On an Orbit page, in its colours.)
+  const o = useOrbitPage();
   const of = goal && goal > 0 ? goal : null;
   const pct = (n: number): DimensionValue => `${Math.max(0, Math.min(100, of ? (n / of) * 100 : 0))}%`;
   // (A little over isn't flagged: within 5% reads as on target.)
@@ -281,16 +291,16 @@ export function GoalBar({
   return (
     <View style={{ marginTop: 12 }}>
       <View style={{ flexDirection: "row", alignItems: "baseline" }}>
-        <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: WEB.body }}>{label}</Text>
-        <Text style={{ fontSize: 13, fontWeight: "700", color: over ? WEB.red : WEB.text }}>
+        <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: o?.text ?? WEB.body }}>{label}</Text>
+        <Text style={{ fontSize: 13, fontWeight: "700", color: over ? (o?.danger ?? WEB.red) : (o?.text ?? WEB.text) }}>
           {Math.round(value)}
-          {planned > 0 && <Text style={{ fontWeight: "500", color: WEB.faint }}> +{Math.round(planned)}</Text>}
-          <Text style={{ fontWeight: "500", color: WEB.muted }}>
+          {planned > 0 && <Text style={{ fontWeight: "500", color: o?.faint ?? WEB.faint }}> +{Math.round(planned)}</Text>}
+          <Text style={{ fontWeight: "500", color: o?.muted ?? WEB.muted }}>
             {of ? ` / ${Math.round(of)}` : ""} {unit}
           </Text>
         </Text>
       </View>
-      <View style={{ marginTop: 5, height: 8, borderRadius: 4, backgroundColor: "#EEF2F7", overflow: "hidden", flexDirection: "row" }}>
+      <View style={{ marginTop: 5, height: 8, borderRadius: 4, backgroundColor: o?.track ?? "#EEF2F7", overflow: "hidden", flexDirection: "row" }}>
         <View style={{ width: pct(value), backgroundColor: color }} />
         <View style={{ width: pct(Math.min(planned, Math.max(0, (of ?? 0) - value))), backgroundColor: color, opacity: 0.3 }} />
       </View>
@@ -313,14 +323,17 @@ export function BarChart({
   color?: string;
   unit?: string;
 }) {
+  // (On an Orbit page: its colours, today in its accent; over the goal, the
+  // bar keeps its colour and its number turns red.)
+  const o = useOrbitPage();
   const top = Math.max(goal ?? 0, ...data.map((d) => d.value + (d.value2 ?? 0)), 1) * 1.12;
   const y = (n: number) => (n / top) * height;
   return (
     <View>
       <View style={{ height, flexDirection: "row", alignItems: "flex-end", gap: data.length > 16 ? 3 : 8 }}>
         {!!goal && (
-          <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: y(goal), borderTopWidth: 1.5, borderStyle: "dashed", borderColor: "#94A3B8" }}>
-            <Text style={{ position: "absolute", right: 0, top: -16, fontSize: 10, fontWeight: "600", color: WEB.muted }}>
+          <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: y(goal), borderTopWidth: 1.5, borderStyle: "dashed", borderColor: o?.faint ?? "#94A3B8" }}>
+            <Text style={{ position: "absolute", right: 0, top: -16, fontSize: 10, fontWeight: "600", color: o?.muted ?? WEB.muted }}>
               goal {Math.round(goal)}
               {unit}
             </Text>
@@ -332,7 +345,7 @@ export function BarChart({
           return (
             <View key={d.key} style={{ flex: 1, alignItems: "center", justifyContent: "flex-end", height }}>
               {d.value + (d.value2 ?? 0) > 0 && data.length <= 16 && (
-                <Text style={{ marginBottom: 3, fontSize: 10, fontWeight: "600", color: WEB.muted }}>{Math.round(d.value + (d.value2 ?? 0))}</Text>
+                <Text style={{ marginBottom: 3, fontSize: 10, fontWeight: over && o ? "800" : "600", color: over && o ? o.danger : (o?.muted ?? WEB.muted) }}>{Math.round(d.value + (d.value2 ?? 0))}</Text>
               )}
               {!!d.value2 && <View style={{ width: "100%", maxWidth: 46, height: y(d.value2), backgroundColor: color, opacity: 0.28, borderTopLeftRadius: 5, borderTopRightRadius: 5 }} />}
               <View
@@ -340,7 +353,7 @@ export function BarChart({
                   width: "100%",
                   maxWidth: 46,
                   height: Math.max(d.value > 0 ? 2 : 0, y(d.value)),
-                  backgroundColor: over ? WEB.red : color,
+                  backgroundColor: over && !o ? WEB.red : color,
                   borderTopLeftRadius: d.value2 ? 0 : 5,
                   borderTopRightRadius: d.value2 ? 0 : 5,
                 }}
@@ -349,14 +362,14 @@ export function BarChart({
           );
         })}
       </View>
-      <View style={{ flexDirection: "row", gap: data.length > 16 ? 3 : 8, marginTop: 6, borderTopWidth: 1, borderTopColor: WEB.border, paddingTop: 5 }}>
+      <View style={{ flexDirection: "row", gap: data.length > 16 ? 3 : 8, marginTop: 6, borderTopWidth: 1, borderTopColor: o?.border ?? WEB.border, paddingTop: 5 }}>
         {data.map((d) => (
           <View key={d.key} style={{ flex: 1, alignItems: "center" }}>
-            <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: d.highlight ? "700" : "500", color: d.highlight ? WEB.blue : WEB.muted }}>
+            <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: d.highlight ? "700" : "500", color: d.highlight ? (o?.ink ?? WEB.blue) : (o?.muted ?? WEB.muted) }}>
               {d.label}
             </Text>
             {!!d.sub && (
-              <Text numberOfLines={1} style={{ fontSize: 10, color: WEB.faint }}>
+              <Text numberOfLines={1} style={{ fontSize: 10, color: o?.faint ?? WEB.faint }}>
                 {d.sub}
               </Text>
             )}
@@ -370,6 +383,7 @@ export function BarChart({
 // Points joined by a line, for a trend (weight over time). Drawn with plain
 // views: dots, and thin rotated strips between them.
 export function LineChart({ points, height = 160, color = WEB.blue, target }: { points: { key: string; label: string; value: number }[]; height?: number; color?: string; target?: number | null }) {
+  const o = useOrbitPage();
   const values = [...points.map((p) => p.value), ...(target != null ? [target] : [])];
   if (points.length === 0) return null;
   const min = Math.min(...values);
@@ -384,15 +398,15 @@ export function LineChart({ points, height = 160, color = WEB.blue, target }: { 
     <View>
       <View style={{ height }}>
         {target != null && (
-          <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: y(target), borderTopWidth: 1.5, borderStyle: "dashed", borderColor: "#94A3B8" }}>
-            <Text style={{ position: "absolute", right: 0, top: -16, fontSize: 10, fontWeight: "600", color: WEB.muted }}>goal {target}</Text>
+          <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: y(target), borderTopWidth: 1.5, borderStyle: "dashed", borderColor: o?.faint ?? "#94A3B8" }}>
+            <Text style={{ position: "absolute", right: 0, top: -16, fontSize: 10, fontWeight: "600", color: o?.muted ?? WEB.muted }}>goal {target}</Text>
           </View>
         )}
         <LineLayer points={points.map((p, i) => ({ x: x(i) / W, y: y(p.value) }))} height={height} color={color} />
       </View>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6, borderTopWidth: 1, borderTopColor: WEB.border, paddingTop: 5 }}>
-        <Text style={{ fontSize: 11, color: WEB.muted }}>{points[0].label}</Text>
-        {points.length > 1 && <Text style={{ fontSize: 11, color: WEB.muted }}>{points[points.length - 1].label}</Text>}
+      <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6, borderTopWidth: 1, borderTopColor: o?.border ?? WEB.border, paddingTop: 5 }}>
+        <Text style={{ fontSize: 11, color: o?.muted ?? WEB.muted }}>{points[0].label}</Text>
+        {points.length > 1 && <Text style={{ fontSize: 11, color: o?.muted ?? WEB.muted }}>{points[points.length - 1].label}</Text>}
       </View>
     </View>
   );

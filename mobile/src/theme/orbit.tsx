@@ -104,7 +104,7 @@ export type Appearance = "system" | "light" | "dark";
 // The orb's colour: the main one — every section's colour together, the
 // assistant as a whole (home, and anywhere outside a section) — or a
 // section's own (its agent's).
-export type OrbHue = "main" | "blue" | "orange" | "violet";
+export type OrbHue = "main" | "blue" | "orange" | "violet" | "green";
 const KEY = "orbit.appearance";
 
 interface ThemeValue {
@@ -153,7 +153,7 @@ export function OrbitPage({ on = true, children }: { on?: boolean; children: Rea
 // orbs): its pages, tab bar, sheets and orb take it in place of the
 // theme's accent (black, or white in the dark). The home screen, the hub
 // for every section, keeps the plain accent. Kitchen first (Oct 2026).
-export type Section = "kitchen" | "calendar" | "tasks";
+export type Section = "kitchen" | "calendar" | "tasks" | "nutrition";
 const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark: Partial<OrbitColors> }> = {
   kitchen: {
     orb: "orange",
@@ -173,6 +173,12 @@ const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark
     // (SECTION_PALETTE.tasks, the same way as the Kitchen's.)
     light: { ink: "#5A44C9", onInk: "#FFFFFE", fill: "#A08CF7", selectedRing: "#C9BDFB", orbGlow: "rgba(160, 140, 247, 0.45)" },
     dark: { ink: "#A08CF7", onInk: "#0D0F14", fill: "#A08CF7", selectedRing: "#5A44C9", orbGlow: "rgba(160, 140, 247, 0.55)" },
+  },
+  nutrition: {
+    orb: "green",
+    // (SECTION_PALETTE.nutrition, the same way as the Kitchen's.)
+    light: { ink: "#2E8A4A", onInk: "#FFFFFE", fill: "#7CC86A", selectedRing: "#A9DC97", orbGlow: "rgba(124, 200, 106, 0.45)" },
+    dark: { ink: "#7CC86A", onInk: "#0D0F14", fill: "#7CC86A", selectedRing: "#2E8A4A", orbGlow: "rgba(124, 200, 106, 0.55)" },
   },
 };
 

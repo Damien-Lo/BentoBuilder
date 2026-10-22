@@ -95,8 +95,8 @@ const KIND_ORDER: ArchiveKind[] = ["ingredients", "recipes", "meals", "restauran
 
 // The Kitchen's archive (from Settings → Kitchen): archived ingredients,
 // recipes, meals and eating-out visits — restored or deleted for good here.
-// On the phone in the Kitchen's Orbit look, light or dark (`o`: its
-// colours); a desktop browser keeps the older look.
+// In the Kitchen's Orbit look, light or dark (`o`: its colours) — in a
+// desktop browser too, the list down two columns.
 export default function ArchiveScreen() {
   return (
     <OrbitSection section="kitchen">
@@ -113,9 +113,10 @@ function ArchivePage() {
   const [searchText, setSearchText] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const layout = useWideForm();
-  const { colors, dark } = useOrbitTheme();
-  const o = layout.wide ? null : colors;
-  const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 };
+  const { colors: o, dark } = useOrbitTheme();
+  // (A desktop browser's page sits back from the edges a little more.)
+  const gutter = layout.wide ? 24 : 16;
+  const card = { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 };
   // (Restoring, in a soft green.)
   const restoreBg = dark ? "rgba(52,211,153,0.14)" : "#ECFDF5";
 
@@ -198,29 +199,19 @@ function ArchivePage() {
   }
 
   return (
-    <OrbitPage on={!layout.wide}>
-    <SafeAreaView className="flex-1 bg-slate-50" style={[layout.page, o && { backgroundColor: o.canvas }]} edges={["top", "left", "right"]}>
-      {o ? (
-        <PageHeader title="Archive" subtitle="Restore what you archived, or delete it for good" onBack={back} style={{ paddingHorizontal: 16, paddingTop: 4 }} />
-      ) : (
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          <Pressable
-            className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-            onPress={back}
-          >
-            <Ionicons name="chevron-back" size={26} color="#0F172A" />
-          </Pressable>
-          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Archive</Text>
-        </View>
-      )}
+    <OrbitPage>
+    <SafeAreaView className="flex-1 bg-slate-50" style={{ backgroundColor: o.canvas }} edges={["top", "left", "right"]}>
+    {/* (In a desktop browser, a column down the middle of the canvas.) */}
+    <View style={[{ flex: 1 }, layout.page]}>
+      <PageHeader title="Archive" subtitle="Restore what you archived, or delete it for good" onBack={back} style={{ paddingHorizontal: gutter, paddingTop: layout.wide ? 16 : 4 }} />
 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}
+        contentContainerStyle={{ paddingHorizontal: gutter, paddingVertical: 12, gap: 8 }}
         className="border-b border-slate-200 bg-white"
         // (On the web a sideways scroller grows to fill the page unless told not to.)
-        style={[{ flexGrow: 0 }, o && { backgroundColor: "transparent", borderBottomWidth: 0, marginTop: 4 }]}
+        style={{ flexGrow: 0, backgroundColor: "transparent", borderBottomWidth: 0, marginTop: 4 }}
       >
         {KIND_ORDER.map((kind) => {
           const isActive = kind === activeKind;
@@ -229,12 +220,12 @@ function ArchivePage() {
             <Pressable
               key={kind}
               className={`rounded-full px-4 py-2 ${isActive ? "bg-blue-600" : "bg-slate-100"}`}
-              style={o && { backgroundColor: isActive ? o.ink : o.pill }}
+              style={{ backgroundColor: isActive ? o.ink : o.pill }}
               onPress={() => setActiveKind(kind)}
               accessibilityRole="button"
               accessibilityState={{ selected: isActive }}
             >
-              <Text className={`text-sm font-semibold ${isActive ? "text-white" : "text-slate-600"}`} style={o && { color: isActive ? o.onInk : o.onPill }}>
+              <Text className={`text-sm font-semibold ${isActive ? "text-white" : "text-slate-600"}`} style={{ color: isActive ? o.onInk : o.onPill }}>
                 {ARCHIVE_CONFIG[kind].label}
                 {!loading ? ` · ${count}` : ""}
               </Text>
@@ -243,34 +234,34 @@ function ArchivePage() {
         })}
       </ScrollView>
 
-      <View className="px-5 pt-4" style={o && { paddingHorizontal: 16, paddingTop: 4 }}>
-        <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 16 }}>
-          <Ionicons name="search-outline" size={19} color={o?.muted ?? "#64748B"} />
+      <View className="px-5 pt-4" style={{ paddingHorizontal: gutter, paddingTop: 4 }}>
+        <View className="h-12 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4" style={[{ backgroundColor: o.surface, borderColor: o.border, borderRadius: 16 }, layout.wide && { maxWidth: 420 }]}>
+          <Ionicons name="search-outline" size={19} color={o.muted} />
           <TextInput
             value={searchText}
             onChangeText={setSearchText}
             placeholder={`Search archived ${config.label.toLowerCase()}`}
-            placeholderTextColor={o?.faint ?? "#94A3B8"}
+            placeholderTextColor={o.faint}
             className="ml-3 flex-1 text-base text-slate-950"
-            style={o && { color: o.text }}
+            style={{ color: o.text }}
           />
         </View>
       </View>
 
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color={o?.fill ?? "#2563EB"} />
+          <ActivityIndicator size="large" color={o.fill} />
         </View>
       ) : (
         <ScrollView
           className="flex-1"
-          contentContainerStyle={[{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 60 }, o && { paddingHorizontal: 16 }]}
+          contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: 16, paddingBottom: 60 }}
           showsVerticalScrollIndicator={false}
         >
           {items.length === 0 ? (
             <View className="items-center rounded-2xl border border-slate-200 bg-white px-6 py-16" style={card}>
-              <Ionicons name="archive-outline" size={38} color={o?.faint ?? "#94A3B8"} />
-              <Text className="mt-3 text-center text-slate-500" style={o && { color: o.muted }}>
+              <Ionicons name="archive-outline" size={38} color={o.faint} />
+              <Text className="mt-3 text-center text-slate-500" style={{ color: o.muted }}>
                 {searchText ? "No matches." : `No archived ${config.label.toLowerCase()}.`}
               </Text>
             </View>
@@ -287,54 +278,32 @@ function ArchivePage() {
                     className={`flex-row items-center px-4 py-3.5 ${
                       index < columnItems.length - 1 ? "border-b border-slate-100" : ""
                     }`}
-                    style={o && { borderBottomColor: o.border }}
+                    style={{ borderBottomColor: o.border }}
                   >
-                    <Text className="flex-1 text-base text-slate-900" style={o && { color: o.text }} numberOfLines={1}>
+                    <Text className="flex-1 text-base text-slate-900" style={{ color: o.text }} numberOfLines={1}>
                       {item.name}
                     </Text>
-                    {o ? (
-                      <>
-                        <Tap
-                          disabled={isBusy}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Restore ${item.name}`}
-                          style={{ marginRight: 4, flexDirection: "row", alignItems: "center", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: restoreBg, opacity: isBusy ? 0.5 : 1 }}
-                          pressedStyle={{ opacity: 0.7 }}
-                          onPress={() => void handleRestore(item)}
-                        >
-                          <Ionicons name="arrow-undo-outline" size={15} color={o.success} />
-                          <Text style={{ marginLeft: 4, fontSize: 12, fontWeight: "600", color: o.success }}>Restore</Text>
-                        </Tap>
-                        <Tap
-                          disabled={isBusy}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Delete ${item.name} for good`}
-                          style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }}
-                          pressedStyle={{ backgroundColor: dangerSoft(dark) }}
-                          onPress={() => handleDeletePermanently(item)}
-                        >
-                          <Ionicons name="trash-outline" size={18} color={o.danger} />
-                        </Tap>
-                      </>
-                    ) : (
-                    <>
-                    <Pressable
+                    <Tap
                       disabled={isBusy}
-                      className="mr-1 flex-row items-center rounded-full bg-emerald-50 px-3 py-1.5 active:bg-emerald-100"
+                      accessibilityRole="button"
+                      accessibilityLabel={`Restore ${item.name}`}
+                      style={{ marginRight: 4, flexDirection: "row", alignItems: "center", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: restoreBg, opacity: isBusy ? 0.5 : 1 }}
+                      pressedStyle={{ opacity: 0.7 }}
                       onPress={() => void handleRestore(item)}
                     >
-                      <Ionicons name="arrow-undo-outline" size={15} color="#059669" />
-                      <Text className="ml-1 text-xs font-semibold text-emerald-700">Restore</Text>
-                    </Pressable>
-                    <Pressable
+                      <Ionicons name="arrow-undo-outline" size={15} color={o.success} />
+                      <Text style={{ marginLeft: 4, fontSize: 12, fontWeight: "600", color: o.success }}>Restore</Text>
+                    </Tap>
+                    <Tap
                       disabled={isBusy}
-                      className="h-9 w-9 items-center justify-center rounded-full active:bg-red-50"
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${item.name} for good`}
+                      style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }}
+                      pressedStyle={{ backgroundColor: dangerSoft(dark) }}
                       onPress={() => handleDeletePermanently(item)}
                     >
-                      <Ionicons name="trash-outline" size={18} color="#DC2626" />
-                    </Pressable>
-                    </>
-                    )}
+                      <Ionicons name="trash-outline" size={18} color={o.danger} />
+                    </Tap>
                   </View>
                 );
               })}
@@ -345,6 +314,7 @@ function ArchivePage() {
           )}
         </ScrollView>
       )}
+    </View>
     </SafeAreaView>
     </OrbitPage>
   );

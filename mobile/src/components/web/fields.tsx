@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-nativ
 
 import { minutesLabel, MONTHS_SHORT, parseTime, WEEKDAYS_SHORT } from "@/src/components/calendar/calendarUtils";
 import { WebMiniMonth } from "@/src/components/calendar/web/WebCalendarGrids";
+import { useOrbitTheme } from "@/src/theme/orbit";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
 import { getWebScale } from "./scale";
@@ -182,6 +183,8 @@ export function Choice<T extends string>({
   width?: number;
   align?: "left" | "right";
 }) {
+  // (The chosen one in the section's colour.)
+  const { colors: c } = useOrbitTheme();
   return (
     <Anchored width={width} align={align} renderTrigger={renderTrigger}>
       {(close) =>
@@ -200,12 +203,12 @@ export function Choice<T extends string>({
                 height: 32,
                 paddingHorizontal: 8,
                 borderRadius: 8,
-                backgroundColor: on ? "#EFF6FF" : hovered ? "#F1F5F9" : "transparent",
+                backgroundColor: on ? c.pill : hovered ? "#F1F5F9" : "transparent",
               })}
             >
               {!!option.color && <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: option.color, marginRight: 8 }} />}
-              <Text style={{ flex: 1, fontSize: 13, fontWeight: on ? "700" : "400", color: on ? "#1D4ED8" : "#0F172A" }}>{option.label}</Text>
-              {on && <Ionicons name="checkmark" size={14} color="#1D4ED8" />}
+              <Text style={{ flex: 1, fontSize: 13, fontWeight: on ? "700" : "400", color: on ? c.ink : "#0F172A" }}>{option.label}</Text>
+              {on && <Ionicons name="checkmark" size={14} color={c.ink} />}
             </Pressable>
           );
         })
@@ -240,6 +243,7 @@ export function TimeField({
   label?: string;
   onOpenChange?: (open: boolean) => void;
 }) {
+  const { colors: c } = useOrbitTheme();
   const [open, setOpenState] = useState(false);
   // What's being typed; null while the field just shows the time.
   const [text, setText] = useState<string | null>(null);
@@ -272,7 +276,7 @@ export function TimeField({
 
   return (
     <View style={{ zIndex: open ? 50 : undefined }}>
-      <View style={{ flexDirection: "row", alignItems: "center", width, height: 36, borderRadius: 10, borderWidth: 1, borderColor: open ? "#2563EB" : "#CBD5E1", backgroundColor: "#FFFFFF" }}>
+      <View style={{ flexDirection: "row", alignItems: "center", width, height: 36, borderRadius: 10, borderWidth: 1, borderColor: open ? c.ink : "#CBD5E1", backgroundColor: "#FFFFFF" }}>
         <TextInput
           ref={input}
           value={text ?? minutesLabel(minutes)}
@@ -311,9 +315,9 @@ export function TimeField({
                     onChange(after != null && row.value === 0 ? 1440 : row.value);
                     input.current?.blur();
                   }}
-                  style={({ hovered }: Hover) => ({ height: 32, paddingHorizontal: 10, justifyContent: "center", borderRadius: 8, backgroundColor: on ? "#EFF6FF" : hovered ? "#F1F5F9" : "transparent" })}
+                  style={({ hovered }: Hover) => ({ height: 32, paddingHorizontal: 10, justifyContent: "center", borderRadius: 8, backgroundColor: on ? c.pill : hovered ? "#F1F5F9" : "transparent" })}
                 >
-                  <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: on ? "700" : "400", color: on ? "#1D4ED8" : "#0F172A" }}>
+                  <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: on ? "700" : "400", color: on ? c.ink : "#0F172A" }}>
                     {row.label}
                   </Text>
                 </Pressable>

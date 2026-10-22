@@ -102,6 +102,7 @@ const EXACT: Record<Role, Record<string, RGB>> = {
     "194,71,26": [242, 138, 60], // the Kitchen's, orange
     "44,93,201": [95, 162, 242], // the Calendar's, blue
     "90,68,201": [160, 140, 247], // Tasks', violet
+    "46,138,74": [124, 200, 106], // Nutrition's, green
   },
   fg: {
     "255,255,254": [13, 15, 20], // the text on a main button

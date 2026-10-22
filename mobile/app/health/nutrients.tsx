@@ -15,6 +15,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SettingsNumericInput } from "@/src/components/forms";
 import { useWideForm } from "@/src/components/forms/wideForm";
+import { deskCard, DeskHeader, NutritionDesk, useNutritionDesk } from "@/src/components/health/web/NutritionDesk";
+import { Button } from "@/src/components/web/ui";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { getMealPlanForDate, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
@@ -33,6 +35,12 @@ import {
   todayStr,
 } from "@/src/utils/mealPlan";
 import { getEffectiveNutrientGoal, getSetNutrientGoal, withNutrientGoal } from "@/src/utils/nutritionGoals";
+import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
+import type { OrbitColors } from "@/src/theme/orbit";
+
+// (In a desktop browser, a main nutrient's bar is in its own colour; the
+// rest in Nutrition's.)
+const MAIN_NUTRIENTS: readonly string[] = ["calories", "protein", "carbs", "fats", "fiber", "sodium"] satisfies MainNutrient[];
 
 type Row = { field: NutritionField; indent?: boolean };
 
@@ -102,8 +110,19 @@ function displayUnit(field: NutritionField): string {
   return meta.dailyValue ? "% DV" : meta.unit;
 }
 
+// (In a desktop browser, in Orbit's look and Nutrition's green.)
 export default function NutrientsScreen() {
+  return (
+    <NutritionDesk>
+      <NutrientsPage />
+    </NutritionDesk>
+  );
+}
+
+function NutrientsPage() {
   const router = useRouter();
+  // The page's colours in a desktop browser; null on a phone.
+  const o = useNutritionDesk();
   const [isLoading, setIsLoading] = useState(true);
   const [isDayLoading, setIsDayLoading] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -179,8 +198,8 @@ export default function NutrientsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.ink ?? "#2563EB"} />
       </SafeAreaView>
     );
   }
@@ -190,10 +209,10 @@ export default function NutrientsScreen() {
   // A card of goals to edit, and a card of the day's totals, for some of
   // the sections (all of them on a phone).
   const editCard = (sections: typeof SECTIONS) => (
-    <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o && deskCard(o)}>
       {sections.map(section => (
         <View key={section.title ?? "label"}>
-          {section.title && <SectionHeading title={section.title} />}
+          {section.title && <SectionHeading title={section.title} o={o} />}
           {section.rows.map(({ field, indent }) => (
             <GoalEditRow
               key={field}
@@ -214,7 +233,7 @@ export default function NutrientsScreen() {
     const lastRows = sections[sections.length - 1].rows;
     const lastField = lastRows[lastRows.length - 1].field;
     return (
-      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o && deskCard(o)}>
         {/* Column headers */}
         <View className="flex-row items-center border-b border-slate-100 px-4 py-2.5">
           <View className="flex-1" />
@@ -225,9 +244,10 @@ export default function NutrientsScreen() {
 
         {sections.map(section => (
           <View key={section.title ?? "label"}>
-            {section.title && <SectionHeading title={section.title} />}
+            {section.title && <SectionHeading title={section.title} o={o} />}
             {section.rows.map(({ field, indent }) => (
               <NutrientRow
+                o={o}
                 key={field}
                 field={field}
                 indent={indent}
@@ -245,13 +265,22 @@ export default function NutrientsScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
       <KeyboardAvoidingView
         className="flex-1"
         style={layout.wide ? { width: "100%", maxWidth: 1280, alignSelf: "center" } : undefined}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header */}
+        {/* Header (in a desktop browser, the title large on the page) */}
+        {o ? (
+          <DeskHeader
+            o={o}
+            title="All Nutrients"
+            subtitle={isEditing ? "Editing daily goals" : friendlyDayLabel(date)}
+            onBack={() => router.back()}
+            right={<Button label={isEditing ? "Cancel" : "Edit goals"} icon={isEditing ? undefined : "create-outline"} onPress={() => !isSaving && setDraft(isEditing ? null : settings)} />}
+          />
+        ) : (
         <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-3">
           <Pressable
             className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
@@ -275,6 +304,7 @@ export default function NutrientsScreen() {
             </Text>
           </Pressable>
         </View>
+        )}
 
         <ScrollView
           ref={scrollRef}
@@ -300,6 +330,11 @@ export default function NutrientsScreen() {
                 Vitamins and minerals are set as a percentage of the standard Daily Value — leave
                 one blank to use 100%. Leave any other goal blank to not track against one.
               </Text>
+              {o ? (
+                <View style={{ marginTop: 18, flexDirection: "row", justifyContent: "flex-end" }}>
+                  <Button label={isSaving ? "Saving…" : "Save goals"} kind="primary" onPress={() => !isSaving && void handleSave()} />
+                </View>
+              ) : (
               <View style={layout.actions}>
               <Pressable
                 onPress={() => void handleSave()}
@@ -313,29 +348,30 @@ export default function NutrientsScreen() {
                 </Text>
               </Pressable>
               </View>
+              )}
             </>
           ) : (
             <>
               {/* Day picker */}
               <View
                 className="mb-3 flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-2 py-1.5"
-                style={layout.wide ? { width: 360 } : undefined}
+                style={o ? { ...deskCard(o), width: 360 } : layout.wide ? { width: 360 } : undefined}
               >
                 <Pressable
                   className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
                   onPress={() => setDate(d => shiftDate(d, -1))}
                 >
-                  <Ionicons name="chevron-back" size={22} color="#334155" />
+                  <Ionicons name="chevron-back" size={22} color={o?.icon ?? "#334155"} />
                 </Pressable>
                 <Pressable onPress={() => setDate(todayStr())} className="flex-row items-center">
-                  <Text className="text-base font-semibold text-slate-900">{friendlyDayLabel(date)}</Text>
-                  {isDayLoading && <ActivityIndicator size="small" color="#94A3B8" style={{ marginLeft: 8 }} />}
+                  <Text className="text-base font-semibold text-slate-900" style={o && { color: o.text }}>{friendlyDayLabel(date)}</Text>
+                  {isDayLoading && <ActivityIndicator size="small" color={o?.faint ?? "#94A3B8"} style={{ marginLeft: 8 }} />}
                 </Pressable>
                 <Pressable
                   className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
                   onPress={() => setDate(d => shiftDate(d, 1))}
                 >
-                  <Ionicons name="chevron-forward" size={22} color="#334155" />
+                  <Ionicons name="chevron-forward" size={22} color={o?.icon ?? "#334155"} />
                 </Pressable>
               </View>
 
@@ -364,15 +400,16 @@ export default function NutrientsScreen() {
   );
 }
 
-function SectionHeading({ title }: { title: string }) {
+function SectionHeading({ title, o }: { title: string; o: OrbitColors | null }) {
   return (
-    <View className="border-b border-slate-100 bg-slate-50 px-4 py-2">
+    <View className="border-b border-slate-100 bg-slate-50 px-4 py-2" style={o && { backgroundColor: o.canvas }}>
       <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">{title}</Text>
     </View>
   );
 }
 
 function NutrientRow({
+  o,
   field,
   indent,
   total,
@@ -381,6 +418,7 @@ function NutrientRow({
   entryCount,
   isLast,
 }: {
+  o: OrbitColors | null;
   field: NutritionField;
   indent?: boolean;
   total: number | null;
@@ -424,10 +462,15 @@ function NutrientRow({
         </Text>
       </View>
       {goal != null && total != null && (
-        <View className={`mt-2 h-1 overflow-hidden rounded-full bg-slate-100 ${indent ? "ml-4" : ""}`}>
+        <View className={`mt-2 h-1 overflow-hidden rounded-full bg-slate-100 ${indent ? "ml-4" : ""}`} style={o && { backgroundColor: o.track }}>
+          {/* (In a desktop browser, the bar in the nutrient's own colour,
+              over its goal or not: the number left turns red instead.) */}
           <View
             className={isOver ? "h-1 bg-red-400" : "h-1 bg-blue-500"}
-            style={{ width: `${pct(total, goal) * 100}%` }}
+            style={{
+              width: `${pct(total, goal) * 100}%`,
+              ...(o && { backgroundColor: MAIN_NUTRIENTS.includes(field) ? nutrientColor(field as MainNutrient) : o.fill }),
+            }}
           />
         </View>
       )}

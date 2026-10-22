@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import type { EventCalendar, EventOccurrence } from "@/src/services/calendarApi";
@@ -8,6 +8,9 @@ import { hexToRgba, parseLocalDate } from "@/src/utils/mealPlan";
 import { calendarColor, layoutDay, minutesLabel, monthGrid, MONTHS_SHORT, WEEKDAYS_SHORT } from "../calendarUtils";
 import { mealLine } from "../mealFood";
 import { getWebScale } from "@/src/components/web/scale";
+import { themeColor } from "@/src/components/web/theme";
+import { LIGHT, SECTION_PALETTE, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { TaskChip } from "../TaskChip";
 
 // The desktop calendar's two grids, laid out like Outlook on the web: a
@@ -18,6 +21,105 @@ const GUTTER = 56;
 const SNAP = 15;
 
 const hoverStyle = (hovered: boolean | undefined, base: string, over: string) => (hovered ? over : base);
+
+// The grids' colours. On a desktop page in Orbit's look, or in a section,
+// Orbit's: today and the day picked in the section's own colour (the
+// Calendar's blue, the Kitchen's orange where its session booker shows the
+// week), today's column in a faint wash of it. Anywhere else (a date picker
+// on a page not redesigned yet, or a narrow window) the older blue look.
+interface GridColors {
+  surface: string;
+  line: string; // hour lines, column edges
+  halfLine: string; // half-hour lines
+  hover: string;
+  outside: string; // a month's days from the months either side
+  text: string;
+  body: string;
+  muted: string;
+  faint: string;
+  subtle: string; // an event's time, the mini month's arrows
+  iconHover: string;
+  dim: string; // a mini month's days outside it
+  accent: string; // today, the day picked
+  onAccent: string;
+  todayWash: string; // today's column
+  monthToday: string; // today in the month
+  band: string; // the week on show, in the mini month
+  bandRadius: number;
+  pick: string; // a day hovered in the mini month
+  spanFill: string; // the time being dragged out
+  spanText: string;
+  now: string;
+}
+
+const OLD_GRID: GridColors = {
+  surface: "#FFFFFF",
+  line: "#E2E8F0",
+  halfLine: "#F1F5F9",
+  hover: "#F8FAFC",
+  outside: "#FAFBFC",
+  text: "#0F172A",
+  body: "#334155",
+  muted: "#64748B",
+  faint: "#94A3B8",
+  subtle: "#475569",
+  iconHover: "#E2E8F0",
+  dim: "#CBD5E1",
+  accent: "#2563EB",
+  onAccent: "#FFFFFF",
+  todayWash: "#F8FBFF",
+  monthToday: "#FFFFFF",
+  band: "#EFF6FF",
+  bandRadius: 6,
+  pick: "#DBEAFE",
+  spanFill: "rgba(37,99,235,0.18)",
+  spanText: "#1D4ED8",
+  now: "#EF4444",
+};
+
+// "r,g,b" of a "#RRGGBB", or `a` blended `t` of the way to `b`.
+const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const blend = (a: number[], b: number[], t: number) => a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(",");
+// (Orbit's dark card, which a dark wash is laid over.)
+const DARK_SURFACE = [23, 26, 33];
+
+export function useGridColors(): GridColors {
+  const wide = useWideWeb();
+  const page = useOrbitPage();
+  const { colors: c } = useOrbitTheme();
+  return useMemo(() => {
+    // (In a section its ink is its own colour, not the plain theme's.)
+    if (!wide || (!page && c.ink === LIGHT.ink)) return OLD_GRID;
+    const hue = Object.values(SECTION_PALETTE).find((p) => p.dark === c.ink);
+    // A faint wash of the section's colour, given its own dark (translated,
+    // a pale tint comes out too strong on the dark).
+    const wash = hue ? themeColor(blend(rgb(hue.tint), [255, 255, 255], 0.7), blend(DARK_SURFACE, rgb(hue.base), 0.06)) : c.canvas;
+    return {
+      surface: c.surface,
+      line: c.border,
+      halfLine: c.track,
+      hover: c.pill,
+      outside: c.canvas,
+      text: c.text,
+      body: c.icon,
+      muted: c.muted,
+      faint: c.faint,
+      subtle: c.muted,
+      iconHover: c.pill,
+      dim: c.orbit,
+      accent: c.ink,
+      onAccent: c.onInk,
+      todayWash: wash,
+      monthToday: wash,
+      band: wash,
+      bandRadius: 14,
+      pick: hue?.tint ?? c.pill,
+      spanFill: hue?.tint ?? c.pill,
+      spanText: c.ink,
+      now: c.danger,
+    };
+  }, [wide, page, c]);
+}
 
 // ── Time grid ────────────────────────────────────────────────────────────────
 
@@ -41,6 +143,7 @@ export function WebTimeGrid({
   onCreate: (date: string, startMinutes: number, endMinutes: number) => void;
   onPressDay: (date: string) => void;
 }) {
+  const g = useGridColors();
   const scroller = useRef<ScrollView>(null);
   // Open on the working day, not midnight.
   useEffect(() => {
@@ -52,9 +155,9 @@ export function WebTimeGrid({
   const tallestAllDay = Math.max(0, ...days.map((d) => allDay(d).length));
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
+    <View style={{ flex: 1, backgroundColor: g.surface }}>
       {/* Day headers */}
-      <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#E2E8F0", paddingRight: 0 }}>
+      <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: g.line, paddingRight: 0 }}>
         <View style={{ width: GUTTER }} />
         {days.map((day) => {
           const d = parseLocalDate(day);
@@ -69,16 +172,16 @@ export function WebTimeGrid({
                 paddingTop: 8,
                 paddingBottom: 6,
                 borderLeftWidth: 1,
-                borderLeftColor: "#E2E8F0",
+                borderLeftColor: g.line,
                 borderTopWidth: 3,
-                borderTopColor: isToday ? "#2563EB" : "transparent",
-                backgroundColor: hoverStyle(hovered, "#FFFFFF", "#F8FAFC"),
+                borderTopColor: isToday ? g.accent : "transparent",
+                backgroundColor: hoverStyle(hovered, g.surface, g.hover),
               })}
             >
-              <Text style={{ fontSize: 22, fontWeight: isToday ? "700" : "500", color: isToday ? "#2563EB" : "#0F172A" }}>
+              <Text style={{ fontSize: 22, fontWeight: isToday ? "700" : "500", color: isToday ? g.accent : g.text }}>
                 {d.getDate()}
               </Text>
-              <Text style={{ fontSize: 12, fontWeight: "600", color: isToday ? "#2563EB" : "#64748B" }}>
+              <Text style={{ fontSize: 12, fontWeight: "600", color: isToday ? g.accent : g.muted }}>
                 {WEEKDAYS_SHORT[d.getDay()]}
               </Text>
             </Pressable>
@@ -88,12 +191,12 @@ export function WebTimeGrid({
 
       {/* All-day row: all-day events and task due dates */}
       {tallestAllDay > 0 && (
-        <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#E2E8F0", backgroundColor: "#FFFFFF" }}>
+        <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: g.line, backgroundColor: g.surface }}>
           <View style={{ width: GUTTER, alignItems: "flex-end", paddingRight: 8, paddingTop: 6 }}>
-            <Text style={{ fontSize: 10, color: "#94A3B8" }}>all-day</Text>
+            <Text style={{ fontSize: 10, color: g.faint }}>all-day</Text>
           </View>
           {days.map((day) => (
-            <View key={day} style={{ flex: 1, padding: 3, gap: 2, borderLeftWidth: 1, borderLeftColor: "#E2E8F0", minHeight: 30 }}>
+            <View key={day} style={{ flex: 1, padding: 3, gap: 2, borderLeftWidth: 1, borderLeftColor: g.line, minHeight: 30 }}>
               {allDay(day).map((event) => {
                 const color = calendarColor(calendarsById.get(event.calendar));
                 return (
@@ -111,7 +214,7 @@ export function WebTimeGrid({
                           paddingVertical: 2,
                         }}
                       >
-                        <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "600", color: "#0F172A" }}>
+                        <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "600", color: g.text }}>
                           {event.title}
                         </Text>
                       </View>
@@ -130,7 +233,7 @@ export function WebTimeGrid({
           <View style={{ width: GUTTER }}>
             {Array.from({ length: 24 }, (_, h) => (
               <View key={h} style={{ height: HOUR_HEIGHT, alignItems: "flex-end", paddingRight: 8 }}>
-                {h > 0 && <Text style={{ fontSize: 11, color: "#94A3B8", marginTop: -7 }}>{minutesLabel(h * 60)}</Text>}
+                {h > 0 && <Text style={{ fontSize: 11, color: g.faint, marginTop: -7 }}>{minutesLabel(h * 60)}</Text>}
               </View>
             ))}
           </View>
@@ -169,6 +272,7 @@ function DayColumn({
   onPressEvent: (event: EventOccurrence) => void;
   onCreate: (date: string, startMinutes: number, endMinutes: number) => void;
 }) {
+  const g = useGridColors();
   const column = useRef<View>(null);
   // While the mouse is held on empty time: where it went down and is now.
   const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
@@ -185,12 +289,12 @@ function DayColumn({
   const span = drag && { start: Math.min(drag.from, drag.to), end: Math.max(drag.from, drag.to) };
 
   return (
-    <View ref={column} style={{ flex: 1, borderLeftWidth: 1, borderLeftColor: "#E2E8F0", backgroundColor: isToday ? "#F8FBFF" : "#FFFFFF" }}>
+    <View ref={column} style={{ flex: 1, borderLeftWidth: 1, borderLeftColor: g.line, backgroundColor: isToday ? g.todayWash : g.surface }}>
       {/* Hour and half-hour lines */}
       {Array.from({ length: 24 }, (_, h) => (
         <View key={h} pointerEvents="none" style={{ position: "absolute", top: h * HOUR_HEIGHT, left: 0, right: 0, height: HOUR_HEIGHT }}>
-          <View style={{ borderTopWidth: 1, borderTopColor: "#E2E8F0" }} />
-          <View style={{ borderTopWidth: 1, borderTopColor: "#F1F5F9", marginTop: HOUR_HEIGHT / 2 - 1 }} />
+          <View style={{ borderTopWidth: 1, borderTopColor: g.line }} />
+          <View style={{ borderTopWidth: 1, borderTopColor: g.halfLine, marginTop: HOUR_HEIGHT / 2 - 1 }} />
         </View>
       ))}
 
@@ -259,7 +363,7 @@ function DayColumn({
                 style={{
                   fontSize: height < 22 ? 11 : 12,
                   fontWeight: "600",
-                  color: event.task?.completed ? "#94A3B8" : "#0F172A",
+                  color: event.task?.completed ? g.faint : g.text,
                   textDecorationLine: event.task?.completed ? "line-through" : "none",
                 }}
               >
@@ -268,14 +372,14 @@ function DayColumn({
                 {event.title}
               </Text>
               {event.meal && height >= 32 && (
-                <Text numberOfLines={1} style={{ fontSize: 11, color: event.meal.food ? "#334155" : "#94A3B8" }}>
+                <Text numberOfLines={1} style={{ fontSize: 11, color: event.meal.food ? g.body : g.faint }}>
                   {event.meal.food?.eaten && <Ionicons name="checkmark-circle" size={10} color="#16A34A" />}
                   {event.meal.food?.eaten ? " " : ""}
                   {mealLine(event)}
                 </Text>
               )}
               {height >= (event.meal ? 50 : 36) && (
-                <Text numberOfLines={1} style={{ fontSize: 11, color: "#475569" }}>
+                <Text numberOfLines={1} style={{ fontSize: 11, color: g.subtle }}>
                   {minutesLabel(event.startMinutes)} – {minutesLabel(event.endMinutes)}
                   {event.location ? ` · ${event.location}` : ""}
                 </Text>
@@ -296,14 +400,14 @@ function DayColumn({
             top: (span.start / 60) * HOUR_HEIGHT,
             height: ((span.end - span.start) / 60) * HOUR_HEIGHT,
             borderRadius: 6,
-            backgroundColor: "rgba(37,99,235,0.18)",
+            backgroundColor: g.spanFill,
             borderWidth: 1,
-            borderColor: "#2563EB",
+            borderColor: g.accent,
             paddingHorizontal: 6,
             paddingTop: 2,
           }}
         >
-          <Text style={{ fontSize: 11, fontWeight: "600", color: "#1D4ED8" }}>
+          <Text style={{ fontSize: 11, fontWeight: "600", color: g.spanText }}>
             {minutesLabel(span.start)} – {minutesLabel(span.end)}
           </Text>
         </View>
@@ -311,8 +415,8 @@ function DayColumn({
 
       {isToday && (
         <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: (nowMinutes / 60) * HOUR_HEIGHT - 1, flexDirection: "row", alignItems: "center" }}>
-          <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: "#EF4444", marginLeft: -5 }} />
-          <View style={{ flex: 1, height: 2, backgroundColor: "#EF4444" }} />
+          <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: g.now, marginLeft: -5 }} />
+          <View style={{ flex: 1, height: 2, backgroundColor: g.now }} />
         </View>
       )}
     </View>
@@ -340,6 +444,7 @@ export function WebMonthGrid({
   onPressEvent: (event: EventOccurrence) => void;
   onPressDay: (date: string) => void;
 }) {
+  const g = useGridColors();
   const weeks = monthGrid(focusDate, weekStartDay);
   const month = parseLocalDate(focusDate).getMonth();
   const onDay = (day: string) =>
@@ -348,16 +453,16 @@ export function WebMonthGrid({
       .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.startMinutes - b.startMinutes);
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
-      <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#E2E8F0" }}>
+    <View style={{ flex: 1, backgroundColor: g.surface }}>
+      <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: g.line }}>
         {weeks[0].map((day) => (
-          <View key={day} style={{ flex: 1, paddingHorizontal: 10, paddingVertical: 8, borderLeftWidth: 1, borderLeftColor: "#E2E8F0" }}>
-            <Text style={{ fontSize: 12, fontWeight: "600", color: "#64748B" }}>{WEEKDAYS_SHORT[parseLocalDate(day).getDay()]}</Text>
+          <View key={day} style={{ flex: 1, paddingHorizontal: 10, paddingVertical: 8, borderLeftWidth: 1, borderLeftColor: g.line }}>
+            <Text style={{ fontSize: 12, fontWeight: "600", color: g.muted }}>{WEEKDAYS_SHORT[parseLocalDate(day).getDay()]}</Text>
           </View>
         ))}
       </View>
       {weeks.map((week) => (
-        <View key={week[0]} style={{ flex: 1, flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#E2E8F0" }}>
+        <View key={week[0]} style={{ flex: 1, flexDirection: "row", borderBottomWidth: 1, borderBottomColor: g.line }}>
           {week.map((day) => {
             const d = parseLocalDate(day);
             const outside = d.getMonth() !== month;
@@ -372,10 +477,10 @@ export function WebMonthGrid({
                   overflow: "hidden",
                   padding: 4,
                   borderLeftWidth: 1,
-                  borderLeftColor: "#E2E8F0",
+                  borderLeftColor: g.line,
                   borderTopWidth: 3,
-                  borderTopColor: isToday ? "#2563EB" : "transparent",
-                  backgroundColor: hovered ? "#F8FAFC" : outside ? "#FAFBFC" : "#FFFFFF",
+                  borderTopColor: isToday ? g.accent : "transparent",
+                  backgroundColor: hovered ? g.hover : outside ? g.outside : isToday ? g.monthToday : g.surface,
                 })}
               >
                 <Text
@@ -384,7 +489,7 @@ export function WebMonthGrid({
                     paddingHorizontal: 4,
                     fontSize: 13,
                     fontWeight: isToday ? "700" : "500",
-                    color: isToday ? "#2563EB" : outside ? "#94A3B8" : "#0F172A",
+                    color: isToday ? g.accent : outside ? g.faint : g.text,
                   }}
                 >
                   {d.getDate() === 1 ? `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}` : d.getDate()}
@@ -412,18 +517,18 @@ export function WebMonthGrid({
                         style={{
                           flex: 1,
                           fontSize: 11,
-                          color: event.task?.completed ? "#94A3B8" : "#0F172A",
+                          color: event.task?.completed ? g.faint : g.text,
                           textDecorationLine: event.task?.completed ? "line-through" : "none",
                         }}
                       >
-                        {!event.allDay && <Text style={{ color: "#64748B" }}>{minutesLabel(event.startMinutes)} </Text>}
+                        {!event.allDay && <Text style={{ color: g.muted }}>{minutesLabel(event.startMinutes)} </Text>}
                         <Text style={{ fontWeight: "600" }}>{event.title}</Text>
                       </Text>
                     </Pressable>
                   );
                 })}
                 {dayEvents.length > MONTH_CHIPS && (
-                  <Text style={{ paddingHorizontal: 5, fontSize: 11, fontWeight: "600", color: "#64748B" }}>
+                  <Text style={{ paddingHorizontal: 5, fontSize: 11, fontWeight: "600", color: g.muted }}>
                     +{dayEvents.length - MONTH_CHIPS} more
                   </Text>
                 )}
@@ -452,6 +557,7 @@ export function WebMiniMonth({
   shownDays: string[];
   onPick: (date: string) => void;
 }) {
+  const g = useGridColors();
   // The month on show follows the focus, but can be paged on its own.
   const [month, setMonth] = useState(focusDate.slice(0, 7));
   useEffect(() => setMonth(focusDate.slice(0, 7)), [focusDate]);
@@ -467,7 +573,7 @@ export function WebMiniMonth({
   return (
     <View>
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
-        <Text style={{ flex: 1, fontSize: 14, fontWeight: "700", color: "#0F172A" }}>
+        <Text style={{ flex: 1, fontSize: 14, fontWeight: "700", color: g.text }}>
           {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][d.getMonth()]}{" "}
           {d.getFullYear()}
         </Text>
@@ -482,22 +588,22 @@ export function WebMiniMonth({
               borderRadius: 13,
               alignItems: "center",
               justifyContent: "center",
-              backgroundColor: hovered ? "#E2E8F0" : "transparent",
+              backgroundColor: hovered ? g.iconHover : "transparent",
             })}
           >
-            <Ionicons name={delta < 0 ? "chevron-up" : "chevron-down"} size={15} color="#475569" />
+            <Ionicons name={delta < 0 ? "chevron-up" : "chevron-down"} size={15} color={g.subtle} />
           </Pressable>
         ))}
       </View>
       <View style={{ flexDirection: "row" }}>
         {weeks[0].map((day) => (
-          <Text key={day} style={{ flex: 1, textAlign: "center", fontSize: 11, fontWeight: "600", color: "#94A3B8", marginBottom: 2 }}>
+          <Text key={day} style={{ flex: 1, textAlign: "center", fontSize: 11, fontWeight: "600", color: g.faint, marginBottom: 2 }}>
             {WEEKDAYS_SHORT[parseLocalDate(day).getDay()][0]}
           </Text>
         ))}
       </View>
       {weeks.map((week) => (
-        <View key={week[0]} style={{ flexDirection: "row", backgroundColor: week.some((day) => shown.has(day)) ? "#EFF6FF" : "transparent", borderRadius: 6 }}>
+        <View key={week[0]} style={{ flexDirection: "row", backgroundColor: week.some((day) => shown.has(day)) ? g.band : "transparent", borderRadius: g.bandRadius }}>
           {week.map((day) => {
             const dd = parseLocalDate(day);
             const outside = dd.getMonth() !== d.getMonth();
@@ -513,12 +619,12 @@ export function WebMiniMonth({
                   alignItems: "center",
                   justifyContent: "center",
                   borderRadius: 14,
-                  backgroundColor: isToday ? "#2563EB" : hovered ? "#DBEAFE" : "transparent",
+                  backgroundColor: isToday ? g.accent : hovered ? g.pick : "transparent",
                   borderWidth: isFocus && !isToday ? 1 : 0,
-                  borderColor: "#2563EB",
+                  borderColor: g.accent,
                 })}
               >
-                <Text style={{ fontSize: 12, fontWeight: isToday || isFocus ? "700" : "400", color: isToday ? "#FFFFFF" : outside ? "#CBD5E1" : "#334155" }}>
+                <Text style={{ fontSize: 12, fontWeight: isToday || isFocus ? "700" : "400", color: isToday ? g.onAccent : outside ? g.dim : g.body }}>
                   {dd.getDate()}
                 </Text>
               </Pressable>

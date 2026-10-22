@@ -10,6 +10,7 @@ import { SidePicker } from "@/src/components/planner/SidePicker";
 import { MenuCard, MenuOverlay } from "@/src/components/planner/web/MenuCard";
 import { DragSource, DropTarget } from "@/src/components/web/dragDrop";
 import { getWebScale } from "@/src/components/web/scale";
+import { themeColor } from "@/src/components/web/theme";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { type PieceChoice } from "@/src/components/planner/usePlanNeeds";
 import { AmountPicker, PieceSizePicker } from "@/src/components/planner/PieceSizePicker";
@@ -56,7 +57,9 @@ type IconName = keyof typeof Ionicons.glyphMap;
 // The Kitchen's pale wash: icon wells, the day picked, where a drop lands;
 // fainter, today's column.
 const TINT = SECTION_PALETTE.kitchen.tint;
-const TODAY_WASH = "rgba(255, 224, 194, 0.3)";
+// Today's column: the Kitchen's tint, faint (given its own dark colour —
+// translated, a see-through tint comes out a heavy brown).
+const TODAY_WASH = themeColor("255,246,237", "36,32,33");
 // What's dragged on the week: a menu item, or a planned meal.
 type Carried = { menu: MenuItem } | { entry: MealPlanEntry };
 

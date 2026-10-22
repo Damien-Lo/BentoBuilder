@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { TimeField } from "@/src/components/web/fields";
+import { Button, hoverable } from "@/src/components/web/ui";
+import { SECTION_PALETTE, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { MEAL_TYPES, SESSION_TYPES, type EventCalendar, type EventOccurrence } from "@/src/services/calendarApi";
 import { hexToRgba, parseLocalDate } from "@/src/utils/mealPlan";
 
@@ -25,10 +27,14 @@ import { WebMiniMonth } from "./WebCalendarGrids";
 // Discard along the top with the calendar it goes in, the fields down the
 // left (title, when, repeat, where, reminder, notes) and, on the right, that
 // day's schedule with the event drawn into it — so a clash shows as you
-// pick the time. Used for a new event and to edit one.
+// pick the time. Used for a new event and to edit one. In Orbit's look, in
+// the Calendar's blue.
 
 type Hover = { hovered?: boolean };
 type IconName = keyof typeof Ionicons.glyphMap;
+
+// The Calendar's pale wash: a note on the form, the choice picked in a list.
+const TINT = SECTION_PALETTE.calendar.tint;
 
 const STEP = 15;
 const PREVIEW_HOUR = 44;
@@ -95,6 +101,7 @@ function EditorCard({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { colors: c } = useOrbitTheme();
   const form = useEventForm(draft, calendars, onSaved);
   // Which dropdown is open, if any (one at a time).
   const [open, setOpen] = useState<string | null>(null);
@@ -111,6 +118,8 @@ function EditorCard({
   const editingId = draft.mode === "edit" ? draft.id : null;
   const [showHiddenCalendars, setShowHiddenCalendars] = useState(false);
   const hiddenCount = calendars.filter((c) => !c.isTasks && !c.visible && c._id !== form.calendarId).length;
+  // Saving, or the event still loading: Save waits.
+  const busy = form.saving || form.loading;
   // A dropdown in the form itself is open (the calendar's is in the top bar).
   const bodyOpen = !!open && open !== "calendar";
 
@@ -139,7 +148,7 @@ function EditorCard({
         height: 680,
         maxHeight: "100%",
         borderRadius: 18,
-        backgroundColor: "#FFFFFF",
+        backgroundColor: c.surface,
         boxShadow: "0 24px 60px rgba(15,23,42,0.3)",
       }}
     >
@@ -157,22 +166,32 @@ function EditorCard({
           height: 58,
           paddingHorizontal: 16,
           borderBottomWidth: 1,
-          borderBottomColor: "#E2E8F0",
+          borderBottomColor: c.border,
           borderTopLeftRadius: 18,
           borderTopRightRadius: 18,
-          backgroundColor: "#F8FAFC",
+          backgroundColor: c.surface,
           zIndex: open === "calendar" ? 30 : 2,
         }}
       >
-        <BarButton label={form.saving ? "Saving…" : "Save"} icon="checkmark" primary disabled={form.saving || form.loading} onPress={() => void form.save()} />
-        <BarButton label="Discard" icon="close" onPress={onClose} />
-        {form.editing && <BarButton label="Delete" icon="trash-outline" danger onPress={form.confirmDelete} />}
+        {/* (Held while saving, or while the event is still loading.) */}
+        <View style={{ opacity: busy ? 0.6 : 1, pointerEvents: busy ? "none" : "auto" }}>
+          <Button
+            label={form.saving ? "Saving…" : "Save"}
+            icon="checkmark"
+            kind="primary"
+            onPress={() => {
+              if (!busy) void form.save();
+            }}
+          />
+        </View>
+        <Button label="Discard" icon="close" onPress={onClose} />
+        {form.editing && <DangerButton label="Delete" icon="trash-outline" onPress={form.confirmDelete} colors={c} />}
         <View style={{ flex: 1 }} />
-        <Text style={{ fontSize: 12, color: "#64748B" }}>Calendar</Text>
+        <Text style={{ fontSize: 12, color: c.muted }}>Calendar</Text>
         <View>
           <FieldButton onPress={() => toggle("calendar")} minWidth={190}>
             <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: color, marginRight: 8 }} />
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "600", color: "#0F172A" }}>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "600", color: c.text }}>
               {form.calendar?.name ?? "Calendar"}
             </Text>
           </FieldButton>
@@ -197,10 +216,10 @@ function EditorCard({
               {!showHiddenCalendars && hiddenCount > 0 && (
                 <Pressable
                   onPress={() => setShowHiddenCalendars(true)}
-                  style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 34, paddingHorizontal: 10, borderRadius: 8, backgroundColor: hovered ? "#F1F5F9" : "transparent" })}
+                  style={hoverable(({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 34, paddingHorizontal: 10, borderRadius: 10, backgroundColor: hovered ? c.pill : "transparent" }))}
                 >
-                  <Ionicons name="chevron-forward" size={13} color="#64748B" />
-                  <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: "600", color: "#64748B" }}>Hidden calendars ({hiddenCount})</Text>
+                  <Ionicons name="chevron-forward" size={13} color={c.muted} />
+                  <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: "600", color: c.muted }}>Hidden calendars ({hiddenCount})</Text>
                 </Pressable>
               )}
             </Popover>
@@ -209,22 +228,22 @@ function EditorCard({
         <Pressable
           onPress={onClose}
           accessibilityLabel="Close"
-          style={({ hovered }: Hover) => ({ width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? "#E2E8F0" : "transparent" })}
+          style={({ hovered }: Hover) => ({ width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? c.pill : "transparent" })}
         >
-          <Ionicons name="close" size={20} color="#475569" />
+          <Ionicons name="close" size={20} color={c.muted} />
         </Pressable>
       </View>
 
       {scopeNote && (
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 8, backgroundColor: "#EFF6FF", borderBottomWidth: 1, borderBottomColor: "#DBEAFE" }}>
-          <Ionicons name="repeat" size={15} color="#1D4ED8" />
-          <Text style={{ marginLeft: 8, fontSize: 13, color: "#1E3A8A" }}>{scopeNote}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingVertical: 8, backgroundColor: TINT, borderBottomWidth: 1, borderBottomColor: c.border }}>
+          <Ionicons name="repeat" size={15} color={c.ink} />
+          <Text style={{ marginLeft: 8, fontSize: 13, color: c.text }}>{scopeNote}</Text>
         </View>
       )}
 
       {form.loading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color={c.muted} />
         </View>
       ) : (
         <View style={{ flex: 1, flexDirection: "row", zIndex: bodyOpen ? 20 : 1 }}>
@@ -239,10 +258,10 @@ function EditorCard({
                 value={form.title}
                 onChangeText={form.setTitle}
                 placeholder="Add a title"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={c.faint}
                 autoFocus={!form.editing}
                 onSubmitEditing={() => void form.save()}
-                style={{ flex: 1, height: 44, fontSize: 22, fontWeight: "600", color: "#0F172A", borderBottomWidth: 2, borderBottomColor: "#E2E8F0", paddingHorizontal: 2 }}
+                style={{ flex: 1, height: 44, fontSize: 22, fontWeight: "700", color: c.text, borderBottomWidth: 2, borderBottomColor: c.border, paddingHorizontal: 2 }}
               />
             </FormRow>
 
@@ -260,16 +279,16 @@ function EditorCard({
                           height: 34,
                           paddingHorizontal: 14,
                           justifyContent: "center",
-                          borderRadius: 10,
-                          backgroundColor: on ? "#2563EB" : hovered ? "#E2E8F0" : "#F1F5F9",
+                          borderRadius: 12,
+                          backgroundColor: on ? c.ink : hovered ? c.track : c.pill,
                         })}
                       >
-                        <Text style={{ fontSize: 13, fontWeight: "600", color: on ? "#FFFFFF" : "#334155" }}>{meal.label}</Text>
+                        <Text style={{ fontSize: 13, fontWeight: "600", color: on ? c.onInk : c.onPill }}>{meal.label}</Text>
                       </Pressable>
                     );
                   })}
                   {/* …or not a meal at all: time to prep, or to shop. */}
-                  <View style={{ width: 1, marginHorizontal: 2, backgroundColor: "#E2E8F0" }} />
+                  <View style={{ width: 1, marginHorizontal: 2, backgroundColor: c.border }} />
                   {SESSION_TYPES.map((session) => {
                     const on = form.kitchenKind === session.value;
                     return (
@@ -280,16 +299,16 @@ function EditorCard({
                           height: 34,
                           paddingHorizontal: 14,
                           justifyContent: "center",
-                          borderRadius: 10,
-                          backgroundColor: on ? "#2563EB" : hovered ? "#E2E8F0" : "#F1F5F9",
+                          borderRadius: 12,
+                          backgroundColor: on ? c.ink : hovered ? c.track : c.pill,
                         })}
                       >
-                        <Text style={{ fontSize: 13, fontWeight: "600", color: on ? "#FFFFFF" : "#334155" }}>{session.label}</Text>
+                        <Text style={{ fontSize: 13, fontWeight: "600", color: on ? c.onInk : c.onPill }}>{session.label}</Text>
                       </Pressable>
                     );
                   })}
                 </View>
-                <Text style={{ marginLeft: 10, alignSelf: "center", fontSize: 12, color: "#94A3B8" }}>shows this meal from your planner</Text>
+                <Text style={{ marginLeft: 10, alignSelf: "center", fontSize: 12, color: c.faint }}>shows this meal from your planner</Text>
               </FormRow>
             )}
 
@@ -297,7 +316,7 @@ function EditorCard({
             <FormRow icon="time-outline" z={open === "date" || open === "start" || open === "end" || open === "endDate" ? 20 : 1}>
               <View>
                 <FieldButton onPress={() => toggle("date")} minWidth={168}>
-                  <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: "#0F172A" }}>
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: c.text }}>
                     {shortDateLabel(form.date)} {parseLocalDate(form.date).getFullYear()}
                   </Text>
                 </FieldButton>
@@ -319,10 +338,10 @@ function EditorCard({
 
               {form.allDay ? (
                 <>
-                  <Text style={{ alignSelf: "center", marginHorizontal: 8, fontSize: 13, color: "#64748B" }}>to</Text>
+                  <Text style={{ alignSelf: "center", marginHorizontal: 8, fontSize: 13, color: c.muted }}>to</Text>
                   <View>
                     <FieldButton onPress={() => toggle("endDate")} minWidth={168}>
-                      <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: "#0F172A" }}>
+                      <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: c.text }}>
                         {shortDateLabel(form.endDate)} {parseLocalDate(form.endDate).getFullYear()}
                       </Text>
                     </FieldButton>
@@ -348,7 +367,7 @@ function EditorCard({
                   <View style={{ marginLeft: 8 }}>
                     <TimeField minutes={form.startMinutes} options={startOptions} label="Starts" onChange={form.changeStartTime} onOpenChange={(on) => setOpen(on ? "start" : null)} />
                   </View>
-                  <Text style={{ alignSelf: "center", marginHorizontal: 8, fontSize: 13, color: "#64748B" }}>to</Text>
+                  <Text style={{ alignSelf: "center", marginHorizontal: 8, fontSize: 13, color: c.muted }}>to</Text>
                   <View>
                     <TimeField minutes={form.endMinutes} options={endOptions} listWidth={210} label="Ends" onChange={form.changeEndTime} onOpenChange={(on) => setOpen(on ? "end" : null)} />
                   </View>
@@ -369,17 +388,17 @@ function EditorCard({
                     alignItems: "center",
                     justifyContent: "center",
                     borderWidth: 2,
-                    borderColor: form.allDay ? "#2563EB" : "#94A3B8",
-                    backgroundColor: form.allDay ? "#2563EB" : "#FFFFFF",
+                    borderColor: form.allDay ? c.ink : c.faint,
+                    backgroundColor: form.allDay ? c.ink : c.surface,
                   }}
                 >
-                  {form.allDay && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+                  {form.allDay && <Ionicons name="checkmark" size={13} color={c.onInk} />}
                 </View>
-                <Text style={{ marginLeft: 7, fontSize: 13, color: "#334155" }}>All day</Text>
+                <Text style={{ marginLeft: 7, fontSize: 13, color: c.icon }}>All day</Text>
               </Pressable>
             </FormRow>
             {!form.allDay && (
-              <Text style={{ marginLeft: 40, marginTop: -6, marginBottom: 10, fontSize: 12, color: form.overnight ? "#D97706" : "#94A3B8" }}>
+              <Text style={{ marginLeft: 40, marginTop: -6, marginBottom: 10, fontSize: 12, color: form.overnight ? c.warning : c.faint }}>
                 {durationLabel(form.duration)}
                 {form.overnight ? " · ends the next day" : ""}
               </Text>
@@ -390,7 +409,7 @@ function EditorCard({
               <FormRow icon="repeat" z={open === "repeat" || open === "until" ? 20 : 1}>
                 <View>
                   <FieldButton onPress={() => toggle("repeat")} minWidth={168}>
-                    <Text style={{ flex: 1, fontSize: 14, color: "#0F172A" }}>
+                    <Text style={{ flex: 1, fontSize: 14, color: c.text }}>
                       {form.repeatFrequency ? REPEAT_OPTIONS.find((o) => o.value === form.repeatFrequency)?.label : "Don't repeat"}
                     </Text>
                   </FieldButton>
@@ -426,10 +445,10 @@ function EditorCard({
                             borderRadius: 15,
                             alignItems: "center",
                             justifyContent: "center",
-                            backgroundColor: on ? "#2563EB" : hovered ? "#E2E8F0" : "#F1F5F9",
+                            backgroundColor: on ? c.ink : hovered ? c.track : c.pill,
                           })}
                         >
-                          <Text style={{ fontSize: 12, fontWeight: "700", color: on ? "#FFFFFF" : "#475569" }}>{WEEKDAYS_FULL[day][0]}</Text>
+                          <Text style={{ fontSize: 12, fontWeight: "700", color: on ? c.onInk : c.onPill }}>{WEEKDAYS_FULL[day][0]}</Text>
                         </Pressable>
                       );
                     })}
@@ -438,10 +457,10 @@ function EditorCard({
 
                 {form.repeatFrequency && (
                   <>
-                    <Text style={{ alignSelf: "center", marginHorizontal: 8, fontSize: 13, color: "#64748B" }}>until</Text>
+                    <Text style={{ alignSelf: "center", marginHorizontal: 8, fontSize: 13, color: c.muted }}>until</Text>
                     <View>
                       <FieldButton onPress={() => toggle("until")} minWidth={132}>
-                        <Text style={{ flex: 1, fontSize: 14, color: "#0F172A" }}>
+                        <Text style={{ flex: 1, fontSize: 14, color: c.text }}>
                           {form.repeatUntil ? `${shortDateLabel(form.repeatUntil)} ${parseLocalDate(form.repeatUntil).getFullYear()}` : "Forever"}
                         </Text>
                       </FieldButton>
@@ -462,31 +481,25 @@ function EditorCard({
                               form.setRepeatUntil(null);
                               setOpen(null);
                             }}
-                            style={({ hovered }: Hover) => ({ marginTop: 8, height: 32, alignItems: "center", justifyContent: "center", borderRadius: 8, backgroundColor: hovered ? "#E2E8F0" : "#F1F5F9" })}
+                            style={({ hovered }: Hover) => ({ marginTop: 8, height: 32, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: hovered ? c.track : c.pill })}
                           >
-                            <Text style={{ fontSize: 13, fontWeight: "600", color: "#334155" }}>Repeat forever</Text>
+                            <Text style={{ fontSize: 13, fontWeight: "600", color: c.onPill }}>Repeat forever</Text>
                           </Pressable>
                           {/* Or a number of times, kept as the date that falls on. */}
                           <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
-                            <Text style={{ fontSize: 13, color: "#64748B" }}>or after</Text>
+                            <Text style={{ fontSize: 13, color: c.muted }}>or after</Text>
                             <TextInput
                               value={times}
                               onChangeText={(text) => setTimes(text.replace(/[^0-9]/g, ""))}
                               placeholder="10"
-                              placeholderTextColor="#94A3B8"
+                              placeholderTextColor={c.faint}
                               inputMode="numeric"
                               accessibilityLabel="Number of times"
                               onSubmitEditing={endAfterTimes}
-                              style={{ width: 52, height: 32, marginHorizontal: 8, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: "#E2E8F0", fontSize: 14, color: "#0F172A", textAlign: "center" }}
+                              style={{ width: 52, height: 32, marginHorizontal: 8, paddingHorizontal: 8, borderRadius: 10, borderWidth: 1, borderColor: c.border, fontSize: 14, color: c.text, textAlign: "center" }}
                             />
-                            <Text style={{ flex: 1, fontSize: 13, color: "#64748B" }}>times</Text>
-                            <Pressable
-                              onPress={endAfterTimes}
-                              accessibilityLabel="End after that many times"
-                              style={({ hovered }: Hover) => ({ height: 32, paddingHorizontal: 12, justifyContent: "center", borderRadius: 8, backgroundColor: hovered ? "#1D4ED8" : "#2563EB" })}
-                            >
-                              <Text style={{ fontSize: 13, fontWeight: "600", color: "#FFFFFF" }}>Set</Text>
-                            </Pressable>
+                            <Text style={{ flex: 1, fontSize: 13, color: c.muted }}>times</Text>
+                            <Button label="Set" kind="primary" small onPress={endAfterTimes} />
                           </View>
                         </Popover>
                       )}
@@ -502,8 +515,8 @@ function EditorCard({
                 value={form.location}
                 onChangeText={form.setLocation}
                 placeholder="Add a location"
-                placeholderTextColor="#94A3B8"
-                style={{ flex: 1, height: 38, borderRadius: 10, borderWidth: 1, borderColor: "#CBD5E1", paddingHorizontal: 12, fontSize: 14, color: "#0F172A" }}
+                placeholderTextColor={c.faint}
+                style={{ flex: 1, height: 38, borderRadius: 12, borderWidth: 1, borderColor: c.border, paddingHorizontal: 12, fontSize: 14, color: c.text }}
               />
             </FormRow>
 
@@ -511,7 +524,7 @@ function EditorCard({
             <FormRow icon="notifications-outline" z={open === "remind" ? 20 : 1}>
               <View>
                 <FieldButton onPress={() => toggle("remind")} minWidth={190}>
-                  <Text style={{ flex: 1, fontSize: 14, color: "#0F172A" }}>
+                  <Text style={{ flex: 1, fontSize: 14, color: c.text }}>
                     {form.remindMinutes == null ? "Don't remind me" : REMIND_OPTIONS.find((o) => o.value === form.remindMinutes)?.label ?? `${form.remindMinutes} minutes before`}
                   </Text>
                 </FieldButton>
@@ -531,7 +544,7 @@ function EditorCard({
                   </Popover>
                 )}
               </View>
-              <Text style={{ marginLeft: 10, alignSelf: "center", fontSize: 12, color: "#94A3B8" }}>saved with the event; notifications come later</Text>
+              <Text style={{ marginLeft: 10, alignSelf: "center", fontSize: 12, color: c.faint }}>saved with the event; notifications come later</Text>
             </FormRow>
 
             {/* Notes */}
@@ -540,19 +553,19 @@ function EditorCard({
                 value={form.description}
                 onChangeText={form.setDescription}
                 placeholder="Add a description"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={c.faint}
                 multiline
                 style={{
                   flex: 1,
                   minHeight: 90,
-                  borderRadius: 10,
+                  borderRadius: 12,
                   borderWidth: 1,
-                  borderColor: "#CBD5E1",
+                  borderColor: c.border,
                   paddingHorizontal: 12,
                   paddingVertical: 10,
                   fontSize: 14,
                   lineHeight: 20,
-                  color: "#0F172A",
+                  color: c.text,
                   textAlignVertical: "top",
                 }}
               />
@@ -584,12 +597,13 @@ function Catcher({ onPress }: { onPress: () => void }) {
 
 // One line of the form: an icon in the margin, then its fields.
 function FormRow({ icon, children, z, grow }: { icon?: IconName; children: ReactNode; z: number; grow?: boolean }) {
+  const { colors: c } = useOrbitTheme();
   return (
     <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 14, zIndex: z, flex: grow ? 1 : undefined }}>
       {/* (A row with no icon brings its own marker, e.g. the title's dot.) */}
       {icon ? (
         <View style={{ width: 40, height: 38, justifyContent: "center" }}>
-          <Ionicons name={icon} size={19} color="#64748B" />
+          <Ionicons name={icon} size={19} color={c.muted} />
         </View>
       ) : null}
       <View
@@ -611,6 +625,7 @@ function FormRow({ icon, children, z, grow }: { icon?: IconName; children: React
 
 // A field that opens a list or a date picker under it.
 function FieldButton({ children, onPress, minWidth }: { children: ReactNode; onPress: () => void; minWidth: number }) {
+  const { colors: c } = useOrbitTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -620,19 +635,20 @@ function FieldButton({ children, onPress, minWidth }: { children: ReactNode; onP
         height: 38,
         minWidth,
         paddingHorizontal: 12,
-        borderRadius: 10,
+        borderRadius: 12,
         borderWidth: 1,
-        borderColor: hovered ? "#94A3B8" : "#CBD5E1",
-        backgroundColor: "#FFFFFF",
+        borderColor: hovered ? c.faint : c.border,
+        backgroundColor: c.surface,
       })}
     >
       {children}
-      <Ionicons name="chevron-down" size={14} color="#64748B" style={{ marginLeft: 8 }} />
+      <Ionicons name="chevron-down" size={14} color={c.muted} style={{ marginLeft: 8 }} />
     </Pressable>
   );
 }
 
 function Popover({ children, width, padded, align = "left" }: { children: ReactNode; width: number; padded?: boolean; align?: "left" | "right" }) {
+  const { colors: c } = useOrbitTheme();
   return (
     <View
       style={{
@@ -642,10 +658,10 @@ function Popover({ children, width, padded, align = "left" }: { children: ReactN
         width,
         zIndex: 50,
         padding: padded ? 12 : 4,
-        borderRadius: 12,
+        borderRadius: 14,
         borderWidth: 1,
-        borderColor: "#E2E8F0",
-        backgroundColor: "#FFFFFF",
+        borderColor: c.border,
+        backgroundColor: c.surface,
         boxShadow: "0 12px 28px rgba(15,23,42,0.18)",
       }}
     >
@@ -655,6 +671,7 @@ function Popover({ children, width, padded, align = "left" }: { children: ReactN
 }
 
 function Option({ label, selected, dot, onPress }: { label: string; selected: boolean; dot?: string; onPress: () => void }) {
+  const { colors: c } = useOrbitTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -663,53 +680,35 @@ function Option({ label, selected, dot, onPress }: { label: string; selected: bo
         alignItems: "center",
         height: 34,
         paddingHorizontal: 10,
-        borderRadius: 8,
-        backgroundColor: selected ? "#EFF6FF" : hovered ? "#F1F5F9" : "transparent",
+        borderRadius: 10,
+        backgroundColor: selected ? TINT : hovered ? c.pill : "transparent",
       })}
     >
       {!!dot && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: dot, marginRight: 8 }} />}
-      <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: selected ? "700" : "400", color: selected ? "#1D4ED8" : "#0F172A" }}>
+      <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: selected ? "700" : "400", color: selected ? c.ink : c.text }}>
         {label}
       </Text>
-      {selected && <Ionicons name="checkmark" size={14} color="#1D4ED8" />}
+      {selected && <Ionicons name="checkmark" size={14} color={c.ink} />}
     </Pressable>
   );
 }
 
-function BarButton({
-  label,
-  icon,
-  primary,
-  danger,
-  disabled,
-  onPress,
-}: {
-  label: string;
-  icon: IconName;
-  primary?: boolean;
-  danger?: boolean;
-  disabled?: boolean;
-  onPress: () => void;
-}) {
-  const text = primary ? "#FFFFFF" : danger ? "#DC2626" : "#334155";
+// Something to delete: the soft red of the phone's delete button.
+export function DangerButton({ label, icon, onPress, colors: c }: { label: string; icon: IconName; onPress: () => void; colors: OrbitColors }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
-      style={({ hovered }: Hover) => ({
+      style={hoverable(({ hovered }: Hover) => ({
         flexDirection: "row",
         alignItems: "center",
         height: 36,
         paddingHorizontal: 14,
-        borderRadius: 10,
-        borderWidth: primary ? 0 : 1,
-        borderColor: danger ? "#FECACA" : "#CBD5E1",
-        opacity: disabled ? 0.6 : 1,
-        backgroundColor: primary ? (hovered ? "#1D4ED8" : "#2563EB") : hovered ? (danger ? "#FEF2F2" : "#F1F5F9") : "#FFFFFF",
-      })}
+        borderRadius: 12,
+        backgroundColor: hovered ? "#FEE2E2" : "#FEF2F2",
+      }))}
     >
-      <Ionicons name={icon} size={16} color={text} style={{ marginRight: 6 }} />
-      <Text style={{ fontSize: 13, fontWeight: "700", color: text }}>{label}</Text>
+      <Ionicons name={icon} size={16} color={c.danger} style={{ marginRight: 6 }} />
+      <Text style={{ fontSize: 13, fontWeight: "600", color: c.danger }}>{label}</Text>
     </Pressable>
   );
 }
@@ -740,6 +739,7 @@ function DayPreview({
   onMove: (startMinutes: number) => void;
   onSpan: (startMinutes: number, endMinutes: number) => void;
 }) {
+  const { colors: c } = useOrbitTheme();
   const scroller = useRef<ScrollView>(null);
   const column = useRef<View>(null);
   const top = useRef(0);
@@ -761,14 +761,14 @@ function DayPreview({
   const span = drag && { start: Math.min(drag.from, drag.to), end: Math.max(drag.from, drag.to) };
 
   return (
-    <View style={{ width: 300, borderLeftWidth: 1, borderLeftColor: "#E2E8F0", backgroundColor: "#F8FAFC", borderBottomRightRadius: 18 }}>
-      <View style={{ paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: "#E2E8F0" }}>
-        <Text style={{ fontSize: 14, fontWeight: "700", color: "#0F172A" }}>{date ? longDateLabel(date) : ""}</Text>
-        <Text style={{ marginTop: 2, fontSize: 12, color: clashes ? "#D97706" : "#64748B" }}>
+    <View style={{ width: 300, borderLeftWidth: 1, borderLeftColor: c.border, backgroundColor: c.canvas, borderBottomRightRadius: 18 }}>
+      <View style={{ paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: c.border }}>
+        <Text style={{ fontSize: 14, fontWeight: "700", color: c.text }}>{date ? longDateLabel(date) : ""}</Text>
+        <Text style={{ marginTop: 2, fontSize: 12, color: clashes ? c.warning : c.muted }}>
           {allDay ? "All day" : clashes ? `Overlaps ${clashes} other event${clashes === 1 ? "" : "s"}` : "Nothing else at this time"}
         </Text>
         {allDayEvents.length > 0 && (
-          <Text numberOfLines={2} style={{ marginTop: 4, fontSize: 12, color: "#64748B" }}>
+          <Text numberOfLines={2} style={{ marginTop: 4, fontSize: 12, color: c.muted }}>
             All day: {allDayEvents.map((e) => e.title).join(", ")}
           </Text>
         )}
@@ -779,13 +779,13 @@ function DayPreview({
           <View style={{ width: 44 }}>
             {Array.from({ length: 24 }, (_, h) => (
               <View key={h} style={{ height: PREVIEW_HOUR, alignItems: "flex-end", paddingRight: 6 }}>
-                {h > 0 && <Text style={{ fontSize: 10, color: "#94A3B8", marginTop: -6 }}>{minutesLabel(h * 60)}</Text>}
+                {h > 0 && <Text style={{ fontSize: 10, color: c.faint, marginTop: -6 }}>{minutesLabel(h * 60)}</Text>}
               </View>
             ))}
           </View>
-          <View ref={column} style={{ flex: 1, marginRight: 10, borderLeftWidth: 1, borderLeftColor: "#E2E8F0", backgroundColor: "#FFFFFF" }}>
+          <View ref={column} style={{ flex: 1, marginRight: 10, borderLeftWidth: 1, borderLeftColor: c.border, backgroundColor: c.surface }}>
             {Array.from({ length: 24 }, (_, h) => (
-              <View key={h} pointerEvents="none" style={{ position: "absolute", top: h * PREVIEW_HOUR, left: 0, right: 0, borderTopWidth: 1, borderTopColor: "#EEF2F7" }} />
+              <View key={h} pointerEvents="none" style={{ position: "absolute", top: h * PREVIEW_HOUR, left: 0, right: 0, borderTopWidth: 1, borderTopColor: c.track }} />
             ))}
 
             {laidOut.map(({ event, start, end, column: col, columns }) => {
@@ -805,7 +805,7 @@ function DayPreview({
                   }}
                 >
                   <View style={{ flex: 1, overflow: "hidden", borderRadius: 5, backgroundColor: hexToRgba(eventColor, 0.16), borderLeftWidth: 3, borderLeftColor: eventColor, paddingHorizontal: 5 }}>
-                    <Text numberOfLines={1} style={{ fontSize: 11, color: "#475569" }}>
+                    <Text numberOfLines={1} style={{ fontSize: 11, color: c.icon }}>
                       {event.title}
                     </Text>
                   </View>
@@ -856,10 +856,10 @@ function DayPreview({
                   overflow: "hidden",
                 }}
               >
-                <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: "700", color: "#0F172A" }}>
+                <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: "700", color: c.text }}>
                   {title}
                 </Text>
-                <Text numberOfLines={1} style={{ fontSize: 10, color: "#334155" }}>
+                <Text numberOfLines={1} style={{ fontSize: 10, color: c.icon }}>
                   {span && span.end > span.start
                     ? `${minutesLabel(span.start)} – ${minutesLabel(span.end)}`
                     : `${minutesLabel(startMinutes)} – ${minutesLabel(endMinutes)}`}
@@ -869,7 +869,7 @@ function DayPreview({
           </View>
         </View>
       </ScrollView>
-      <Text style={{ paddingHorizontal: 14, paddingVertical: 8, fontSize: 11, color: "#94A3B8", borderTopWidth: 1, borderTopColor: "#E2E8F0" }}>
+      <Text style={{ paddingHorizontal: 14, paddingVertical: 8, fontSize: 11, color: c.faint, borderTopWidth: 1, borderTopColor: c.border }}>
         Click a time to move it there, or drag to set its start and end.
       </Text>
     </View>

@@ -7,7 +7,8 @@ import { RepeatDaysSheet } from "@/src/components/calendar/RepeatDaysSheet";
 import { loadUsualFoods, UsualFoodPicker, type UsualFood } from "@/src/components/calendar/UsualFoodPicker";
 import { addDays, durationLabel, minutesLabel, repeatLabel, untilAfter, WEEKDAYS_FULL, WEEKDAYS_SHORT, weeklyDays } from "@/src/components/calendar/calendarUtils";
 import { DateField, TimeField } from "@/src/components/web/fields";
-import { Button, Card, PageTitle, WEB, WebPage } from "@/src/components/web/ui";
+import { themeColor } from "@/src/components/web/theme";
+import { Button, Card, hoverable, PageTitle, WebPage } from "@/src/components/web/ui";
 import {
   createCalendarEvent,
   deleteCalendarEvent,
@@ -28,13 +29,19 @@ import {
 import { loadSettings } from "@/src/services/settingsService";
 import { createUsualMeal, getUsualMeals, stopUsualMeal, updateUsualMeal, usualName, type UsualMeal } from "@/src/services/usualMealApi";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
+import { SECTION_PALETTE, useOrbitTheme } from "@/src/theme/orbit";
 
 // The Kitchen calendar's settings on a desktop: the regular meal times, and
 // the regular prep sessions and shopping trips. The same things the phone's
 // pages set (app/calendar/meal-times.tsx, sessions.tsx), laid out for a wide
-// window: the meal times as a week's table, the rest as cards beside it.
+// window: the meal times as a week's table, the rest as cards beside it. In
+// Orbit's look, in the Calendar's blue.
 
 type Hover = { hovered?: boolean };
+// The Calendar's pale wash: the cell or regular time picked.
+const TINT = SECTION_PALETTE.calendar.tint;
+// A switch's knob: white in either theme.
+const KNOB = themeColor("255,255,255", "226,232,240");
 
 const DEFAULT_TIMES: Record<MealType, MealTime> = {
   breakfast: { start: 7 * 60, end: 7 * 60 + 30 },
@@ -53,19 +60,24 @@ function daysLabel(weekdays: number[]): string {
 }
 
 function DayChip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  const { colors: c } = useOrbitTheme();
   return (
-    <Pressable onPress={onPress} accessibilityLabel={label} style={({ hovered }: Hover) => ({ height: 34, minWidth: 48, paddingHorizontal: 10, alignItems: "center", justifyContent: "center", borderRadius: 10, backgroundColor: on ? WEB.blue : hovered ? "#E2E8F0" : "#F1F5F9" })}>
-      <Text style={{ fontSize: 13, fontWeight: "600", color: on ? "#FFFFFF" : "#334155" }}>{label}</Text>
+    <Pressable onPress={onPress} accessibilityLabel={label} style={hoverable(({ hovered }: Hover) => ({ height: 34, minWidth: 48, paddingHorizontal: 10, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: on ? c.ink : hovered ? c.track : c.pill }))}>
+      <Text style={{ fontSize: 13, fontWeight: "600", color: on ? c.onInk : c.onPill }}>{label}</Text>
     </Pressable>
   );
 }
 
-const Label = ({ children }: { children: string }) => <Text style={{ width: 86, fontSize: 13, color: WEB.muted }}>{children}</Text>;
+function Label({ children }: { children: string }) {
+  const { colors: c } = useOrbitTheme();
+  return <Text style={{ width: 86, fontSize: 13, color: c.muted }}>{children}</Text>;
+}
 
 // ── Meal times ───────────────────────────────────────────────────────────────
 
 export function WebMealTimesScreen() {
   const router = useRouter();
+  const { colors: c } = useOrbitTheme();
   const [times, setTimes] = useState<MealTimes | null>(null);
   const [until, setUntil] = useState<string | null>(null);
   const [saved, setSaved] = useState("");
@@ -100,7 +112,7 @@ export function WebMealTimesScreen() {
   if (!times) {
     return (
       <WebPage>
-        <ActivityIndicator style={{ marginTop: 80 }} size="large" color={WEB.blue} />
+        <ActivityIndicator style={{ marginTop: 80 }} size="large" color={c.muted} />
       </WebPage>
     );
   }
@@ -137,7 +149,7 @@ export function WebMealTimesScreen() {
         subtitle="When you usually eat, for the Kitchen calendar. Changes start today; earlier days keep the times they had."
         right={
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {dirty && <Text style={{ fontSize: 13, color: WEB.muted }}>Unsaved changes</Text>}
+            {dirty && <Text style={{ fontSize: 13, color: c.muted }}>Unsaved changes</Text>}
             <Button label="Back to calendar" onPress={() => router.push("/calendar")} />
             <Button label={saving ? "Saving…" : "Save"} kind="primary" onPress={() => void save()} />
           </View>
@@ -150,14 +162,14 @@ export function WebMealTimesScreen() {
           <View style={{ flexDirection: "row", marginBottom: 6 }}>
             <View style={{ width: 96 }} />
             {days.map((d) => (
-              <Text key={d} style={{ flex: 1, textAlign: "center", fontSize: 12, fontWeight: "700", color: WEB.muted }}>
+              <Text key={d} style={{ flex: 1, textAlign: "center", fontSize: 12, fontWeight: "700", color: c.muted }}>
                 {WEEKDAYS_SHORT[d]}
               </Text>
             ))}
           </View>
           {MEAL_TYPES.map((type) => (
             <View key={type.value} style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
-              <Text style={{ width: 96, fontSize: 14, fontWeight: "600", color: WEB.text }}>{type.label}</Text>
+              <Text style={{ width: 96, fontSize: 14, fontWeight: "600", color: c.text }}>{type.label}</Text>
               {days.map((d) => {
                 const time = times[type.value][d];
                 const on = meal === type.value && day === d;
@@ -175,14 +187,14 @@ export function WebMealTimesScreen() {
                       marginHorizontal: 3,
                       alignItems: "center",
                       justifyContent: "center",
-                      borderRadius: 10,
+                      borderRadius: 12,
                       borderWidth: on ? 2 : 1,
                       borderStyle: time ? "solid" : "dashed",
-                      borderColor: on ? WEB.blue : WEB.border,
-                      backgroundColor: time ? (hovered || on ? WEB.blueSoft : WEB.page) : hovered ? WEB.page : "transparent",
+                      borderColor: on ? c.ink : c.border,
+                      backgroundColor: time ? (hovered || on ? TINT : c.canvas) : hovered ? c.canvas : "transparent",
                     })}
                   >
-                    <Text style={{ fontSize: 12, fontWeight: time ? "600" : "400", color: time ? WEB.text : WEB.faint }}>{time ? `${minutesLabel(time.start)}–${minutesLabel(time.end)}` : "—"}</Text>
+                    <Text style={{ fontSize: 12, fontWeight: time ? "600" : "400", color: time ? c.text : c.faint }}>{time ? `${minutesLabel(time.start)}–${minutesLabel(time.end)}` : "—"}</Text>
                   </Pressable>
                 );
               })}
@@ -191,8 +203,8 @@ export function WebMealTimesScreen() {
         </View>
 
         {/* The cell picked above. */}
-        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 10, paddingHorizontal: 18, paddingVertical: 14, borderTopWidth: 1, borderTopColor: WEB.border, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, backgroundColor: WEB.page }}>
-          <Text style={{ minWidth: 170, fontSize: 14, fontWeight: "700", color: WEB.text }}>
+        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 10, paddingHorizontal: 18, paddingVertical: 14, borderTopWidth: 1, borderTopColor: c.border, borderBottomLeftRadius: 17, borderBottomRightRadius: 17, backgroundColor: c.canvas }}>
+          <Text style={{ minWidth: 170, fontSize: 14, fontWeight: "700", color: c.text }}>
             {mealLabel(meal)} · {WEEKDAYS_FULL[day]}
           </Text>
           {current ? (
@@ -202,9 +214,9 @@ export function WebMealTimesScreen() {
                 // (The length is kept.)
                 onChange={(start) => setDayTime(meal, [day], { start: Math.min(start, 1425), end: Math.min(1440, Math.min(start, 1425) + (current.end - current.start)) })}
               />
-              <Text style={{ fontSize: 13, color: WEB.muted }}>to</Text>
+              <Text style={{ fontSize: 13, color: c.muted }}>to</Text>
               <TimeField minutes={current.end} after={current.start} label="Ends" onChange={(end) => setDayTime(meal, [day], { start: current.start, end })} />
-              <Text style={{ fontSize: 13, color: WEB.muted }}>{durationLabel(current.end - current.start)}</Text>
+              <Text style={{ fontSize: 13, color: c.muted }}>{durationLabel(current.end - current.start)}</Text>
               <View style={{ flex: 1 }} />
               <Button label="Copy to every day" small onPress={() => setDayTime(meal, [0, 1, 2, 3, 4, 5, 6], current)} />
               <Button label="Copy to weekdays" small onPress={() => setDayTime(meal, [1, 2, 3, 4, 5], current)} />
@@ -212,7 +224,7 @@ export function WebMealTimesScreen() {
             </>
           ) : (
             <>
-              <Text style={{ flex: 1, fontSize: 13, color: WEB.muted }}>
+              <Text style={{ flex: 1, fontSize: 13, color: c.muted }}>
                 No {mealLabel(meal).toLowerCase()} block on {WEEKDAYS_FULL[day]}s.
               </Text>
               {/* Starts from another day's time for this meal, if any. */}
@@ -225,7 +237,7 @@ export function WebMealTimesScreen() {
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 16, marginTop: 16 }}>
         <Card title="Run until" subtitle="A last day for all the regular times" style={{ width: 340 }}>
           <DateField value={until} onChange={setUntil} placeholder="No end date" weekStartDay={weekStartDay} />
-          <Text style={{ marginTop: 10, fontSize: 12, lineHeight: 17, color: WEB.muted }}>
+          <Text style={{ marginTop: 10, fontSize: 12, lineHeight: 17, color: c.muted }}>
             {until ? "Every meal's regular time stops after this day. Saved with the times above." : "With no end date they run on. Any single day you've edited or skipped in the calendar stays as it is."}
           </Text>
         </Card>
@@ -234,19 +246,19 @@ export function WebMealTimesScreen() {
           {MEAL_TYPES.map((type) => {
             const list = usuals.filter((u) => u.slot === type.value);
             return (
-              <View key={type.value} style={{ borderTopWidth: 1, borderTopColor: WEB.border, paddingHorizontal: 18, paddingVertical: 10 }}>
+              <View key={type.value} style={{ borderTopWidth: 1, borderTopColor: c.border, paddingHorizontal: 18, paddingVertical: 10 }}>
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <Text style={{ flex: 1, fontSize: 13, fontWeight: "700", color: WEB.text }}>{type.label}</Text>
+                  <Text style={{ flex: 1, fontSize: 13, fontWeight: "700", color: c.text }}>{type.label}</Text>
                   <Button label="Add" icon="add" small onPress={() => chooseUsual(type.value)} />
                 </View>
-                {list.length === 0 && <Text style={{ marginTop: 2, fontSize: 12, color: WEB.faint }}>Nothing usual yet.</Text>}
+                {list.length === 0 && <Text style={{ marginTop: 2, fontSize: 12, color: c.faint }}>Nothing usual yet.</Text>}
                 {list.map((usual) => (
                   <View key={usual._id} style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
-                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, color: usual.active ? WEB.text : WEB.faint }}>
+                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, color: usual.active ? c.text : c.faint }}>
                       {usualName(usual)}
                     </Text>
-                    <Pressable onPress={() => setEditingDays(usual)} accessibilityLabel={`Days for ${usualName(usual)}`} style={({ hovered }: Hover) => ({ height: 28, paddingHorizontal: 10, justifyContent: "center", borderRadius: 8, backgroundColor: hovered ? WEB.blueSoft : "transparent" })}>
-                      <Text style={{ fontSize: 12, fontWeight: "600", color: WEB.blue }}>
+                    <Pressable onPress={() => setEditingDays(usual)} accessibilityLabel={`Days for ${usualName(usual)}`} style={hoverable(({ hovered }: Hover) => ({ height: 28, paddingHorizontal: 10, justifyContent: "center", borderRadius: 10, backgroundColor: hovered ? TINT : "transparent" }))}>
+                      <Text style={{ fontSize: 12, fontWeight: "600", color: c.ink }}>
                         {daysLabel(usual.weekdays)}
                         {usual.active ? "" : " · off"}
                       </Text>
@@ -257,9 +269,9 @@ export function WebMealTimesScreen() {
                         updateUsualMeal(usual._id, { active: !usual.active }).then(loadUsuals, usualFail);
                       }}
                       accessibilityLabel={usual.active ? "Switch off" : "Switch on"}
-                      style={{ marginLeft: 6, width: 38, height: 22, justifyContent: "center", borderRadius: 11, paddingHorizontal: 3, backgroundColor: usual.active ? WEB.blue : "#CBD5E1" }}
+                      style={{ marginLeft: 6, width: 38, height: 22, justifyContent: "center", borderRadius: 11, paddingHorizontal: 3, backgroundColor: usual.active ? c.ink : c.orbit }}
                     >
-                      <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: "#FFFFFF", transform: [{ translateX: usual.active ? 16 : 0 }] }} />
+                      <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: KNOB, transform: [{ translateX: usual.active ? 16 : 0 }] }} />
                     </Pressable>
                     <Pressable
                       onPress={() =>
@@ -271,7 +283,7 @@ export function WebMealTimesScreen() {
                       accessibilityLabel={`Stop having ${usualName(usual)}`}
                       style={({ hovered }: Hover) => ({ marginLeft: 6, width: 28, height: 28, alignItems: "center", justifyContent: "center", borderRadius: 8, backgroundColor: hovered ? "#FEE2E2" : "transparent" })}
                     >
-                      <Ionicons name="trash-outline" size={15} color={WEB.red} />
+                      <Ionicons name="trash-outline" size={15} color={c.danger} />
                     </Pressable>
                   </View>
                 ))}
@@ -327,6 +339,7 @@ export function WebMealTimesScreen() {
 
 export function WebSessionsScreen({ kind }: { kind: KitchenKind }) {
   const router = useRouter();
+  const { colors: c } = useOrbitTheme();
   const session = SESSION_TYPES.find((s) => s.value === kind)!;
   const plural = kind === "prep" ? "Prep sessions" : "Shopping trips";
   const today = todayStr();
@@ -417,23 +430,23 @@ export function WebSessionsScreen({ kind }: { kind: KitchenKind }) {
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 16 }}>
         <Card title="Regular times" subtitle="Click one to change it. A single day can still be moved or skipped in the calendar." style={{ flex: 1 }} padded={false}>
           {series == null ? (
-            <ActivityIndicator style={{ marginVertical: 24 }} color={WEB.blue} />
+            <ActivityIndicator style={{ marginVertical: 24 }} color={c.muted} />
           ) : series.length === 0 ? (
-            <Text style={{ paddingHorizontal: 18, paddingBottom: 18, fontSize: 13, lineHeight: 19, color: WEB.muted }}>None yet. Set one up here, or book single {plural.toLowerCase()} from the Kitchen week plan.</Text>
+            <Text style={{ paddingHorizontal: 18, paddingBottom: 18, fontSize: 13, lineHeight: 19, color: c.muted }}>None yet. Set one up here, or book single {plural.toLowerCase()} from the Kitchen week plan.</Text>
           ) : (
             series.map((item) => (
               <Pressable
                 key={item._id}
                 onPress={() => edit(editing?._id === item._id ? null : item)}
                 accessibilityLabel={`Change the ${minutesLabel(item.startMinutes)} regular time`}
-                style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 12, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: editing?._id === item._id ? WEB.blueSoft : hovered ? WEB.page : "transparent" })}
+                style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 12, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: editing?._id === item._id ? TINT : hovered ? c.canvas : "transparent" })}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: "600", color: WEB.text }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: c.text }}>
                     {minutesLabel(item.startMinutes)}–{minutesLabel(item.endMinutes)}
-                    <Text style={{ fontWeight: "400", color: WEB.muted }}> · {durationLabel(item.endMinutes - item.startMinutes)}</Text>
+                    <Text style={{ fontWeight: "400", color: c.muted }}> · {durationLabel(item.endMinutes - item.startMinutes)}</Text>
                   </Text>
-                  <Text style={{ marginTop: 2, fontSize: 12, color: WEB.blue }}>
+                  <Text style={{ marginTop: 2, fontSize: 12, color: c.ink }}>
                     {repeatLabel(item.repeat ?? null, item.date)}
                     {item.repeat?.until ? "" : " · no end"}
                   </Text>
@@ -448,7 +461,7 @@ export function WebSessionsScreen({ kind }: { kind: KitchenKind }) {
                   accessibilityLabel="Remove this regular time"
                   style={({ hovered }: Hover) => ({ width: 32, height: 32, alignItems: "center", justifyContent: "center", borderRadius: 8, backgroundColor: hovered ? "#FEE2E2" : "transparent" })}
                 >
-                  <Ionicons name="trash-outline" size={16} color={WEB.red} />
+                  <Ionicons name="trash-outline" size={16} color={c.danger} />
                 </Pressable>
               </Pressable>
             ))
@@ -471,9 +484,9 @@ export function WebSessionsScreen({ kind }: { kind: KitchenKind }) {
                 setStart(next);
               }}
             />
-            <Text style={{ fontSize: 13, color: WEB.muted }}>to</Text>
+            <Text style={{ fontSize: 13, color: c.muted }}>to</Text>
             <TimeField minutes={end} after={start} label="Ends" onChange={setEnd} />
-            <Text style={{ fontSize: 13, color: WEB.muted }}>{durationLabel(end - start)}</Text>
+            <Text style={{ fontSize: 13, color: c.muted }}>{durationLabel(end - start)}</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 }}>
             <Label>Until</Label>
@@ -493,15 +506,15 @@ export function WebSessionsScreen({ kind }: { kind: KitchenKind }) {
               value={times}
               onChangeText={(text) => setTimes(text.replace(/[^0-9]/g, ""))}
               placeholder="–"
-              placeholderTextColor={WEB.faint}
+              placeholderTextColor={c.faint}
               inputMode="numeric"
               accessibilityLabel="Number of times"
-              style={{ width: 60, height: 36, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1, borderColor: WEB.border, fontSize: 14, color: WEB.text, textAlign: "center" }}
+              style={{ width: 60, height: 36, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1, borderColor: c.border, fontSize: 14, color: c.text, textAlign: "center" }}
             />
-            <Text style={{ fontSize: 13, color: WEB.muted }}>times</Text>
+            <Text style={{ fontSize: 13, color: c.muted }}>times</Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", marginTop: 18 }}>
-            <Text style={{ flex: 1, fontSize: 12, color: WEB.muted }}>
+            <Text style={{ flex: 1, fontSize: 12, color: c.muted }}>
               {days.length ? `${daysLabel(days)} · ${count ? `${count} time${count === 1 ? "" : "s"}` : until ? "until the date above" : "no end"}` : "Pick the days of the week"}
             </Text>
             {editing && <Button label="Cancel" onPress={() => edit(null)} />}

@@ -71,12 +71,12 @@ const LOAD_RETRY_MS = 2500;
 // pulls down into the month, Day / 3-Day time grids (drag on empty time to
 // create an event), Month and Agenda views, and a drawer of calendars.
 export default function CalendarScreen() {
-  // A desktop browser gets its own layout; the phone screen is below, in
-  // Orbit's look in the Calendar's blue (the desktop keeps its own look).
+  // A desktop browser gets its own layout; the phone screen is below. Both
+  // in Orbit's look, in the Calendar's blue.
   const wide = useWideWeb();
   return (
     <OrbitSection section="calendar">
-      <OrbitPage on={!wide}>{wide ? <WebCalendarScreen /> : <PhoneCalendarScreen />}</OrbitPage>
+      <OrbitPage>{wide ? <WebCalendarScreen /> : <PhoneCalendarScreen />}</OrbitPage>
     </OrbitSection>
   );
 }

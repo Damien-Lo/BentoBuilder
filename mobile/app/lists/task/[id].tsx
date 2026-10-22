@@ -11,8 +11,8 @@ import { useWideWeb } from "@/src/utils/useWideWeb";
 // as a card over this one (and a sub-subtask as a second, smaller card), so it's always clear how deep you are and what you came from.
 // `open` (a subtask id) starts with that subtask's sheet showing — how the
 // calendar opens a subtask.
-// On a phone in Orbit's look, in the Tasks section's violet; in a desktop
-// browser as it was.
+// In Orbit's look, in the Tasks section's violet — in a desktop browser
+// too, as a page of a comfortable reading width on the canvas.
 export default function TodoTaskScreen() {
   return (
     <OrbitSection section="tasks">
@@ -26,7 +26,7 @@ function TodoTaskPage() {
   const insets = useSafeAreaInsets();
   const wide = useWideWeb();
   const { colors } = useOrbitTheme();
-  const o = wide ? null : colors;
+  const o = colors;
   const { id, open } = useLocalSearchParams<{ id: string; open?: string }>();
   // The sheet levels showing, outermost first (subtask, then sub-subtask).
   const [stack, setStack] = useState<string[]>(open ? [open] : []);
@@ -45,8 +45,10 @@ function TodoTaskPage() {
   const top = stack[stack.length - 1];
 
   return (
-    <OrbitPage on={!!o}>
-      {/* (In a desktop browser: a page of a comfortable reading width.) */}
+    <OrbitPage>
+      {/* (In a desktop browser: a page of a comfortable reading width, on
+          the canvas, a little down from the top.) */}
+      <View style={wide ? { flex: 1, backgroundColor: o.canvas, paddingTop: 16 } : { flex: 1 }}>
       <View style={wide ? { flex: 1, width: "100%", maxWidth: 900, alignSelf: "center" } : { flex: 1 }}>
       <TaskDetail
         id={id}
@@ -57,6 +59,7 @@ function TodoTaskPage() {
         onOpenParent={(parentId) => router.replace({ pathname: "/lists/task/[id]", params: { id: parentId } })}
         onExit={() => router.back()}
       />
+      </View>
       </View>
 
       <Modal visible={stack.length > 0} transparent animationType="fade" onRequestClose={pop}>

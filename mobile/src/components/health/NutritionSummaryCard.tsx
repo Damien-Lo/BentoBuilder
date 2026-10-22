@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { hexToRgba, pct, type DayNutrition } from "@/src/utils/mealPlan";
 import type { CoreNutritionField } from "@/src/types/nutrition";
 import { nutrientColor } from "@/src/theme/nutrients";
+import type { OrbitColors } from "@/src/theme/orbit";
 
 // Core-only on purpose — this card is the "main 6" summary; extended
 // nutrients (and any goals for them) belong to the secondary all-nutrients
@@ -14,23 +15,30 @@ export type NutritionLimits = Record<CoreNutritionField, number | null>;
 // continuing on from it. Used by the planner's day/week pages and by the
 // Health tab's Nutrition and Weekly Report pages, so all three read as the
 // same visual language.
+// (`orbit`: in Orbit's look, in these colours — the Weekly Report in a
+// desktop browser: its card, and calories in their own colour, the number
+// red when over rather than the bar.)
 export function NutritionSummaryCard({
   title,
   subtitle,
   confirmed,
   planned,
   limits,
+  orbit: o,
 }: {
   title: string;
   subtitle?: string;
   confirmed: DayNutrition;
   planned: DayNutrition;
   limits: NutritionLimits;
+  orbit?: OrbitColors | null;
 }) {
   const confirmedCalPct = pct(confirmed.calories, limits.calories);
   const totalCalPct = pct(confirmed.calories + planned.calories, limits.calories);
   const plannedCalSegment = Math.max(totalCalPct - confirmedCalPct, 0);
   const calOverLimit = confirmedCalPct >= 1;
+  const calBar = o ? nutrientColor("calories") : calOverLimit ? "#F87171" : "#3B82F6";
+  const track = o ? { backgroundColor: o.track } : undefined;
 
   const macros = [
     { label: "Protein", confirmedValue: confirmed.protein, plannedValue: planned.protein, unit: "g", limit: limits.protein, bar: nutrientColor("protein") },
@@ -42,7 +50,7 @@ export function NutritionSummaryCard({
   const hasSodiumData = confirmed.sodium > 0 || planned.sodium > 0 || limits.sodium != null;
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o ? { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 } : undefined}>
       {/* Calories row */}
       <View className="border-b border-slate-100 px-5 pb-4 pt-4">
         <View className="flex-row items-center justify-between">
@@ -55,7 +63,7 @@ export function NutritionSummaryCard({
         </View>
         <View className="mt-2 flex-row items-end justify-between">
           <View className="flex-row items-end">
-            <Text className="text-4xl font-bold text-slate-900">
+            <Text className="text-4xl font-bold text-slate-900" style={o ? { color: calOverLimit ? o.danger : o.text, fontWeight: "800", letterSpacing: -0.5 } : undefined}>
               {confirmed.calories}
             </Text>
             {planned.calories > 0 && (
@@ -72,9 +80,9 @@ export function NutritionSummaryCard({
           )}
         </View>
         {limits.calories != null && (
-          <View className="mt-2 h-2 w-full flex-row overflow-hidden rounded-full bg-slate-100">
-            <View style={{ width: `${confirmedCalPct * 100}%`, backgroundColor: calOverLimit ? "#F87171" : "#3B82F6" }} />
-            <View style={{ width: `${plannedCalSegment * 100}%`, backgroundColor: hexToRgba(calOverLimit ? "#F87171" : "#3B82F6", 0.35) }} />
+          <View className="mt-2 h-2 w-full flex-row overflow-hidden rounded-full bg-slate-100" style={track}>
+            <View style={{ width: `${confirmedCalPct * 100}%`, backgroundColor: calBar }} />
+            <View style={{ width: `${plannedCalSegment * 100}%`, backgroundColor: hexToRgba(calBar, 0.35) }} />
           </View>
         )}
       </View>
@@ -97,7 +105,7 @@ export function NutritionSummaryCard({
               </Text>
               <Text className="mt-0.5 text-xs text-slate-400">{label}</Text>
               {limit != null && (
-                <View className="mt-2 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100">
+                <View className="mt-2 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100" style={track}>
                   <View style={{ height: 6, width: `${confirmedF * 100}%`, backgroundColor: bar }} />
                   <View style={{ height: 6, width: `${plannedSegment * 100}%`, backgroundColor: hexToRgba(bar, 0.35) }} />
                 </View>
@@ -131,7 +139,7 @@ export function NutritionSummaryCard({
                   </Text>
                 </View>
                 {limits.sodium != null && (
-                  <View className="mt-1.5 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100">
+                  <View className="mt-1.5 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100" style={track}>
                     <View style={{ height: 6, width: `${confirmedF * 100}%`, backgroundColor: nutrientColor("sodium") }} />
                     <View style={{ height: 6, width: `${plannedSegment * 100}%`, backgroundColor: hexToRgba(nutrientColor("sodium"), 0.35) }} />
                   </View>

@@ -54,9 +54,9 @@ import { hexToRgba, parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
 // One event, as Outlook's event page shows it: the summary card (title,
 // date, time, repeat), then location / notes / reminder, then delete. `date`
-// is the occurrence that was tapped (for a repeating event). In the
-// Calendar's colours, and on a phone in Orbit's look; a desktop browser
-// keeps its own.
+// is the occurrence that was tapped (for a repeating event). In Orbit's
+// look, in the Calendar's colours — in a desktop browser too, with what the
+// event is for beside it.
 export default function CalendarEventScreen() {
   return (
     <OrbitSection section="calendar">
@@ -78,9 +78,8 @@ function CalendarEventPage() {
   const [loadedFood, setFood] = useState<{ entries: MealPlanEntry[]; conversions: CustomUnitConversion[]; day: string; slot: MealType } | null | undefined>(undefined);
   const kitchenPlan = usePlanNeeds();
   const wide = useWideWeb();
-  // (On a phone, in Orbit's colours; null in a desktop browser.)
-  const { colors, dark } = useOrbitTheme();
-  const o = wide ? null : colors;
+  // (In Orbit's colours, on a phone and in a desktop browser.)
+  const { colors: o, dark } = useOrbitTheme();
   const food = useMemo<MealFood | null | undefined>(
     () => (loadedFood ? (buildMealFood(kitchenPlan.sized(loadedFood.entries), loadedFood.conversions).get(mealKey(loadedFood.day, loadedFood.slot)) ?? null) : loadedFood),
     [loadedFood, kitchenPlan],
@@ -175,8 +174,8 @@ function CalendarEventPage() {
     );
   }
 
-  // (Orbit's look, on a phone: a card, a hairline, and the soft red of
-  // something to delete.)
+  // (Orbit's look: a card, a hairline, and the soft red of something to
+  // delete.)
   const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 };
   const line = o && { borderColor: o.border };
   const dangerTint = dark ? "rgba(248,113,113,0.14)" : "#FEF2F2";
@@ -411,64 +410,40 @@ function CalendarEventPage() {
   );
 
   return (
-    <OrbitPage on={!wide}>
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : o && { backgroundColor: o.canvas }}>
-      {/* Nav bar: on a phone round buttons on the page itself (the title's
-          the large one in the page); in a desktop browser its own bar */}
-      {o ? (
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingTop: 4 }}>
-          <Tap onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
-            <Ionicons name="chevron-back" size={22} color={o.text} />
-          </Tap>
-          <View style={{ flex: 1 }} />
-          <Tap onPress={startEdit} accessibilityLabel="Edit event" style={{ height: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, borderRadius: 20, backgroundColor: o.ink }} pressedStyle={{ opacity: 0.8 }}>
-            <Ionicons name="create-outline" size={17} color={o.onInk} />
-            <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>Edit</Text>
-          </Tap>
-        </View>
-      ) : (
-      <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-2.5">
-        <Pressable onPress={() => router.back()} className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100">
-          <Ionicons name="chevron-back" size={26} color="#0F172A" />
-        </Pressable>
-        <View className="ml-1 flex-1 items-center">
-          <Text className="text-base font-bold text-slate-950" numberOfLines={1}>
-            {calendar?.name ?? "Calendar"}
-          </Text>
-        </View>
-        <Pressable
-          onPress={startEdit}
-          accessibilityLabel="Edit event"
-          className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
-        >
-          <Ionicons name="create-outline" size={23} color="#2563EB" />
-        </Pressable>
+    <OrbitPage>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={[{ backgroundColor: o.canvas }, wide && { width: "100%", maxWidth: 1180, alignSelf: "center" }]}>
+      {/* Nav bar: round buttons on the page itself (the title's the large
+          one in the page) */}
+      <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingTop: 4 }}>
+        <Tap onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+          <Ionicons name="chevron-back" size={22} color={o.text} />
+        </Tap>
+        <View style={{ flex: 1 }} />
+        <Tap onPress={startEdit} accessibilityLabel="Edit event" style={{ height: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, borderRadius: 20, backgroundColor: o.ink }} pressedStyle={{ opacity: 0.8 }}>
+          <Ionicons name="create-outline" size={17} color={o.onInk} />
+          <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>Edit</Text>
+        </Tap>
       </View>
-      )}
 
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingTop: o ? 12 : 16, paddingBottom: 48 }}>
-        {/* (On a phone: the event's title as the page's large one, and its
-            calendar under it.) */}
-        {o && (
-          <View style={{ marginBottom: 16 }}>
-            <Text style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>{event.title}</Text>
-            <View style={{ marginTop: 6, flexDirection: "row", alignItems: "center" }}>
-              <View style={{ width: 10, height: 10, borderRadius: 5, marginRight: 8, backgroundColor: color }} />
-              <Text style={{ fontSize: 14, fontWeight: "600", color: o.muted }}>{calendar?.name ?? "Calendar"}</Text>
-            </View>
+      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingTop: 12, paddingBottom: 48 }}>
+        {/* The event's title as the page's large one, and its calendar under it. */}
+        <View style={{ marginBottom: 16 }}>
+          <Text style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>{event.title}</Text>
+          <View style={{ marginTop: 6, flexDirection: "row", alignItems: "center" }}>
+            <View style={{ width: 10, height: 10, borderRadius: 5, marginRight: 8, backgroundColor: color }} />
+            <Text style={{ fontSize: 14, fontWeight: "600", color: o.muted }}>{calendar?.name ?? "Calendar"}</Text>
           </View>
-        )}
+        </View>
         {/* (In a desktop browser: what the event is on the left, what it's
             for — the food, or the session's prep and shopping — on the right.) */}
         <View style={wide ? { flexDirection: "row", alignItems: "flex-start", gap: 16 } : undefined}>
           <View style={wide ? { flex: 2, minWidth: 0 } : undefined}>
         {/* Summary */}
         <View className="mb-3 flex-row rounded-3xl border border-slate-200 bg-white p-4" style={card}>
-          <View className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: hexToRgba(color, o && dark ? 0.22 : 0.15) }}>
+          <View className="h-10 w-10 items-center justify-center rounded-full" style={{ backgroundColor: hexToRgba(color, dark ? 0.22 : 0.15) }}>
             <View className="h-4 w-4 rounded-full" style={{ backgroundColor: color }} />
           </View>
           <View className="ml-3 flex-1" style={o && { justifyContent: "center" }}>
-            {!o && <Text className="text-xl font-bold text-slate-950">{event.title}</Text>}
             <Text className="mt-1.5 text-base text-slate-700" style={o && { marginTop: 0, fontWeight: "600", color: o.text }}>{longDateLabel(occurrence)}</Text>
             {event.allDay ? (
               <Text className="mt-0.5 text-base text-slate-500" style={o && { color: o.muted }}>

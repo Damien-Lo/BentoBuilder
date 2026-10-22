@@ -162,7 +162,7 @@ export function ResolveIngredientSourcesModal({
       <View className="flex-1 items-center justify-center bg-black/40 px-6" style={o && { backgroundColor: o.scrim, paddingHorizontal: 16 }}>
         <Pressable className="absolute inset-0" onPress={onCancel} />
 
-        <View className="max-h-[85%] w-full rounded-3xl bg-white" style={o && { backgroundColor: o.canvas, borderRadius: 28, overflow: "hidden" }}>
+        <View className="max-h-[85%] w-full rounded-3xl bg-white" style={[{ maxWidth: 560, alignSelf: "center" }, o && { backgroundColor: o.canvas, borderRadius: 28, overflow: "hidden" }]}>
           <ScrollView contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
             <Text className="text-lg font-bold text-slate-950" style={o && { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: o.text }}>Confirm what you used</Text>
             <Text className="mt-0.5 mb-5 text-sm text-slate-400" style={o && { lineHeight: 19, color: o.muted }}>

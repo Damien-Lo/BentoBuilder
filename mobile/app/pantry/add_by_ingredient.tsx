@@ -44,6 +44,8 @@ import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { useWideForm } from "@/src/components/forms/wideForm";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { Tap } from "@/src/components/ui/Tap";
+import { WebFormHeader } from "@/src/components/ingredients/web/WebFormHeader";
+import { Button } from "@/src/components/web/ui";
 import { OrbitPage, OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { addDurationToDate, todayDateInputString } from "@/src/utils/date";
 import {
@@ -232,11 +234,12 @@ function AddPantryItemByIngredient() {
   // default to 0 and don't need to be listed here). Store is the only
   // dropdown-capable field on this page.
   const layout = useWideForm();
-  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
-  // desktop browser keeps the desktop's for now. The cards, fields,
-  // dropdowns and toggle in it follow by themselves (OrbitPage).
+  // In Orbit's look, light or dark (`o`: its colours) — on a phone, and in
+  // a desktop browser with the desktop's own header and two columns. The
+  // cards, fields, dropdowns and toggle in it follow by themselves
+  // (OrbitPage).
   const { colors } = useOrbitTheme();
-  const o = layout.wide ? null : colors;
+  const o = colors;
   const field = o && { backgroundColor: o.surface, borderColor: o.border };
   const scrollRef = useRef<ScrollView>(null);
   const scrollAnchorRef = useRef<View>(null);
@@ -617,7 +620,7 @@ function AddPantryItemByIngredient() {
   }
 
   return (
-    <OrbitPage on={!!o}>
+    <OrbitPage>
     <SafeAreaView className="flex-1 bg-slate-50" style={o && { backgroundColor: o.canvas }}>
       <KeyboardAvoidingView
         className="flex-1"
@@ -625,7 +628,7 @@ function AddPantryItemByIngredient() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header (phone): the way back over a large title, on the page itself */}
-        {o ? (
+        {!layout.wide ? (
           <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4 }}>
               <Tap onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
@@ -638,25 +641,12 @@ function AddPantryItemByIngredient() {
             </Text>
           </View>
         ) : (
-          // Header
-          <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-            <Pressable
-              className="h-11 w-11 items-center justify-center rounded-full"
-              onPress={() => router.back()}
-            >
-              <Ionicons name="chevron-back" size={26} color="#0F172A" />
-            </Pressable>
-
-            <View className="ml-2 flex-1">
-              <Text className="text-xl font-bold text-slate-950">
-                Add to pantry
-              </Text>
-
-              <Text className="text-sm text-slate-500">
-                {locationName ? `Storing in ${locationName}` : "Choose an existing ingredient"}
-              </Text>
-            </View>
-          </View>
+          // (Desktop: the title beside the way back.)
+          <WebFormHeader
+            title="Add to pantry"
+            subtitle={locationName ? `Storing in ${locationName}` : "Choose an existing ingredient"}
+            onBack={() => router.back()}
+          />
         )}
 
         {!selectedIngredient ? (
@@ -1098,39 +1088,27 @@ function AddPantryItemByIngredient() {
             </View>
           </ScrollView>
 
-            <View className="pb-6 pt-4" style={layout.actions}>
-              {o ? (
-                <Tap
-                  disabled={saving}
-                  onPress={() => void handleSave()}
-                  style={{ height: 56, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }}
-                  pressedStyle={{ opacity: 0.85 }}
-                >
-                  {saving ? (
-                    <ActivityIndicator color={o.onInk} />
-                  ) : (
-                    <Text style={{ fontSize: 16, fontWeight: "700", color: o.onInk }}>Add to pantry</Text>
-                  )}
-                </Tap>
-              ) : (
-                <Pressable
-                  disabled={saving}
-                  className={`items-center justify-center rounded-2xl ${
-                    saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
-                  }`}
-                  style={{ height: 56 }}
-                  onPress={() => void handleSave()}
-                >
-                  {saving ? (
-                    <ActivityIndicator color="white" />
-                  ) : (
-                    <Text className="text-base font-bold text-white">
-                      Add to pantry
-                    </Text>
-                  )}
-                </Pressable>
-              )}
+            {layout.wide ? (
+              // (Desktop: at a button's size, under the columns' right.)
+              <View style={{ flexDirection: "row", justifyContent: "flex-end", paddingTop: 16, paddingBottom: 24 }}>
+                <Button label={saving ? "Adding..." : "Add to pantry"} icon="add" kind="primary" onPress={() => !saving && void handleSave()} />
+              </View>
+            ) : (
+            <View className="pb-6 pt-4">
+              <Tap
+                disabled={saving}
+                onPress={() => void handleSave()}
+                style={{ height: 56, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }}
+                pressedStyle={{ opacity: 0.85 }}
+              >
+                {saving ? (
+                  <ActivityIndicator color={o.onInk} />
+                ) : (
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: o.onInk }}>Add to pantry</Text>
+                )}
+              </Tap>
             </View>
+            )}
           </View>
         )}
       </KeyboardAvoidingView>

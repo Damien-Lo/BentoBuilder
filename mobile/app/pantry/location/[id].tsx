@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Pressable,
   Text,
   View,
 } from "react-native";
@@ -23,6 +22,8 @@ import type { PantryItem } from "@/src/types/pantry";
 import { daysUntil, formatDateDisplay } from "@/src/utils/date";
 import { useWideForm } from "@/src/components/forms/wideForm";
 import { Tap } from "@/src/components/ui/Tap";
+import { WebFormHeader } from "@/src/components/ingredients/web/WebFormHeader";
+import { Button } from "@/src/components/web/ui";
 import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 
 function getIngredientName(item: PantryItem): string {
@@ -80,11 +81,16 @@ function LocationDetail() {
   const [splittingItem, setSplittingItem] = useState<PantryItem | null>(null);
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
   const layout = useWideForm();
-  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
-  // desktop browser keeps the desktop's for now. The item cards and the
-  // split sheet follow by themselves (OrbitPage).
+  // In Orbit's look, light or dark (`o`: its colours) — on a phone, and in
+  // a desktop browser with the desktop's own header and a grid of cards.
+  // The item cards and the split sheet follow by themselves (OrbitPage).
   const { colors, dark } = useOrbitTheme();
-  const o = layout.wide ? null : colors;
+  const o = colors;
+  const addHere = () =>
+    router.push({
+      pathname: "/pantry/add_by_ingredient",
+      params: { locationId: id, locationName: name },
+    });
   // Soft tints behind a badge, in either theme.
   const tint = (light: string, darkTint: string) => (dark ? darkTint : light);
 
@@ -183,11 +189,13 @@ function LocationDetail() {
   }
 
   return (
-    <OrbitPage on={!!o}>
-    <SafeAreaView className="flex-1 bg-slate-50" style={[layout.page, o && { backgroundColor: o.canvas }]} edges={o ? ["top", "left", "right"] : undefined}>
+    <OrbitPage>
+    {/* (The canvas the whole width; the page itself held to a column.) */}
+    <View style={{ flex: 1, backgroundColor: o.canvas }}>
+    <SafeAreaView className="flex-1 bg-slate-50" style={[layout.page, { backgroundColor: o.canvas }]} edges={["top", "left", "right"]}>
       {/* Header (phone): the way back and the add button over a large
           title, on the page itself */}
-      {o ? (
+      {!layout.wide ? (
         <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
           <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4 }}>
             <Tap onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
@@ -216,36 +224,13 @@ function LocationDetail() {
           </Text>
         </View>
       ) : (
-        // Nav bar
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          <Pressable
-            className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-back" size={26} color="#0F172A" />
-          </Pressable>
-
-          <View className="ml-2 flex-1">
-            <Text className="text-xl font-bold text-slate-950" numberOfLines={1}>
-              {name ?? "Location"}
-            </Text>
-            <Text className="text-sm text-slate-500">
-              {items.length} {items.length === 1 ? "item" : "items"}
-            </Text>
-          </View>
-
-          <Pressable
-            className="h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 active:bg-blue-700"
-            onPress={() =>
-              router.push({
-                pathname: "/pantry/add_by_ingredient",
-                params: { locationId: id, locationName: name },
-              })
-            }
-          >
-            <Ionicons name="add" size={26} color="white" />
-          </Pressable>
-        </View>
+        // (Desktop: the name beside the way back, Add on the right.)
+        <WebFormHeader
+          title={name ?? "Location"}
+          subtitle={`${items.length} ${items.length === 1 ? "item" : "items"}`}
+          onBack={() => router.back()}
+          right={<Button label="Add item" icon="add" kind="primary" onPress={addHere} />}
+        />
       )}
 
       {isLoading ? (
@@ -263,8 +248,8 @@ function LocationDetail() {
           keyExtractor={(item) => item._id}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingHorizontal: o ? 16 : 20,
-            paddingTop: o ? 16 : 20,
+            paddingHorizontal: 16,
+            paddingTop: 16,
             paddingBottom: 60,
           }}
           ListEmptyComponent={
@@ -280,7 +265,11 @@ function LocationDetail() {
               <Text className="mt-2 text-center text-slate-500" style={o && { color: o.muted }}>
                 Tap + to add your first item to {name ?? "this location"}.
               </Text>
-              {o ? (
+              {layout.wide ? (
+                <View style={{ marginTop: 20 }}>
+                  <Button label="Add item" icon="add" kind="primary" onPress={addHere} />
+                </View>
+              ) : (
                 <Tap
                   onPress={() =>
                     router.push({
@@ -294,19 +283,6 @@ function LocationDetail() {
                   <Ionicons name="add" size={20} color={o.onInk} />
                   <Text style={{ marginLeft: 4, fontSize: 15, fontWeight: "600", color: o.onInk }}>Add item</Text>
                 </Tap>
-              ) : (
-                <Pressable
-                  className="mt-6 flex-row items-center rounded-2xl bg-blue-600 px-5 py-3 active:bg-blue-700"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/pantry/add_by_ingredient",
-                      params: { locationId: id, locationName: name },
-                    })
-                  }
-                >
-                  <Ionicons name="add" size={20} color="white" />
-                  <Text className="ml-1 font-semibold text-white">Add item</Text>
-                </Pressable>
               )}
             </View>
           }
@@ -387,6 +363,7 @@ function LocationDetail() {
         onSplit={handleSplitComplete}
       />
     </SafeAreaView>
+    </View>
     </OrbitPage>
   );
 }

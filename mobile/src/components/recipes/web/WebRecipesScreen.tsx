@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 
 import { PlanRecipeModal } from "@/src/components/recipes/PlanRecipeModal";
@@ -63,6 +63,15 @@ export function WebRecipesScreen() {
   const [groupBy, setGroupBy] = useState<GroupBy>("category");
   const [folded, setFolded] = useState<string[]>([]);
   const [view, setViewState] = useState<View_>(savedView);
+  // The grids' width, so every card is one column wide — a group of one
+  // the same size as the rest.
+  const [gridWidth, setGridWidth] = useState(0);
+  const measureGrid = (e: { nativeEvent: { layout: { width: number } } }) => setGridWidth(e.nativeEvent.layout.width);
+  const columnWidth = (basis: number, gap: number) => {
+    if (!gridWidth) return null;
+    const columns = Math.max(1, Math.floor((gridWidth + gap) / (basis + gap)));
+    return (gridWidth - gap * (columns - 1)) / columns;
+  };
   // Each card's quick actions: on the menu, or onto a day.
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [planning, setPlanning] = useState<Recipe | null>(null);
@@ -244,7 +253,8 @@ export function WebRecipesScreen() {
                   </Pressable>
                 )}
                 {!closed && (
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: view === "photos" ? 18 : 14 }}>
+                  <TileWidth.Provider value={view === "photos" ? columnWidth(250, 18) : columnWidth(270, 14)}>
+                  <View onLayout={measureGrid} style={{ flexDirection: "row", flexWrap: "wrap", gap: view === "photos" ? 18 : 14 }}>
                     {group.recipes.map((recipe) => {
                       const kcal = getRecipeKcal(recipe, 1);
                       const n = recipe.nutrition;
@@ -274,12 +284,14 @@ export function WebRecipesScreen() {
                       );
                     })}
                   </View>
+                  </TileWidth.Provider>
                 )}
               </View>
             );
           })}
 
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 14 }}>
+        <TileWidth.Provider value={columnWidth(270, 14)}>
+        <View onLayout={measureGrid} style={{ flexDirection: "row", flexWrap: "wrap", gap: 14 }}>
           {kind === "meals" &&
             shownMeals.map((meal) => (
               <Tile
@@ -307,6 +319,7 @@ export function WebRecipesScreen() {
               />
             ))}
         </View>
+        </TileWidth.Provider>
 
         {planning && (
           <PlanRecipeModal
@@ -387,6 +400,9 @@ function CardActions({ onMenu, onMenuPress, onPlanPress }: { onMenu: boolean; on
   );
 }
 
+// One column's width in the grid the card is in (null until it's measured).
+const TileWidth = createContext<number | null>(null);
+
 function Tile({
   photo,
   icon,
@@ -413,14 +429,13 @@ function Tile({
   actions?: ReactNode;
 }) {
   const { colors: c } = useOrbitTheme();
+  const width = useContext(TileWidth);
   const shown = lines.filter(Boolean);
   return (
     <Pressable
       onPress={onPress}
       style={hoverable(({ hovered }) => ({
-        flexGrow: 1,
-        flexBasis: 270,
-        maxWidth: 420,
+        ...(width ? { width } : { flexGrow: 1, flexBasis: 270, maxWidth: 420 }),
         minHeight: 138,
         padding: 16,
         borderRadius: 18,
@@ -466,14 +481,13 @@ function Tile({
 // macros underneath.
 function PhotoTile({ photo, title, tag, kcal, macros, facts, onPress, actions }: { photo?: string; title: string; tag?: string; kcal: number | null; macros: Macros | null; facts: string; onPress: () => void; actions?: ReactNode }) {
   const { colors: c } = useOrbitTheme();
+  const width = useContext(TileWidth);
   const uri = photoUri(photo);
   return (
     <Pressable
       onPress={onPress}
       style={hoverable(({ hovered }) => ({
-        flexGrow: 1,
-        flexBasis: 250,
-        maxWidth: 340,
+        ...(width ? { width } : { flexGrow: 1, flexBasis: 250, maxWidth: 340 }),
         borderRadius: 18,
         overflow: "hidden",
         borderWidth: 1,

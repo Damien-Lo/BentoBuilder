@@ -76,7 +76,8 @@ import { MoreNutrientsPanel } from "@/src/components/nutrition/MoreNutrientsPane
 import { addNutrition, divideNutritionTotals, emptyNutritionTotals, scaleNutrition } from "@/src/utils/nutrition";
 import { Tap } from "@/src/components/ui/Tap";
 import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
-import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+import { OrbitPage, OrbitSection, SECTION_PALETTE, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+import { Button, hoverable, IconButton } from "@/src/components/web/ui";
 
 const MEAL_CATEGORY_LABEL: Record<string, string> = {
   breakfast: "Breakfast",
@@ -301,10 +302,10 @@ function RecipeDetail() {
   // not chosen yet). A piece goes into one batch only.
   const wide = useWideWeb();
   const layout = useWideForm();
-  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
-  // desktop browser keeps the desktop's for now.
+  // In Orbit's look (`o`: its colours) — on a phone, light or dark; in a
+  // desktop browser too, in its own columns.
   const { colors, dark } = useOrbitTheme();
-  const o = wide ? null : colors;
+  const o = colors;
   const tint = (light: string, darkTint: string) => (dark ? darkTint : light);
   // From the top bar: on the menu (see services/menuApi.ts), or straight
   // onto a day. `planNotice` says where it went, for a few seconds.
@@ -864,11 +865,13 @@ function RecipeDetail() {
     ]);
   }
 
-  // Orbit pieces the sections share (phone only).
-  const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 20 };
+  // Orbit pieces the sections share.
+  const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: wide ? 18 : 20 };
   const eyebrow = o && { fontSize: 12, letterSpacing: 1.2, color: o.faint };
   const chip = o && { backgroundColor: o.pill };
   const chipText = o && { color: o.onPill };
+  // An icon's well: on a desktop, the Kitchen's pale tint.
+  const well = wide ? { backgroundColor: SECTION_PALETTE.kitchen.tint } : chip;
   const segment = (chosen: boolean) => (o ? { backgroundColor: chosen ? o.ink : o.surface, borderLeftColor: o.border } : undefined);
   const segmentText = (chosen: boolean) => (o ? { color: chosen ? o.onInk : o.muted } : undefined);
 
@@ -887,7 +890,7 @@ function RecipeDetail() {
             </View>
           ) : (
             <View className="flex-row items-start justify-between">
-              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50" style={chip}>
+              <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-50" style={well}>
                 <Ionicons name="book-outline" size={26} color={o?.ink ?? "#2563EB"} />
               </View>
               <Pressable onPress={handlePhoto} disabled={photoBusy} accessibilityLabel="Add photo" className="flex-row items-center rounded-full bg-slate-100 px-3 py-1.5 active:bg-slate-200" style={chip}>
@@ -999,9 +1002,9 @@ function RecipeDetail() {
     <>
         {/* Prepares an ingredient */}
         {producedIngredient && (
-          <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5" style={[card, o && { marginTop: 16 }]}>
+          <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5" style={[card, o && { marginTop: wide ? 0 : 16 }]}>
             <View className="flex-row items-center">
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50" style={chip}>
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50" style={well}>
                 <Ionicons name="flask-outline" size={20} color={o?.ink ?? "#2563EB"} />
               </View>
               <View className="ml-3 flex-1">
@@ -1049,8 +1052,8 @@ function RecipeDetail() {
   );
   const ratingSection = (
     <>
-        {/* Rating */}
-        <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5" style={[card, o && { marginTop: 16 }]}>
+        {/* Rating (on a desktop, at the top of its column unless something's above it) */}
+        <View className="mt-6 rounded-2xl border border-slate-200 bg-white p-5" style={[card, o && { marginTop: wide && !producedIngredient ? 0 : 16 }]}>
           <View className="flex-row items-center justify-between">
             <View>
               <Text className="text-sm font-bold uppercase tracking-wide text-slate-500" style={eyebrow}>
@@ -1233,7 +1236,7 @@ function RecipeDetail() {
                         })
                       }
                     >
-                      <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={chip}>
+                      <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={well}>
                         <Ionicons name="nutrition-outline" size={15} color={o?.ink ?? "#2563EB"} />
                       </View>
 
@@ -1444,11 +1447,11 @@ function RecipeDetail() {
 
   return (
     <OrbitPage on={!!o}>
-    <SafeAreaView className="flex-1 bg-slate-50" style={layout.wide ? { width: "100%", maxWidth: 1180, alignSelf: "center" } : o && { backgroundColor: o.canvas }}>
+    <SafeAreaView className="flex-1 bg-slate-50" style={[layout.wide && { width: "100%", maxWidth: 1180, alignSelf: "center" }, { backgroundColor: o.canvas }]}>
       {/* Header (phone): the way back, and on the right the menu, a day
           and editing, as round buttons on the page itself — the recipe's
           name is the card's title just under them */}
-      {o && roundButton && (
+      {!wide && roundButton && (
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4 }}>
           <View style={{ marginLeft: -4 }}>
             <Tap onPress={() => router.back()} accessibilityLabel="Back" style={roundButton} pressedStyle={{ backgroundColor: o.pill }}>
@@ -1469,55 +1472,30 @@ function RecipeDetail() {
         </View>
       )}
 
-      {/* Nav bar (desktop) */}
-      {!o && (
-      <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-        <Pressable
-          className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-          onPress={() => router.back()}
-        >
-          <Ionicons name="chevron-back" size={26} color="#0F172A" />
-        </Pressable>
-
-        <Text className="ml-2 flex-1 text-xl font-bold text-slate-950" numberOfLines={1}>
-          {recipe.name}
-        </Text>
-
-        {/* On the menu, or onto a day. */}
-        <Pressable
-          onPress={menuPressed}
-          accessibilityLabel={menuItem ? "On your menu" : "Add to menu"}
-          className={`ml-2 h-9 flex-row items-center justify-center rounded-xl bg-violet-50 active:bg-violet-100 ${wide ? "px-3" : "w-9"}`}
-        >
-          <Ionicons name={menuItem ? "checkmark" : "restaurant-outline"} size={wide ? 15 : 17} color="#7C3AED" />
-          {/* (On a phone, just the icons: the title needs the room.) */}
-          {wide && <Text className="ml-1.5 text-sm font-semibold text-violet-700">{menuItem ? "On the menu" : "Add to menu"}</Text>}
-        </Pressable>
-        <Pressable
-          onPress={() => setPlanning(true)}
-          accessibilityLabel="Plan on a day"
-          className={`ml-2 h-9 flex-row items-center justify-center rounded-xl bg-blue-600 active:bg-blue-700 ${wide ? "px-3" : "w-9"}`}
-        >
-          <Ionicons name="calendar-outline" size={wide ? 15 : 17} color="white" />
-          {wide && <Text className="ml-1.5 text-sm font-semibold text-white">Plan</Text>}
-        </Pressable>
-
-        <Pressable
-          className="ml-1 h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-          onPress={() =>
-            router.push({ pathname: "/recipes/edit/[id]", params: { id } })
-          }
-        >
-          <Ionicons name="create-outline" size={24} color="#2563EB" />
-        </Pressable>
-      </View>
+      {/* Header (desktop): the way back and the recipe's name as the page's
+          title; the menu, a day and editing as buttons on the right */}
+      {wide && (
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 4 }}>
+          <View style={{ marginLeft: -6, marginRight: 6 }}>
+            <IconButton icon="chevron-back" label="Back" size={36} color={o.text} onPress={() => router.back()} />
+          </View>
+          <Text numberOfLines={1} style={{ flex: 1, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>
+            {recipe.name}
+          </Text>
+          {/* On the menu, or onto a day. */}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginLeft: 12 }}>
+            <Button label={menuItem ? "On the menu" : "Add to menu"} icon={menuItem ? "checkmark" : "restaurant-outline"} onPress={menuPressed} />
+            <Button label="Plan" icon="calendar-outline" kind="primary" onPress={() => setPlanning(true)} />
+            <Button label="Edit" icon="create-outline" onPress={() => router.push({ pathname: "/recipes/edit/[id]", params: { id } })} />
+          </View>
+        </View>
       )}
 
       {!!planNotice && (
         <Pressable
           onPress={() => router.navigate("/planner")}
           className="flex-row items-center border-b border-blue-100 bg-blue-50 px-5 py-2.5"
-          style={o && { marginHorizontal: 16, marginTop: 8, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderBottomWidth: 1, borderColor: o.border, backgroundColor: o.surface }}
+          style={o && { marginHorizontal: wide ? 20 : 16, marginTop: wide ? 12 : 8, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderBottomWidth: 1, borderColor: o.border, backgroundColor: o.surface }}
         >
           <Ionicons name="checkmark-circle" size={16} color={o?.success ?? "#2563EB"} />
           <Text className="ml-2 flex-1 text-sm text-blue-800" style={o && { color: o.text }}>{planNotice}</Text>
@@ -1527,7 +1505,7 @@ function RecipeDetail() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: o ? 16 : 20, paddingBottom: 60, paddingTop: o ? 12 : 20 }}
+        contentContainerStyle={{ paddingHorizontal: wide ? 20 : 16, paddingBottom: 60, paddingTop: wide ? 16 : 12 }}
       >
         {layout.wide ? (
           <View style={layout.columns}>
@@ -1597,7 +1575,7 @@ function RecipeDetail() {
       >
         <Pressable className="absolute inset-0" onPress={handleCancelBatch} />
 
-        <View className="w-full rounded-3xl bg-white p-5" style={wide ? { maxWidth: batchSlots.length ? 980 : 520 } : o && { backgroundColor: o.canvas, borderRadius: 28 }}>
+        <View className="w-full rounded-3xl bg-white p-5" style={[wide && { maxWidth: batchSlots.length ? 980 : 520 }, { backgroundColor: o.canvas, borderRadius: wide ? 24 : 28 }]}>
           <Text className="text-lg font-bold text-slate-950" style={o && { fontWeight: "800", color: o.text }}>Make a batch</Text>
           <Text className="mt-0.5 mb-5 text-sm text-slate-400" style={o && { color: o.muted }}>
             {producedIngredient?.name ?? "This ingredient"} will be added to your pantry.
@@ -1688,8 +1666,8 @@ function RecipeDetail() {
 
           {/* The same on a desktop: a grid, a row for each one being made and a
               column for everything a run takes. What's to be decided — which
-              piece — is the part in orange until it's chosen; the rest is the
-              same in every row, and just says how much. */}
+              piece — is the part in orange (the Kitchen's) until it's chosen; the
+              rest is the same in every row, and just says how much. */}
           {batchSlots.length > 0 && wide && (
             <View className="mb-4">
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -1697,12 +1675,12 @@ function RecipeDetail() {
                   <View className="flex-row items-end pb-1.5">
                     <View style={{ width: 84 }} />
                     {batchSlots.map((slot, i) => (
-                      <Text key={`s${i}`} numberOfLines={2} style={{ width: 170 }} className="px-1.5 text-xs font-bold text-amber-700">
+                      <Text key={`s${i}`} numberOfLines={2} style={{ width: 170, color: o.ink }} className="px-1.5 text-xs font-bold text-amber-700">
                         {slot.name} · choose
                       </Text>
                     ))}
                     {otherColumns.map((column, i) => (
-                      <Text key={`o${i}`} numberOfLines={2} style={{ width: 104 }} className="px-1.5 text-xs font-semibold text-slate-400">
+                      <Text key={`o${i}`} numberOfLines={2} style={{ width: 104, color: o.faint }} className="px-1.5 text-xs font-semibold text-slate-400">
                         {column.name}
                       </Text>
                     ))}
@@ -1711,9 +1689,9 @@ function RecipeDetail() {
                   {batches.map((batch, batchIndex) => {
                     const open = openSlot?.startsWith(`${batchIndex}:`) ? Number(openSlot.split(":")[1]) : null;
                     return (
-                      <View key={batchIndex} className="border-t border-slate-100 py-1.5">
+                      <View key={batchIndex} className="border-t border-slate-100 py-1.5" style={{ borderTopColor: o.border }}>
                         <View className="flex-row items-center">
-                          <Text style={{ width: 84 }} className="text-sm font-bold text-slate-900">
+                          <Text style={{ width: 84, color: o.text }} className="text-sm font-bold text-slate-900">
                             {madeUnit.charAt(0).toUpperCase() + madeUnit.slice(1)} {batchIndex + 1}
                           </Text>
                           {batchSlots.map((slot, slotIndex) => {
@@ -1724,33 +1702,42 @@ function RecipeDetail() {
                                 <Pressable
                                   onPress={() => setOpenSlot(openSlot === key ? null : key)}
                                   accessibilityLabel={`${slot.name} for ${madeUnit} ${batchIndex + 1}`}
-                                  className={`flex-row items-center rounded-xl border px-3 py-2 ${openSlot === key ? "border-blue-500 bg-white" : chosen ? "border-amber-300 bg-white" : "border-amber-500 bg-amber-50"}`}
+                                  style={hoverable(({ hovered }) => ({
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 8,
+                                    borderWidth: 1,
+                                    borderRadius: 12,
+                                    borderColor: openSlot === key ? o.ink : chosen ? (hovered ? o.selectedRing : o.border) : o.fill,
+                                    backgroundColor: chosen || openSlot === key ? o.surface : SECTION_PALETTE.kitchen.tint,
+                                  }))}
                                 >
-                                  <Text numberOfLines={1} className={`flex-1 text-sm font-semibold ${chosen ? "text-slate-900" : "text-amber-700"}`}>
+                                  <Text numberOfLines={1} className="flex-1 text-sm font-semibold" style={{ color: chosen ? o.text : o.ink }}>
                                     {chosen ? `${round1(chosen.quantityAvailable)} ${chosen.quantityUnit}` : `Choose a ${slot.unit}`}
                                   </Text>
-                                  <Ionicons name={openSlot === key ? "chevron-up" : "chevron-down"} size={14} color={chosen ? "#64748B" : "#B45309"} />
+                                  <Ionicons name={openSlot === key ? "chevron-up" : "chevron-down"} size={14} color={chosen ? o.muted : o.ink} />
                                 </Pressable>
                               </View>
                             );
                           })}
                           {otherColumns.map((column, i) => (
-                            <Text key={i} numberOfLines={1} style={{ width: 104 }} className="px-1.5 text-sm text-slate-400">
+                            <Text key={i} numberOfLines={1} style={{ width: 104, color: o.muted }} className="px-1.5 text-sm text-slate-400">
                               {column.amount}
                             </Text>
                           ))}
                           <View style={{ width: 28 }} className="items-end">
                             {batches.length > 1 && (
                               <Pressable hitSlop={8} onPress={() => setBatches((prev) => prev.filter((_, i) => i !== batchIndex))} accessibilityLabel={`Remove ${madeUnit} ${batchIndex + 1}`}>
-                                <Ionicons name="close-circle" size={20} color="#CBD5E1" />
+                                <Ionicons name="close-circle" size={20} color={o.orbit} />
                               </Pressable>
                             )}
                           </View>
                         </View>
                         {/* The pieces to choose from, for the cell that's open in this row. */}
                         {open != null && (
-                          <View className="mt-1.5 flex-row flex-wrap items-center gap-2 rounded-xl bg-slate-50 px-3 py-2" style={{ marginLeft: 84 }}>
-                            <Text className="text-xs font-semibold text-slate-500">{batchSlots[open].name}:</Text>
+                          <View className="mt-1.5 flex-row flex-wrap items-center gap-2 rounded-xl bg-slate-50 px-3 py-2" style={{ marginLeft: 84, borderRadius: 12, borderWidth: 1, borderColor: o.border, backgroundColor: o.surface }}>
+                            <Text className="text-xs font-semibold text-slate-500" style={{ color: o.muted }}>{batchSlots[open].name}:</Text>
                             {batchSlots[open].candidates
                               .filter((p) => p._id === batch[open] || !takenPieces.has(p._id))
                               .map((piece) => {
@@ -1763,16 +1750,23 @@ function RecipeDetail() {
                                       setOpenSlot(null);
                                     }}
                                     accessibilityLabel={`${round1(piece.quantityAvailable)} ${piece.quantityUnit} ${batchSlots[open].unit}`}
-                                    className={`rounded-lg border px-2.5 py-1.5 ${on ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white active:bg-slate-100"}`}
+                                    style={hoverable(({ hovered }) => ({
+                                      paddingHorizontal: 10,
+                                      paddingVertical: 6,
+                                      borderWidth: 1,
+                                      borderRadius: 10,
+                                      borderColor: on ? o.ink : hovered ? o.selectedRing : o.border,
+                                      backgroundColor: on ? SECTION_PALETTE.kitchen.tint : hovered ? o.pill : o.surface,
+                                    }))}
                                   >
-                                    <Text className={`text-sm font-semibold ${on ? "text-blue-700" : "text-slate-900"}`}>
+                                    <Text className="text-sm font-semibold" style={{ color: on ? o.ink : o.text }}>
                                       {round1(piece.quantityAvailable)} {piece.quantityUnit}
-                                      {piece.expiryDate ? <Text className="font-normal text-slate-400"> · {piece.expiryDate.slice(5, 10)}</Text> : null}
+                                      {piece.expiryDate ? <Text className="font-normal text-slate-400" style={{ color: o.faint }}> · {piece.expiryDate.slice(5, 10)}</Text> : null}
                                     </Text>
                                   </Pressable>
                                 );
                               })}
-                            {batchSlots[open].candidates.every((p) => p._id !== batch[open] && takenPieces.has(p._id)) && <Text className="text-sm text-slate-500">None left: the others are in use.</Text>}
+                            {batchSlots[open].candidates.every((p) => p._id !== batch[open] && takenPieces.has(p._id)) && <Text className="text-sm text-slate-500" style={{ color: o.muted }}>None left: the others are in use.</Text>}
                           </View>
                         )}
                       </View>
@@ -1786,10 +1780,10 @@ function RecipeDetail() {
                   disabled={!canAddBatch}
                   className={`flex-row items-center ${canAddBatch ? "active:opacity-60" : "opacity-40"}`}
                 >
-                  <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
-                  <Text className="ml-1.5 text-sm font-semibold text-blue-600">{canAddBatch ? `Add another ${madeUnit}` : `No more to make another ${madeUnit} from`}</Text>
+                  <Ionicons name="add-circle-outline" size={18} color={o.accent} />
+                  <Text className="ml-1.5 text-sm font-semibold text-blue-600" style={{ color: o.accent }}>{canAddBatch ? `Add another ${madeUnit}` : `No more to make another ${madeUnit} from`}</Text>
                 </Pressable>
-                <Text className="ml-4 flex-1 text-xs text-slate-500">
+                <Text className="ml-4 flex-1 text-xs text-slate-500" style={{ color: o.muted }}>
                   Makes {batches.length} {madeUnit}
                   {batches.length === 1 ? "" : "s"}, each its own pantry entry, counted at the size of what went into it.
                 </Text>

@@ -1,19 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Redirect, useRouter, type Href } from "expo-router";
+import { Fragment } from "react";
 import { Platform, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAccount } from "@/src/components/auth/AuthGate";
-import { APPEARANCE_LABEL, Hairline, IconTile, ListCard, ListRow, neutralTile, PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
+import { ACCOUNT_PATH, APPEARANCE_LABEL, entryTile, Hairline, IconTile, initialsOf, ListCard, ListRow, neutralTile, PageHeader, SETTINGS_GROUPS, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
-import { sectionColor, useOrbitTheme } from "@/src/theme/orbit";
+import { useOrbitTheme } from "@/src/theme/orbit";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Settings on the phone: one list, like the iPhone's — your account at the
 // top, then each part of the app, every row opening its own page. In
 // Orbit's look, light or dark, in the plain accent (Settings isn't a
-// section). A desktop browser has Settings' tabs instead, so it goes
-// straight to the first.
+// section). A desktop browser has this list beside each page instead
+// (settings/web/WebSettingsFrame), so it goes straight to the first.
 export default function SettingsIndex() {
   const wide = useWideWeb();
   if (wide) return <Redirect href="/settings-section/kitchen" />;
@@ -26,14 +27,7 @@ function SettingsList() {
   const { colors: c, dark, appearance } = useOrbitTheme();
   const { account } = useAccount();
   const open = (path: string) => router.push(path as Href);
-  const tile = (id: string) => sectionColor(id, dark) ?? neutralTile(dark);
-
-  const initials = (account?.name || account?.email || "?")
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]!.toUpperCase())
-    .join("");
+  const initials = initialsOf(account);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>
@@ -42,7 +36,7 @@ function SettingsList() {
 
         {/* You, at the top */}
         <Tap
-          onPress={() => open("/settings-section/account")}
+          onPress={() => open(ACCOUNT_PATH)}
           accessibilityRole="button"
           accessibilityLabel={`Account, ${account?.name ?? ""}`}
           style={{ flexDirection: "row", alignItems: "center", gap: 14, padding: 14, backgroundColor: c.surface, borderRadius: 18, borderWidth: 1, borderColor: c.border }}
@@ -69,21 +63,17 @@ function SettingsList() {
           </ListCard>
         )}
 
-        {/* The parts of the app */}
-        <ListCard>
-          <ListRow label="Kitchen" tile={<IconTile icon="restaurant" color={tile("kitchen")} />} onPress={() => open("/settings-section/kitchen")} />
-          <Hairline />
-          <ListRow label="Scheduling" soon value="Coming" tile={<IconTile icon="time" color={tile("calendar")} />} onPress={() => open("/settings-section/scheduling")} />
-          <Hairline />
-          <ListRow label="Devices" tile={<IconTile icon="phone-portrait" color={neutralTile(dark)} />} onPress={() => open("/settings-section/devices")} />
-        </ListCard>
-
-        {/* Still to come */}
-        <ListCard>
-          <ListRow label="Home planning" soon value="Coming" tile={<IconTile icon="home" color={tile("home")} />} onPress={() => open("/settings-section/home-planning")} />
-          <Hairline />
-          <ListRow label="Documents" soon value="Coming" tile={<IconTile icon="document-text" color={tile("documents")} />} onPress={() => open("/settings-section/documents")} />
-        </ListCard>
+        {/* The parts of the app, then those still to come */}
+        {SETTINGS_GROUPS.map((group, g) => (
+          <ListCard key={g}>
+            {group.map((entry, i) => (
+              <Fragment key={entry.path}>
+                {i > 0 && <Hairline />}
+                <ListRow label={entry.label} soon={entry.soon} value={entry.soon ? "Coming" : undefined} tile={<IconTile icon={entry.icon} color={entryTile(entry, dark)} />} onPress={() => open(entry.path)} />
+              </Fragment>
+            ))}
+          </ListCard>
+        ))}
       </ScrollView>
     </SafeAreaView>
   );

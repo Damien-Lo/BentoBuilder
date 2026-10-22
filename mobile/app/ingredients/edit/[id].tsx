@@ -17,6 +17,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Tap } from "@/src/components/ui/Tap";
+import { WebDangerButton, WebFormHeader } from "@/src/components/ingredients/web/WebFormHeader";
+import { Button } from "@/src/components/web/ui";
 import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
 import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 
@@ -278,11 +280,12 @@ function IngredientDetail() {
   // capable fields only — see useScrollFocusSection for why plain
   // TextInput-style sections don't need one (they default to 0).
   const layout = useWideForm();
-  // On a phone, in Orbit's look, light or dark (`o`: its colours, the
-  // Kitchen's orange for the main things); a desktop browser keeps the
-  // desktop's for now. The cards and fields follow by themselves (OrbitPage).
+  // In Orbit's look, light or dark (`o`: its colours, the Kitchen's orange
+  // for the main things) — on a phone, and in a desktop browser with the
+  // desktop's own header and two columns. The cards and fields follow by
+  // themselves (OrbitPage).
   const { colors, dark } = useOrbitTheme();
-  const o = layout.wide ? null : colors;
+  const o = colors;
   const card = o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 };
   // Soft backgrounds for the coloured chips, light / dark.
   const tint = {
@@ -1017,7 +1020,11 @@ function IngredientDetail() {
         edges={["top", "left", "right"]}
         style={o && { backgroundColor: o.canvas }}
       >
-        {o ? (
+        {layout.wide ? (
+          <View style={layout.page}>
+            <WebFormHeader title="Ingredient" onBack={() => router.back()} />
+          </View>
+        ) : (
           <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
               <Tap onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
@@ -1026,18 +1033,6 @@ function IngredientDetail() {
             </View>
             <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>Ingredient</Text>
           </View>
-        ) : (
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          <Pressable
-            className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-back" size={26} color="#0F172A" />
-          </Pressable>
-          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">
-            Ingredient
-          </Text>
-        </View>
         )}
         <View className="flex-1 items-center justify-center px-8">
           <Ionicons name="warning-outline" size={42} color={o?.faint ?? "#94A3B8"} />
@@ -1073,7 +1068,7 @@ function IngredientDetail() {
         isInStock);
 
   return (
-    <OrbitPage on={!!o}>
+    <OrbitPage>
     <SafeAreaView
       className="flex-1 bg-slate-50"
       edges={["top", "left", "right"]}
@@ -1086,7 +1081,7 @@ function IngredientDetail() {
       >
         {/* Header (phone): the way back — or Cancel while editing — and
             Edit / Save, over a large title, on the page itself */}
-        {o && (
+        {!layout.wide && (
           <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
               {isEditing ? (
@@ -1118,56 +1113,24 @@ function IngredientDetail() {
           </View>
         )}
 
-        {/* Header */}
-        {!o && (
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          {isEditing ? (
-            <Pressable
-              disabled={saving}
-              className="h-11 items-center justify-center px-1 active:opacity-60"
-              onPress={handleCancel}
-            >
-              <Text className="text-base font-medium text-slate-500">
-                Cancel
-              </Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-              onPress={() => router.back()}
-            >
-              <Ionicons name="chevron-back" size={26} color="#0F172A" />
-            </Pressable>
-          )}
-
-          <Text
-            className="ml-2 flex-1 text-xl font-bold text-slate-950"
-            numberOfLines={1}
-          >
-            {ingredient.name}
-          </Text>
-
-          {isEditing ? (
-            <Pressable
-              disabled={saving}
-              className={`rounded-xl px-4 py-2 ${
-                saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
-              }`}
-              onPress={() => void handleSave()}
-            >
-              <Text className="font-semibold text-white">
-                {saving ? "Saving..." : "Save"}
-              </Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              className="rounded-xl bg-slate-100 px-4 py-2 active:bg-slate-200"
-              onPress={() => setIsEditing(true)}
-            >
-              <Text className="font-semibold text-slate-700">Edit</Text>
-            </Pressable>
-          )}
-        </View>
+        {/* Header (desktop): the same, with the name beside the way back
+            and the buttons on the right */}
+        {layout.wide && (
+          <WebFormHeader
+            title={ingredient.name}
+            onBack={isEditing ? handleCancel : () => router.back()}
+            backDisabled={saving}
+            right={
+              isEditing ? (
+                <>
+                  <Button label="Cancel" onPress={() => !saving && handleCancel()} />
+                  <Button label={saving ? "Saving..." : "Save"} icon="checkmark" kind="primary" onPress={() => !saving && void handleSave()} />
+                </>
+              ) : (
+                <Button label="Edit" icon="create-outline" onPress={() => setIsEditing(true)} />
+              )
+            }
+          />
         )}
 
         <ScrollView
@@ -1518,7 +1481,15 @@ function IngredientDetail() {
               </View>
               </View>
 
-              <View style={layout.actions}>
+              {layout.wide ? (
+                // (Desktop: Delete and Save at a button's size, under the
+                // columns' right.)
+                <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+                  <WebDangerButton label="Delete ingredient" icon="trash-outline" onPress={() => !saving && handleDeleteIngredient()} />
+                  <Button label={saving ? "Saving..." : "Save changes"} icon="checkmark" kind="primary" onPress={() => !saving && void handleSave()} />
+                </View>
+              ) : (
+              <>
               <OrbitPressable
                 disabled={saving}
                 onPress={() => void handleSave()}
@@ -1540,7 +1511,8 @@ function IngredientDetail() {
               >
                 <Text className="font-semibold text-red-600" style={o && { color: o.danger }}>Delete ingredient</Text>
               </OrbitPressable>
-              </View>
+              </>
+              )}
             </>
           ) : (
             /* ── Detail view ── */

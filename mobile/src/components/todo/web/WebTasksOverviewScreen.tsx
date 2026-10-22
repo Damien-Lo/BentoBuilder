@@ -5,7 +5,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { daysBetween } from "@/src/components/calendar/calendarUtils";
 import { compactDate } from "@/src/components/web/fields";
-import { Button, Card, CardLink, Empty, PageTitle, Row, Stat, WEB, WebPage } from "@/src/components/web/ui";
+import { Button, Card, CardLink, Empty, PageTitle, Row, Stat, WebPage } from "@/src/components/web/ui";
 import {
   getListTasks,
   getSmartTasks,
@@ -16,6 +16,7 @@ import {
   type TodoOverview,
   type TodoTask,
 } from "@/src/services/todoApi";
+import { OrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import { todayStr } from "@/src/utils/mealPlan";
 
 import { projectDone, StatusPill } from "../TaskBits";
@@ -25,13 +26,15 @@ import { PROJECT_STATUS_META } from "./WebProjectView";
 // The Tasks section's overview on the desktop: where everything stands at
 // a glance — the counts, what's overdue and coming up, each project's
 // progress, and the lists. Checklists and shopping lists aren't counted.
-// Anything clicked opens in Lists & projects.
+// Anything clicked opens in Lists & projects. In Orbit's look, in the Tasks
+// section's violet.
 
 type Hover = { hovered?: boolean };
 
 export function WebTasksOverviewScreen() {
   const router = useRouter();
   const theme = useTodoTheme();
+  const { colors: c } = useOrbitTheme();
   const today = todayStr();
   const [dashboard, setDashboard] = useState<TodoDashboard | null>(null);
   const [overview, setOverview] = useState<TodoOverview | null>(null);
@@ -73,8 +76,9 @@ export function WebTasksOverviewScreen() {
   const open = dashboard ? dashboard.total - dashboard.completed : 0;
 
   return (
+    <OrbitPage>
     <WebPage>
-      <PageTitle title="Overview" subtitle={longToday()} right={<Button label="Lists & projects" icon="list-outline" onPress={() => router.navigate("/lists/tasks")} />} />
+      <PageTitle title="Overview" subtitle={longToday()} right={<Button label="Lists & projects" icon="list-outline" kind="primary" onPress={() => router.navigate("/lists/tasks")} />} />
 
       <Row>
         <Stat label="Open" value={String(open)} sub={dashboard ? `of ${dashboard.total} tasks` : undefined} icon="list-outline" />
@@ -114,24 +118,26 @@ export function WebTasksOverviewScreen() {
               <Pressable
                 key={list._id}
                 onPress={() => openList(list._id)}
-                style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 38, paddingHorizontal: 18, backgroundColor: hovered ? "#F8FAFC" : "transparent" })}
+                style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 40, paddingHorizontal: 18, backgroundColor: hovered ? c.pill : "transparent" })}
               >
                 <Ionicons name={list.isDefault ? "home-outline" : "list-outline"} size={16} color={listAccent(list.color, theme)} />
-                <Text numberOfLines={1} style={{ flex: 1, marginLeft: 10, fontSize: 14, fontWeight: "500", color: WEB.text }}>
+                <Text numberOfLines={1} style={{ flex: 1, marginLeft: 10, fontSize: 14, fontWeight: "500", color: c.text }}>
                   {list.name}
                 </Text>
-                {!!groupName(list.group) && <Text style={{ marginRight: 10, fontSize: 12, color: WEB.faint }}>{groupName(list.group)}</Text>}
-                <Text style={{ fontSize: 12, color: WEB.muted }}>{list.openCount ?? 0} open</Text>
+                {!!groupName(list.group) && <Text style={{ marginRight: 10, fontSize: 12, color: c.faint }}>{groupName(list.group)}</Text>}
+                <Text style={{ fontSize: 12, color: c.muted }}>{list.openCount ?? 0} open</Text>
               </Pressable>
             ))}
           </View>
         </Card>
       </Row>
     </WebPage>
+    </OrbitPage>
   );
 }
 
 function TaskLines({ tasks, today, onOpen }: { tasks: TodoTask[]; today: string; onOpen: (task: TodoTask) => void }) {
+  const { colors: c } = useOrbitTheme();
   return (
     <View style={{ paddingBottom: 8 }}>
       {tasks.map((task) => {
@@ -141,19 +147,19 @@ function TaskLines({ tasks, today, onOpen }: { tasks: TodoTask[]; today: string;
           <Pressable
             key={task._id}
             onPress={() => onOpen(task)}
-            style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", minHeight: 46, paddingHorizontal: 18, paddingVertical: 6, backgroundColor: hovered ? "#F8FAFC" : "transparent" })}
+            style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", minHeight: 48, paddingHorizontal: 18, paddingVertical: 6, backgroundColor: hovered ? c.pill : "transparent" })}
           >
             <View style={{ flex: 1, paddingRight: 10 }}>
-              <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: WEB.text }}>
+              <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: c.text }}>
                 {task.title}
               </Text>
-              <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 12, color: WEB.muted }}>
+              <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 12, color: c.muted }}>
                 {task.list.name}
                 {task.subtaskCount > 0 ? ` · ${task.subtaskCount - task.openSubtaskCount}/${task.subtaskCount} subtasks` : ""}
               </Text>
             </View>
             <StatusPill status={task.status} />
-            {!!date && <Text style={{ width: 86, textAlign: "right", fontSize: 12, fontWeight: late ? "700" : "500", color: late ? WEB.red : WEB.muted }}>{compactDate(date)}</Text>}
+            {!!date && <Text style={{ width: 86, textAlign: "right", fontSize: 12, fontWeight: late ? "700" : "500", color: late ? c.danger : c.muted }}>{compactDate(date)}</Text>}
           </Pressable>
         );
       })}
@@ -162,32 +168,33 @@ function TaskLines({ tasks, today, onOpen }: { tasks: TodoTask[]; today: string;
 }
 
 function ProjectLine({ project, group, tasks, today, color, onPress }: { project: TodoList; group?: string; tasks?: TodoTask[]; today: string; color: string; onPress: () => void }) {
+  const { colors: c } = useOrbitTheme();
   const status = PROJECT_STATUS_META[project.projectStatus ?? "planning"];
   const total = tasks?.length ?? 0;
   const done = tasks?.filter((t) => t.completed).length ?? 0;
   const progress = total ? Math.round(tasks!.reduce((sum, t) => sum + (t.completed ? 100 : t.progress ?? 0), 0) / total) : 0;
   const left = project.targetDate ? daysBetween(today, project.targetDate) : null;
   return (
-    <Pressable onPress={onPress} style={({ hovered }: Hover) => ({ paddingHorizontal: 18, paddingVertical: 10, backgroundColor: hovered ? "#F8FAFC" : "transparent" })}>
+    <Pressable onPress={onPress} style={({ hovered }: Hover) => ({ paddingHorizontal: 18, paddingVertical: 11, backgroundColor: hovered ? c.pill : "transparent" })}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         <Ionicons name="git-network-outline" size={16} color={color} />
-        <Text numberOfLines={1} style={{ flexShrink: 1, marginLeft: 10, fontSize: 14, fontWeight: "700", color: projectDone(project) ? WEB.muted : WEB.text, textDecorationLine: projectDone(project) ? "line-through" : "none" }}>
+        <Text numberOfLines={1} style={{ flexShrink: 1, marginLeft: 10, fontSize: 14, fontWeight: "700", color: projectDone(project) ? c.muted : c.text, textDecorationLine: projectDone(project) ? "line-through" : "none" }}>
           {project.name}
         </Text>
-        {!!group && <Text style={{ marginLeft: 8, fontSize: 12, color: WEB.faint }}>{group}</Text>}
+        {!!group && <Text style={{ marginLeft: 8, fontSize: 12, color: c.faint }}>{group}</Text>}
         <View style={{ flex: 1 }} />
         <View style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: status.bg }}>
           <Text style={{ fontSize: 11, fontWeight: "700", color: status.fg }}>{status.label}</Text>
         </View>
-        <Text style={{ width: 150, textAlign: "right", fontSize: 12, fontWeight: left !== null && left < 0 ? "700" : "500", color: left !== null && left < 0 ? WEB.red : WEB.muted }}>
+        <Text style={{ width: 150, textAlign: "right", fontSize: 12, fontWeight: left !== null && left < 0 ? "700" : "500", color: left !== null && left < 0 ? c.danger : c.muted }}>
           {project.targetDate ? `${compactDate(project.targetDate)} · ${left! < 0 ? `${-left!} d late` : left === 0 ? "today" : `${left} d left`}` : "No target date"}
         </Text>
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
-        <View style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: "#EEF2F7", overflow: "hidden" }}>
-          <View style={{ width: `${progress}%`, height: 6, backgroundColor: color }} />
+        <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: c.track, overflow: "hidden" }}>
+          <View style={{ width: `${progress}%`, height: 8, borderRadius: 4, backgroundColor: color }} />
         </View>
-        <Text style={{ width: 110, textAlign: "right", fontSize: 12, color: WEB.muted }}>{tasks ? `${done} of ${total} done · ${progress}%` : ""}</Text>
+        <Text style={{ width: 110, textAlign: "right", fontSize: 12, color: c.muted }}>{tasks ? `${done} of ${total} done · ${progress}%` : ""}</Text>
       </View>
     </Pressable>
   );

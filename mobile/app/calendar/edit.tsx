@@ -49,7 +49,6 @@ import {
   type RepeatFrequency,
 } from "@/src/services/calendarApi";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
-import { useWideWeb } from "@/src/utils/useWideWeb";
 import { Tap } from "@/src/components/ui/Tap";
 import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 
@@ -72,8 +71,8 @@ type SheetTarget = "calendar" | "repeat" | "remind" | null;
 
 // New event / edit event. Opened with `date` + `start`/`end` (minutes) from
 // a dragged-out block or the + button, or with `id` to edit an event (a
-// repeating event is edited as a whole series). In the Calendar's colours,
-// and on a phone in Orbit's look; a desktop browser keeps its own.
+// repeating event is edited as a whole series). In Orbit's look, in the
+// Calendar's colours — in a desktop browser too.
 export default function EditCalendarEventScreen() {
   return (
     <OrbitSection section="calendar">
@@ -84,10 +83,8 @@ export default function EditCalendarEventScreen() {
 
 function EditCalendarEventPage() {
   const router = useRouter();
-  // (On a phone, in Orbit's colours; null in a desktop browser.)
-  const wide = useWideWeb();
-  const { colors, dark } = useOrbitTheme();
-  const o = wide ? null : colors;
+  // (In Orbit's colours, on a phone and in a desktop browser.)
+  const { colors: o, dark } = useOrbitTheme();
   const params = useLocalSearchParams<{
     id?: string;
     date?: string;
@@ -351,8 +348,8 @@ function EditCalendarEventPage() {
     );
   }
 
-  // (Orbit's look, on a phone: a hairline, a choice on or off, and the soft
-  // red of something to delete.)
+  // (Orbit's look: a hairline, a choice on or off, and the soft red of
+  // something to delete.)
   const line = o && { borderColor: o.border };
   const choice = (on: boolean) => o && { backgroundColor: on ? o.ink : o.pill, borderRadius: 12 };
   const choiceText = (on: boolean) => o && { color: on ? o.onInk : o.onPill };
@@ -368,63 +365,33 @@ function EditCalendarEventPage() {
           : "Edit event";
 
   return (
-    <OrbitPage on={!wide}>
+    <OrbitPage>
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        {/* Header (phone): close and Save over a large title, and the
-            calendar it's in as a pill to change it, on the page itself */}
-        {o && (
-          <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
-              <Tap onPress={() => router.back()} disabled={saving} accessibilityLabel="Close" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
-                <Ionicons name="close" size={22} color={o.text} />
-              </Tap>
-              <View style={{ flex: 1 }} />
-              <Tap disabled={saving} onPress={() => void handleSave()} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }} pressedStyle={{ opacity: 0.8 }}>
-                <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>{saving ? "Saving..." : "Save"}</Text>
-              </Tap>
-            </View>
-            <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>{heading}</Text>
-            <Tap
-              onPress={() => setSheet("calendar")}
-              accessibilityLabel="Calendar"
-              style={{ alignSelf: "flex-start", marginTop: 10, height: 32, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, borderRadius: 16, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
-              pressedStyle={{ backgroundColor: o.pill }}
-            >
-              <View style={{ width: 9, height: 9, borderRadius: 4.5, marginRight: 7, backgroundColor: color }} />
-              <Text style={{ fontSize: 13, fontWeight: "600", color: o.onPill }}>{calendar?.name ?? "Calendar"}</Text>
-              <Ionicons name="chevron-down" size={13} color={o.muted} style={{ marginLeft: 4 }} />
+        {/* Header: close and Save over a large title, and the calendar it's
+            in as a pill to change it, on the page itself */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
+            <Tap onPress={() => router.back()} disabled={saving} accessibilityLabel="Close" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+              <Ionicons name="close" size={22} color={o.text} />
+            </Tap>
+            <View style={{ flex: 1 }} />
+            <Tap disabled={saving} onPress={() => void handleSave()} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }} pressedStyle={{ opacity: 0.8 }}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>{saving ? "Saving..." : "Save"}</Text>
             </Tap>
           </View>
-        )}
-
-        {/* Header (desktop): cancel · title + calendar · save */}
-        {!o && (
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-2.5">
-          <Pressable
-            onPress={() => router.back()}
-            disabled={saving}
-            className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
+          <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>{heading}</Text>
+          <Tap
+            onPress={() => setSheet("calendar")}
+            accessibilityLabel="Calendar"
+            style={{ alignSelf: "flex-start", marginTop: 10, height: 32, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, borderRadius: 16, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}
+            pressedStyle={{ backgroundColor: o.pill }}
           >
-            <Ionicons name="close" size={26} color="#0F172A" />
-          </Pressable>
-          <Pressable onPress={() => setSheet("calendar")} className="ml-1 flex-1 active:opacity-60">
-            <Text className="text-lg font-bold text-slate-950">{heading}</Text>
-            <View className="flex-row items-center">
-              <View className="mr-1.5 h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
-              <Text className="text-xs font-medium text-slate-500">{calendar?.name ?? "Calendar"}</Text>
-              <Ionicons name="chevron-down" size={12} color="#64748B" style={{ marginLeft: 2 }} />
-            </View>
-          </Pressable>
-          <Pressable
-            onPress={() => void handleSave()}
-            disabled={saving}
-            className={`h-10 justify-center rounded-xl px-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
-          >
-            <Text className="font-semibold text-white">{saving ? "Saving..." : "Save"}</Text>
-          </Pressable>
+            <View style={{ width: 9, height: 9, borderRadius: 4.5, marginRight: 7, backgroundColor: color }} />
+            <Text style={{ fontSize: 13, fontWeight: "600", color: o.onPill }}>{calendar?.name ?? "Calendar"}</Text>
+            <Ionicons name="chevron-down" size={13} color={o.muted} style={{ marginLeft: 4 }} />
+          </Tap>
         </View>
-        )}
 
         <ScrollView
           className="flex-1"

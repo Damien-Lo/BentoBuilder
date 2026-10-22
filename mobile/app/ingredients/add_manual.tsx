@@ -18,6 +18,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Tap } from "@/src/components/ui/Tap";
+import { WebFormHeader } from "@/src/components/ingredients/web/WebFormHeader";
+import { Button } from "@/src/components/web/ui";
 import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 
 import {
@@ -424,11 +426,12 @@ function AddManualPantryItem() {
   // every one after it; plain text fields default to 0 and don't need to be
   // listed here).
   const layout = useWideForm();
-  // On a phone, in Orbit's look, light or dark (`o`: its colours, the
-  // Kitchen's orange for the main things); a desktop browser keeps the
-  // desktop's for now. The cards and fields follow by themselves (OrbitPage).
+  // In Orbit's look, light or dark (`o`: its colours, the Kitchen's orange
+  // for the main things) — on a phone, and in a desktop browser with the
+  // desktop's own header and two columns. The cards and fields follow by
+  // themselves (OrbitPage).
   const { colors } = useOrbitTheme();
-  const o = layout.wide ? null : colors;
+  const o = colors;
   const scrollRef = useRef<ScrollView>(null);
   const scrollAnchorRef = useRef<View>(null);
   const nameSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 130);
@@ -1283,20 +1286,20 @@ function AddManualPantryItem() {
 
   if (loadingOptions) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
-        <ActivityIndicator size="large" color={o?.muted ?? "#2563EB"} />
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={{ backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o.muted} />
 
-        <Text className="mt-3 text-slate-500" style={o && { color: o.muted }}>Loading form options...</Text>
+        <Text className="mt-3 text-slate-500" style={{ color: o.muted }}>Loading form options...</Text>
       </SafeAreaView>
     );
   }
 
   return (
-    <OrbitPage on={!!o}>
+    <OrbitPage>
     <SafeAreaView
       className="flex-1 bg-slate-50"
       edges={["top", "left", "right"]}
-      style={o && { backgroundColor: o.canvas }}
+      style={{ backgroundColor: o.canvas }}
     >
       <KeyboardAvoidingView
         className="flex-1"
@@ -1305,7 +1308,7 @@ function AddManualPantryItem() {
       >
         {/* Header (phone): the way back and Save, over a large title, on
             the page itself */}
-        {o && (
+        {!layout.wide && (
           <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
               <Tap disabled={saving} onPress={() => router.back()} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
@@ -1327,39 +1330,16 @@ function AddManualPantryItem() {
           </View>
         )}
 
-        {!o && (
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          <Pressable
-            disabled={saving}
-            className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-back" size={26} color="#0F172A" />
-          </Pressable>
-
-          <View className="ml-2 flex-1">
-            <Text className="text-xl font-bold text-slate-950" numberOfLines={1}>
-              {isResolvingGroceryItem ? "Log purchase" : "Add Ingredient"}
-            </Text>
-            {isResolvingGroceryItem && (
-              <Text className="text-sm text-slate-500" numberOfLines={1}>
-                Completing &quot;{params.prefillName}&quot; from your grocery list
-              </Text>
-            )}
-          </View>
-
-          <Pressable
-            disabled={saving}
-            className={`h-10 justify-center rounded-xl px-4 ${
-              saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
-            }`}
-            onPress={() => void handleSave()}
-          >
-            <Text className="font-semibold text-white">
-              {saving ? "Saving..." : "Save"}
-            </Text>
-          </Pressable>
-        </View>
+        {/* Header (desktop): the same, with the title beside the way back
+            and Save on the right */}
+        {layout.wide && (
+          <WebFormHeader
+            title={isResolvingGroceryItem ? "Log purchase" : "Add Ingredient"}
+            subtitle={isResolvingGroceryItem ? `Completing "${params.prefillName ?? ""}" from your grocery list` : undefined}
+            onBack={() => router.back()}
+            backDisabled={saving}
+            right={<Button label={saving ? "Saving..." : "Save"} icon="checkmark" kind="primary" onPress={() => !saving && void handleSave()} />}
+          />
         )}
 
         <ScrollView
@@ -1696,17 +1676,17 @@ function AddManualPantryItem() {
             headerAccessory={
               <Pressable
                 className="h-8 flex-row items-center rounded-lg bg-blue-50 px-2.5 active:bg-blue-100"
-                style={o && { backgroundColor: o.pill, borderRadius: 16, paddingHorizontal: 12 }}
+                style={{ backgroundColor: o.pill, borderRadius: 16, paddingHorizontal: 12 }}
                 disabled={readingLabel}
                 onPress={() => setLabelCameraVisible(true)}
                 accessibilityLabel="Scan nutrition label"
               >
                 {readingLabel ? (
-                  <ActivityIndicator size="small" color={o?.ink ?? "#2563EB"} />
+                  <ActivityIndicator size="small" color={o.ink} />
                 ) : (
-                  <Ionicons name="camera-outline" size={15} color={o?.ink ?? "#1D4ED8"} />
+                  <Ionicons name="camera-outline" size={15} color={o.ink} />
                 )}
-                <Text className="ml-1.5 text-xs font-semibold text-blue-700" style={o && { color: o.onPill }}>
+                <Text className="ml-1.5 text-xs font-semibold text-blue-700" style={{ color: o.onPill }}>
                   {readingLabel ? "Reading…" : "Scan label"}
                 </Text>
               </Pressable>
@@ -1887,7 +1867,7 @@ function AddManualPantryItem() {
                 <View
                   className="mt-3 rounded-2xl bg-blue-50/60 px-3 pb-3 pt-1"
                   {...expiryDurationSection.wrapperProps}
-                  style={[expiryDurationSection.wrapperProps.style, o && { backgroundColor: o.pill }]}
+                  style={[expiryDurationSection.wrapperProps.style, { backgroundColor: o.pill }]}
                 >
                   <FieldLabel text="Or set expiry from purchase date" />
                   <DurationExpiryInput
@@ -1936,8 +1916,17 @@ function AddManualPantryItem() {
           </View>
           </View>
 
-          <View style={layout.actions}>
-          {o ? (
+          {layout.wide ? (
+            // (Desktop: Save at a button's size, under the columns' right.)
+            <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 8 }}>
+              <Button
+                label={saving ? "Saving..." : isResolvingGroceryItem ? "Save & log purchase" : "Save ingredient"}
+                icon="checkmark"
+                kind="primary"
+                onPress={() => !saving && void handleSave()}
+              />
+            </View>
+          ) : (
             <Tap
               disabled={saving}
               onPress={() => void handleSave()}
@@ -1948,20 +1937,7 @@ function AddManualPantryItem() {
                 {saving ? "Saving..." : isResolvingGroceryItem ? "Save & log purchase" : "Save ingredient"}
               </Text>
             </Tap>
-          ) : (
-          <Pressable
-            disabled={saving}
-            onPress={() => void handleSave()}
-            className={`mt-2 items-center rounded-2xl py-4 ${
-              saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
-            }`}
-          >
-            <Text className="text-base font-semibold text-white">
-              {saving ? "Saving..." : isResolvingGroceryItem ? "Save & log purchase" : "Save ingredient"}
-            </Text>
-          </Pressable>
           )}
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 

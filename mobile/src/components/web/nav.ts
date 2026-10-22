@@ -92,14 +92,8 @@ export const WEB_SECTIONS: WebSection[] = [
     icon: "settings-outline",
     path: "/settings-section/kitchen",
     also: ["/settings-section", "/manage-lists"],
-    tabs: [
-      { label: "Kitchen", path: "/settings-section/kitchen", also: ["/manage-lists"] },
-      { label: "Scheduling", path: "/settings-section/scheduling" },
-      { label: "Home planning", path: "/settings-section/home-planning" },
-      { label: "Documents", path: "/settings-section/documents" },
-      { label: "Devices", path: "/settings-section/devices" },
-      { label: "Account", path: "/settings-section/account" },
-    ],
+    // (Its pages are a list down the left instead: settings/web/WebSettingsFrame.)
+    tabs: [],
     footer: true,
   },
   {

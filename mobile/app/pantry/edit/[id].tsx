@@ -39,6 +39,8 @@ import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
 import { formatDateDisplay, toDateOnly, todayDateInputString } from "@/src/utils/date";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { Tap } from "@/src/components/ui/Tap";
+import { WebDangerButton, WebFormHeader } from "@/src/components/ingredients/web/WebFormHeader";
+import { Button } from "@/src/components/web/ui";
 import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 import { getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 
@@ -193,11 +195,11 @@ function EditPantryItem() {
   // default to 0 and don't need to be listed here). Store is the only
   // dropdown-capable field on this page.
   const layout = useWideForm();
-  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
-  // desktop browser keeps the desktop's for now. The cards, fields and
-  // dropdowns in it follow by themselves (OrbitPage).
+  // In Orbit's look, light or dark (`o`: its colours) — on a phone, and in
+  // a desktop browser with the desktop's own header and two columns. The
+  // cards, fields and dropdowns in it follow by themselves (OrbitPage).
   const { colors, dark } = useOrbitTheme();
-  const o = layout.wide ? null : colors;
+  const o = colors;
   const field = o && { backgroundColor: o.surface, borderColor: o.border };
   // Soft tints, in either theme.
   const tint = (light: string, darkTint: string) => (dark ? darkTint : light);
@@ -352,8 +354,8 @@ function EditPantryItem() {
   const ingredientId = getIngredientId(item);
 
   return (
-    <OrbitPage on={!!o}>
-    <SafeAreaView className="flex-1 bg-slate-50" style={o && { backgroundColor: o.canvas }} edges={o ? ["top", "left", "right"] : undefined}>
+    <OrbitPage>
+    <SafeAreaView className="flex-1 bg-slate-50" style={{ backgroundColor: o.canvas }} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         className="flex-1"
         style={layout.page}
@@ -361,7 +363,7 @@ function EditPantryItem() {
       >
         {/* Header (phone): the way back and Save over a large title, on
             the page itself */}
-        {o ? (
+        {!layout.wide ? (
           <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4 }}>
               <Tap onPress={() => router.back()} disabled={saving} accessibilityLabel="Cancel" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
@@ -377,33 +379,13 @@ function EditPantryItem() {
             </Text>
           </View>
         ) : (
-          // Header
-          <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-            <Pressable
-              className="h-11 items-center justify-center px-1 active:opacity-60"
-              onPress={() => router.back()}
-              disabled={saving}
-            >
-              <Text className="text-base font-medium text-slate-500">Cancel</Text>
-            </Pressable>
-
-            <Text
-              className="ml-2 flex-1 text-xl font-bold text-slate-950"
-              numberOfLines={1}
-            >
-              {ingredientName}
-            </Text>
-
-            <Pressable
-              disabled={saving}
-              className={`rounded-xl px-4 py-2 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
-              onPress={() => void handleSave()}
-            >
-              <Text className="font-semibold text-white">
-                {saving ? "Saving..." : "Save"}
-              </Text>
-            </Pressable>
-          </View>
+          // (Desktop: the name beside the way back, Save on the right.)
+          <WebFormHeader
+            title={ingredientName}
+            onBack={() => router.back()}
+            backDisabled={saving}
+            right={<Button label={saving ? "Saving..." : "Save"} icon="checkmark" kind="primary" onPress={() => !saving && void handleSave()} />}
+          />
         )}
 
         <ScrollView
@@ -651,7 +633,14 @@ function EditPantryItem() {
           </View>
           </View>
 
-          {o ? (
+          {layout.wide ? (
+            // (Desktop: Delete and Save at a button's size, under the
+            // columns' right.)
+            <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+              <WebDangerButton label="Delete pantry entry" icon="trash-outline" onPress={() => !saving && handleDelete()} />
+              <Button label={saving ? "Saving..." : "Save changes"} icon="checkmark" kind="primary" onPress={() => !saving && void handleSave()} />
+            </View>
+          ) : (
             <View>
               <Tap
                 disabled={saving}
@@ -670,24 +659,6 @@ function EditPantryItem() {
               >
                 <Text style={{ fontSize: 15, fontWeight: "600", color: o.danger }}>Delete pantry entry</Text>
               </Tap>
-            </View>
-          ) : (
-            <View style={layout.actions}>
-            <Pressable
-              disabled={saving}
-              onPress={() => void handleSave()}
-              className={`mt-2 items-center rounded-2xl py-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
-            >
-              <Text className="text-base font-semibold text-white">{saving ? "Saving..." : "Save changes"}</Text>
-            </Pressable>
-
-            <Pressable
-              disabled={saving}
-              className="mt-3 items-center rounded-2xl border border-red-200 bg-red-50 py-3.5 active:bg-red-100"
-              onPress={handleDelete}
-            >
-              <Text className="font-semibold text-red-600">Delete pantry entry</Text>
-            </Pressable>
             </View>
           )}
         </ScrollView>

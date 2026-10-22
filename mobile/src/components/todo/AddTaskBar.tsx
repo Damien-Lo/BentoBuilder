@@ -6,6 +6,7 @@ import { DatePickerModal } from "@/src/components/forms";
 import { Tap } from "@/src/components/ui/Tap";
 import { useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { todayStr } from "@/src/utils/mealPlan";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 import { readableAccent } from "./TaskBits";
 import { friendlyDate } from "./theme";
@@ -41,6 +42,10 @@ export function AddTaskBar({
   const o = useOrbitPage();
   // (The list's colour as text and icons: lightened in the dark, to read.)
   const shown = readableAccent(accent, o, useOrbitTheme().dark);
+  // In Orbit's look on the desktop it's a card in its pane, not a band
+  // across the top of a page: no padding of its own, no hairline under it.
+  const wide = useWideWeb();
+  const pane = !!o && wide;
   const inputRef = useRef<TextInput>(null);
   const [active, setActive] = useState(false);
   const [title, setTitle] = useState("");
@@ -73,7 +78,10 @@ export function AddTaskBar({
   const showOptions = active && !checklist;
 
   return (
-    <View className="border-b border-slate-200 bg-white px-4 pb-2.5 pt-2.5" style={o && { backgroundColor: o.canvas, borderBottomColor: o.border }}>
+    <View
+      className="border-b border-slate-200 bg-white px-4 pb-2.5 pt-2.5"
+      style={[o && { backgroundColor: o.canvas, borderBottomColor: o.border }, pane && { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0, borderBottomWidth: 0, backgroundColor: "transparent" }]}
+    >
       <View
         className={`rounded-2xl border bg-slate-50 px-4 ${active ? "border-blue-400" : "border-slate-200"}`}
         style={o && { backgroundColor: o.surface, borderColor: active ? o.selectedRing : o.border, borderRadius: 18 }}

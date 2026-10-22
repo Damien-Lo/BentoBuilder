@@ -1,12 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { reloadAppAsync } from "expo";
-import { Ionicons } from "@expo/vector-icons";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Platform, Text, View } from "react-native";
 
 import { preload } from "@/src/services/apiCache";
 
 import { getMe, installAuthFetch, loadToken, onSessionEnded, signOut as endSession, type Account } from "@/src/services/authApi";
+
+import { OrbSphere } from "@/src/components/ui/OrbSphere";
+import { useOrbitTheme } from "@/src/theme/orbit";
 
 import { SignInScreen } from "./SignInScreen";
 
@@ -39,6 +41,7 @@ const AuthContext = createContext<AuthValue>({ account: null, setAccount: () => 
 export const useAccount = () => useContext(AuthContext);
 
 export function AuthGate({ children }: { children: ReactNode }) {
+  const { colors } = useOrbitTheme();
   const [state, setState] = useState<"checking" | "signedOut" | "signedIn">("checking");
   const [account, setAccountState] = useState<Account | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -121,8 +124,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (state === "checking") {
     return (
-      <View className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator color="#2563EB" />
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.canvas }}>
+        <ActivityIndicator color={colors.muted} />
       </View>
     );
   }
@@ -147,18 +150,17 @@ export function AuthGate({ children }: { children: ReactNode }) {
   );
 }
 
-// The cover while the day's things are fetched.
+// The cover while the day's things are fetched: Orbit's orb, on its canvas.
 function WarmUp({ progress, name }: { progress: { done: number; total: number } | null; name: string }) {
+  const { colors, dark } = useOrbitTheme();
   const share = progress && progress.total ? progress.done / progress.total : 0;
   return (
-    <View className="items-center justify-center bg-slate-50 px-10" style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}>
-      <View className="h-16 w-16 items-center justify-center rounded-3xl bg-blue-600">
-        <Ionicons name="grid-outline" size={30} color="#FFFFFF" />
-      </View>
-      <Text className="mt-5 text-2xl font-bold text-slate-900">{name ? `Hi, ${name}` : "Welcome back"}</Text>
-      <Text className="mt-2 text-center text-sm text-slate-500">Getting your day ready…</Text>
-      <View className="mt-6 h-1.5 w-48 overflow-hidden rounded-full bg-slate-200">
-        <View className="h-full rounded-full bg-blue-600" style={{ width: `${Math.max(8, Math.round(share * 100))}%` }} />
+    <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", paddingHorizontal: 40, backgroundColor: colors.canvas }}>
+      <OrbSphere size={64} label="Orbit" colors={colors} dark={dark} />
+      <Text style={{ marginTop: 22, fontSize: 24, fontWeight: "800", letterSpacing: -0.4, color: colors.text }}>{name ? `Hi, ${name}` : "Welcome back"}</Text>
+      <Text style={{ marginTop: 6, textAlign: "center", fontSize: 14, color: colors.muted }}>Getting your day ready…</Text>
+      <View style={{ marginTop: 24, height: 6, width: 192, overflow: "hidden", borderRadius: 3, backgroundColor: colors.track }}>
+        <View style={{ height: "100%", borderRadius: 3, backgroundColor: colors.ink, width: `${Math.max(8, Math.round(share * 100))}%` }} />
       </View>
     </View>
   );

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, AppState, Image, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Pressable, Text, View } from "react-native";
 
+import { OrbSphere } from "@/src/components/ui/OrbSphere";
 import { API_BASE_URL } from "@/src/config/api";
+import { useOrbitTheme } from "@/src/theme/orbit";
 
 // The deployed server goes to sleep when nothing has called it for a while,
 // and its first answer after that can take most of a minute. Screens load
@@ -83,24 +85,26 @@ export function ServerGate({ children }: { children: ReactNode }) {
   return (
     <View style={{ flex: 1 }}>
       {children}
-      {covered && (
-        <View
-          className="items-center justify-center bg-slate-50 px-10"
-          style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
-        >
-          {/* The app's icon */}
-          <Image source={require("@/assets/images/orbit-splash-light.png")} style={{ width: 72, height: 72 }} accessibilityIgnoresInvertColors />
-          <Text className="mt-5 text-3xl font-bold text-slate-900">Orbit</Text>
-          <ActivityIndicator className="mt-8" color="#2563EB" />
-          <Text className="mt-3 text-center text-sm text-slate-500">
-            {slow ? "Still waking the server. This can take up to a minute." : "Getting things ready…"}
-          </Text>
-          {slow && (
-            <Pressable onPress={skip} className="mt-6 rounded-full bg-slate-200 px-5 py-2.5 active:bg-slate-300">
-              <Text className="text-sm font-semibold text-slate-700">Continue anyway</Text>
-            </Pressable>
-          )}
-        </View>
+      {covered && <WakingCover slow={slow} onSkip={skip} />}
+    </View>
+  );
+}
+
+// In Orbit's look: its orb, on the canvas.
+function WakingCover({ slow, onSkip }: { slow: boolean; onSkip: () => void }) {
+  const { colors, dark } = useOrbitTheme();
+  return (
+    <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", paddingHorizontal: 40, backgroundColor: colors.canvas }}>
+      <OrbSphere size={72} label="Orbit" colors={colors} dark={dark} />
+      <Text style={{ marginTop: 22, fontSize: 30, fontWeight: "800", letterSpacing: -0.5, color: colors.text }}>Orbit</Text>
+      <ActivityIndicator style={{ marginTop: 28 }} color={colors.muted} />
+      <Text style={{ marginTop: 12, textAlign: "center", fontSize: 14, color: colors.muted }}>
+        {slow ? "Still waking the server. This can take up to a minute." : "Getting things ready…"}
+      </Text>
+      {slow && (
+        <Pressable onPress={onSkip} style={({ pressed }) => ({ marginTop: 24, borderRadius: 999, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: pressed ? colors.track : colors.pill })}>
+          <Text style={{ fontSize: 14, fontWeight: "600", color: colors.onPill }}>Continue anyway</Text>
+        </Pressable>
       )}
     </View>
   );

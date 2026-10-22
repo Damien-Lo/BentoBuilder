@@ -5,7 +5,8 @@ import { requireOptionalNativeModule } from "expo";
 import { ActivityIndicator, Alert, Platform, Pressable, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { Tap } from "@/src/components/ui/Tap";
-import { useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
+import { sectionColor, useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // The pieces Settings is made of (and Developer → People). On an Orbit page
 // (OrbitPage) the cards, headings, fields and buttons take its colours;
@@ -69,10 +70,12 @@ export function Input(props: ComponentProps<typeof TextInput>) {
   );
 }
 
-// (`fill`: on an Orbit page, grows to fill the row — or, in a column, its width.)
+// (`fill`: on an Orbit page, grows to fill the row — or, in a column, its
+// width. In a desktop browser it's a desktop button's size.)
 export function Button({ label, onPress, busy, tone = "blue", icon, fill }: { label: string; onPress: () => void; busy?: boolean; tone?: "blue" | "plain" | "red"; icon?: keyof typeof Ionicons.glyphMap; fill?: boolean }) {
   const o = useOrbitPage();
   const { dark } = useOrbitTheme();
+  const wide = useWideWeb();
   if (o) {
     // Orbit's: the main one in ink, the others in a pill, a destructive one red on a soft red.
     const bg = tone === "blue" ? o.ink : tone === "red" ? dangerSoft(dark) : o.pill;
@@ -83,11 +86,11 @@ export function Button({ label, onPress, busy, tone = "blue", icon, fill }: { la
         disabled={busy}
         accessibilityRole="button"
         accessibilityLabel={label}
-        style={[{ height: 52, borderRadius: 16, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: bg }, fill ? { flexGrow: 1, flexShrink: 1 } : { alignSelf: "flex-start" }]}
+        style={[{ height: wide ? 42 : 52, borderRadius: wide ? 12 : 16, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: bg }, fill ? { flexGrow: 1, flexShrink: 1 } : { alignSelf: "flex-start" }]}
         pressedStyle={{ opacity: 0.75 }}
       >
         {busy ? <ActivityIndicator size="small" color={fg} style={{ marginRight: 8 }} /> : icon && <Ionicons name={icon} size={17} color={fg} style={{ marginRight: 8 }} />}
-        <Text style={{ fontSize: 15, fontWeight: "600", color: fg }}>{label}</Text>
+        <Text style={{ fontSize: wide ? 14 : 15, fontWeight: "600", color: fg }}>{label}</Text>
       </Tap>
     );
   }
@@ -132,16 +135,20 @@ export function useGoBack(fallback: string) {
 }
 
 // A page's header: the round way back, and a large title on the page itself.
-export function PageHeader({ title, subtitle, onBack, style }: { title: string; subtitle?: ReactNode; onBack: () => void; style?: StyleProp<ViewStyle> }) {
+// (No `onBack`: just the title — a desktop browser's Settings, where the
+// list beside the page is the way to the others.)
+export function PageHeader({ title, subtitle, onBack, style }: { title: string; subtitle?: ReactNode; onBack?: () => void; style?: StyleProp<ViewStyle> }) {
   const { colors: c } = useOrbitTheme();
   return (
     <View style={style}>
-      <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4 }}>
-        <Tap onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }} pressedStyle={{ backgroundColor: c.pill }}>
-          <Ionicons name="chevron-back" size={22} color={c.text} />
-        </Tap>
-      </View>
-      <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>{title}</Text>
+      {onBack && (
+        <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4 }}>
+          <Tap onPress={onBack} accessibilityRole="button" accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }} pressedStyle={{ backgroundColor: c.pill }}>
+            <Ionicons name="chevron-back" size={22} color={c.text} />
+          </Tap>
+        </View>
+      )}
+      <Text style={{ marginTop: onBack ? 12 : 0, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>{title}</Text>
       {!!subtitle && <Text style={{ marginTop: 2, fontSize: 14, lineHeight: 20, color: c.muted }}>{subtitle}</Text>}
     </View>
   );
@@ -188,6 +195,55 @@ export function ListRow({ label, tile, value, onPress, soon, checked }: { label:
     </Tap>
   );
 }
+
+// ── What the Settings list holds ──
+// (The phone's list — app/settings-section/index — and the one beside a
+// page in a desktop browser — settings/web/WebSettingsFrame — both read it,
+// so they keep the same rows in the same order.)
+
+export const ACCOUNT_PATH = "/settings-section/account";
+
+export interface SettingsEntry {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  path: string;
+  // Whose colour its tile is in (a section's, see sectionColor), or grey.
+  section?: string;
+  // Not built yet.
+  soon?: boolean;
+}
+
+// Each group is a card. (Your account sits above them, and Appearance, on
+// the phone, between.)
+export const SETTINGS_GROUPS: SettingsEntry[][] = [
+  // The parts of the app
+  [
+    { label: "Kitchen", icon: "restaurant", path: "/settings-section/kitchen", section: "kitchen" },
+    { label: "Scheduling", icon: "time", path: "/settings-section/scheduling", section: "calendar", soon: true },
+    { label: "Devices", icon: "phone-portrait", path: "/settings-section/devices" },
+  ],
+  // Still to come
+  [
+    { label: "Home planning", icon: "home", path: "/settings-section/home-planning", section: "home", soon: true },
+    { label: "Documents", icon: "document-text", path: "/settings-section/documents", section: "documents", soon: true },
+  ],
+];
+
+// A Settings page's padding in a desktop browser, beside the list: at a
+// reading width, from the left.
+export const DESKTOP_PAGE: ViewStyle = { paddingHorizontal: 36, paddingTop: 28, paddingBottom: 60, width: "100%", maxWidth: 780 };
+
+// An entry's tile colour, in either theme.
+export const entryTile = (entry: SettingsEntry, dark: boolean) => (entry.section ? sectionColor(entry.section, dark) : null) ?? neutralTile(dark);
+
+// The two letters in your avatar.
+export const initialsOf = (account: { name?: string | null; email?: string | null } | null | undefined) =>
+  (account?.name || account?.email || "?")
+    .split(/[\s@.]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join("");
 
 // A page not built yet: what it'll be, in a card.
 export function ComingSoon({ icon, color, title, detail }: { icon: keyof typeof Ionicons.glyphMap; color: string; title: string; detail: string }) {

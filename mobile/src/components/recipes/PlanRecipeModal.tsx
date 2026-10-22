@@ -9,6 +9,7 @@ import { loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { nutrientColor } from "@/src/theme/nutrients";
 import { useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 type Hover = { hovered?: boolean };
 
@@ -31,6 +32,8 @@ export function PlanRecipeModal({ recipeId, recipeName, nutrition, visible, onCl
   const o = useOrbitPage();
   const { dark } = useOrbitTheme();
   const soft = dark ? "rgba(251,146,60,0.14)" : "#FFF7ED";
+  // (In a desktop browser, the meal under the pointer lights up in it too.)
+  const wide = useWideWeb();
   const [start, setStart] = useState(today);
   const [servings, setServings] = useState(1);
   const [entries, setEntries] = useState<MealPlanEntry[] | null>(null);
@@ -188,7 +191,9 @@ export function PlanRecipeModal({ recipeId, recipeName, nutrition, visible, onCl
                         onPress={() => void place(d, slot.id)}
                         accessibilityLabel={`Plan for ${d}, ${slot.label}`}
                         style={
-                          o
+                          o && wide
+                            ? ({ hovered }: Hover) => ({ width: column, minHeight: 92, padding: 6, borderLeftWidth: 1, borderLeftColor: o.border, backgroundColor: hovered || saving === key ? soft : "transparent" })
+                            : o
                             ? { width: column, minHeight: 92, padding: 6, borderLeftWidth: 1, borderLeftColor: o.border, backgroundColor: saving === key ? soft : "transparent" }
                             : ({ hovered }: Hover) => ({ width: column, minHeight: 92, padding: 6, borderLeftWidth: 1, borderLeftColor: "#E2E8F0", backgroundColor: hovered || saving === key ? "#EFF6FF" : "transparent" })
                         }
@@ -211,8 +216,8 @@ export function PlanRecipeModal({ recipeId, recipeName, nutrition, visible, onCl
                                 <ActivityIndicator size="small" color={o?.ink ?? "#2563EB"} />
                               ) : (
                                 <>
-                                  <Ionicons name="add" size={13} color={o ? o.faint : hovered ? "#2563EB" : "#94A3B8"} />
-                                  <Text className={`ml-0.5 text-[11px] font-semibold ${hovered ? "text-blue-600" : "text-slate-400"}`} style={o && { color: o.faint }}>Place here</Text>
+                                  <Ionicons name="add" size={13} color={o ? (wide && hovered ? o.ink : o.faint) : hovered ? "#2563EB" : "#94A3B8"} />
+                                  <Text className={`ml-0.5 text-[11px] font-semibold ${hovered ? "text-blue-600" : "text-slate-400"}`} style={o && { color: wide && hovered ? o.ink : o.faint }}>Place here</Text>
                                 </>
                               )}
                             </View>

@@ -20,6 +20,7 @@ import { SettingsNumericInput, SettingsRow, SettingsSectionHeader } from "@/src/
 import { getMealPlanForDate, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
 import { computeDayNutrition, todayStr } from "@/src/utils/mealPlan";
+import { OrbitSection } from "@/src/theme/orbit";
 
 interface MoreRow {
   id: string;
@@ -39,9 +40,16 @@ const MORE_ROWS: MoreRow[] = [
 ];
 
 export default function NutritionScreen() {
-  // A desktop browser gets the review page; the phone's tab is below.
+  // A desktop browser gets the review page, in Nutrition's own green (not
+  // the Kitchen's, whose tabs this sits among); the phone's tab is below.
   const wide = useWideWeb();
-  return wide ? <WebNutritionScreen /> : <PhoneNutritionScreen />;
+  return wide ? (
+    <OrbitSection section="nutrition">
+      <WebNutritionScreen />
+    </OrbitSection>
+  ) : (
+    <PhoneNutritionScreen />
+  );
 }
 
 function PhoneNutritionScreen() {

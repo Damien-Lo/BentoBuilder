@@ -4,18 +4,20 @@ import { Alert, Modal, Pressable, Text, View } from "react-native";
 
 import { addDays, MONTHS_SHORT, WEEKDAYS_SHORT } from "@/src/components/calendar/calendarUtils";
 import { entryName } from "@/src/components/calendar/mealFood";
-import { BarChart, Button, Card, CardLink, Empty, GoalBar, LineChart, PageTitle, Planned, Row, Segmented, Stat, WEB, WebPage } from "@/src/components/web/ui";
+import { BarChart, Button, Card, CardLink, Empty, GoalBar, LineChart, PageTitle, Planned, Row, Segmented, Stat, WebPage } from "@/src/components/web/ui";
 import { getMealPlanRange, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { SettingsNumericInput, SettingsRow } from "@/src/components/forms";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
 import { getWeightEntries, type WeightEntry } from "@/src/services/weightEntryApi";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
 import { nutrientColor } from "@/src/theme/nutrients";
+import { OrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 
 // Nutrition in a desktop browser: the review page. What was eaten over the
 // last week, fortnight or month — a day at a time against the goal, the
 // averages, where the calories came from — and the weight trend, with room
-// held for the charts still to come.
+// held for the charts still to come. In Orbit's look, in Nutrition's green
+// (the route puts it in that section); each nutrient in its own colour.
 
 type Range = "7" | "14" | "30";
 const RANGES: { value: Range; label: string }[] = [
@@ -31,6 +33,7 @@ const shortDay = (date: string) => {
 
 export function WebNutritionScreen() {
   const router = useRouter();
+  const { colors: c } = useOrbitTheme();
   const today = todayStr();
   const [range, setRange] = useState<Range>("7");
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -100,6 +103,7 @@ export function WebNutritionScreen() {
   const change = latest && start != null ? latest.weight - start : null;
 
   return (
+    <OrbitPage>
     <WebPage>
       <PageTitle
         title="Nutrition overview"
@@ -136,6 +140,7 @@ export function WebNutritionScreen() {
               })}
               goal={settings.dailyCalorieLimit}
               height={220}
+              color={nutrientColor("calories")}
             />
           </View>
         </Card>
@@ -153,7 +158,7 @@ export function WebNutritionScreen() {
       <Row>
         <Card title="By meal" subtitle="Average calories a day" style={{ flex: 1, minWidth: 300 }}>
           <View style={{ paddingTop: 14 }}>
-            <BarChart data={bySlot} height={150} color="#0D9488" />
+            <BarChart data={bySlot} height={150} color={nutrientColor("calories")} />
           </View>
         </Card>
 
@@ -164,15 +169,15 @@ export function WebNutritionScreen() {
             topFoods.map(([name, info]) => (
               <View key={name} style={{ marginTop: 10 }}>
                 <View style={{ flexDirection: "row", alignItems: "baseline" }}>
-                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "600", color: WEB.body }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "600", color: c.icon }}>
                     {name}
                   </Text>
-                  <Text style={{ fontSize: 12, color: WEB.muted }}>
-                    {info.times}× · <Text style={{ fontWeight: "700", color: WEB.text }}>{Math.round(info.kcal)}</Text> kcal
+                  <Text style={{ fontSize: 12, color: c.muted }}>
+                    {info.times}× · <Text style={{ fontWeight: "700", color: c.text }}>{Math.round(info.kcal)}</Text> kcal
                   </Text>
                 </View>
-                <View style={{ marginTop: 4, height: 6, borderRadius: 3, backgroundColor: "#EEF2F7", overflow: "hidden" }}>
-                  <View style={{ width: `${(info.kcal / topKcal) * 100}%`, height: 6, backgroundColor: WEB.blue }} />
+                <View style={{ marginTop: 4, height: 6, borderRadius: 3, backgroundColor: c.track, overflow: "hidden" }}>
+                  <View style={{ width: `${(info.kcal / topKcal) * 100}%`, height: 6, borderRadius: 3, backgroundColor: nutrientColor("calories") }} />
                 </View>
               </View>
             ))
@@ -185,15 +190,15 @@ export function WebNutritionScreen() {
           ) : (
             <>
               <View style={{ flexDirection: "row", alignItems: "baseline", marginBottom: 14 }}>
-                <Text style={{ fontSize: 28, fontWeight: "700", color: WEB.text }}>{latest.weight}</Text>
+                <Text style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>{latest.weight}</Text>
                 {change != null && (
-                  <Text style={{ marginLeft: 8, fontSize: 13, fontWeight: "600", color: change <= 0 ? WEB.green : WEB.amber }}>
+                  <Text style={{ marginLeft: 8, fontSize: 13, fontWeight: "600", color: change <= 0 ? c.success : c.warning }}>
                     {change > 0 ? "+" : ""}
                     {change.toFixed(1)} since start
                   </Text>
                 )}
               </View>
-              <LineChart points={weightPoints.map((w) => ({ key: w._id, label: shortDay(w.date), value: w.weight }))} target={settings.goalWeight} height={130} />
+              <LineChart points={weightPoints.map((w) => ({ key: w._id, label: shortDay(w.date), value: w.weight }))} target={settings.goalWeight} height={130} color={c.ink} />
             </>
           )}
         </Card>
@@ -225,13 +230,13 @@ export function WebNutritionScreen() {
 
       {/* Daily goals */}
       <Modal visible={!!goals} transparent animationType="fade" onRequestClose={() => setGoals(null)}>
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(15,23,42,0.4)", padding: 24 }}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.scrim, padding: 24 }}>
           <Pressable style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} onPress={() => setGoals(null)} />
           {goals && (
-            <View style={{ width: "100%", maxWidth: 440, borderRadius: 20, backgroundColor: "#FFFFFF", padding: 22, boxShadow: "0 16px 40px rgba(15,23,42,0.25)" }}>
-              <Text style={{ fontSize: 18, fontWeight: "700", color: WEB.text }}>Daily nutrition goals</Text>
-              <Text style={{ marginTop: 2, marginBottom: 14, fontSize: 13, color: WEB.muted }}>Leave one empty to stop tracking it.</Text>
-              <View style={{ borderWidth: 1, borderColor: WEB.border, borderRadius: 14, overflow: "hidden" }}>
+            <View style={{ width: "100%", maxWidth: 440, borderRadius: 22, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, padding: 22, boxShadow: "0 16px 40px rgba(15,23,42,0.22)" }}>
+              <Text style={{ fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: c.text }}>Daily nutrition goals</Text>
+              <Text style={{ marginTop: 2, marginBottom: 14, fontSize: 13, color: c.muted }}>Leave one empty to stop tracking it.</Text>
+              <View style={{ borderWidth: 1, borderColor: c.border, borderRadius: 14, overflow: "hidden" }}>
                 {(
                   [
                     ["Calories", "dailyCalorieLimit", "kcal"],
@@ -256,5 +261,6 @@ export function WebNutritionScreen() {
         </View>
       </Modal>
     </WebPage>
+    </OrbitPage>
   );
 }

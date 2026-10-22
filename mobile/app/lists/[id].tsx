@@ -47,13 +47,13 @@ import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // One list — a real one, or a smart list (My Day / Important / Planned /
 // All) when `id` is one of those. Task cards, a collapsible Completed
-// section, and an "Add a Task" bar pinned to the bottom. On a phone in
-// Orbit's look, in the Tasks section's violet; in a desktop browser as it was.
+// section, and an "Add a Task" bar pinned to the bottom. In Orbit's look,
+// in the Tasks section's violet — in a desktop browser too, held to a
+// reading width on the canvas.
 export default function TodoListScreen() {
-  const wide = useWideWeb();
   return (
     <OrbitSection section="tasks">
-      <OrbitPage on={!wide}>
+      <OrbitPage>
         <TodoListPage />
       </OrbitPage>
     </OrbitSection>
@@ -65,6 +65,7 @@ function TodoListPage() {
   // (On an Orbit page: the same roles in Orbit's colours.)
   const theme = useListsTheme();
   const o = useOrbitPage();
+  const wide = useWideWeb();
   const { id } = useLocalSearchParams<{ id: string }>();
   const smart = SMART_LISTS.find((s) => s.id === id);
 
@@ -230,11 +231,11 @@ function TodoListPage() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={["top", "left", "right"]}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={[{ flex: 1 }, wide && { width: "100%", maxWidth: 900, alignSelf: "center", paddingTop: 16 }]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         {/* Header: the title and, for a project, its details beneath it.
-            (Phone, Orbit: round buttons over a large title on the page
-            itself, the project's strip a card under it; desktop: its bar.) */}
-        {o ? (
+            (Orbit: round buttons over a large title on the page itself,
+            the project's strip a card under it.) */}
+        {o && (
           <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12 }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
               <Tap onPress={() => router.back()} accessibilityLabel="Back to lists" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
@@ -263,53 +264,17 @@ function TodoListPage() {
               </View>
             )}
           </View>
-        ) : (
-          <View style={{ backgroundColor: theme.headerBg, borderBottomWidth: 1, borderBottomColor: theme.cardBorder }}>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: 12,
-              paddingVertical: 12,
-            }}
-          >
-            <Pressable
-              onPress={() => router.back()}
-              accessibilityLabel="Back to lists"
-              className="active:bg-slate-100"
-              style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }}
-            >
-              <Ionicons name="chevron-back" size={26} color={theme.text} />
-            </Pressable>
-            <View style={{ flex: 1, marginLeft: 4 }}>
-              <Text style={{ fontSize: 24, fontWeight: "700", color: theme.title }} numberOfLines={1}>
-                {title}
-              </Text>
-              <Text style={{ marginTop: 2, fontSize: 14, color: theme.textMuted }} numberOfLines={1}>
-                {subtitle}
-              </Text>
-            </View>
-            {list && (
-              <Pressable
-                accessibilityLabel="List options"
-                onPress={() => openOptions(list)}
-                className="active:bg-slate-100"
-                style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }}
-              >
-                <Ionicons name="ellipsis-horizontal" size={22} color={theme.icon} />
-              </Pressable>
-            )}
-          </View>
-          {isProject && list && <ProjectSummary project={list} tasks={tasks} accent={accent} theme={theme} onOpenTask={openTask} onChanged={refresh} />}
-          </View>
         )}
 
-        <AddTaskBar
-          accent={accent}
-          checklist={isChecklist}
-          defaults={{ myDay: smart?.id === "myday", dueDate: smart?.id === "planned" ? todayStr() : null }}
-          onAdd={(input) => void addTask(input)}
-        />
+        {/* (In a desktop browser the bar is a card, in line with the page.) */}
+        <View style={wide ? { paddingHorizontal: 16 } : undefined}>
+          <AddTaskBar
+            accent={accent}
+            checklist={isChecklist}
+            defaults={{ myDay: smart?.id === "myday", dueDate: smart?.id === "planned" ? todayStr() : null }}
+            onAdd={(input) => void addTask(input)}
+          />
+        </View>
 
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40 }}>
 

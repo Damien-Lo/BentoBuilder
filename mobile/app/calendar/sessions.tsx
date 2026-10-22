@@ -24,12 +24,12 @@ import { useWideWeb } from "@/src/utils/useWideWeb";
 export default function RegularSessionsScreen() {
   const { kind: kindParam } = useLocalSearchParams<{ kind?: string }>();
   const kind: KitchenKind = kindParam === "shop" ? "shop" : "prep";
-  // A desktop browser gets its own layout of the same thing, in its older
-  // look; the phone's is in Orbit's, in the Calendar's blue.
+  // A desktop browser gets its own layout of the same thing; both in Orbit's
+  // look, in the Calendar's blue.
   const wide = useWideWeb();
   return (
     <OrbitSection section="calendar">
-      <OrbitPage on={!wide}>{wide ? <WebSessionsScreen key={kind} kind={kind} /> : <PhoneSessionsScreen key={kind} kind={kind} />}</OrbitPage>
+      <OrbitPage>{wide ? <WebSessionsScreen key={kind} kind={kind} /> : <PhoneSessionsScreen key={kind} kind={kind} />}</OrbitPage>
     </OrbitSection>
   );
 }

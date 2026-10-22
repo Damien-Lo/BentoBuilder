@@ -31,10 +31,10 @@ export function DataBadge() {
     <Pressable
       onPress={() => router.push("/developer/data")}
       accessibilityLabel={`${test ? "Test" : "Real"} data: switch`}
-      // (Top right in a desktop browser, clear of the section's tabs; top
-      // centre at a phone's width, clear of the buttons pages keep at the
-      // top right.)
-      style={{ position: "absolute", top: insets.top + (wide ? 14 : 4), ...(wide ? { right: 16 } : { alignSelf: "center" as const }), zIndex: 1000, flexDirection: "row", alignItems: "center", height: 22, paddingHorizontal: 10, borderRadius: 11, backgroundColor: test ? "#F59E0B" : "#DC2626", opacity: 0.95 }}
+      // (Bottom right in a desktop browser, clear of the controls pages
+      // keep along the top; top centre at a phone's width, clear of the
+      // buttons pages keep at the top right.)
+      style={{ position: "absolute", ...(wide ? { bottom: 14, right: 16 } : { top: insets.top + 4, alignSelf: "center" as const }), zIndex: 1000, flexDirection: "row", alignItems: "center", height: 22, paddingHorizontal: 10, borderRadius: 11, backgroundColor: test ? "#F59E0B" : "#DC2626", opacity: 0.95 }}
     >
       <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.3, color: "#FFFFFF" }}>{test ? "TEST DATA" : "REAL DATA"}</Text>
     </Pressable>

@@ -74,7 +74,8 @@ export function MenuCard({
   return (
     <Card
       title="Menu"
-      subtitle={on.length ? `${on.length} on the menu${onDrag ? " · drag one onto a meal" : ""}` : "What you'd like to have soon"}
+      // (Short, beside the link in the corner; how to place one goes under the list.)
+      subtitle={on.length ? `${on.length} on the menu` : "What you'd like to have soon"}
       action={compact ? <CardLink label={on.length ? "Open" : "Add"} onPress={() => onOpen?.()} /> : <CardLink label={adding ? "Done" : "Add"} onPress={() => (setAdding((a) => !a), setQuery(""))} />}
       padded={false}
       style={style}
@@ -102,6 +103,8 @@ export function MenuCard({
       )}
 
       {!on.length && !adding && <Text style={{ paddingHorizontal: 18, paddingBottom: 14, fontSize: 12, lineHeight: 17, color: c.muted }}>Add recipes you&apos;d like this week: what they need goes on the grocery list, and you put them on days when you know when.</Text>}
+
+      {!!on.length && onDrag && <Text style={{ paddingHorizontal: 18, marginTop: -4, fontSize: 12, color: c.faint }}>Drag one onto a meal</Text>}
 
       {/* (Beside the week, a long menu scrolls inside the card.) */}
       <ScrollView style={{ flexShrink: 1 }}>

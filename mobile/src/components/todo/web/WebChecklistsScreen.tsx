@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
+import { Button } from "@/src/components/web/ui";
 import { getGroceryItems } from "@/src/services/groceryListApi";
 import {
   createTodoList,
@@ -16,6 +17,7 @@ import {
   type TodoList,
   type TodoTask,
 } from "@/src/services/todoApi";
+import { OrbitPage, SECTION_PALETTE, useOrbitTheme } from "@/src/theme/orbit";
 
 import { AddTaskBar } from "../AddTaskBar";
 import { openListOptions } from "../listActions";
@@ -26,14 +28,18 @@ import { listAccent, showActions, useTodoTheme } from "../theme";
 // the lists down the left, the chosen one's items beside them. A checklist
 // is plain tickable lines — no dates, status or detail — so there is no
 // third column. The Shopping tab leads with the Kitchen's grocery list,
-// which has a page of its own.
+// which has a page of its own. In Orbit's look, in the Tasks section's
+// violet (the grocery list, the Kitchen's, in its orange).
 
 const LISTS_WIDTH = 270;
+// The section's pale wash: the list open.
+const TINT = SECTION_PALETTE.tasks.tint;
 type Hover = { hovered?: boolean };
 
 export function WebChecklistsScreen({ shopping }: { shopping: boolean }) {
   const router = useRouter();
   const theme = useTodoTheme();
+  const { colors: c } = useOrbitTheme();
   const [lists, setLists] = useState<TodoList[]>([]);
   const [groups, setGroups] = useState<TodoGroup[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -129,29 +135,31 @@ export function WebChecklistsScreen({ shopping }: { shopping: boolean }) {
   }
 
   return (
-    <View style={{ flex: 1, flexDirection: "row", backgroundColor: "#FFFFFF" }}>
+    <OrbitPage>
+    <View style={{ flex: 1, flexDirection: "row", backgroundColor: c.canvas }}>
       {/* The lists */}
-      <View style={{ width: LISTS_WIDTH, borderRightWidth: 1, borderRightColor: "#E2E8F0", backgroundColor: "#F8FAFC" }}>
+      <View style={{ width: LISTS_WIDTH, borderRightWidth: 1, borderRightColor: c.border, backgroundColor: c.canvas }}>
         <ScrollView contentContainerStyle={{ padding: 12, paddingTop: 16 }} showsVerticalScrollIndicator={false}>
           {shopping && (
             <>
               <Pressable
                 onPress={() => router.navigate("/grocery-list")}
-                style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 52, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: "#E2E8F0", backgroundColor: hovered ? "#F1F5F9" : "#FFFFFF" })}
+                style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 56, paddingHorizontal: 10, borderRadius: 16, borderWidth: 1, borderColor: hovered ? c.selectedRing : c.border, backgroundColor: c.surface })}
               >
-                <View style={{ width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "#F0FDF4" }}>
-                  <Ionicons name="cart-outline" size={17} color="#16A34A" />
+                {/* (The Kitchen's: its icon on the Kitchen's pale wash.) */}
+                <View style={{ width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: SECTION_PALETTE.kitchen.tint }}>
+                  <Ionicons name="cart-outline" size={17} color={SECTION_PALETTE.kitchen.dark} />
                 </View>
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={{ fontSize: 14, fontWeight: "600", color: "#0F172A" }}>Grocery list</Text>
-                  <Text numberOfLines={1} style={{ fontSize: 11, color: "#64748B" }}>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: c.text }}>Grocery list</Text>
+                  <Text numberOfLines={1} style={{ fontSize: 11.5, color: c.muted }}>
                     Linked to your pantry
                   </Text>
                 </View>
-                {groceryToBuy > 0 && <Text style={{ marginRight: 4, fontSize: 12, color: "#64748B" }}>{groceryToBuy}</Text>}
-                <Ionicons name="chevron-forward" size={14} color="#94A3B8" />
+                {groceryToBuy > 0 && <Text style={{ marginRight: 4, fontSize: 12, color: c.faint }}>{groceryToBuy}</Text>}
+                <Ionicons name="chevron-forward" size={14} color={c.faint} />
               </Pressable>
-              <Text style={{ marginTop: 16, marginBottom: 4, paddingHorizontal: 10, fontSize: 11, fontWeight: "700", letterSpacing: 1, color: "#94A3B8" }}>MY SHOPPING LISTS</Text>
+              <Text style={{ marginTop: 16, marginBottom: 4, paddingHorizontal: 10, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, color: c.faint }}>MY SHOPPING LISTS</Text>
             </>
           )}
           {lists.map((l) => {
@@ -160,49 +168,49 @@ export function WebChecklistsScreen({ shopping }: { shopping: boolean }) {
               <Pressable
                 key={l._id}
                 onPress={() => setSelected(l._id)}
-                style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 38, paddingHorizontal: 10, borderRadius: 10, backgroundColor: on ? "#E0EAFF" : hovered ? "#EEF2F7" : "transparent" })}
+                style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 38, paddingHorizontal: 10, borderRadius: 12, backgroundColor: on ? TINT : hovered ? c.pill : "transparent" })}
               >
                 <Ionicons name={shopping ? "bag-handle-outline" : "checkbox-outline"} size={18} color={listAccent(l.color, theme)} />
-                <Text numberOfLines={1} style={{ flex: 1, marginLeft: 12, fontSize: 14, fontWeight: on ? "700" : "500", color: "#0F172A" }}>
+                <Text numberOfLines={1} style={{ flex: 1, marginLeft: 12, fontSize: 14, fontWeight: on ? "700" : "500", color: on ? c.ink : c.text }}>
                   {l.name}
                 </Text>
-                {!!l.openCount && <Text style={{ fontSize: 12, color: "#64748B" }}>{l.openCount}</Text>}
+                {!!l.openCount && <Text style={{ fontSize: 12, fontWeight: on ? "700" : "400", color: on ? c.ink : c.faint }}>{l.openCount}</Text>}
               </Pressable>
             );
           })}
           {loaded && lists.length === 0 && (
-            <Text style={{ paddingHorizontal: 10, paddingVertical: 6, fontSize: 12, lineHeight: 17, color: "#94A3B8" }}>
+            <Text style={{ paddingHorizontal: 10, paddingVertical: 6, fontSize: 12, lineHeight: 17, color: c.faint }}>
               {shopping ? "For shopping that isn't groceries: household, gifts, a list per store." : "For things you want to list, not track: ideas, things to cook, what to pack."}
             </Text>
           )}
         </ScrollView>
-        <Pressable
-          onPress={() => setPrompt({ kind: "new" })}
-          style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 48, paddingHorizontal: 20, borderTopWidth: 1, borderTopColor: "#E2E8F0", backgroundColor: hovered ? "#EEF2F7" : "transparent" })}
-        >
-          <Ionicons name="add" size={19} color="#2563EB" />
-          <Text style={{ marginLeft: 8, fontSize: 13, fontWeight: "600", color: "#2563EB" }}>New {noun}</Text>
-        </Pressable>
+        <View style={{ flexDirection: "row", paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border }}>
+          <Button label={`New ${noun}`} icon="add" kind="primary" onPress={() => setPrompt({ kind: "new" })} />
+        </View>
       </View>
 
       {/* The chosen list's items */}
-      <View style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
+      <View style={{ flex: 1, backgroundColor: c.canvas }}>
         {!list ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 40 }}>
-            <Ionicons name={shopping ? "bag-handle-outline" : "checkbox-outline"} size={40} color="#CBD5E1" />
-            <Text style={{ marginTop: 12, fontSize: 16, fontWeight: "600", color: "#475569" }}>{loaded ? `No ${noun}s yet` : ""}</Text>
-            {loaded && <Text style={{ marginTop: 4, fontSize: 13, color: "#94A3B8" }}>Start one with &quot;New {noun}&quot; on the left.</Text>}
+            <Ionicons name={shopping ? "bag-handle-outline" : "checkbox-outline"} size={40} color={c.faint} />
+            <Text style={{ marginTop: 12, fontSize: 16, fontWeight: "600", color: c.text }}>{loaded ? `No ${noun}s yet` : ""}</Text>
+            {loaded && <Text style={{ marginTop: 4, fontSize: 13, color: c.muted }}>Start one with &quot;New {noun}&quot; on the left.</Text>}
           </View>
         ) : (
-          <ScrollView contentContainerStyle={{ paddingHorizontal: 28, paddingTop: 22, paddingBottom: 48, maxWidth: 900 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 28, paddingTop: 24, paddingBottom: 48, maxWidth: 900 }}>
+            {/* The title, large, on the page; the list's own colour in a dot. */}
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
               <View style={{ flex: 1 }}>
-                <Text numberOfLines={1} style={{ fontSize: 26, fontWeight: "700", color: accent }}>
+                <Text numberOfLines={1} style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>
                   {list.name}
                 </Text>
-                <Text style={{ marginTop: 2, fontSize: 13, color: "#64748B" }}>
-                  {ready ? `${open.length} to go${done.length ? ` · ${done.length} ticked` : ""}` : " "}
-                </Text>
+                <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center" }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, marginRight: 8, backgroundColor: accent }} />
+                  <Text style={{ fontSize: 14, fontWeight: "600", color: c.muted }}>
+                    {ready ? `${open.length} to go${done.length ? ` · ${done.length} ticked` : ""}` : " "}
+                  </Text>
+                </View>
               </View>
               <Pressable
                 onPress={() =>
@@ -223,9 +231,9 @@ export function WebChecklistsScreen({ shopping }: { shopping: boolean }) {
                   })
                 }
                 accessibilityLabel="List options"
-                style={({ hovered }: Hover) => ({ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? "#E2E8F0" : "transparent" })}
+                style={({ hovered }: Hover) => ({ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? c.pill : c.surface, borderWidth: 1, borderColor: c.border })}
               >
-                <Ionicons name="ellipsis-horizontal" size={20} color="#475569" />
+                <Ionicons name="ellipsis-horizontal" size={19} color={c.icon} />
               </Pressable>
             </View>
 
@@ -234,17 +242,23 @@ export function WebChecklistsScreen({ shopping }: { shopping: boolean }) {
             {open.map((item) => (
               <Item key={item._id} item={item} accent={accent} onToggle={() => toggle(item)} onMenu={() => itemMenu(item)} />
             ))}
-            {ready && items.length === 0 && <Text style={{ marginTop: 28, textAlign: "center", fontSize: 14, color: "#94A3B8" }}>Nothing on this list yet. Type above to add to it.</Text>}
+            {ready && items.length === 0 && <Text style={{ marginTop: 28, textAlign: "center", fontSize: 14, color: c.faint }}>Nothing on this list yet. Type above to add to it.</Text>}
 
             {done.length > 0 && (
               <>
-                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 18, marginBottom: 6 }}>
-                  <Pressable onPress={() => setShowDone((v) => !v)} style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-                    <Ionicons name={showDone ? "chevron-down" : "chevron-forward"} size={14} color="#64748B" />
-                    <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: "700", color: "#475569" }}>Ticked · {done.length}</Text>
-                  </Pressable>
-                  <Pressable onPress={clearDone} style={({ hovered }: Hover) => ({ height: 28, paddingHorizontal: 10, justifyContent: "center", borderRadius: 8, backgroundColor: hovered ? "#E2E8F0" : "transparent" })}>
-                    <Text style={{ fontSize: 12, fontWeight: "600", color: "#64748B" }}>Remove ticked</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 18, marginBottom: 4 }}>
+                  <View style={{ flex: 1, flexDirection: "row" }}>
+                    <Pressable
+                      onPress={() => setShowDone((v) => !v)}
+                      style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 32, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: c.border, backgroundColor: hovered ? c.track : c.pill })}
+                    >
+                      <Ionicons name={showDone ? "chevron-down" : "chevron-forward"} size={14} color={c.onPill} />
+                      <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: "600", color: c.onPill }}>Ticked</Text>
+                      <Text style={{ marginLeft: 6, fontSize: 13, color: c.faint }}>{done.length}</Text>
+                    </Pressable>
+                  </View>
+                  <Pressable onPress={clearDone} style={({ hovered }: Hover) => ({ height: 30, paddingHorizontal: 12, justifyContent: "center", borderRadius: 15, backgroundColor: hovered ? c.track : "transparent" })}>
+                    <Text style={{ fontSize: 12.5, fontWeight: "600", color: c.muted }}>Remove ticked</Text>
                   </Pressable>
                 </View>
                 {showDone && done.map((item) => <Item key={item._id} item={item} accent={accent} onToggle={() => toggle(item)} onMenu={() => itemMenu(item)} />)}
@@ -277,23 +291,25 @@ export function WebChecklistsScreen({ shopping }: { shopping: boolean }) {
         }}
       />
     </View>
+    </OrbitPage>
   );
 }
 
 function Item({ item, accent, onToggle, onMenu }: { item: TodoTask; accent: string; onToggle: () => void; onMenu: () => void }) {
+  const { colors: c } = useOrbitTheme();
   return (
     <Pressable
       onPress={onToggle}
-      style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", minHeight: 44, marginTop: 6, paddingLeft: 12, paddingRight: 6, borderRadius: 12, borderWidth: 1, borderColor: "#E2E8F0", backgroundColor: hovered ? "#F8FAFC" : "#FFFFFF" })}
+      style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", minHeight: 48, marginTop: 8, paddingLeft: 14, paddingRight: 6, borderRadius: 16, borderWidth: 1, borderColor: hovered ? c.selectedRing : c.border, backgroundColor: c.surface })}
     >
-      <Ionicons name={item.completed ? "checkbox" : "square-outline"} size={20} color={item.completed ? accent : "#94A3B8"} />
-      <Text style={{ flex: 1, marginLeft: 12, paddingVertical: 10, fontSize: 14, color: item.completed ? "#94A3B8" : "#0F172A", textDecorationLine: item.completed ? "line-through" : "none" }}>{item.title}</Text>
+      <Ionicons name={item.completed ? "checkbox" : "square-outline"} size={20} color={item.completed ? accent : c.faint} />
+      <Text style={{ flex: 1, marginLeft: 12, paddingVertical: 10, fontSize: 14.5, color: item.completed ? c.faint : c.text, textDecorationLine: item.completed ? "line-through" : "none" }}>{item.title}</Text>
       <Pressable
         onPress={onMenu}
         accessibilityLabel="More"
-        style={({ hovered }: Hover) => ({ width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? "#E2E8F0" : "transparent" })}
+        style={({ hovered }: Hover) => ({ width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? c.track : "transparent" })}
       >
-        <Ionicons name="ellipsis-horizontal" size={16} color="#94A3B8" />
+        <Ionicons name="ellipsis-horizontal" size={16} color={c.faint} />
       </Pressable>
     </Pressable>
   );

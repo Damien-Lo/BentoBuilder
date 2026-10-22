@@ -16,7 +16,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Tap } from "@/src/components/ui/Tap";
 import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
-import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+import { OrbitPage, OrbitSection, SECTION_PALETTE, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+import { Button, IconButton } from "@/src/components/web/ui";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 import {
   CreatableMultiTagDropdown,
@@ -145,12 +147,14 @@ function StepRow({
   removeStep: (index: number) => void;
 }) {
   const stepSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
-  // (On the phone, in Orbit's look, light or dark.)
+  // (In Orbit's look, light or dark; on a desktop, its number in the
+  // Kitchen's pale tint.)
   const o = useOrbitPage();
+  const wide = useWideWeb();
 
   return (
     <View className="mb-3 flex-row items-start">
-      <View className="mt-3 h-7 w-7 items-center justify-center rounded-full bg-blue-100" style={o && { backgroundColor: o.pill }}>
+      <View className="mt-3 h-7 w-7 items-center justify-center rounded-full bg-blue-100" style={o && { backgroundColor: wide ? SECTION_PALETTE.kitchen.tint : o.pill }}>
         <Text className="text-xs font-bold text-blue-700" style={o && { color: o.ink }}>{index + 1}</Text>
       </View>
 
@@ -289,11 +293,13 @@ function AddRecipe() {
   const pickerPieceWeightSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const notesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const layout = useWideForm();
-  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
-  // desktop browser keeps the desktop's for now. The fields, cards and
-  // switches follow by themselves (OrbitPage).
+  // In Orbit's look (`o`: its colours) — on a phone, light or dark; in a
+  // desktop browser too, in its two columns. The fields, cards and switches
+  // follow by themselves (OrbitPage).
   const { colors, dark } = useOrbitTheme();
-  const o = layout.wide ? null : colors;
+  const o = colors;
+  // A number's well: on a desktop, the Kitchen's pale tint.
+  const well = layout.wide ? SECTION_PALETTE.kitchen.tint : o.pill;
   // The row being edited, faintly in the section's colour; "Generic" in violet.
   const soft = dark ? "rgba(251,146,60,0.14)" : "#FFF7ED";
   const generic = o && { color: dark ? "#C4B5FD" : "#7C3AED" };
@@ -753,7 +759,7 @@ function AddRecipe() {
 
   return (
     <OrbitPage on={!!o}>
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={{ backgroundColor: o.canvas }}>
       <KeyboardAvoidingView
         className="flex-1"
         style={layout.page}
@@ -761,7 +767,7 @@ function AddRecipe() {
       >
         {/* Header (phone): the way back and Save over a large title, on the
             page itself */}
-        {o && (
+        {!layout.wide && (
           <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
               <Tap onPress={() => router.back()} disabled={saving} accessibilityLabel="Back" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
@@ -776,33 +782,15 @@ function AddRecipe() {
           </View>
         )}
 
-        {/* Nav bar (desktop) */}
-        {!o && (
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          <Pressable
-            disabled={saving}
-            className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-back" size={26} color="#0F172A" />
-          </Pressable>
-
-          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">
-            New Recipe
-          </Text>
-
-          <Pressable
-            disabled={saving}
-            className={`rounded-xl px-4 py-2 ${
-              saving ? "bg-violet-300" : "bg-blue-600 active:bg-blue-700"
-            }`}
-            onPress={() => void handleSave()}
-          >
-            <Text className="font-semibold text-white">
-              {saving ? "Saving..." : "Save"}
-            </Text>
-          </Pressable>
-        </View>
+        {/* Header (desktop): the way back, the page's title, and Save */}
+        {layout.wide && (
+          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 20 }}>
+            <View style={{ marginLeft: -6, marginRight: 6 }}>
+              <IconButton icon="chevron-back" label="Back" size={36} color={o.text} onPress={() => !saving && router.back()} />
+            </View>
+            <Text style={{ flex: 1, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>New Recipe</Text>
+            <Button label={saving ? "Saving..." : "Save"} kind="primary" disabled={saving} onPress={() => { if (!saving) void handleSave(); }} />
+          </View>
         )}
 
         <ScrollView
@@ -1307,7 +1295,7 @@ function AddRecipe() {
                   style={o && { borderBottomColor: o.border, backgroundColor: editingRowKey === row.key ? soft : o.surface }}
                   onPress={() => startEditingRow(row)}
                 >
-                  <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.pill }}>
+                  <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: well }}>
                     <Text className="text-xs font-bold text-blue-700" style={o && { color: o.ink }}>
                       {index + 1}
                     </Text>

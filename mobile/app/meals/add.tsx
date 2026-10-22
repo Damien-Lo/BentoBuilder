@@ -37,8 +37,8 @@ const MEAL_TYPE_OPTIONS: { value: MealType; label: string; icon: string; availab
   { value: "bento", label: "Bento Box", icon: "grid-outline", available: false },
 ];
 
-// A new saved meal (Kitchen): in the Kitchen's colours, and on a phone in
-// Orbit's look; a desktop browser keeps its own.
+// A new saved meal (Kitchen): in Orbit's look, in the Kitchen's colours —
+// in a desktop browser too, in two columns.
 export default function AddMealScreen() {
   return (
     <OrbitSection section="kitchen">
@@ -75,9 +75,7 @@ function AddMealPage() {
   const tagsSection = useScrollFocusSection(scrollRef, scrollAnchorRef, 20);
   const coursesSection = useScrollFocusSection(scrollRef, scrollAnchorRef);
   const layout = useWideForm();
-  // (On a phone, in Orbit's colours; null in a desktop browser.)
-  const { colors } = useOrbitTheme();
-  const o = layout.wide ? null : colors;
+  const { colors: o } = useOrbitTheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -154,88 +152,41 @@ function AddMealPage() {
   // Nutrition summary
   const nutritionCard = (
     <FormCard icon="flame-outline" title="Nutrition" description="Totalled from each course's recipe or ingredient." zIndex={40}>
-      {/* (On a phone: the calories large, the rest beside each other.) */}
-      {o ? (
-        <View style={{ marginTop: 14 }}>
-          <MealNutritionFigures totals={totalNutrition} />
-        </View>
-      ) : (
-      <View className="-mx-1 mt-3 flex-row flex-wrap">
-        {(
-          [
-            ["Calories", totalNutrition.calories, "kcal"],
-            ["Protein",  totalNutrition.protein,  "g"],
-            ["Carbs",    totalNutrition.carbs,    "g"],
-            ["Fats",     totalNutrition.fats,     "g"],
-            ["Fiber",    totalNutrition.fiber,    "g"],
-            ["Sodium",   totalNutrition.sodium,   "mg"],
-          ] as [string, number, string][]
-        ).map(([label, value, unit]) => (
-          <View key={label} className="mb-2 px-1" style={{ width: "33.333%" }}>
-            <View className="rounded-xl bg-slate-50 px-2.5 py-2">
-              <Text className="text-xs text-slate-500">{label}</Text>
-              <Text className="mt-0.5 text-base font-semibold text-slate-900">
-                {Math.round(value * 10) / 10}
-                <Text className="text-xs font-normal text-slate-400"> {unit}</Text>
-              </Text>
-            </View>
-          </View>
-        ))}
+      {/* (The calories large, the rest beside each other.) */}
+      <View style={{ marginTop: 14 }}>
+        <MealNutritionFigures totals={totalNutrition} />
       </View>
-      )}
     </FormCard>
   );
 
   return (
-    <OrbitPage on={!!o}>
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
+    <OrbitPage>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={{ backgroundColor: o.canvas }}>
       <Stack.Screen options={{ headerShown: false }} />
       <KeyboardAvoidingView
         className="flex-1"
         style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header: on a phone a round way out and Save over a large title,
-            on the page itself; in a desktop browser its own bar */}
-        {o ? (
-          <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
-              <Tap onPress={() => router.back()} disabled={saving} accessibilityLabel="Cancel" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
-                <Ionicons name="close" size={21} color={o.text} />
-              </Tap>
-              <View style={{ flex: 1 }} />
-              <Tap disabled={saving} onPress={() => void handleSave()} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }} pressedStyle={{ opacity: 0.8 }}>
-                <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>{saving ? "Saving..." : "Save"}</Text>
-              </Tap>
-            </View>
-            <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>New Meal</Text>
+        {/* Header: a round way out and Save over a large title, on the page
+            itself */}
+        <View style={{ paddingHorizontal: 16, paddingTop: layout.wide ? 16 : 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }}>
+            <Tap onPress={() => router.back()} disabled={saving} accessibilityLabel="Cancel" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+              <Ionicons name="close" size={21} color={o.text} />
+            </Tap>
+            <View style={{ flex: 1 }} />
+            <Tap disabled={saving} onPress={() => void handleSave()} style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }} pressedStyle={{ opacity: 0.8 }}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: o.onInk }}>{saving ? "Saving..." : "Save"}</Text>
+            </Tap>
           </View>
-        ) : (
-          <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-            <Pressable
-              className="h-11 items-center justify-center px-1 active:opacity-60"
-              onPress={() => router.back()}
-              disabled={saving}
-            >
-              <Text className="text-base font-medium text-slate-500">Cancel</Text>
-            </Pressable>
-            <Text className="ml-3 flex-1 text-xl font-bold text-slate-950">New Meal</Text>
-            <Pressable
-              disabled={saving}
-              className={`rounded-xl px-4 py-2 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
-              onPress={() => void handleSave()}
-            >
-              <Text className="font-semibold text-white">
-                {saving ? "Saving..." : "Save"}
-              </Text>
-            </Pressable>
-          </View>
-        )}
+          <Text style={{ marginTop: 12, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>New Meal</Text>
+        </View>
 
         <ScrollView
           ref={scrollRef}
           className="flex-1"
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: o ? 16 : 20, paddingBottom: 80 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 80 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -250,28 +201,28 @@ function AddMealPage() {
           <View className="relative" style={{ zIndex: 10 }}>
             <Pressable
               className="h-14 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4"
-              style={o && { backgroundColor: o.surface, borderColor: o.border }}
+              style={{ backgroundColor: o.surface, borderColor: o.border }}
               onPress={() => setShowTypePicker(v => !v)}
             >
               <Ionicons
                 name={MEAL_TYPE_OPTIONS.find(o => o.value === mealType)?.icon as any ?? "list-outline"}
                 size={20}
-                color={o?.ink ?? "#2563EB"}
+                color={o.ink}
               />
-              <Text className="ml-3 flex-1 text-base text-slate-950" style={o && { color: o.text }}>
+              <Text className="ml-3 flex-1 text-base text-slate-950" style={{ color: o.text }}>
                 {MEAL_TYPE_OPTIONS.find(o => o.value === mealType)?.label ?? "Select type"}
               </Text>
               <Ionicons
                 name={showTypePicker ? "chevron-up" : "chevron-down"}
                 size={18}
-                color={o?.muted ?? "#64748B"}
+                color={o.muted}
               />
             </Pressable>
 
             {showTypePicker && (
               <View
                 className="absolute left-0 right-0 top-16 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
-                style={[{ elevation: 20 }, o && { backgroundColor: o.surface, borderColor: o.border }]}
+                style={[{ elevation: 20 }, { backgroundColor: o.surface, borderColor: o.border }]}
               >
                 {MEAL_TYPE_OPTIONS.filter((option) => option.available).map((option, i, visible) => (
                   <Tap
@@ -279,17 +230,17 @@ function AddMealPage() {
                     className={`flex-row items-center px-4 py-3.5 ${
                       i < visible.length - 1 ? "border-b border-slate-100" : ""
                     } active:bg-slate-50`}
-                    style={o && { borderBottomColor: o.border }}
-                    pressedStyle={o ? { backgroundColor: o.pill } : {}}
+                    style={{ borderBottomColor: o.border }}
+                    pressedStyle={{ backgroundColor: o.pill }}
                     onPress={() => {
                       setMealType(option.value);
                       setShowTypePicker(false);
                     }}
                   >
-                    <Ionicons name={option.icon as any} size={18} color={o?.muted ?? "#64748B"} />
-                    <Text className="ml-3 flex-1 text-base text-slate-800" style={o && { color: o.text }}>{option.label}</Text>
+                    <Ionicons name={option.icon as any} size={18} color={o.muted} />
+                    <Text className="ml-3 flex-1 text-base text-slate-800" style={{ color: o.text }}>{option.label}</Text>
                     {option.value === mealType && (
-                      <Ionicons name="checkmark" size={18} color={o?.ink ?? "#2563EB"} />
+                      <Ionicons name="checkmark" size={18} color={o.ink} />
                     )}
                   </Tap>
                 ))}
@@ -375,10 +326,10 @@ function AddMealPage() {
             disabled={saving}
             onPress={() => void handleSave()}
             className={`mt-2 items-center rounded-2xl py-4 ${saving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
-            style={o && { height: 52, paddingVertical: 0, justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }}
-            pressedStyle={o ? { opacity: 0.85 } : {}}
+            style={{ height: 52, paddingVertical: 0, justifyContent: "center", borderRadius: 16, backgroundColor: o.ink, opacity: saving ? 0.5 : 1 }}
+            pressedStyle={{ opacity: 0.85 }}
           >
-            <Text className="text-base font-semibold text-white" style={o && { color: o.onInk }}>{saving ? "Saving..." : "Save meal"}</Text>
+            <Text className="text-base font-semibold text-white" style={{ color: o.onInk }}>{saving ? "Saving..." : "Save meal"}</Text>
           </Tap>
           </View>
         </ScrollView>

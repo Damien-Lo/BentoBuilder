@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 import { getWebScale } from "@/src/components/web/scale";
+import { Button } from "@/src/components/web/ui";
 import { loadSettings } from "@/src/services/settingsService";
 import {
   createTodoGroup,
@@ -25,6 +26,7 @@ import {
   type TodoOverview,
   type TodoTask,
 } from "@/src/services/todoApi";
+import { OrbitPage, SECTION_PALETTE, useOrbitTheme } from "@/src/theme/orbit";
 import { todayStr } from "@/src/utils/mealPlan";
 
 import { AddTaskBar, type NewTaskInput } from "../AddTaskBar";
@@ -39,15 +41,20 @@ import { WebProjectView } from "./WebProjectView";
 // the lists down the left, the chosen list's tasks in the middle with the
 // add bar on top, and the task you click opening in a panel on the right
 // rather than as a page of its own. Same data and behaviour as the phone.
+// In Orbit's look, in the Tasks section's violet: the lists on the page's
+// canvas, the one open on the section's pale wash; the tasks as cards.
 
 const LISTS_WIDTH = 270;
 const DETAIL_WIDTH = 440;
+// The section's pale wash: the list open, the task picked, where a drop lands.
+const TINT = SECTION_PALETTE.tasks.tint;
 
 type Row = { hovered?: boolean };
 
 export function WebTasksScreen() {
   const router = useRouter();
   const theme = useTodoTheme();
+  const { colors: c } = useOrbitTheme();
   const [overview, setOverview] = useState<TodoOverview | null>(null);
   const [deletedCount, setDeletedCount] = useState(0);
   const [showArchived, setShowArchived] = useState(false);
@@ -183,17 +190,17 @@ export function WebTasksScreen() {
     ).map(([label, rows]) =>
       rows.length ? (
         <View key={label}>
-          <Text style={{ marginTop: 6, marginBottom: 2, paddingLeft: indent ? 20 : 10, fontSize: 10, fontWeight: "700", letterSpacing: 0.8, color: "#94A3B8" }}>{label.toUpperCase()}</Text>
+          <Text style={{ marginTop: 6, marginBottom: 2, paddingLeft: indent ? 20 : 10, fontSize: 10, fontWeight: "700", letterSpacing: 1, color: c.faint }}>{label.toUpperCase()}</Text>
           {rows.map((l) => rowFor(l, indent))}
         </View>
       ) : null,
     );
   const zoneStyle = (id: string) => ({
-    borderRadius: 12,
+    borderRadius: 14,
     marginHorizontal: -4,
     paddingHorizontal: 4,
     paddingVertical: 2,
-    backgroundColor: drag && drag.over === id && id !== (drag.list.group ?? "") ? "#DBEAFE" : "transparent",
+    backgroundColor: drag && drag.over === id && id !== (drag.list.group ?? "") ? TINT : "transparent",
   });
 
   const isProject = list?.type === "project";
@@ -355,10 +362,29 @@ export function WebTasksScreen() {
   const done = tasks.filter((t) => t.completed).sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
   const openId = detail[detail.length - 1];
 
+  // A small round button: the surface with a hairline, as on the phone.
+  const roundButton = (size: number) => ({ hovered }: Row) => ({
+    width: size,
+    height: size,
+    borderRadius: size / 2,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    backgroundColor: hovered ? c.pill : c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+  });
+  const subtitle =
+    smart?.id === "myday"
+      ? longToday()
+      : ready
+        ? `${isProject ? "Project · " : ""}${open.length} task${open.length === 1 ? "" : "s"}${done.length ? ` · ${done.length} completed` : ""}`
+        : " ";
+
   return (
-    <View style={{ flex: 1, flexDirection: "row", backgroundColor: "#FFFFFF" }}>
+    <OrbitPage>
+    <View style={{ flex: 1, flexDirection: "row", backgroundColor: c.canvas }}>
       {/* Lists */}
-      <View style={{ width: LISTS_WIDTH, borderRightWidth: 1, borderRightColor: "#E2E8F0", backgroundColor: "#F8FAFC" }}>
+      <View style={{ width: LISTS_WIDTH, borderRightWidth: 1, borderRightColor: c.border, backgroundColor: c.canvas }}>
         <ScrollView contentContainerStyle={{ padding: 12, paddingTop: 16 }} showsVerticalScrollIndicator={false}>
           {SMART_LISTS.map((s) => (
             <ListRow
@@ -372,7 +398,7 @@ export function WebTasksScreen() {
             />
           ))}
 
-          <View style={{ height: 1, backgroundColor: "#E2E8F0", marginVertical: 10, marginHorizontal: 8 }} />
+          <View style={{ height: 1, backgroundColor: c.border, marginVertical: 10, marginHorizontal: 8 }} />
 
           {/* In no group */}
           <View
@@ -392,13 +418,13 @@ export function WebTasksScreen() {
             <Pressable
               onPress={() => setPrompt("createGroup")}
               accessibilityLabel="New group"
-              style={({ hovered }: Row) => ({ width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? "#E2E8F0" : "transparent" })}
+              style={({ hovered }: Row) => ({ width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? c.track : "transparent" })}
             >
-              <Ionicons name="add" size={17} color="#64748B" />
+              <Ionicons name="add" size={17} color={c.muted} />
             </Pressable>
           </View>
           {groups.length === 0 && (
-            <Text style={{ paddingHorizontal: 10, paddingVertical: 4, fontSize: 12, lineHeight: 17, color: "#94A3B8" }}>
+            <Text style={{ paddingHorizontal: 10, paddingVertical: 4, fontSize: 12, lineHeight: 17, color: c.faint }}>
               A group holds related lists and projects. Make one with +, then drag things into it.
             </Text>
           )}
@@ -413,31 +439,31 @@ export function WebTasksScreen() {
                 style={[zoneStyle(group._id), { marginBottom: 4 }]}
               >
                 <View style={{ flexDirection: "row", alignItems: "center", height: 30, paddingLeft: 10 }}>
-                  <Ionicons name="folder-outline" size={14} color="#64748B" />
-                  <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontSize: 13, fontWeight: "700", color: "#475569" }}>
+                  <Ionicons name="albums-outline" size={15} color={drag?.over === group._id ? c.ink : c.icon} />
+                  <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontSize: 13, fontWeight: "700", color: c.text }}>
                     {group.name}
                   </Text>
                   <Pressable
                     onPress={() => groupMenu(group)}
                     accessibilityLabel={`${group.name} options`}
-                    style={({ hovered }: Row) => ({ width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? "#E2E8F0" : "transparent" })}
+                    style={({ hovered }: Row) => ({ width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? c.track : "transparent" })}
                   >
-                    <Ionicons name="ellipsis-horizontal" size={14} color="#94A3B8" />
+                    <Ionicons name="ellipsis-horizontal" size={14} color={c.faint} />
                   </Pressable>
                 </View>
                 {kinds(members, true)}
-                {members.length === 0 && <Text style={{ paddingLeft: 32, paddingBottom: 6, fontSize: 12, color: "#94A3B8" }}>Drag a list or project here</Text>}
+                {members.length === 0 && <Text style={{ paddingLeft: 32, paddingBottom: 6, fontSize: 12, color: c.faint }}>Drag a list or project here</Text>}
               </View>
             );
           })}
 
-          <View style={{ height: 1, backgroundColor: "#E2E8F0", marginVertical: 10, marginHorizontal: 8 }} />
+          <View style={{ height: 1, backgroundColor: c.border, marginVertical: 10, marginHorizontal: 8 }} />
 
           {archived.length > 0 && (
             <>
               <ListRow
                 icon="archive-outline"
-                color="#64748B"
+                color={c.muted}
                 label="Archived"
                 count={archived.length}
                 on={false}
@@ -449,7 +475,7 @@ export function WebTasksScreen() {
           )}
           <ListRow
             icon="trash-outline"
-            color="#64748B"
+            color={c.muted}
             label="Recently deleted"
             count={deletedCount}
             on={false}
@@ -457,31 +483,10 @@ export function WebTasksScreen() {
           />
         </ScrollView>
 
-        <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: "#E2E8F0" }}>
-          {(
-            [
-              ["newList", "New list", "add"],
-              ["newProject", "New project", "git-network-outline"],
-            ] as const
-          ).map(([kind, label, icon], index) => (
-            <Pressable
-              key={kind}
-              onPress={() => setPrompt(kind)}
-              style={({ hovered }: Row) => ({
-                flex: 1,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                height: 48,
-                borderLeftWidth: index ? 1 : 0,
-                borderLeftColor: "#E2E8F0",
-                backgroundColor: hovered ? "#EEF2F7" : "transparent",
-              })}
-            >
-              <Ionicons name={icon} size={index ? 15 : 18} color="#2563EB" />
-              <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: "600", color: "#2563EB" }}>{label}</Text>
-            </Pressable>
-          ))}
+        {/* What to make: a list (the main thing), or a project. */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: c.border }}>
+          <Button label="New list" icon="add" kind="primary" onPress={() => setPrompt("newList")} />
+          <Button label="New project" icon="git-network-outline" onPress={() => setPrompt("newProject")} />
         </View>
       </View>
 
@@ -506,28 +511,24 @@ export function WebTasksScreen() {
       )}
 
       {/* The chosen list's tasks */}
-      <View style={{ flex: 1, backgroundColor: "#F8FAFC", display: isProject ? "none" : "flex" }}>
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 28, paddingTop: 24, paddingBottom: 12 }}>
+      <View style={{ flex: 1, backgroundColor: c.canvas, display: isProject ? "none" : "flex" }}>
+        {/* The title, large, on the page; the list's own colour in a dot
+            beside what's in it (as on the phone). */}
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 28, paddingTop: 24, paddingBottom: 10 }}>
           <View style={{ flex: 1 }}>
-            <Text numberOfLines={1} style={{ fontSize: 26, fontWeight: "700", color: accent }}>
+            <Text numberOfLines={1} style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>
               {title}
             </Text>
-            {smart?.id === "myday" && <Text style={{ marginTop: 2, fontSize: 13, color: "#64748B" }}>{longToday()}</Text>}
+            <View style={{ marginTop: 4, flexDirection: "row", alignItems: "center" }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, marginRight: 8, backgroundColor: accent }} />
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: "600", color: c.muted }}>
+                {subtitle}
+              </Text>
+            </View>
           </View>
           {list && (
-            <Pressable
-              onPress={() => listOptions(list)}
-              accessibilityLabel="List options"
-              style={({ hovered }: Row) => ({
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: hovered ? "#E2E8F0" : "transparent",
-              })}
-            >
-              <Ionicons name="ellipsis-horizontal" size={20} color="#475569" />
+            <Pressable onPress={() => listOptions(list)} accessibilityLabel="List options" style={roundButton(38)}>
+              <Ionicons name="ellipsis-horizontal" size={19} color={c.icon} />
             </Pressable>
           )}
         </View>
@@ -539,9 +540,9 @@ export function WebTasksScreen() {
         <ScrollView contentContainerStyle={{ paddingHorizontal: 28, paddingTop: 12, paddingBottom: 40 }}>
           {ready && open.length === 0 && done.length === 0 && (
             <View style={{ alignItems: "center", paddingVertical: 60 }}>
-              <Ionicons name="checkmark-done-outline" size={40} color="#CBD5E1" />
-              <Text style={{ marginTop: 10, fontSize: 15, fontWeight: "600", color: "#475569" }}>Nothing here yet</Text>
-              <Text style={{ marginTop: 2, fontSize: 13, color: "#94A3B8" }}>Add a task above to get started.</Text>
+              <Ionicons name="checkmark-done-outline" size={40} color={c.faint} />
+              <Text style={{ marginTop: 10, fontSize: 15, fontWeight: "600", color: c.text }}>Nothing here yet</Text>
+              <Text style={{ marginTop: 2, fontSize: 13, color: c.muted }}>Add a task above to get started.</Text>
             </View>
           )}
 
@@ -569,14 +570,17 @@ export function WebTasksScreen() {
                   alignItems: "center",
                   marginTop: 14,
                   marginBottom: 8,
-                  paddingHorizontal: 10,
-                  height: 30,
-                  borderRadius: 8,
-                  backgroundColor: hovered ? "#E2E8F0" : "#EEF2F7",
+                  paddingHorizontal: 12,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: hovered ? c.track : c.pill,
+                  borderWidth: 1,
+                  borderColor: c.border,
                 })}
               >
-                <Ionicons name={showCompleted ? "chevron-down" : "chevron-forward"} size={14} color="#475569" />
-                <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: "600", color: "#475569" }}>Completed  {done.length}</Text>
+                <Ionicons name={showCompleted ? "chevron-down" : "chevron-forward"} size={14} color={c.onPill} />
+                <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: "600", color: c.onPill }}>Completed</Text>
+                <Text style={{ marginLeft: 6, fontSize: 13, color: c.faint }}>{done.length}</Text>
               </Pressable>
               {showCompleted &&
                 done.map((task) => (
@@ -599,7 +603,7 @@ export function WebTasksScreen() {
 
       {/* The open task */}
       {openId && (
-        <View style={{ width: DETAIL_WIDTH, borderLeftWidth: 1, borderLeftColor: "#E2E8F0", backgroundColor: "#F8FAFC" }}>
+        <View style={{ width: DETAIL_WIDTH, borderLeftWidth: 1, borderLeftColor: c.border, backgroundColor: c.canvas }}>
           <TaskDetail
             key={openId}
             id={openId}
@@ -622,10 +626,10 @@ export function WebTasksScreen() {
       {drag && (
         <View
           pointerEvents="none"
-          style={{ position: "fixed", left: drag.x + 12, top: drag.y + 8, zIndex: 100, flexDirection: "row", alignItems: "center", height: 32, paddingHorizontal: 10, borderRadius: 9, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#BFDBFE", boxShadow: "0 8px 20px rgba(15,23,42,0.18)" } as object}
+          style={{ position: "fixed", left: drag.x + 12, top: drag.y + 8, zIndex: 100, flexDirection: "row", alignItems: "center", height: 34, paddingHorizontal: 12, borderRadius: 12, backgroundColor: c.surface, borderWidth: 1, borderColor: c.selectedRing, boxShadow: "0 8px 20px rgba(15,23,42,0.18)" } as object}
         >
           <Ionicons name={drag.list.type === "project" ? "git-network-outline" : "list-outline"} size={15} color={listAccent(drag.list.color, theme)} />
-          <Text style={{ marginLeft: 8, fontSize: 13, fontWeight: "600", color: "#0F172A" }}>{drag.list.name}</Text>
+          <Text style={{ marginLeft: 8, fontSize: 13, fontWeight: "600", color: c.text }}>{drag.list.name}</Text>
         </View>
       )}
 
@@ -666,11 +670,13 @@ export function WebTasksScreen() {
         }}
       />
     </View>
+    </OrbitPage>
   );
 }
 
 function Heading({ label }: { label: string }) {
-  return <Text style={{ marginBottom: 4, paddingHorizontal: 10, fontSize: 11, fontWeight: "700", letterSpacing: 1, color: "#94A3B8" }}>{label.toUpperCase()}</Text>;
+  const { colors: c } = useOrbitTheme();
+  return <Text style={{ marginBottom: 4, paddingHorizontal: 10, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, color: c.faint }}>{label.toUpperCase()}</Text>;
 }
 
 function ListRow({
@@ -705,6 +711,9 @@ function ListRow({
   onPress: () => void;
   onMouseDown?: (e: { clientX: number; clientY: number; button?: number }) => void;
 }) {
+  // (The one open: the section's pale wash, its name in the section's colour.)
+  const { colors: c } = useOrbitTheme();
+  const finished = !!list && projectDone(list);
   return (
     <Pressable
       onPress={onPress}
@@ -716,29 +725,29 @@ function ListRow({
         paddingHorizontal: 10,
         marginLeft: indent ? 10 : 0,
         opacity: faded ? 0.4 : 1,
-        borderRadius: 10,
-        backgroundColor: on ? "#E0EAFF" : hovered ? "#EEF2F7" : "transparent",
+        borderRadius: 12,
+        backgroundColor: on ? TINT : hovered ? c.pill : "transparent",
       })}
     >
       <Ionicons name={icon} size={18} color={color} />
       {list && <ProjectStatusDot list={list} gap={12} />}
       <Text
         numberOfLines={1}
-        style={{ flex: 1, marginLeft: list?.type === "project" ? 8 : 12, fontSize: 14, fontWeight: on ? "700" : "500", color: list && projectDone(list) ? "#64748B" : "#0F172A", textDecorationLine: list && projectDone(list) ? "line-through" : "none" }}
+        style={{ flex: 1, marginLeft: list?.type === "project" ? 8 : 12, fontSize: 14, fontWeight: on ? "700" : "500", color: finished ? c.muted : on ? c.ink : c.text, textDecorationLine: finished ? "line-through" : "none" }}
       >
         {label}
       </Text>
-      {count > 0 && <Text style={{ marginLeft: 6, fontSize: 12, color: "#64748B" }}>{count}</Text>}
+      {count > 0 && <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: on ? "700" : "400", color: on ? c.ink : c.faint }}>{count}</Text>}
       {onMore && (
         <Pressable
           onPress={onMore}
           accessibilityLabel={`${label} options`}
-          style={({ hovered }: Row) => ({ width: 24, height: 24, marginLeft: 4, marginRight: -4, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? "#E2E8F0" : "transparent" })}
+          style={({ hovered }: Row) => ({ width: 24, height: 24, marginLeft: 4, marginRight: -4, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? (on ? c.selectedRing : c.track) : "transparent" })}
         >
-          <Ionicons name="ellipsis-horizontal" size={14} color="#94A3B8" />
+          <Ionicons name="ellipsis-horizontal" size={14} color={on ? c.ink : c.faint} />
         </Pressable>
       )}
-      {trailing && <Ionicons name={trailing} size={14} color="#94A3B8" style={{ marginLeft: 6 }} />}
+      {trailing && <Ionicons name={trailing} size={14} color={c.faint} style={{ marginLeft: 6 }} />}
     </Pressable>
   );
 }
@@ -763,6 +772,7 @@ function TaskRow({
   onStar: () => void;
   onMenu: () => void;
 }) {
+  const { colors: c } = useOrbitTheme();
   const overdue = !task.completed && !!task.dueDate && isOverdue(task.dueDate);
   const meta = [
     showList ? task.list?.name : null,
@@ -776,14 +786,15 @@ function TaskRow({
       style={({ hovered }: Row) => ({
         flexDirection: "row",
         alignItems: "center",
-        minHeight: 54,
-        marginBottom: 6,
+        minHeight: 56,
+        marginBottom: 8,
         paddingLeft: 6,
         paddingRight: 10,
-        borderRadius: 12,
+        borderRadius: 16,
         borderWidth: 1,
-        borderColor: selected ? "#93C5FD" : "#E2E8F0",
-        backgroundColor: selected ? "#EFF6FF" : hovered ? "#F1F5F9" : "#FFFFFF",
+        // (Picked: the section's pale wash, ringed; under the pointer, ringed.)
+        borderColor: selected || hovered ? c.selectedRing : c.border,
+        backgroundColor: selected ? TINT : c.surface,
       })}
     >
       <Pressable
@@ -795,7 +806,7 @@ function TaskRow({
           <Ionicons
             name={task.completed ? "checkmark-circle" : hovered ? "checkmark-circle-outline" : "ellipse-outline"}
             size={22}
-            color={task.completed ? accent : hovered ? accent : "#94A3B8"}
+            color={task.completed ? accent : hovered ? accent : c.faint}
           />
         )}
       </Pressable>
@@ -807,7 +818,7 @@ function TaskRow({
             style={{
               flexShrink: 1,
               fontSize: 15,
-              color: task.completed ? "#94A3B8" : "#0F172A",
+              color: task.completed ? c.faint : c.text,
               textDecorationLine: task.completed ? "line-through" : "none",
             }}
           >
@@ -818,25 +829,25 @@ function TaskRow({
         <View style={{ marginTop: 3, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
           {!task.completed && task.status !== "not_started" && <StatusPill status={task.status} />}
           {!task.completed && task.priority !== "medium" && <PriorityPill priority={task.priority} />}
-          {meta.length > 0 && <Text style={{ fontSize: 12, color: "#64748B" }}>{meta.join("  ·  ")}</Text>}
+          {meta.length > 0 && <Text style={{ fontSize: 12, color: c.muted }}>{meta.join("  ·  ")}</Text>}
           {!!task.dueDate && (
             <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Ionicons name="calendar-outline" size={12} color={overdue ? "#DC2626" : "#64748B"} />
-              <Text style={{ marginLeft: 3, fontSize: 12, color: overdue ? "#DC2626" : "#64748B" }}>Due {friendlyDate(task.dueDate)}</Text>
+              <Ionicons name="calendar-outline" size={12} color={overdue ? c.danger : c.muted} />
+              <Text style={{ marginLeft: 3, fontSize: 12, fontWeight: overdue ? "600" : "400", color: overdue ? c.danger : c.muted }}>Due {friendlyDate(task.dueDate)}</Text>
             </View>
           )}
         </View>
       </View>
 
       <Pressable onPress={onMenu} accessibilityLabel="More" style={{ width: 30, height: 44, alignItems: "center", justifyContent: "center" }}>
-        <Ionicons name="ellipsis-horizontal" size={16} color="#94A3B8" />
+        <Ionicons name="ellipsis-horizontal" size={16} color={c.faint} />
       </Pressable>
       <Pressable
         onPress={onStar}
         accessibilityLabel={task.important ? "Remove importance" : "Mark as important"}
         style={{ width: 36, height: 44, alignItems: "center", justifyContent: "center" }}
       >
-        <Ionicons name={task.important ? "star" : "star-outline"} size={19} color={task.important ? accent : "#94A3B8"} />
+        <Ionicons name={task.important ? "star" : "star-outline"} size={19} color={task.important ? accent : c.faint} />
       </Pressable>
     </Pressable>
   );

@@ -4,7 +4,7 @@ import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from "r
 
 import { addDays, daysBetween, MONTHS_SHORT, WEEKDAYS_SHORT } from "@/src/components/calendar/calendarUtils";
 import { Choice, compactDate, DateField } from "@/src/components/web/fields";
-import { Card, Empty, hoverable, Segmented, WEB } from "@/src/components/web/ui";
+import { Button, Card, Empty, hoverable, Segmented, WEB } from "@/src/components/web/ui";
 import { themeColor } from "@/src/components/web/theme";
 import {
   addProjectPhase,
@@ -21,7 +21,7 @@ import {
   type TodoTask,
   type TodoTaskChanges,
 } from "@/src/services/todoApi";
-import { useOrbitPage } from "@/src/theme/orbit";
+import { SECTION_PALETTE, useOrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
 
 import { StatusPill } from "../TaskBits";
@@ -36,6 +36,8 @@ const BOOKED = themeColor("15,23,42", "226,232,240");
 // tasks by phase, in order, with dates) and Timeline (those tasks laid
 // against the calendar). Its tasks are ordinary tasks: opening one shows
 // the usual task panel beside this.
+// In Orbit's look (it's drawn on the Lists page's Orbit page), in the Tasks
+// section's violet.
 
 type Hover = { hovered?: boolean };
 type Tab = "overview" | "plan" | "timeline";
@@ -50,6 +52,8 @@ const PROJECT_STATUSES = Object.keys(PROJECT_STATUS_META) as ProjectStatus[];
 
 // "No phase" in maps and lists.
 const NONE = "none";
+// The Tasks section's pale wash: the task picked, a choice switched on.
+const TINT = SECTION_PALETTE.tasks.tint;
 
 export function WebProjectView({
   project,
@@ -75,6 +79,7 @@ export function WebProjectView({
   onOptions: () => void;
 }) {
   const today = todayStr();
+  const { colors: c } = useOrbitTheme();
   const [tab, setTab] = useState<Tab>("plan");
   // Shown at once while a change saves; replaced by what comes back.
   const [tasks, setTasks] = useState(loadedTasks);
@@ -274,13 +279,16 @@ export function WebProjectView({
   const late = !!project.targetDate && project.targetDate < today && status !== "done";
 
   return (
-    <View style={{ flex: 1, backgroundColor: WEB.page }}>
-      {/* Header */}
+    <View style={{ flex: 1, backgroundColor: c.canvas }}>
+      {/* Header: the name large on the page, the project's colour in a dot */}
       <View style={{ paddingHorizontal: 28, paddingTop: 20, paddingBottom: 14 }}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <View style={{ flex: 1 }}>
-            {!!groupName && <Text style={{ marginBottom: 2, fontSize: 12, fontWeight: "600", color: WEB.muted }}>{groupName}  ›  Project</Text>}
-            <Text numberOfLines={1} style={{ fontSize: 26, fontWeight: "700", color: accent }}>
+            <View style={{ marginBottom: 2, flexDirection: "row", alignItems: "center" }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, marginRight: 7, backgroundColor: accent }} />
+              <Text style={{ fontSize: 12, fontWeight: "600", color: c.muted }}>{groupName ? `${groupName}  ›  Project` : "Project"}</Text>
+            </View>
+            <Text numberOfLines={1} style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>
               {project.name}
             </Text>
           </View>
@@ -296,9 +304,9 @@ export function WebProjectView({
           <Pressable
             onPress={onOptions}
             accessibilityLabel="Project options"
-            style={({ hovered }: Hover) => ({ marginLeft: 8, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? "#E2E8F0" : "transparent" })}
+            style={({ hovered }: Hover) => ({ marginLeft: 8, width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? c.pill : c.surface, borderWidth: 1, borderColor: c.border })}
           >
-            <Ionicons name="ellipsis-horizontal" size={20} color="#475569" />
+            <Ionicons name="ellipsis-horizontal" size={19} color={c.icon} />
           </Pressable>
         </View>
 
@@ -315,7 +323,7 @@ export function WebProjectView({
             )}
           />
           <DateField value={project.startDate} placeholder="Start date" weekStartDay={weekStartDay} onChange={(d) => void updateTodoProject(project._id, { startDate: d }).then(onChanged, fail)} />
-          <Ionicons name="arrow-forward" size={14} color={WEB.faint} />
+          <Ionicons name="arrow-forward" size={14} color={c.faint} />
           <DateField
             value={project.targetDate}
             placeholder="Target date"
@@ -323,16 +331,16 @@ export function WebProjectView({
             weekStartDay={weekStartDay}
             onChange={(d) => void updateTodoProject(project._id, { targetDate: d }).then(onChanged, fail)}
           />
-          {late && <Text style={{ fontSize: 12, fontWeight: "600", color: WEB.red }}>past its target</Text>}
+          {late && <Text style={{ fontSize: 12, fontWeight: "600", color: c.danger }}>past its target</Text>}
           <View style={{ flex: 1, minWidth: 160, maxWidth: 320, marginLeft: 6 }}>
             <View style={{ flexDirection: "row" }}>
-              <Text style={{ flex: 1, fontSize: 12, color: WEB.muted }}>
+              <Text style={{ flex: 1, fontSize: 12, color: c.muted }}>
                 {done} of {tasks.length} done
               </Text>
-              <Text style={{ fontSize: 12, fontWeight: "700", color: WEB.text }}>{progress}%</Text>
+              <Text style={{ fontSize: 12, fontWeight: "800", color: c.text }}>{progress}%</Text>
             </View>
-            <View style={{ marginTop: 4, height: 6, borderRadius: 3, backgroundColor: "#E2E8F0", overflow: "hidden" }}>
-              <View style={{ width: `${progress}%`, height: 6, backgroundColor: accent }} />
+            <View style={{ marginTop: 5, height: 8, borderRadius: 4, backgroundColor: c.track, overflow: "hidden" }}>
+              <View style={{ width: `${progress}%`, height: 8, borderRadius: 4, backgroundColor: accent }} />
             </View>
           </View>
         </View>
@@ -357,24 +365,24 @@ export function WebProjectView({
                 ref={(view) => {
                   cardViews.current.set(id, view);
                 }}
-                style={{ marginBottom: 18, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, borderRadius: 14, overflow: "hidden" }}
+                style={{ marginBottom: 18, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 18, overflow: "hidden" }}
               >
-                <View style={{ flexDirection: "row", alignItems: "center", height: 42, paddingLeft: 14, paddingRight: 6, backgroundColor: "#F8FAFC", borderBottomWidth: 1, borderBottomColor: WEB.border }}>
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: phase ? WEB.text : WEB.muted }}>{phase?.name ?? (phases.length ? "Not in a phase yet" : "Tasks")}</Text>
-                  <Text style={{ flex: 1, marginLeft: 10, fontSize: 12, color: WEB.muted }}>
+                <View style={{ flexDirection: "row", alignItems: "center", height: 46, paddingLeft: 16, paddingRight: 6, borderBottomWidth: 1, borderBottomColor: c.border }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: phase ? c.text : c.muted }}>{phase?.name ?? (phases.length ? "Not in a phase yet" : "Tasks")}</Text>
+                  <Text style={{ flex: 1, marginLeft: 10, fontSize: 12, color: c.muted }}>
                     {finished} of {rows.length} done
                   </Text>
-                  <Text style={{ width: COL.status, fontSize: 11, fontWeight: "700", letterSpacing: 0.5, color: WEB.faint }}>STATUS</Text>
-                  <Text style={{ width: COL.date, fontSize: 11, fontWeight: "700", letterSpacing: 0.5, color: WEB.faint }}>START</Text>
-                  <Text style={{ width: COL.date, fontSize: 11, fontWeight: "700", letterSpacing: 0.5, color: WEB.faint }}>DUE</Text>
+                  <Text style={{ width: COL.status, fontSize: 11, fontWeight: "700", letterSpacing: 1, color: c.faint }}>STATUS</Text>
+                  <Text style={{ width: COL.date, fontSize: 11, fontWeight: "700", letterSpacing: 1, color: c.faint }}>START</Text>
+                  <Text style={{ width: COL.date, fontSize: 11, fontWeight: "700", letterSpacing: 1, color: c.faint }}>DUE</Text>
                   <View style={{ width: COL.actions, alignItems: "flex-end" }}>
                     {phase && (
                       <Pressable
                         onPress={() => phaseMenu(phase)}
                         accessibilityLabel={`${phase.name} options`}
-                        style={({ hovered }: Hover) => ({ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? "#E2E8F0" : "transparent" })}
+                        style={({ hovered }: Hover) => ({ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? c.track : "transparent" })}
                       >
-                        <Ionicons name="ellipsis-horizontal" size={16} color="#64748B" />
+                        <Ionicons name="ellipsis-horizontal" size={16} color={c.muted} />
                       </Pressable>
                     )}
                   </View>
@@ -388,7 +396,7 @@ export function WebProjectView({
                     }}
                     style={{ opacity: drag?.id === task._id ? 0.35 : 1 }}
                   >
-                    {dropIndex >= 0 && others.indexOf(task) === dropIndex && <DropLine color={accent} />}
+                    {dropIndex >= 0 && others.indexOf(task) === dropIndex && <DropLine color={c.ink} />}
                     <PlanRow
                       task={task}
                       place={placeOf.get(task._id) ?? 0}
@@ -406,7 +414,7 @@ export function WebProjectView({
                     />
                   </View>
                 ))}
-                {dropIndex >= 0 && dropIndex === others.length && <DropLine color={accent} />}
+                {dropIndex >= 0 && dropIndex === others.length && <DropLine color={c.ink} />}
 
                 <AddRow
                   placeholder={phase ? `Add a task to ${phase.name}` : "Add a task"}
@@ -424,17 +432,17 @@ export function WebProjectView({
               alignSelf: "flex-start",
               flexDirection: "row",
               alignItems: "center",
-              height: 36,
+              height: 38,
               paddingHorizontal: 14,
-              borderRadius: 10,
-              borderWidth: 1,
+              borderRadius: 12,
+              borderWidth: 1.5,
               borderStyle: "dashed",
-              borderColor: "#94A3B8",
-              backgroundColor: hovered ? "#F1F5F9" : "transparent",
+              borderColor: c.selectedRing,
+              backgroundColor: hovered ? TINT : "transparent",
             })}
           >
-            <Ionicons name="add" size={16} color="#475569" />
-            <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: "600", color: "#475569" }}>Add a phase</Text>
+            <Ionicons name="add" size={17} color={c.ink} />
+            <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: "700", color: c.ink }}>Add a phase</Text>
           </Pressable>
         </ScrollView>
       )}
@@ -512,6 +520,7 @@ function PlanRow({
   // Let go (true), or the drag was taken away (false).
   onDragEnd: (commit: boolean) => void;
 }) {
+  const { colors: c } = useOrbitTheme();
   const overdue = !task.completed && !!task.dueDate && task.dueDate < today;
   return (
     <Pressable
@@ -519,11 +528,11 @@ function PlanRow({
       style={({ hovered }: Hover) => ({
         flexDirection: "row",
         alignItems: "center",
-        minHeight: 44,
+        minHeight: 46,
         paddingRight: 6,
         borderBottomWidth: 1,
-        borderBottomColor: WEB.line,
-        backgroundColor: selected ? "#EFF6FF" : hovered ? "#F8FAFC" : "#FFFFFF",
+        borderBottomColor: c.track,
+        backgroundColor: selected ? TINT : hovered ? c.pill : c.surface,
       })}
     >
       {/* The handle: drag it to move the task, within its phase or to another. */}
@@ -539,13 +548,13 @@ function PlanRow({
         // (A click on the handle isn't a click on the row.)
         {...({ onClick: (e: { stopPropagation: () => void }) => e.stopPropagation() } as object)}
       >
-        <Ionicons name="reorder-two-outline" size={16} color="#94A3B8" />
-        <Text style={{ flex: 1, textAlign: "right", fontSize: 12, fontWeight: "700", color: WEB.muted }}>{place}</Text>
+        <Ionicons name="reorder-two-outline" size={16} color={c.faint} />
+        <Text style={{ flex: 1, textAlign: "right", fontSize: 12, fontWeight: "700", color: c.muted }}>{place}</Text>
       </View>
 
       <Pressable onPress={onToggle} accessibilityLabel={task.completed ? "Mark as not done" : "Mark as done"} style={{ width: 36, height: 40, alignItems: "center", justifyContent: "center" }}>
         {({ hovered }: Hover) => (
-          <Ionicons name={task.completed ? "checkmark-circle" : hovered ? "checkmark-circle-outline" : "ellipse-outline"} size={20} color={task.completed || hovered ? accent : "#94A3B8"} />
+          <Ionicons name={task.completed ? "checkmark-circle" : hovered ? "checkmark-circle-outline" : "ellipse-outline"} size={20} color={task.completed || hovered ? accent : c.faint} />
         )}
       </Pressable>
 
@@ -553,19 +562,19 @@ function PlanRow({
         {task.milestone && <Ionicons name="diamond" size={13} color={accent} style={{ marginRight: 7 }} />}
         <Text
           numberOfLines={1}
-          style={{ flexShrink: 1, fontSize: 14, fontWeight: task.milestone ? "700" : "500", color: task.completed ? WEB.faint : WEB.text, textDecorationLine: task.completed ? "line-through" : "none" }}
+          style={{ flexShrink: 1, fontSize: 14, fontWeight: task.milestone ? "700" : "500", color: task.completed ? c.faint : c.text, textDecorationLine: task.completed ? "line-through" : "none" }}
         >
           {task.title}
         </Text>
         {task.subtaskCount > 0 && (
-          <Text style={{ marginLeft: 8, fontSize: 12, color: WEB.muted }}>
+          <Text style={{ marginLeft: 8, fontSize: 12, color: c.muted }}>
             {task.subtaskCount - task.openSubtaskCount}/{task.subtaskCount}
           </Text>
         )}
         {task.workBlocks.length > 0 && (
           <View style={{ marginLeft: 8, flexDirection: "row", alignItems: "center" }}>
-            <Ionicons name="time-outline" size={12} color={WEB.muted} />
-            <Text style={{ marginLeft: 2, fontSize: 12, color: WEB.muted }}>{task.workBlocks.length}</Text>
+            <Ionicons name="time-outline" size={12} color={c.muted} />
+            <Text style={{ marginLeft: 2, fontSize: 12, color: c.muted }}>{task.workBlocks.length}</Text>
           </View>
         )}
       </View>
@@ -584,7 +593,7 @@ function PlanRow({
       </View>
       <View style={{ width: COL.date }}>
         {/* A milestone is a point in time: it has a date, not a span. */}
-        {task.milestone ? <Text style={{ paddingHorizontal: 6, fontSize: 13, color: WEB.faint }}>—</Text> : <DateField bare value={task.startDate} placeholder="Start" weekStartDay={weekStartDay} onChange={(d) => onPatch({ startDate: d })} />}
+        {task.milestone ? <Text style={{ paddingHorizontal: 6, fontSize: 13, color: c.faint }}>—</Text> : <DateField bare value={task.startDate} placeholder="Start" weekStartDay={weekStartDay} onChange={(d) => onPatch({ startDate: d })} />}
       </View>
       <View style={{ width: COL.date }}>
         <DateField bare value={task.dueDate} placeholder={task.milestone ? "Date" : "Due"} danger={overdue} weekStartDay={weekStartDay} onChange={(d) => onPatch({ dueDate: d })} align="right" />
@@ -598,19 +607,21 @@ function PlanRow({
 }
 
 function RowIcon({ icon, label, disabled, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; disabled?: boolean; onPress: () => void }) {
+  const { colors: c } = useOrbitTheme();
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       accessibilityLabel={label}
-      style={({ hovered }: Hover) => ({ width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.25 : 1, backgroundColor: hovered && !disabled ? "#E2E8F0" : "transparent" })}
+      style={({ hovered }: Hover) => ({ width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.25 : 1, backgroundColor: hovered && !disabled ? c.track : "transparent" })}
     >
-      <Ionicons name={icon} size={15} color="#64748B" />
+      <Ionicons name={icon} size={15} color={c.muted} />
     </Pressable>
   );
 }
 
 function AddRow({ placeholder, onAdd }: { placeholder: string; onAdd: (title: string, milestone: boolean) => void }) {
+  const { colors: c } = useOrbitTheme();
   const [title, setTitle] = useState("");
   const [milestone, setMilestone] = useState(false);
   const submit = () => {
@@ -621,27 +632,28 @@ function AddRow({ placeholder, onAdd }: { placeholder: string; onAdd: (title: st
     setMilestone(false);
   };
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", height: 42, paddingLeft: 13, paddingRight: 8 }}>
-      <Ionicons name={milestone ? "diamond-outline" : "add"} size={milestone ? 15 : 18} color="#94A3B8" />
+    <View style={{ flexDirection: "row", alignItems: "center", height: 46, paddingLeft: 14, paddingRight: 8 }}>
+      <Ionicons name={milestone ? "diamond-outline" : "add"} size={milestone ? 15 : 19} color={c.ink} />
       <TextInput
         value={title}
         onChangeText={setTitle}
         onSubmitEditing={submit}
         placeholder={milestone ? placeholder.replace("a task", "a milestone") : placeholder}
-        placeholderTextColor="#94A3B8"
-        style={{ flex: 1, marginLeft: 10, height: 34, fontSize: 14, color: WEB.text, outlineStyle: "none" } as object}
+        placeholderTextColor={c.faint}
+        style={{ flex: 1, marginLeft: 10, height: 34, fontSize: 14, color: c.text, outlineStyle: "none" } as object}
       />
+      {/* (Switched on: the section's pale wash, in its colour.) */}
       <Pressable
         onPress={() => setMilestone((v) => !v)}
-        style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 28, paddingHorizontal: 10, borderRadius: 14, backgroundColor: milestone ? "#EFF6FF" : hovered ? "#F1F5F9" : "transparent" })}
+        style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 28, paddingHorizontal: 10, borderRadius: 14, backgroundColor: milestone ? TINT : hovered ? c.pill : "transparent" })}
       >
-        <Ionicons name="diamond-outline" size={12} color={milestone ? WEB.blueDark : "#64748B"} />
-        <Text style={{ marginLeft: 5, fontSize: 12, fontWeight: "600", color: milestone ? WEB.blueDark : "#64748B" }}>Milestone</Text>
+        <Ionicons name="diamond-outline" size={12} color={milestone ? c.ink : c.muted} />
+        <Text style={{ marginLeft: 5, fontSize: 12, fontWeight: milestone ? "700" : "600", color: milestone ? c.ink : c.muted }}>Milestone</Text>
       </Pressable>
       {!!title.trim() && (
-        <Pressable onPress={submit} style={({ hovered }: Hover) => ({ marginLeft: 6, height: 28, paddingHorizontal: 12, justifyContent: "center", borderRadius: 14, backgroundColor: hovered ? WEB.blueDark : WEB.blue })}>
-          <Text style={{ fontSize: 12, fontWeight: "700", color: "#FFFFFF" }}>Add</Text>
-        </Pressable>
+        <View style={{ marginLeft: 6 }}>
+          <Button label="Add" kind="primary" small onPress={submit} />
+        </View>
       )}
     </View>
   );
@@ -670,6 +682,7 @@ function OverviewTab({
   onChanged: () => void;
   fail: (error: unknown) => void;
 }) {
+  const { colors: c } = useOrbitTheme();
   const [goal, setGoal] = useState(project.description ?? "");
   useEffect(() => setGoal(project.description ?? ""), [project._id, project.description]);
 
@@ -692,9 +705,9 @@ function OverviewTab({
               onChangeText={setGoal}
               onBlur={() => goal.trim() !== (project.description ?? "") && void updateTodoProject(project._id, { description: goal.trim() }).then(onChanged, fail)}
               placeholder="Describe the outcome you're after…"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={c.faint}
               multiline
-              style={{ minHeight: 96, borderRadius: 10, borderWidth: 1, borderColor: "#E2E8F0", padding: 10, fontSize: 14, lineHeight: 20, color: WEB.text, textAlignVertical: "top" }}
+              style={{ minHeight: 96, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.canvas, padding: 12, fontSize: 14, lineHeight: 20, color: c.text, textAlignVertical: "top" }}
             />
           </Card>
 
@@ -710,13 +723,13 @@ function OverviewTab({
                   return (
                     <View key={phase._id} style={{ marginTop: 12 }}>
                       <View style={{ flexDirection: "row" }}>
-                        <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: WEB.body }}>{phase.name}</Text>
-                        <Text style={{ fontSize: 12, color: WEB.muted }}>
+                        <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: c.text }}>{phase.name}</Text>
+                        <Text style={{ fontSize: 12, color: c.muted }}>
                           {finished} of {rows.length}
                         </Text>
                       </View>
-                      <View style={{ marginTop: 5, height: 7, borderRadius: 4, backgroundColor: "#EEF2F7", overflow: "hidden" }}>
-                        <View style={{ width: `${pct}%`, height: 7, backgroundColor: accent }} />
+                      <View style={{ marginTop: 6, height: 8, borderRadius: 4, backgroundColor: c.track, overflow: "hidden" }}>
+                        <View style={{ width: `${pct}%`, height: 8, borderRadius: 4, backgroundColor: accent }} />
                       </View>
                     </View>
                   );
@@ -728,16 +741,18 @@ function OverviewTab({
 
         <View style={{ flex: 1, minWidth: 320, gap: 16 }}>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+            {/* (As on the phone's Overview: the colour only where it means
+                something — in progress in the section's, done green, on hold amber.) */}
             {TASK_STATUSES.map((s) => (
-              <Fact key={s} label={TASK_STATUS_META[s].label} value={String(tasks.filter((t) => t.status === s).length)} color={TASK_STATUS_META[s].fg} />
+              <Fact key={s} label={TASK_STATUS_META[s].label} value={String(tasks.filter((t) => t.status === s).length)} color={s === "in_progress" ? c.ink : s === "completed" ? c.success : s === "on_hold" ? c.warning : undefined} />
             ))}
           </View>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-            <Fact label="Overdue" value={String(overdue.length)} color={overdue.length ? WEB.red : undefined} />
+            <Fact label="Overdue" value={String(overdue.length)} color={overdue.length ? c.danger : undefined} />
             <Fact
               label={daysLeft == null ? "No target date" : daysLeft >= 0 ? "Days to target" : "Days past target"}
               value={daysLeft == null ? "—" : String(Math.abs(daysLeft))}
-              color={daysLeft != null && daysLeft < 0 ? WEB.red : undefined}
+              color={daysLeft != null && daysLeft < 0 ? c.danger : undefined}
             />
             <Fact label="Time booked" value={bookedMinutes ? `${Math.round((bookedMinutes / 60) * 10) / 10} h` : "—"} />
             <Fact label="No dates yet" value={String(undated)} />
@@ -757,15 +772,17 @@ function OverviewTab({
 }
 
 function Fact({ label, value, color }: { label: string; value: string; color?: string }) {
+  const { colors: c } = useOrbitTheme();
   return (
-    <View style={{ flex: 1, minWidth: 110, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 }}>
-      <Text style={{ fontSize: 22, fontWeight: "700", color: color ?? WEB.text }}>{value}</Text>
-      <Text style={{ marginTop: 1, fontSize: 12, color: WEB.muted }}>{label}</Text>
+    <View style={{ flex: 1, minWidth: 110, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12 }}>
+      <Text style={{ fontSize: 22, fontWeight: "800", color: color ?? c.text }}>{value}</Text>
+      <Text style={{ marginTop: 1, fontSize: 12, color: c.muted }}>{label}</Text>
     </View>
   );
 }
 
 function TaskLines({ tasks, today, accent, onOpenTask }: { tasks: TodoTask[]; today: string; accent: string; onOpenTask: (id: string) => void }) {
+  const { colors: c } = useOrbitTheme();
   return (
     <View style={{ paddingBottom: 8 }}>
       {tasks.map((task) => {
@@ -774,13 +791,13 @@ function TaskLines({ tasks, today, accent, onOpenTask }: { tasks: TodoTask[]; to
           <Pressable
             key={task._id}
             onPress={() => onOpenTask(task._id)}
-            style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 7, backgroundColor: hovered ? "#F8FAFC" : "transparent" })}
+            style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 8, backgroundColor: hovered ? c.pill : "transparent" })}
           >
-            <Ionicons name={task.completed ? "checkmark-circle" : task.milestone ? "diamond" : "ellipse-outline"} size={14} color={task.completed ? WEB.green : task.milestone ? accent : WEB.faint} />
-            <Text numberOfLines={1} style={{ flex: 1, marginLeft: 10, fontSize: 14, color: task.completed ? WEB.faint : WEB.text, textDecorationLine: task.completed ? "line-through" : "none" }}>
+            <Ionicons name={task.completed ? "checkmark-circle" : task.milestone ? "diamond" : "ellipse-outline"} size={14} color={task.completed ? c.success : task.milestone ? accent : c.faint} />
+            <Text numberOfLines={1} style={{ flex: 1, marginLeft: 10, fontSize: 14, color: task.completed ? c.faint : c.text, textDecorationLine: task.completed ? "line-through" : "none" }}>
               {task.title}
             </Text>
-            <Text style={{ fontSize: 12, fontWeight: overdue ? "700" : "400", color: overdue ? WEB.red : WEB.muted }}>{task.dueDate ? compactDate(task.dueDate) : "No date"}</Text>
+            <Text style={{ fontSize: 12, fontWeight: overdue ? "700" : "400", color: overdue ? c.danger : c.muted }}>{task.dueDate ? compactDate(task.dueDate) : "No date"}</Text>
           </Pressable>
         );
       })}
@@ -836,6 +853,8 @@ export function TimelineTab({
   const c = o
     ? { card: o.surface, border: o.border, line: o.border, head: o.canvas, band: o.pill, bandSoft: o.pill, weekend: o.track, weekendSoft: o.track, row: o.surface, rowOn: o.pill, text: o.text, body: o.icon, muted: o.muted, faint: o.faint, today: o.selectedRing, todayText: o.ink, target: o.faint, now: o.danger, picked: o.ink }
     : { card: WEB.card, border: WEB.border, line: WEB.line, head: "#F8FAFC", band: "#F1F5F9", bandSoft: "rgba(241,245,249,0.85)", weekend: "#F1F5F9", weekendSoft: "rgba(241,245,249,0.6)", row: "#FFFFFF", rowOn: "#EFF6FF", text: WEB.text, body: WEB.body, muted: WEB.muted, faint: WEB.faint, today: "#DBEAFE", todayText: WEB.blueDark, target: "#94A3B8", now: "#EF4444", picked: "#1D4ED8" };
+  // (The desktop's, in Orbit's look: the parts the phone draws as they were.)
+  const d = o && !compact ? o : null;
   const labels = compact ? 124 : LABELS;
   const gutter = compact ? 12 : 28;
   const [width, setWidth] = useState(0);
@@ -977,7 +996,7 @@ export function TimelineTab({
                           onPress={() => onOpenTask(task._id)}
                           style={hoverable(({ hovered }) => ({ height: ROW, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, backgroundColor: selectedTaskId === task._id ? c.rowOn : hovered ? c.head : c.row }))}
                         >
-                          <Ionicons name={task.completed ? "checkmark-circle" : task.milestone ? "diamond" : "ellipse-outline"} size={13} color={task.completed ? WEB.green : task.milestone ? accent : c.faint} />
+                          <Ionicons name={task.completed ? "checkmark-circle" : task.milestone ? "diamond" : "ellipse-outline"} size={13} color={task.completed ? (d?.success ?? WEB.green) : task.milestone ? accent : c.faint} />
                           <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontSize: 13, color: task.completed ? c.faint : c.text }}>
                             {task.title}
                           </Text>
@@ -1101,27 +1120,27 @@ export function TimelineTab({
 
             {/* What can't be placed yet */}
             {undated.length > 0 && (
-              <View style={{ borderTopWidth: 1, borderTopColor: WEB.border, padding: 12 }}>
-                <Text style={{ marginBottom: 8, fontSize: 12, fontWeight: "700", color: WEB.muted }}>NO DATES YET · {undated.length}</Text>
+              <View style={{ borderTopWidth: 1, borderTopColor: d?.border ?? WEB.border, padding: 12 }}>
+                <Text style={{ marginBottom: 8, fontSize: 12, fontWeight: "700", letterSpacing: d ? 1 : 0, color: d?.muted ?? WEB.muted }}>NO DATES YET · {undated.length}</Text>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
                   {undated.map((task) => (
                     <Pressable
                       key={task._id}
                       onPress={() => onOpenTask(task._id)}
-                      style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", height: 28, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: "#CBD5E1", backgroundColor: hovered ? "#F1F5F9" : "#FFFFFF" }))}
+                      style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", height: 28, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: d?.orbit ?? "#CBD5E1", backgroundColor: hovered ? (d?.pill ?? "#F1F5F9") : (d?.surface ?? "#FFFFFF") }))}
                     >
                       {task.milestone && <Ionicons name="diamond-outline" size={11} color={accent} style={{ marginRight: 5 }} />}
-                      <Text style={{ fontSize: 12, color: task.completed ? WEB.faint : WEB.body }}>{task.title}</Text>
+                      <Text style={{ fontSize: 12, color: task.completed ? (d?.faint ?? WEB.faint) : (d?.icon ?? WEB.body) }}>{task.title}</Text>
                     </Pressable>
                   ))}
                 </View>
-                <Text style={{ marginTop: 8, fontSize: 12, color: WEB.faint }}>{compact ? "Give these a start or due date to place them on the timeline." : "Give these a start or due date on the Plan tab to place them on the timeline."}</Text>
+                <Text style={{ marginTop: 8, fontSize: 12, color: d?.faint ?? WEB.faint }}>{compact ? "Give these a start or due date to place them on the timeline." : "Give these a start or due date on the Plan tab to place them on the timeline."}</Text>
               </View>
             )}
           </ScrollView>
 
           {/* Key */}
-          <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: 14, rowGap: 4, paddingHorizontal: 12, paddingVertical: 8, minHeight: 34, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: "#F8FAFC" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: 14, rowGap: 4, paddingHorizontal: 12, paddingVertical: 8, minHeight: 34, borderTopWidth: 1, borderTopColor: d?.border ?? WEB.border, backgroundColor: d?.canvas ?? "#F8FAFC" }}>
             <Key color="#94A3B8" label="Not started" />
             <Key color={accent} label="In progress" />
             <Key color="#D97706" label="On hold" />
@@ -1133,9 +1152,9 @@ export function TimelineTab({
             {!fit && (
               <Pressable
                 onPress={() => goTo(today, true)}
-                style={hoverable(({ hovered }) => ({ marginLeft: "auto", height: 24, paddingHorizontal: 10, justifyContent: "center", borderRadius: 7, backgroundColor: hovered ? "#DBEAFE" : "#EFF6FF" }))}
+                style={hoverable(({ hovered }) => ({ marginLeft: "auto", height: 24, paddingHorizontal: 10, justifyContent: "center", borderRadius: d ? 12 : 7, backgroundColor: d ? (hovered ? d.selectedRing : TINT) : hovered ? "#DBEAFE" : "#EFF6FF" }))}
               >
-                <Text style={{ fontSize: 12, fontWeight: "600", color: "#1D4ED8" }}>Today</Text>
+                <Text style={{ fontSize: 12, fontWeight: d ? "700" : "600", color: d?.ink ?? "#1D4ED8" }}>Today</Text>
               </Pressable>
             )}
           </View>

@@ -238,7 +238,9 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
           autoCapitalize="words"
           autoCorrect={false}
           className={`flex-1 text-slate-950 ${bare ? "text-base" : compact ? "ml-2 text-sm" : "ml-3 text-base"}`}
-          style={o ? { color: o.text } : undefined}
+          // (minWidth 0: a browser's input won't shrink below its default
+          // width otherwise, and in a narrow field it pushes the icon out.)
+          style={[{ minWidth: 0 }, o ? { color: o.text } : null]}
           onFocus={openDropdown}
           onChangeText={handleTextChange}
           onSubmitEditing={closeDropdown}

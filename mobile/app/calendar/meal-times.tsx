@@ -46,12 +46,12 @@ const DEFAULT_TIMES: Record<MealType, MealTime> = {
 // the repeating meal events follow from today on; earlier days keep the
 // times they had.
 export default function MealTimesScreen() {
-  // A desktop browser gets the week laid out as a table, in its older look;
-  // the phone's is in Orbit's, in the Calendar's blue.
+  // A desktop browser gets the week laid out as a table; both it and the
+  // phone's are in Orbit's look, in the Calendar's blue.
   const wide = useWideWeb();
   return (
     <OrbitSection section="calendar">
-      <OrbitPage on={!wide}>{wide ? <WebMealTimesScreen /> : <PhoneMealTimesScreen />}</OrbitPage>
+      <OrbitPage>{wide ? <WebMealTimesScreen /> : <PhoneMealTimesScreen />}</OrbitPage>
     </OrbitSection>
   );
 }

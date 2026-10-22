@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState, type ComponentProps } from "react";
-import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PrivacyPolicyModal } from "@/src/components/legal/PrivacyPolicy";
+import { OrbSphere } from "@/src/components/ui/OrbSphere";
 import { joinWithInvite, resetPassword, signIn, type Account } from "@/src/services/authApi";
 import { getDatabaseState, switchDatabase, type DatabaseId, type DatabaseState } from "@/src/services/databaseApi";
+import { useOrbitTheme } from "@/src/theme/orbit";
 
 // The page shown until this device is signed in — on the phone and on the
 // web alike. Three ways in: signing in; joining with an invite code (there's
@@ -15,6 +17,9 @@ import { getDatabaseState, switchDatabase, type DatabaseId, type DatabaseState }
 // On a developer's machine, where the server can be on the real data or the
 // test data, which one is chosen here too: each has its own accounts, so
 // it's chosen before signing in.
+//
+// In Orbit's look: its orb over a card on the canvas, the button in the
+// theme's ink, links in blue.
 
 type Mode = "signin" | "join" | "reset";
 
@@ -25,13 +30,16 @@ const COPY: Record<Mode, { title: string; lead: string; button: string }> = {
 };
 
 function Field({ label, ...props }: { label: string } & ComponentProps<typeof TextInput>) {
+  const { colors } = useOrbitTheme();
   return (
-    <View className="mt-4">
-      <Text className="mb-1.5 text-xs font-semibold text-slate-500">{label}</Text>
+    <View style={{ marginTop: 16 }}>
+      <Text style={{ marginBottom: 6, fontSize: 12, fontWeight: "600", color: colors.muted }}>{label}</Text>
       <TextInput
-        placeholderTextColor="#94A3B8"
-        className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900"
-        style={Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : undefined}
+        placeholderTextColor={colors.faint}
+        style={[
+          { borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: colors.text },
+          Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null,
+        ]}
         {...props}
       />
     </View>
@@ -96,22 +104,24 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
     }
   }
 
+  const { colors, dark } = useOrbitTheme();
   const copy = COPY[mode];
   const newPassword = mode !== "signin";
+  const link = { fontWeight: "600" as const, color: colors.accent };
   return (
-    <SafeAreaView className="flex-1 bg-slate-50">
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 20 }} keyboardShouldPersistTaps="handled">
           <View style={{ width: "100%", maxWidth: 420, alignSelf: "center" }}>
-            <View className="mb-6 items-center">
-              {/* The app's icon */}
-              <Image source={require("@/assets/images/orbit-splash-light.png")} style={{ width: 64, height: 64 }} accessibilityIgnoresInvertColors />
-              <Text className="mt-3 text-lg font-bold text-slate-900">Orbit</Text>
+            <View style={{ marginBottom: 24, alignItems: "center" }}>
+              {/* Orbit's orb */}
+              <OrbSphere size={60} label="Orbit" colors={colors} dark={dark} />
+              <Text style={{ marginTop: 12, fontSize: 18, fontWeight: "800", color: colors.text }}>Orbit</Text>
             </View>
 
-            <View className="rounded-3xl border border-slate-200 bg-white p-6">
-              <Text className="text-2xl font-bold text-slate-950">{copy.title}</Text>
-              <Text className="mt-1 text-sm text-slate-500">{copy.lead}</Text>
+            <View style={{ borderRadius: 24, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 24 }}>
+              <Text style={{ fontSize: 26, fontWeight: "800", letterSpacing: -0.4, color: colors.text }}>{copy.title}</Text>
+              <Text style={{ marginTop: 4, fontSize: 14, color: colors.muted }}>{copy.lead}</Text>
 
               {!!notice && mode === "signin" && (
                 <View className="mt-4 flex-row items-center rounded-xl bg-amber-50 px-3 py-2.5">
@@ -155,11 +165,15 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
                 returnKeyType="go"
               />
 
-              {!!error && <Text className="mt-4 text-sm text-red-600">{error}</Text>}
+              {!!error && <Text style={{ marginTop: 16, fontSize: 14, color: colors.danger }}>{error}</Text>}
 
-              <Pressable onPress={() => void submit()} disabled={busy} className={`mt-6 flex-row items-center justify-center rounded-xl py-3.5 ${busy ? "bg-blue-400" : "bg-blue-600 active:bg-blue-700"}`}>
-                {busy && <ActivityIndicator color="white" style={{ marginRight: 8 }} />}
-                <Text className="text-base font-semibold text-white">{copy.button}</Text>
+              <Pressable
+                onPress={() => void submit()}
+                disabled={busy}
+                style={({ pressed }) => ({ marginTop: 24, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 14, paddingVertical: 14, backgroundColor: colors.ink, opacity: busy ? 0.6 : pressed ? 0.85 : 1 })}
+              >
+                {busy && <ActivityIndicator color={colors.onInk} style={{ marginRight: 8 }} />}
+                <Text style={{ fontSize: 16, fontWeight: "600", color: colors.onInk }}>{copy.button}</Text>
               </Pressable>
             </View>
 
@@ -167,26 +181,26 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
               {mode === "signin" ? (
                 <>
                   <Pressable onPress={() => switchTo("join")} hitSlop={6}>
-                    <Text className="text-sm text-slate-500">
-                      Have an invite code? <Text className="font-semibold text-blue-600">Join</Text>
+                    <Text style={{ fontSize: 14, color: colors.muted }}>
+                      Have an invite code? <Text style={link}>Join</Text>
                     </Text>
                   </Pressable>
                   <Pressable onPress={() => switchTo("reset")} hitSlop={6}>
-                    <Text className="text-sm text-slate-500">
-                      Forgot your password? <Text className="font-semibold text-blue-600">Use a reset code</Text>
+                    <Text style={{ fontSize: 14, color: colors.muted }}>
+                      Forgot your password? <Text style={link}>Use a reset code</Text>
                     </Text>
                   </Pressable>
-                  <Text className="px-6 text-center text-xs text-slate-400">No reset code? Ask whoever runs your Orbit for one.</Text>
+                  <Text style={{ paddingHorizontal: 24, textAlign: "center", fontSize: 12, color: colors.faint }}>No reset code? Ask whoever runs your Orbit for one.</Text>
                 </>
               ) : (
                 <Pressable onPress={() => switchTo("signin")} hitSlop={6}>
-                  <Text className="text-sm font-semibold text-blue-600">Back to sign in</Text>
+                  <Text style={[link, { fontSize: 14 }]}>Back to sign in</Text>
                 </Pressable>
               )}
             </View>
 
             <Pressable onPress={() => setPrivacy(true)} hitSlop={6} className="mt-6 items-center">
-              <Text className="text-xs font-semibold text-slate-400">Privacy policy</Text>
+              <Text style={{ fontSize: 12, fontWeight: "600", color: colors.faint }}>Privacy policy</Text>
             </Pressable>
             <PrivacyPolicyModal visible={privacy} onClose={() => setPrivacy(false)} />
 

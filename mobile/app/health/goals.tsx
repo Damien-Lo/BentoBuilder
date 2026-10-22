@@ -15,11 +15,25 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DateTextInput, SettingsNumericInput, SettingsRow, SettingsSectionHeader } from "@/src/components/forms";
 import { useWideForm } from "@/src/components/forms/wideForm";
+import { deskCard, DeskHeader, NutritionDesk, useNutritionDesk } from "@/src/components/health/web/NutritionDesk";
+import { Button } from "@/src/components/web/ui";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
+import { SECTION_PALETTE } from "@/src/theme/orbit";
 
+// (In a desktop browser, in Orbit's look and Nutrition's green.)
 export default function GoalsScreen() {
+  return (
+    <NutritionDesk>
+      <GoalsPage />
+    </NutritionDesk>
+  );
+}
+
+function GoalsPage() {
   const router = useRouter();
+  // The page's colours in a desktop browser; null on a phone.
+  const o = useNutritionDesk();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -58,8 +72,8 @@ export default function GoalsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o?.ink ?? "#2563EB"} />
       </SafeAreaView>
     );
   }
@@ -69,7 +83,7 @@ export default function GoalsScreen() {
     <>
       {/* ── Weight ── */}
       <SettingsSectionHeader title="Weight" />
-      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o && deskCard(o)}>
         <View {...startingWeightSection.wrapperProps}>
           <SettingsRow label="Starting weight">
             <SettingsNumericInput
@@ -91,6 +105,7 @@ export default function GoalsScreen() {
             onChangeText={v => patch({ startingWeightDate: v || null })}
             onFocus={startingDateSection.trigger}
             className="min-w-[110px] rounded-xl bg-slate-100 px-3 py-2 text-right text-base font-semibold text-slate-900"
+            style={o && { backgroundColor: o.pill }}
           />
         </View>
         <View {...goalWeightSection.wrapperProps}>
@@ -111,10 +126,18 @@ export default function GoalsScreen() {
   const nutritionLink = (
     <Pressable
       className={`${layout.wide ? "" : "mt-3 "}flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3.5 active:bg-slate-50`}
+      style={o && deskCard(o)}
       onPress={() => router.back()}
     >
       <View className="mr-2 flex-1 flex-row items-center">
-        <Ionicons name="pie-chart-outline" size={18} color="#2563EB" />
+        {/* (In a desktop browser, its icon in a well of Nutrition's green.) */}
+        {o ? (
+          <View style={{ width: 32, height: 32, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: SECTION_PALETTE.nutrition.tint }}>
+            <Ionicons name="pie-chart-outline" size={17} color={o.ink} />
+          </View>
+        ) : (
+          <Ionicons name="pie-chart-outline" size={18} color="#2563EB" />
+        )}
         <Text className="ml-3 flex-1 text-base text-slate-700">
           Daily calorie & macro goals live on the Nutrition tab
         </Text>
@@ -124,13 +147,16 @@ export default function GoalsScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
       <KeyboardAvoidingView
         className="flex-1"
         style={layout.page}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header */}
+        {/* Header (in a desktop browser, the title large on the page) */}
+        {o ? (
+          <DeskHeader o={o} title="Goals" subtitle="Your weight targets" onBack={() => router.back()} />
+        ) : (
         <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-3">
           <Pressable
             className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
@@ -143,6 +169,7 @@ export default function GoalsScreen() {
             <Text className="mt-0.5 text-sm text-slate-500">Your weight targets</Text>
           </View>
         </View>
+        )}
 
         <ScrollView
           ref={scrollRef}
@@ -168,6 +195,11 @@ export default function GoalsScreen() {
           )}
 
           {/* Save button */}
+          {o ? (
+            <View style={{ marginTop: 24, flexDirection: "row", justifyContent: "flex-end" }}>
+              <Button label={isSaving ? "Saving…" : "Save goals"} kind="primary" onPress={() => !isSaving && void handleSave()} />
+            </View>
+          ) : (
           <View style={layout.actions}>
           <Pressable
             onPress={() => void handleSave()}
@@ -181,6 +213,7 @@ export default function GoalsScreen() {
             </Text>
           </Pressable>
           </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

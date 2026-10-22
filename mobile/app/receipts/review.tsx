@@ -113,7 +113,7 @@ import {
   takePendingReceipt,
 } from "@/src/utils/receiptReviewStore";
 import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
-import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { OrbitPage, OrbitSection, SECTION_PALETTE, useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { Tap } from "@/src/components/ui/Tap";
 
 // Something to tap. Elsewhere as before: its classes, and their active:
@@ -1564,14 +1564,13 @@ function ReceiptReview() {
   const { width: windowWidth, height: windowHeight } = usePaneDimensions();
   const pagerRef = useRef<FlatList<ReviewRow>>(null);
   const layout = useWideForm();
-  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
-  // desktop browser keeps the desktop's for now. The fields and dropdowns
-  // in it follow by themselves (OrbitPage).
-  const { colors, dark } = useOrbitTheme();
-  const o = layout.wide ? null : colors;
-  const card = o && { backgroundColor: o.surface, borderColor: o.border };
+  // In Orbit's look, light or dark (`o`: its colours) — in a desktop
+  // browser too, the item list and the item side by side. The fields and
+  // dropdowns in it follow by themselves (OrbitPage).
+  const { colors: o, dark } = useOrbitTheme();
+  const card = { backgroundColor: o.surface, borderColor: o.border };
   // A round button in the header, and on either side of "Item 2 of 5".
-  const roundButton = o && { alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border };
+  const roundButton = { alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border };
 
   // The item-list panel's draggable height (see the gesture + JSX further
   // down) — declared here, unconditionally, alongside the other hooks and
@@ -2663,19 +2662,19 @@ function ReceiptReview() {
 
   if (loadError) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-8" style={o && { backgroundColor: o.canvas }}>
-        <Ionicons name="cloud-offline-outline" size={40} color={o?.faint ?? "#94A3B8"} />
-        <Text className="mt-3 text-center text-base font-semibold text-slate-700" style={o && { color: o.text }}>
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-8" style={{ backgroundColor: o.canvas }}>
+        <Ionicons name="cloud-offline-outline" size={40} color={o.faint} />
+        <Text className="mt-3 text-center text-base font-semibold text-slate-700" style={{ color: o.text }}>
           Couldn&apos;t load this receipt
         </Text>
-        <Text className="mt-1 text-center text-sm text-slate-500" style={o && { color: o.muted }}>{loadError}</Text>
+        <Text className="mt-1 text-center text-sm text-slate-500" style={{ color: o.muted }}>{loadError}</Text>
         <Press
           className="mt-5 rounded-xl bg-blue-600 px-5 py-3 active:bg-blue-700"
-          orbit={o && { height: 52, justifyContent: "center", paddingHorizontal: 24, borderRadius: 16, backgroundColor: o.ink }}
-          held={o && { opacity: 0.85 }}
+          orbit={{ height: 52, justifyContent: "center", paddingHorizontal: 24, borderRadius: 16, backgroundColor: o.ink }}
+          held={{ opacity: 0.85 }}
           onPress={() => setRetryToken((token) => token + 1)}
         >
-          <Text className="font-semibold text-white" style={o && { fontSize: 16, color: o.onInk }}>Try again</Text>
+          <Text className="font-semibold text-white" style={{ fontSize: 16, color: o.onInk }}>Try again</Text>
         </Press>
       </SafeAreaView>
     );
@@ -2683,9 +2682,9 @@ function ReceiptReview() {
 
   if (loading || !receipt) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
-        <ActivityIndicator size="large" color={o?.ink ?? "#2563EB"} />
-        <Text className="mt-3 text-slate-500" style={o && { color: o.muted }}>Loading...</Text>
+      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={{ backgroundColor: o.canvas }}>
+        <ActivityIndicator size="large" color={o.ink} />
+        <Text className="mt-3 text-slate-500" style={{ color: o.muted }}>Loading...</Text>
       </SafeAreaView>
     );
   }
@@ -2752,8 +2751,8 @@ function ReceiptReview() {
   const itemList = (
     <>
       <View className="flex-row items-center justify-between px-4 pb-2">
-        <Text className="flex-1 text-sm text-slate-500" numberOfLines={1} style={o && { color: o.muted }}>
-          <Text className="font-bold text-slate-900" style={o && { color: o.text }}>
+        <Text className="flex-1 text-sm text-slate-500" numberOfLines={1} style={{ color: o.muted }}>
+          <Text className="font-bold text-slate-900" style={{ color: o.text }}>
             {rows.length} item{rows.length === 1 ? "" : "s"}
           </Text>
           {" · "}
@@ -2768,7 +2767,7 @@ function ReceiptReview() {
             );
           }}
         >
-          <Text className="text-sm font-semibold text-blue-600" style={o && { color: o.accent }}>
+          <Text className="text-sm font-semibold text-blue-600" style={{ color: o.accent }}>
             {allSelectableChecked ? "Deselect all" : "Select all"}
           </Text>
         </Pressable>
@@ -2797,12 +2796,12 @@ function ReceiptReview() {
 
         <Press
           className="mt-1 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3 active:bg-slate-100"
-          orbit={o && { borderRadius: 18, borderColor: o.faint, backgroundColor: "transparent" }}
-          held={o && { backgroundColor: o.pill }}
+          orbit={{ borderRadius: 18, borderColor: o.faint, backgroundColor: "transparent" }}
+          held={{ backgroundColor: o.pill }}
           onPress={handleAddManualRow}
         >
-          <Ionicons name="add-circle-outline" size={18} color={o?.ink ?? "#2563EB"} />
-          <Text className="ml-1.5 text-sm font-semibold text-blue-600" style={o && { color: o.ink }}>
+          <Ionicons name="add-circle-outline" size={18} color={o.ink} />
+          <Text className="ml-1.5 text-sm font-semibold text-blue-600" style={{ color: o.ink }}>
             Add an item the receipt missed
           </Text>
         </Press>
@@ -2814,9 +2813,9 @@ function ReceiptReview() {
 
   // (In a browser: which camera barcodes and labels use.)
   const cameraSwitch = (
-    <View className="mr-3 flex-row items-center" style={o && { marginRight: 0 }}>
-      <Text className="mr-2 text-xs font-medium text-slate-500" style={o && { color: o.muted }}>Camera</Text>
-      <View className="flex-row rounded-xl bg-slate-100 p-1" style={o && { backgroundColor: o.pill }}>
+    <View className="mr-3 flex-row items-center" style={{ marginRight: 0 }}>
+      <Text className="mr-2 text-xs font-medium text-slate-500" style={{ color: o.muted }}>Camera</Text>
+      <View className="flex-row rounded-xl bg-slate-100 p-1" style={{ backgroundColor: o.pill }}>
         {(
           [
             ["computer", "desktop-outline", "This computer"],
@@ -2828,12 +2827,12 @@ function ReceiptReview() {
             onPress={() => setCameraMode(mode)}
             accessibilityLabel={`Use ${text.toLowerCase()} for photos`}
             className={`flex-row items-center rounded-lg px-3 py-1.5 ${cameraMode === mode ? "bg-white" : ""}`}
-            style={o && cameraMode === mode ? { backgroundColor: o.ink } : undefined}
+            style={cameraMode === mode ? { backgroundColor: o.ink } : undefined}
           >
-            <Ionicons name={icon} size={14} color={o ? (cameraMode === mode ? o.onInk : o.muted) : cameraMode === mode ? "#2563EB" : "#64748B"} />
+            <Ionicons name={icon} size={14} color={cameraMode === mode ? o.onInk : o.muted} />
             <Text
               className={`ml-1.5 text-xs font-semibold ${cameraMode === mode ? "text-blue-700" : "text-slate-500"}`}
-              style={o && { color: cameraMode === mode ? o.onInk : o.muted }}
+              style={{ color: cameraMode === mode ? o.onInk : o.muted }}
             >
               {text}
             </Text>
@@ -2844,16 +2843,61 @@ function ReceiptReview() {
   );
 
   return (
-    <OrbitPage on={!layout.wide}>
+    <OrbitPage>
     <SafeAreaView
       className="flex-1 bg-slate-50"
-      style={layout.wide ? { width: "100%", maxWidth: 1600, alignSelf: "center" } : o && { backgroundColor: o.canvas }}
+      style={{ backgroundColor: o.canvas }}
       edges={["top", "left", "right"]}
     >
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        {/* Header (phone): the way back and the receipt's actions over a
-            large title, on the page itself. */}
-        {o ? (
+      {/* (In a desktop browser, held to a width down the middle of the canvas.) */}
+      <KeyboardAvoidingView className="flex-1" style={layout.wide ? { width: "100%", maxWidth: 1600, alignSelf: "center" } : undefined} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        {/* Header: the way back and the receipt's actions on the page itself
+            — over a large title on a phone; in a desktop browser all on one
+            line, the camera choice among them. */}
+        {layout.wide ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 16 }}>
+            <Tap
+              disabled={submitting}
+              onPress={() => router.back()}
+              accessibilityLabel="Back"
+              style={[roundButton, { width: 40, height: 40, borderRadius: 20 }]}
+              pressedStyle={{ backgroundColor: o.pill }}
+            >
+              <Ionicons name="chevron-back" size={22} color={o.text} />
+            </Tap>
+            <Text style={{ marginLeft: 6, flex: 1, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }} numberOfLines={1}>Review Receipt</Text>
+            <View style={{ marginRight: 4 }}>{cameraSwitch}</View>
+            {/* The receipt itself, to check the lines against. */}
+            {!!draftPhoto && (
+              <Tap
+                accessibilityLabel="Show the receipt"
+                onPress={() => setShowPhoto(true)}
+                style={[roundButton, { height: 40, borderRadius: 20, flexDirection: "row", paddingHorizontal: 14 }]}
+                pressedStyle={{ backgroundColor: o.pill }}
+              >
+                <Ionicons name="receipt-outline" size={18} color={o.icon} />
+                <Text style={{ marginLeft: 6, fontSize: 14, fontWeight: "600", color: o.text }}>Receipt</Text>
+              </Tap>
+            )}
+            <Tap
+              disabled={submitting}
+              accessibilityLabel="Discard receipt"
+              onPress={handleDiscardReceipt}
+              style={[roundButton, { width: 40, height: 40, borderRadius: 20 }]}
+              pressedStyle={{ backgroundColor: o.pill }}
+            >
+              <Ionicons name="trash-outline" size={18} color={o.icon} />
+            </Tap>
+            <Tap
+              disabled={submitting}
+              onPress={() => void handleConfirm()}
+              style={{ height: 40, justifyContent: "center", paddingHorizontal: 18, borderRadius: 20, backgroundColor: o.ink, opacity: submitting ? 0.5 : 1 }}
+              pressedStyle={{ opacity: 0.8 }}
+            >
+              <Text style={{ fontSize: 15, fontWeight: "700", color: o.onInk }}>{submitting ? "Adding..." : "Confirm"}</Text>
+            </Tap>
+          </View>
+        ) : (
           <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginLeft: -4, minHeight: 40 }}>
               <Tap
@@ -2898,55 +2942,17 @@ function ReceiptReview() {
             <Text style={{ marginTop: 10, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: o.text }}>Review Receipt</Text>
             {Platform.OS === "web" && <View style={{ marginTop: 8, alignSelf: "flex-start" }}>{cameraSwitch}</View>}
           </View>
-        ) : (
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-4 py-3">
-          <Pressable
-            disabled={submitting}
-            className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-back" size={26} color="#0F172A" />
-          </Pressable>
-          <Text className="ml-2 flex-1 text-xl font-bold text-slate-950">Review Receipt</Text>
-          {Platform.OS === "web" && cameraSwitch}
-          {/* The receipt itself, to check the lines against. */}
-          {!!draftPhoto && (
-            <Pressable
-              accessibilityLabel="Show the receipt"
-              className="mr-2 h-10 flex-row items-center rounded-xl bg-slate-100 px-3 active:bg-slate-200"
-              onPress={() => setShowPhoto(true)}
-            >
-              <Ionicons name="receipt-outline" size={18} color="#475569" />
-              {layout.wide && <Text className="ml-1.5 font-semibold text-slate-700">Receipt</Text>}
-            </Pressable>
-          )}
-          <Pressable
-            disabled={submitting}
-            accessibilityLabel="Discard receipt"
-            className="mr-2 h-10 w-10 items-center justify-center rounded-xl bg-slate-100 active:bg-slate-200"
-            onPress={handleDiscardReceipt}
-          >
-            <Ionicons name="trash-outline" size={19} color="#475569" />
-          </Pressable>
-          <Pressable
-            disabled={submitting}
-            className={`h-10 justify-center rounded-xl px-4 ${submitting ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"}`}
-            onPress={() => void handleConfirm()}
-          >
-            <Text className="font-semibold text-white">{submitting ? "Adding..." : "Confirm"}</Text>
-          </Pressable>
-        </View>
         )}
 
         {/* Raised above the card pager below, so the store's options list
             draws over it. */}
         <View className="flex-row gap-2 px-4 pt-3" style={{ zIndex: 10 }}>
-          <View className="flex-1 flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 py-2" style={card && { ...card, borderRadius: 18 }}>
-            <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100" style={o && { backgroundColor: o.pill }}>
-              <Ionicons name="cart-outline" size={18} color={o?.icon ?? "#475569"} />
+          <View className="flex-1 flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 py-2" style={{ ...card, borderRadius: 18 }}>
+            <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100" style={{ backgroundColor: o.pill }}>
+              <Ionicons name="cart-outline" size={18} color={o.icon} />
             </View>
             <View className="ml-2.5 flex-1">
-              <Text className="text-[11px] font-medium text-slate-500" style={o && { color: o.muted }}>Store</Text>
+              <Text className="text-[11px] font-medium text-slate-500" style={{ color: o.muted }}>Store</Text>
               <SearchableObjectDropdown<SelectOption>
                 bare
                 options={stores}
@@ -2970,15 +2976,15 @@ function ReceiptReview() {
           <Press
             onPress={() => setPickingPurchaseDate(true)}
             className="flex-1 flex-row items-center rounded-2xl border border-slate-200 bg-white px-3 py-2 active:bg-slate-50"
-            orbit={card && { ...card, borderRadius: 18 }}
-            held={o && { backgroundColor: o.pill }}
+            orbit={{ ...card, borderRadius: 18 }}
+            held={{ backgroundColor: o.pill }}
           >
-            <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100" style={o && { backgroundColor: o.pill }}>
-              <Ionicons name="calendar-outline" size={18} color={o?.icon ?? "#475569"} />
+            <View className="h-9 w-9 items-center justify-center rounded-xl bg-slate-100" style={{ backgroundColor: o.pill }}>
+              <Ionicons name="calendar-outline" size={18} color={o.icon} />
             </View>
             <View className="ml-2.5 flex-1">
-              <Text className="text-[11px] font-medium text-slate-500" style={o && { color: o.muted }}>Purchase date</Text>
-              <Text className="text-base text-slate-950" style={[{ lineHeight: 26 }, o && { color: o.text }]} numberOfLines={1}>
+              <Text className="text-[11px] font-medium text-slate-500" style={{ color: o.muted }}>Purchase date</Text>
+              <Text className="text-base text-slate-950" style={[{ lineHeight: 26 }, { color: o.text }]} numberOfLines={1}>
                 {formatDateDisplay(purchaseDate) ?? "Pick a date"}
               </Text>
             </View>
@@ -2989,40 +2995,44 @@ function ReceiptReview() {
             item being looked at on the right — no pager, no panel.) */}
         <View className="flex-1" style={layout.wide ? { flexDirection: "row", gap: 16, padding: 16, paddingTop: 12 } : undefined}>
         {layout.wide ? (
-          <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white pt-4" style={{ width: 440 }}>
+          <View className="overflow-hidden rounded-3xl border border-slate-200 bg-white pt-4" style={{ width: 440, borderRadius: 20, backgroundColor: o.surface, borderColor: o.border }}>
             {itemList}
           </View>
         ) : null}
         {rows.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
-            <Text className="text-center text-slate-500" style={o && { color: o.muted }}>
+            <Text className="text-center text-slate-500" style={{ color: o.muted }}>
               No items left on this receipt — add one below, or discard the receipt.
             </Text>
           </View>
         ) : layout.wide ? (
           <View style={{ flex: 1, minWidth: 0 }}>
             <View className="mb-2 flex-row items-center justify-between">
-              <Pressable
+              <Press
                 disabled={focusedIndex === 0}
                 accessibilityLabel="Previous item"
                 onPress={() => goToIndex(focusedIndex - 1)}
                 className="h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white active:bg-slate-100"
                 style={{ opacity: focusedIndex === 0 ? 0.35 : 1 }}
+                orbit={roundButton}
+                held={{ backgroundColor: o.pill }}
               >
-                <Ionicons name="chevron-back" size={16} color="#334155" />
-              </Pressable>
-              <Text className="text-xs font-medium text-slate-500">
+                <Ionicons name="chevron-back" size={16} color={o.icon} />
+              </Press>
+              <Text className="text-xs font-medium text-slate-500" style={{ color: o.muted }}>
                 Item {focusedIndex + 1} of {rows.length}
               </Text>
-              <Pressable
+              <Press
                 disabled={focusedIndex >= rows.length - 1}
                 accessibilityLabel="Next item"
                 onPress={() => goToIndex(focusedIndex + 1)}
                 className="h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white active:bg-slate-100"
                 style={{ opacity: focusedIndex >= rows.length - 1 ? 0.35 : 1 }}
+                orbit={roundButton}
+                held={{ backgroundColor: o.pill }}
               >
-                <Ionicons name="chevron-forward" size={16} color="#334155" />
-              </Pressable>
+                <Ionicons name="chevron-forward" size={16} color={o.icon} />
+              </Press>
             </View>
             {focusedRow ? <ReceiptRowDetail key={focusedRow.key} row={focusedRow} callbacks={rowCallbacks} /> : null}
           </View>
@@ -3036,11 +3046,11 @@ function ReceiptReview() {
                 className="h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white active:bg-slate-100"
                 style={{ opacity: focusedIndex === 0 ? 0.35 : 1 }}
                 orbit={roundButton}
-                held={o && { backgroundColor: o.pill }}
+                held={{ backgroundColor: o.pill }}
               >
-                <Ionicons name="chevron-back" size={16} color={o?.icon ?? "#334155"} />
+                <Ionicons name="chevron-back" size={16} color={o.icon} />
               </Press>
-              <Text className="text-xs font-medium text-slate-500" style={o && { color: o.muted }}>
+              <Text className="text-xs font-medium text-slate-500" style={{ color: o.muted }}>
                 Item {focusedIndex + 1} of {rows.length} · swipe for next
               </Text>
               <Press
@@ -3050,9 +3060,9 @@ function ReceiptReview() {
                 className="h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white active:bg-slate-100"
                 style={{ opacity: focusedIndex >= rows.length - 1 ? 0.35 : 1 }}
                 orbit={roundButton}
-                held={o && { backgroundColor: o.pill }}
+                held={{ backgroundColor: o.pill }}
               >
-                <Ionicons name="chevron-forward" size={16} color={o?.icon ?? "#334155"} />
+                <Ionicons name="chevron-forward" size={16} color={o.icon} />
               </Press>
             </View>
             <FlatList<ReviewRow>
@@ -3097,12 +3107,12 @@ function ReceiptReview() {
 
       {layout.wide ? null : (
       <Animated.View
-          style={[listPanelStyle, o && { borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: o.canvas, borderColor: o.border }]}
+          style={[listPanelStyle, { borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: o.canvas, borderColor: o.border }]}
           className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-3xl border border-slate-200 bg-white"
         >
           <GestureDetector gesture={listPanGesture}>
             <View className="items-center justify-center" style={{ height: LIST_HANDLE_AREA_HEIGHT }}>
-              <View className="h-1.5 w-10 rounded-full bg-slate-300" style={o && { height: 4, backgroundColor: dark ? o.faint : o.orbit }} />
+              <View className="h-1.5 w-10 rounded-full bg-slate-300" style={{ height: 4, backgroundColor: dark ? o.faint : o.orbit }} />
             </View>
           </GestureDetector>
 
@@ -3143,45 +3153,43 @@ function ReceiptReview() {
       >
         <Pressable
           className="flex-1 items-center justify-end bg-black/40"
-          style={o && { backgroundColor: o.scrim }}
+          style={{ backgroundColor: o.scrim }}
           onPress={() => setGroceryLinkRowKey(null)}
         >
           <Pressable
             className="max-h-[70%] w-full rounded-t-3xl bg-white pb-6 pt-4"
-            style={o && { borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: o.canvas, paddingTop: 10, paddingBottom: 32 }}
+            style={{ borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: o.canvas, paddingTop: 10, paddingBottom: 32 }}
             onPress={(event) => event.stopPropagation()}
           >
-            {o && (
-              <View style={{ alignItems: "center", paddingBottom: 14 }}>
-                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: o.track }} />
-              </View>
-            )}
-            <Text className="px-5 pb-3 text-base font-bold text-slate-950" style={o && { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: o.text, paddingBottom: 14 }}>
+            <View style={{ alignItems: "center", paddingBottom: 14 }}>
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: o.track }} />
+            </View>
+            <Text className="px-5 pb-3 text-base font-bold text-slate-950" style={{ fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: o.text, paddingBottom: 14 }}>
               Link to grocery list
             </Text>
             <ScrollView
               keyboardShouldPersistTaps="handled"
               // (On the phone: the choices as one card.)
-              style={o && { marginHorizontal: 16, overflow: "hidden", borderRadius: 18, borderWidth: 1, borderColor: o.border, backgroundColor: o.surface }}
+              style={{ marginHorizontal: 16, overflow: "hidden", borderRadius: 18, borderWidth: 1, borderColor: o.border, backgroundColor: o.surface }}
             >
               <Press
                 className="flex-row items-center border-t border-slate-100 px-5 py-4 active:bg-slate-50"
-                orbit={o && { borderTopWidth: 0, paddingHorizontal: 16, backgroundColor: o.surface }}
-                held={o && { backgroundColor: o.pill }}
+                orbit={{ borderTopWidth: 0, paddingHorizontal: 16, backgroundColor: o.surface }}
+                held={{ backgroundColor: o.pill }}
                 onPress={() => {
                   if (groceryLinkRowKey) handleLinkGroceryItem(groceryLinkRowKey, null);
                   setGroceryLinkRowKey(null);
                 }}
               >
-                <Ionicons name="close-circle-outline" size={20} color={o?.muted ?? "#64748B"} />
-                <Text className="ml-2.5 text-sm font-medium text-slate-700" style={o && { color: o.text }}>
+                <Ionicons name="close-circle-outline" size={20} color={o.muted} />
+                <Text className="ml-2.5 text-sm font-medium text-slate-700" style={{ color: o.text }}>
                   Not on my list (bought extra)
                 </Text>
               </Press>
               {pendingGroceryItems.length === 0 ? (
                 <Text
                   className="px-5 py-4 text-sm text-slate-400"
-                  style={o && { paddingHorizontal: 16, color: o.faint, borderTopWidth: 1, borderTopColor: o.border }}
+                  style={{ paddingHorizontal: 16, color: o.faint, borderTopWidth: 1, borderTopColor: o.border }}
                 >
                   Nothing pending on your grocery list right now.
                 </Text>
@@ -3196,21 +3204,21 @@ function ReceiptReview() {
                     <Press
                       key={item._id}
                       className="flex-row items-center border-t border-slate-100 px-5 py-4 active:bg-slate-50"
-                      orbit={o && { paddingHorizontal: 16, borderTopColor: o.border, backgroundColor: o.surface }}
-                      held={o && { backgroundColor: o.pill }}
+                      orbit={{ paddingHorizontal: 16, borderTopColor: o.border, backgroundColor: o.surface }}
+                      held={{ backgroundColor: o.pill }}
                       onPress={() => {
                         if (groceryLinkRowKey) handleLinkGroceryItem(groceryLinkRowKey, item._id);
                         setGroceryLinkRowKey(null);
                       }}
                     >
                       <View className="flex-1">
-                        <Text className="text-sm font-medium text-slate-900" style={o && { color: o.text }}>{item.name}</Text>
-                        <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.faint }}>
+                        <Text className="text-sm font-medium text-slate-900" style={{ color: o.text }}>{item.name}</Text>
+                        <Text className="mt-0.5 text-xs text-slate-400" style={{ color: o.faint }}>
                           {item.quantity != null ? `${item.quantity} ${item.unit}`.trim() : "No quantity set"}
                           {claimedByOtherRow ? " · currently linked to another item on this receipt" : ""}
                         </Text>
                       </View>
-                      {isSelected && <Ionicons name="checkmark-circle" size={20} color={o?.ink ?? "#2563EB"} />}
+                      {isSelected && <Ionicons name="checkmark-circle" size={20} color={o.ink} />}
                     </Press>
                   );
                 })
@@ -3222,8 +3230,8 @@ function ReceiptReview() {
 
       {/* A barcode or label being taken on the paired phone. */}
       <Modal visible={!!phoneJob} transparent animationType="fade" onRequestClose={() => (phoneJob?.stop?.(), setPhoneJob(null))}>
-        <View className="flex-1 items-center justify-center bg-black/40 px-6">
-          <View className="w-full items-center rounded-3xl bg-white px-6 py-7" style={{ maxWidth: 440 }}>
+        <View className="flex-1 items-center justify-center bg-black/40 px-6" style={{ backgroundColor: o.scrim }}>
+          <View className="w-full items-center rounded-3xl bg-white px-6 py-7" style={{ maxWidth: 440, borderRadius: 24, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}>
             {phoneJob && (() => {
               const what = phoneJob.kind === "barcode" ? "barcode" : "nutrition label";
               const open = ["waiting", "capturing", "looking"].includes(phoneJob.status);
@@ -3243,15 +3251,16 @@ function ReceiptReview() {
                           : "That didn't work";
               return (
                 <>
-                  <View className={`h-14 w-14 items-center justify-center rounded-full ${phoneJob.status === "filled" ? "bg-emerald-50" : open ? "bg-blue-50" : "bg-slate-100"}`}>
+                  {/* (Under way: in the Kitchen's pale wash.) */}
+                  <View className="h-14 w-14 items-center justify-center rounded-full bg-slate-100" style={{ backgroundColor: phoneJob.status === "filled" ? "#ECFDF5" : open ? SECTION_PALETTE.kitchen.tint : o.pill }}>
                     {open ? (
-                      <ActivityIndicator color="#2563EB" />
+                      <ActivityIndicator color={o.ink} />
                     ) : (
-                      <Ionicons name={phoneJob.status === "filled" ? "checkmark" : "close"} size={26} color={phoneJob.status === "filled" ? "#16A34A" : "#64748B"} />
+                      <Ionicons name={phoneJob.status === "filled" ? "checkmark" : "close"} size={26} color={phoneJob.status === "filled" ? o.success : o.muted} />
                     )}
                   </View>
-                  <Text className="mt-4 text-center text-lg font-bold text-slate-900">{title}</Text>
-                  <Text className="mt-1 text-center text-sm text-slate-500">
+                  <Text className="mt-4 text-center text-lg font-bold text-slate-900" style={{ color: o.text }}>{title}</Text>
+                  <Text className="mt-1 text-center text-sm text-slate-500" style={{ color: o.muted }}>
                     {phoneJob.status === "waiting"
                       ? `Scan the ${what}${phoneJob.rowName ? ` for ${phoneJob.rowName}` : ""} on your phone. On it, keep Orbit open at Settings → Devices → Be my computer's camera: the camera opens by itself.`
                       : phoneJob.status === "capturing"
@@ -3263,9 +3272,10 @@ function ReceiptReview() {
                       if (open) phoneJob.stop?.();
                       setPhoneJob(null);
                     }}
-                    className={`mt-5 rounded-xl px-5 py-2.5 ${open ? "bg-slate-100 active:bg-slate-200" : "bg-blue-600 active:bg-blue-700"}`}
+                    className="mt-5 rounded-xl px-5 py-2.5"
+                    style={({ pressed }) => ({ borderRadius: 14, backgroundColor: open ? o.pill : o.ink, opacity: pressed ? 0.8 : 1 })}
                   >
-                    <Text className={`font-semibold ${open ? "text-slate-700" : "text-white"}`}>{open ? "Cancel" : "Done"}</Text>
+                    <Text className="font-semibold" style={{ color: open ? o.onPill : o.onInk }}>{open ? "Cancel" : "Done"}</Text>
                   </Pressable>
                 </>
               );
@@ -3286,12 +3296,12 @@ function ReceiptReview() {
 
       {/* No phone on the account yet, when "My phone" is chosen. */}
       <Modal visible={noPhone} transparent animationType="fade" onRequestClose={() => setNoPhone(false)}>
-        <View className="flex-1 items-center justify-center bg-black/40 px-6">
-          <View className="w-full rounded-3xl bg-white p-6" style={{ maxWidth: 680 }}>
+        <View className="flex-1 items-center justify-center bg-black/40 px-6" style={{ backgroundColor: o.scrim }}>
+          <View className="w-full rounded-3xl bg-white p-6" style={{ maxWidth: 680, borderRadius: 24, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border }}>
             <View className="mb-4 flex-row items-center">
-              <Text className="flex-1 text-lg font-bold text-slate-900">Use your phone&apos;s camera</Text>
+              <Text className="flex-1 text-lg font-bold text-slate-900" style={{ color: o.text }}>Use your phone&apos;s camera</Text>
               <Pressable onPress={() => setNoPhone(false)} hitSlop={10} accessibilityLabel="Close">
-                <Ionicons name="close" size={22} color="#64748B" />
+                <Ionicons name="close" size={22} color={o.muted} />
               </Pressable>
             </View>
             {noPhone && <NoPhoneYet onFound={() => setNoPhone(false)} />}
