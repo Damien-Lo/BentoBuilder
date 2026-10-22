@@ -48,6 +48,14 @@ export default function RootLayout() {
           }}
         />
 
+        {/* Health — a list: nutrition, weight, and what's to come */}
+        <Stack.Screen
+          name="health-section"
+          options={{
+            headerShown: false,
+          }}
+        />
+
         {/* Settings — a list (like the iPhone's), each row its own page */}
         <Stack.Screen
           name="settings-section"

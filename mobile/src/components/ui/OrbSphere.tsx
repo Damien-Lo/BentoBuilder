@@ -20,6 +20,7 @@ const HUES: Record<Exclude<OrbHue, "main">, { stops: [number, string][]; glow: {
   blue: { stops: [[0, SECTION_PALETTE.calendar.tint], [0.24, "#93C2F6"], [0.52, SECTION_PALETTE.calendar.base], [0.86, SECTION_PALETTE.calendar.dark], [1, SECTION_PALETTE.calendar.deep]], glow: { light: SECTION_PALETTE.calendar.base, dark: SECTION_PALETTE.calendar.base } },
   violet: { stops: [[0, SECTION_PALETTE.tasks.tint], [0.24, "#C3B6FA"], [0.52, SECTION_PALETTE.tasks.base], [0.86, SECTION_PALETTE.tasks.dark], [1, SECTION_PALETTE.tasks.deep]], glow: { light: SECTION_PALETTE.tasks.base, dark: SECTION_PALETTE.tasks.base } },
   green: { stops: [[0, SECTION_PALETTE.nutrition.tint], [0.24, "#A9DC97"], [0.52, SECTION_PALETTE.nutrition.base], [0.86, SECTION_PALETTE.nutrition.dark], [1, SECTION_PALETTE.nutrition.deep]], glow: { light: SECTION_PALETTE.nutrition.base, dark: SECTION_PALETTE.nutrition.base } },
+  pink: { stops: [[0, SECTION_PALETTE.health.tint], [0.24, "#F7A1AD"], [0.52, SECTION_PALETTE.health.base], [0.86, SECTION_PALETTE.health.dark], [1, SECTION_PALETTE.health.deep]], glow: { light: SECTION_PALETTE.health.base, dark: SECTION_PALETTE.health.base } },
   orange: { stops: [[0, SECTION_PALETTE.kitchen.tint], [0.24, "#F7AE6E"], [0.52, SECTION_PALETTE.kitchen.base], [0.86, SECTION_PALETTE.kitchen.dark], [1, SECTION_PALETTE.kitchen.deep]], glow: { light: SECTION_PALETTE.kitchen.base, dark: SECTION_PALETTE.kitchen.base } },
 };
 

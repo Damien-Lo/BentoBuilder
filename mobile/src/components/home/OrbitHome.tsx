@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { requireOptionalNativeModule } from "expo";
 import { useRouter, type Href } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Gesture, GestureDetector, ScrollView } from "react-native-gesture-handler";
 import { Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
-import Animated, { Easing, FadeIn, FadeInDown, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { Easing, FadeIn, FadeInDown, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
@@ -30,7 +30,7 @@ import { useToday, type Today } from "./useToday";
 // day so far, calories, tasks done). Tapping the orb opens quick actions —
 // where the voice assistant will go.
 
-type SectionId = "calendar" | "kitchen" | "nutrition" | "health" | "home" | "tasks";
+type SectionId = "calendar" | "kitchen" | "gym" | "health" | "home" | "tasks";
 interface Section {
   id: SectionId;
   label: string;
@@ -41,8 +41,9 @@ interface Section {
 const ORBIT: Section[] = [
   { id: "calendar", label: "Calendar", icon: "calendar-outline", route: "/calendar" },
   { id: "kitchen", label: "Kitchen", icon: "restaurant-outline", route: "/planner" },
-  { id: "nutrition", label: "Nutrition", icon: "leaf-outline", route: "/health" },
-  { id: "health", label: "Health", icon: "pulse-outline", route: "/health/weight" },
+  // (Nutrition is part of Health now — its pages are in Health's list.)
+  { id: "gym", label: "Gym", icon: "barbell-outline", soon: true },
+  { id: "health", label: "Health", icon: "pulse-outline", route: "/health-section" as Href },
   { id: "home", label: "Home", icon: "home-outline", soon: true },
   { id: "tasks", label: "Tasks", icon: "checkmark-circle-outline", route: "/lists" },
 ];
@@ -87,8 +88,6 @@ function glance(id: SectionId, t: Today): { value: string; ring: number; caption
         ring: t.goal ? Math.min(1, kcal / t.goal) : 0,
         caption: t.goal ? `${kcal.toLocaleString()} of ${t.goal.toLocaleString()} kcal` : `${kcal.toLocaleString()} kcal today`,
       };
-    case "nutrition":
-      return { value: `${Math.round((kcal / t.goal) * 100)}%`, ring: Math.min(1, kcal / t.goal), caption: `${kcal.toLocaleString()} of ${t.goal.toLocaleString()} kcal` };
     case "health":
       return {
         value: t.latestWeight ? `${t.latestWeight.weight} lbs` : "—",
@@ -176,6 +175,49 @@ function Node({ section, index, turn, centre, radius, selected, value, onPress, 
   );
 }
 
+// --- A section's own nodes --------------------------------------------------
+
+// The section at the top shows its own nodes in a fan above it (for now
+// three empty ones, while what goes in them is planned). They grow out of
+// it one after another once it's there, and fold away while the orbit
+// turns. (The orbit keeps room above it for them, so nothing on the page
+// moves.)
+//
+// Off for now (Oct 22, 2026): tried, and the orbit read as busier than it's
+// worth while sub-sections live inside each section. Set to true to bring
+// it back — the room above the orbit comes with it.
+const SHOW_SUB_NODES = false;
+const SUB_COUNT = 3;
+const SUB_SIZE = 38;
+const SUB_REACH = 62; // from the section's centre to each of its nodes
+const SUB_SPREAD = 54; // degrees between neighbours
+function SubNode({ k, open, wait, x, y, color, colors }: { k: number; open: boolean; wait: number; x: number; y: number; color: string; colors: OrbitColors }) {
+  const still = useReducedMotion();
+  const shown = useSharedValue(0);
+  useEffect(() => {
+    // (Out from the middle one first — once the section has turned to the
+    // top, `wait` — and back in all at once.)
+    const order = Math.abs(k - (SUB_COUNT - 1) / 2);
+    shown.value = still ? (open ? 1 : 0) : open ? withDelay(wait + order * 60, withSpring(1, { damping: 14, stiffness: 180 })) : withTiming(0, { duration: 140 });
+  }, [open, wait, k, still, shown]);
+  const a = ((-90 + (k - (SUB_COUNT - 1) / 2) * SUB_SPREAD) * Math.PI) / 180;
+  const style = useAnimatedStyle(() => ({
+    opacity: Math.min(1, shown.value),
+    transform: [{ translateX: x + SUB_REACH * Math.cos(a) * shown.value - SUB_SIZE / 2 }, { translateY: y + SUB_REACH * Math.sin(a) * shown.value - SUB_SIZE / 2 }, { scale: 0.4 + 0.6 * shown.value }],
+  }));
+  return (
+    <Animated.View pointerEvents={open ? "auto" : "none"} style={[{ position: "absolute", left: 0, top: 0 }, style]}>
+      {/* (Tap, not a Pressable with a style function: NativeWind drops those on a phone.) */}
+      <Tap
+        accessibilityRole="button"
+        accessibilityLabel="Empty"
+        style={{ width: SUB_SIZE, height: SUB_SIZE, borderRadius: SUB_SIZE / 2, backgroundColor: colors.node, borderWidth: 1.5, borderStyle: "dashed", borderColor: color }}
+        pressedStyle={{ backgroundColor: colors.pill }}
+      />
+    </Animated.View>
+  );
+}
+
 // --- The panel for the selected section -----------------------------------
 
 function Row({ icon, iconColor, title, detail, right, onPress, colors }: { icon: keyof typeof Ionicons.glyphMap; iconColor?: string; title: string; detail?: string; right?: React.ReactNode; onPress?: () => void; colors: OrbitColors }) {
@@ -256,7 +298,8 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
       </>
     );
     actions = <Action label="Grocery list" icon="cart-outline" onPress={() => go("/grocery-list")} colors={colors} />;
-  } else if (section.id === "nutrition") {
+  } else if (section.id === "health") {
+    // (What you've eaten against your goals, then your weight.)
     const bar = (label: string, value: number | null | undefined, limit: number | null, color: string) => {
       const share = limit ? Math.min(1, (value ?? 0) / limit) : 0;
       return (
@@ -283,18 +326,19 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
         {bar("Protein", t.eaten.protein, t.settings.dailyProteinLimit, nutrientColor("protein", dark))}
         {bar("Carbs", t.eaten.carbs, t.settings.dailyCarbsLimit, nutrientColor("carbs", dark))}
         {bar("Fat", t.eaten.fats, t.settings.dailyFatsLimit, nutrientColor("fats", dark))}
+        <View style={{ marginTop: 10 }}>
+          {t.latestWeight ? (
+            <Row
+              icon="scale-outline"
+              title={`${t.latestWeight.weight} lbs`}
+              detail={`${t.weightChange == null ? "Weighed" : `${t.weightChange > 0 ? "+" : ""}${t.weightChange} lbs this week · weighed`} ${t.latestWeight.date === t.today ? "today" : t.latestWeight.date}${t.settings.goalWeight ? ` · goal ${t.settings.goalWeight} lbs` : ""}`}
+              colors={colors}
+            />
+          ) : (
+            quiet("No weigh-ins yet.")
+          )}
+        </View>
       </>
-    );
-  } else if (section.id === "health") {
-    body = t.latestWeight ? (
-      <Row
-        icon="scale-outline"
-        title={`${t.latestWeight.weight} lbs`}
-        detail={`${t.weightChange == null ? "Weighed" : `${t.weightChange > 0 ? "+" : ""}${t.weightChange} lbs this week · weighed`} ${t.latestWeight.date === t.today ? "today" : t.latestWeight.date}${t.settings.goalWeight ? ` · goal ${t.settings.goalWeight} lbs` : ""}`}
-        colors={colors}
-      />
-    ) : (
-      quiet("No weigh-ins yet.")
     );
     actions = <Action label="Log weight" icon="add" onPress={() => go("/health/weight")} colors={colors} />;
   } else if (section.id === "tasks") {
@@ -313,6 +357,8 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
         ))
       : quiet("Nothing due — nice.");
     actions = <Action label="New task" icon="add" onPress={() => go("/lists")} colors={colors} />;
+  } else if (section.id === "gym") {
+    body = quiet("Workouts, logged sessions and progress are on their way.");
   } else {
     body = quiet("Home planning — tasks and projects for the house — is on its way.");
   }
@@ -344,6 +390,10 @@ export function OrbitHome() {
   const { width } = useWindowDimensions();
   const [selected, setSelected] = useState<SectionId>("calendar");
   const [asking, setAsking] = useState(false);
+  // The selected section's own nodes, fanned out above it — away only while
+  // the orbit is turned by hand (`wait`: after a turn brings it to the top).
+  const [open, setOpen] = useState(true);
+  const [wait, setWait] = useState(0);
 
   // The orbit's turn (degrees): the selected section at the top.
   const turn = useSharedValue(0);
@@ -359,6 +409,9 @@ export function OrbitHome() {
       if (section.route) router.push(section.route);
       return;
     }
+    // (Another: it turns to the top, and its nodes open as it gets there.)
+    setWait(still ? 0 : 320);
+    setOpen(true);
     const to = ORBIT.findIndex((s) => s.id === section.id);
     let delta = ((to - from) * STEP) % 360;
     if (delta > 180) delta -= 360;
@@ -379,6 +432,7 @@ export function OrbitHome() {
   const draggedAt = useRef(0);
   const dragging = () => {
     draggedAt.current = Date.now();
+    setOpen(false);
   };
   const dragFrom = useSharedValue(0); // the finger's angle last time (radians)
   const showing = useSharedValue(0); // the section at the top while dragging
@@ -395,6 +449,8 @@ export function OrbitHome() {
   }
   function settle(index: number) {
     setSelected(ORBIT[index].id);
+    setWait(0);
+    setOpen(true);
   }
 
   const size = Math.min(width - 24, 400);
@@ -403,6 +459,8 @@ export function OrbitHome() {
   const orb = size * 0.3;
   const ring = size * 0.43;
   const current = ORBIT.find((s) => s.id === selected)!;
+  // Room kept above the orbit for the top section's nodes.
+  const roomAbove = SHOW_SUB_NODES ? Math.max(0, SUB_REACH + SUB_SIZE / 2 - (centre - radius) - 4) : 0;
   const turning = Gesture.Pan()
     // (A tap on a section or the orb is still a tap; the page still scrolls
     // from everywhere else.)
@@ -477,7 +535,7 @@ export function OrbitHome() {
 
         {/* The orbit — turned by tapping a section, or by hand */}
         <GestureDetector gesture={turning}>
-        <View style={{ width: size, height: centre + radius + 72, alignSelf: "center", marginTop: 8 }}>
+        <View style={{ width: size, height: centre + radius + 72, alignSelf: "center", marginTop: 8 + roomAbove }}>
           <View pointerEvents="none" style={{ position: "absolute", left: centre - radius, top: centre - radius, width: radius * 2, height: radius * 2, borderRadius: radius, borderWidth: 1.5, borderStyle: "dotted", borderColor: colors.orbit }} />
           <View style={{ position: "absolute", left: centre - ring / 2, top: centre - ring / 2, width: ring, height: ring, alignItems: "center", justifyContent: "center" }}>
             <Ring size={ring} value={focus.ring} colors={colors} />
@@ -496,6 +554,9 @@ export function OrbitHome() {
               onPress={() => select(section)}
               colors={colors}
             />
+          ))}
+          {SHOW_SUB_NODES && Array.from({ length: SUB_COUNT }, (_, k) => (
+            <SubNode key={`${selected}-${k}`} k={k} open={open} wait={wait} x={centre} y={centre - radius} color={(current.soon ? null : sectionColor(current.id, dark)) ?? colors.faint} colors={colors} />
           ))}
         </View>
         </GestureDetector>
