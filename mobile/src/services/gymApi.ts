@@ -70,3 +70,24 @@ export const getExerciseSessions = (exerciseId: string) => call<ExerciseSessionR
 // For each exercise, its sets from the last time it was done.
 export const getPreviousSets = (exerciseIds: string[]) =>
   exerciseIds.length ? call<Record<string, DoneSetInput[]>>(`/previous?exercises=${exerciseIds.map(encodeURIComponent).join(",")}`) : Promise.resolve({} as Record<string, DoneSetInput[]>);
+
+// A finished workout, in full.
+export interface GymSessionRecord {
+  _id: string;
+  name: string;
+  startedAt: string;
+  finishedAt: string;
+  workout?: string | null;
+  exercises: { exercise: Pick<Exercise, "_id" | "name" | "primaryMuscles" | "secondaryMuscles"> | null; note: string; sets: DoneSetInput[] }[];
+}
+export const getSessions = () => call<GymSessionRecord[]>("/sessions");
+export const getSession = (id: string) => call<GymSessionRecord>(`/sessions/${id}`);
+export const deleteSession = (id: string) => call<void>(`/sessions/${id}`, { method: "DELETE" });
+
+// What a session came to: how long, the sets, the weight moved.
+export function sessionTotals(session: Pick<GymSessionRecord, "startedAt" | "finishedAt" | "exercises">) {
+  const sets = session.exercises.reduce((n, e) => n + e.sets.length, 0);
+  const volume = session.exercises.reduce((sum, e) => sum + e.sets.reduce((v, s) => v + (s.weight ?? 0) * (s.reps ?? 0), 0), 0);
+  const seconds = Math.max(0, (new Date(session.finishedAt).getTime() - new Date(session.startedAt).getTime()) / 1000);
+  return { sets, volume, seconds };
+}

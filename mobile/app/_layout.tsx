@@ -55,6 +55,9 @@ export default function RootLayout() {
         <Stack.Screen name="gym/exercise/[id]" options={{ headerShown: false }} />
         {/* Doing a workout (no swipe away: Finish or Discard) */}
         <Stack.Screen name="gym/session" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="gym/history" options={{ headerShown: false }} />
+        <Stack.Screen name="gym/workout/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="gym/sessions/[id]" options={{ headerShown: false }} />
 
         {/* Health — a list: nutrition, weight, and what's to come */}
         <Stack.Screen

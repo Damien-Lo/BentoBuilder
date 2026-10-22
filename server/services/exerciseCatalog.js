@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { EXERCISE_CORE } from "../data/exerciseCore.js";
+import { EXERCISE_CORE, EXERCISE_EXTRAS } from "../data/exerciseCore.js";
 import Exercise from "../models/Exercise.js";
 
 // Fills Gym's exercise library from free-exercise-db (data/), and keeps it
@@ -47,6 +47,17 @@ export async function ensureExerciseCatalog() {
       },
     };
   });
+  // And Orbit's own (data/exerciseCore.js), in the core.
+  for (const extra of EXERCISE_EXTRAS) {
+    const { id, ...fields } = extra;
+    operations.push({
+      updateOne: {
+        filter: { sourceId: id },
+        update: { $set: { ...fields, sourceName: null, core: true, images: [] }, $setOnInsert: { sourceId: id, owner: null } },
+        upsert: true,
+      },
+    });
+  }
   const result = await Exercise.bulkWrite(operations, { ordered: false });
   return { added: result.upsertedCount, updated: result.modifiedCount, core: core.size };
 }

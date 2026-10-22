@@ -143,10 +143,21 @@ router.get("/sessions", async (req, res) => {
         })),
       });
     }
-    const sessions = await GymSession.find({}).sort({ finishedAt: -1 }).limit(100).populate("exercises.exercise", "name").lean();
+    const sessions = await GymSession.find({}).sort({ finishedAt: -1 }).limit(200).populate("exercises.exercise", "name primaryMuscles secondaryMuscles").lean();
     return res.json({ success: true, data: sessions });
   } catch (error) {
     return sendError(res, error, 500);
+  }
+});
+
+/** GET /api/gym/sessions/:id — one session, every exercise and set in it. */
+router.get("/sessions/:id", async (req, res) => {
+  try {
+    const session = await GymSession.findById(req.params.id).populate("exercises.exercise", "name primaryMuscles secondaryMuscles").lean();
+    if (!session) return sendError(res, new Error("Session not found"), 404);
+    return res.json({ success: true, data: session });
+  } catch (error) {
+    return sendError(res, error);
   }
 });
 

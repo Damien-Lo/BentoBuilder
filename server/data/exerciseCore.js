@@ -45,6 +45,7 @@ export const EXERCISE_CORE = {
     { name: "Incline Curl (Dumbbell)", source: "Incline Dumbbell Curl" },
     { name: "Preacher Curl (Barbell)", source: "Preacher Curl" },
     { name: "Preacher Curl (Machine)", source: "Machine Preacher Curls" },
+    { name: "Preacher Curl (Dumbbell)", source: "One Arm Dumbbell Preacher Curl" },
     { name: "Concentration Curl", source: "Concentration Curls" },
     { name: "Bicep Curl (Cable)", source: "Standing Biceps Cable Curl" },
     { name: "Hammer Curl (Cable Rope)", source: "Cable Hammer Curls - Rope Attachment" },
@@ -172,3 +173,26 @@ export const EXERCISE_CORE = {
     { name: "Battle Ropes", source: "Battling Ropes" },
   ],
 };
+
+// Exercises Orbit adds itself, missing from free-exercise-db: each in the
+// core, under its group. (`id` is its own, kept for good: "orbit:…".)
+export const EXERCISE_EXTRAS = [
+  {
+    id: "orbit:pull-up-assisted",
+    name: "Pull-Up (Assisted)",
+    group: "lats",
+    category: "strength",
+    equipment: "machine",
+    primaryMuscles: ["lats"],
+    secondaryMuscles: ["biceps", "middle back"],
+    level: "beginner",
+    mechanic: "compound",
+    force: "pull",
+    instructions: [
+      "Set the machine's counterweight: the more weight, the more help. Kneel or stand on the platform and take the handles above you, a little wider than your shoulders.",
+      "Pull yourself up until your chin is over the handles, leading with your chest and squeezing your shoulder blades down and back.",
+      "Lower yourself slowly until your arms are straight. Repeat.",
+      "As you get stronger, use less counterweight.",
+    ],
+  },
+];

@@ -83,6 +83,7 @@ export default function WorkoutsTab() {
               <WorkoutCard
                 key={workout._id}
                 workout={workout}
+                onOpen={() => router.push(`/gym/workout/${workout._id}` as Href)}
                 onEdit={() => build(workout._id)}
                 onStart={() => start(workout)}
                 colors={c}
@@ -95,14 +96,18 @@ export default function WorkoutsTab() {
   );
 }
 
-function WorkoutCard({ workout, onEdit, onStart, colors: c }: { workout: GymWorkout; onEdit: () => void; onStart: () => void; colors: OrbitColors }) {
+// A workout: tap it for all of it (its own page); Edit and Start under it.
+function WorkoutCard({ workout, onOpen, onEdit, onStart, colors: c }: { workout: GymWorkout; onOpen: () => void; onEdit: () => void; onStart: () => void; colors: OrbitColors }) {
   const exercises = workout.exercises.filter((e) => e.exercise);
   const sets = exercises.reduce((n, e) => n + e.sets.length, 0);
   return (
-    <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
-      <Text style={{ fontSize: 17, fontWeight: "700", color: c.text }} numberOfLines={1}>
-        {workout.name}
-      </Text>
+    <Tap onPress={onOpen} accessibilityRole="button" accessibilityLabel={workout.name} style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }} pressedStyle={{ backgroundColor: c.pill }}>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Text style={{ flex: 1, fontSize: 17, fontWeight: "700", color: c.text }} numberOfLines={1}>
+          {workout.name}
+        </Text>
+        <Ionicons name="chevron-forward" size={18} color={c.faint} />
+      </View>
       <Text style={{ marginTop: 3, fontSize: 13, color: c.muted }}>
         {exercises.length} exercise{exercises.length === 1 ? "" : "s"} · {sets} set{sets === 1 ? "" : "s"}
       </Text>
@@ -122,6 +127,6 @@ function WorkoutCard({ workout, onEdit, onStart, colors: c }: { workout: GymWork
           <Text style={{ fontSize: 15, fontWeight: "700", color: c.onInk }}>Start</Text>
         </Tap>
       </View>
-    </View>
+    </Tap>
   );
 }
