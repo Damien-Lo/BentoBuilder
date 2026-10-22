@@ -6,7 +6,7 @@ import GymWorkout from "../models/GymWorkout.js";
 const router = express.Router();
 
 // Each exercise with what showing it needs: its name, photos and muscles.
-const withExercises = (query) => query.populate("exercises.exercise", "name images group primaryMuscles equipment");
+const withExercises = (query) => query.populate("exercises.exercise", "name images group primaryMuscles secondaryMuscles equipment");
 
 const sendError = (res, error, status = 400) => res.status(status).json({ success: false, message: error.message || String(error) });
 

@@ -8,7 +8,7 @@ export interface WorkoutSet {
   reps: number | null;
 }
 export interface WorkoutExercise {
-  exercise: Pick<Exercise, "_id" | "name" | "images" | "group" | "primaryMuscles" | "equipment">;
+  exercise: Pick<Exercise, "_id" | "name" | "images" | "group" | "primaryMuscles" | "secondaryMuscles" | "equipment">;
   restSeconds: number;
   note: string;
   sets: WorkoutSet[];

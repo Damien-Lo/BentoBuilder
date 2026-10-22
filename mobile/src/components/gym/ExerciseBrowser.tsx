@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import { useMemo, useState } from "react";
 import { Platform, Text, TextInput, View } from "react-native";
 
+import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
 import { Tap } from "@/src/components/ui/Tap";
-import { EXERCISE_GROUPS, exerciseImage, groupLabel, type Exercise } from "@/src/services/exerciseApi";
+import { EXERCISE_GROUPS, groupLabel, type Exercise } from "@/src/services/exerciseApi";
 import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // The exercise library as a list: a search over all of it (the core first,
@@ -12,7 +12,7 @@ import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 // each muscle group. Used by Gym → Exercises (`onPick` absent: just
 // browsing) and by the workout builder's "Add exercise" (each card picks or
 // unpicks; `picked` are ticked).
-export function ExerciseBrowser({ all, picked, onPick }: { all: Exercise[]; picked?: Set<string>; onPick?: (exercise: Exercise) => void }) {
+export function ExerciseBrowser({ all, picked, onPick, onOpen }: { all: Exercise[]; picked?: Set<string>; onPick?: (exercise: Exercise) => void; onOpen?: (exercise: Exercise) => void }) {
   const { colors: c } = useOrbitTheme();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -39,7 +39,9 @@ export function ExerciseBrowser({ all, picked, onPick }: { all: Exercise[]; pick
       else next.add(group);
       return next;
     });
-  const card = (exercise: Exercise) => <ExerciseCard key={exercise._id} exercise={exercise} picked={picked?.has(exercise._id)} onPress={onPick && (() => onPick(exercise))} colors={c} />;
+  const card = (exercise: Exercise) => (
+    <ExerciseCard key={exercise._id} exercise={exercise} picked={picked?.has(exercise._id)} picking={!!onPick} onPress={onPick ? () => onPick(exercise) : onOpen && (() => onOpen(exercise))} colors={c} />
+  );
 
   return (
     <View>
@@ -110,35 +112,23 @@ function Label({ text, top, colors: c }: { text: string; top: number; colors: Or
   return <Text style={{ marginTop: top, marginBottom: 10, marginLeft: 4, fontSize: 12, fontWeight: "700", letterSpacing: 1.4, color: c.faint }}>{text.toUpperCase()}</Text>;
 }
 
-// A card: the exercise's name — and, when picking, a tick.
-function ExerciseCard({ exercise, picked, onPress, colors: c }: { exercise: Exercise; picked?: boolean; onPress?: () => void; colors: OrbitColors }) {
+// A card: the exercise's name — and, when picking, a tick (otherwise, a way
+// into it).
+function ExerciseCard({ exercise, picked, picking, onPress, colors: c }: { exercise: Exercise; picked?: boolean; picking: boolean; onPress?: () => void; colors: OrbitColors }) {
   return (
     <Tap
       onPress={onPress}
       disabled={!onPress}
-      accessibilityRole={onPress ? "checkbox" : undefined}
-      accessibilityState={onPress ? { checked: !!picked } : undefined}
-      style={{ marginBottom: 8, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, borderRadius: 16, borderWidth: picked ? 2 : 1, borderColor: picked ? c.ink : c.border, backgroundColor: c.surface }}
+      accessibilityRole={picking ? "checkbox" : onPress ? "button" : undefined}
+      accessibilityState={picking ? { checked: !!picked } : undefined}
+      style={{ marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 12, paddingLeft: 10, paddingRight: 16, paddingVertical: 10, borderRadius: 16, borderWidth: picked ? 2 : 1, borderColor: picked ? c.ink : c.border, backgroundColor: c.surface }}
       pressedStyle={{ backgroundColor: c.pill }}
     >
+      <ExerciseIcon name={exercise.name} primary={exercise.primaryMuscles} secondary={exercise.secondaryMuscles} />
       <Text style={{ flex: 1, fontSize: 16, fontWeight: "600", color: c.text }} numberOfLines={2}>
         {exercise.name}
       </Text>
-      {onPress && <Ionicons name={picked ? "checkmark-circle" : "ellipse-outline"} size={22} color={picked ? c.ink : c.faint} />}
+      {picking ? <Ionicons name={picked ? "checkmark-circle" : "ellipse-outline"} size={22} color={picked ? c.ink : c.faint} /> : onPress ? <Ionicons name="chevron-forward" size={18} color={c.faint} /> : null}
     </Tap>
-  );
-}
-
-// An exercise's photo, in a circle (or its muscle's icon, without one).
-export function ExerciseThumb({ images, size = 44 }: { images?: string[]; size?: number }) {
-  const { colors: c } = useOrbitTheme();
-  return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: c.border }}>
-      {images?.[0] ? (
-        <Image source={{ uri: exerciseImage(images[0]) }} style={{ width: size * 1.5, height: size }} contentFit="cover" transition={120} accessibilityIgnoresInvertColors />
-      ) : (
-        <Ionicons name="barbell" size={size * 0.45} color={c.faint} />
-      )}
-    </View>
   );
 }

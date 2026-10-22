@@ -5,7 +5,8 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Scroll
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ExerciseBrowser, ExerciseThumb } from "@/src/components/gym/ExerciseBrowser";
+import { ExerciseBrowser } from "@/src/components/gym/ExerciseBrowser";
+import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
 import { ReorderExercises } from "@/src/components/gym/ReorderExercises";
 import { showActions } from "@/src/components/todo/theme";
 import { Tap } from "@/src/components/ui/Tap";
@@ -149,7 +150,7 @@ function BuildWorkout() {
     setPicking(false);
   }
 
-  const reorderRows = useMemo(() => items.map((i) => ({ key: i.key, name: i.exercise.name, images: i.exercise.images })), [items]);
+  const reorderRows = useMemo(() => items.map((i) => ({ key: i.key, name: i.exercise.name, primary: i.exercise.primaryMuscles ?? [], secondary: i.exercise.secondaryMuscles ?? [] })), [items]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>
@@ -186,7 +187,7 @@ function BuildWorkout() {
               <View key={item.key} style={{ marginTop: 16, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
                 {/* The exercise: its photo, name, and ⋯ */}
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                  <ExerciseThumb images={item.exercise.images} />
+                  <ExerciseIcon name={item.exercise.name} primary={item.exercise.primaryMuscles ?? []} secondary={item.exercise.secondaryMuscles ?? []} />
                   <Text style={{ flex: 1, fontSize: 17, fontWeight: "700", color: c.text }} numberOfLines={2}>
                     {item.exercise.name}
                   </Text>

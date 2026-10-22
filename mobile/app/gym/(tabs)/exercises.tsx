@@ -1,4 +1,4 @@
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, ScrollView, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -11,6 +11,7 @@ import { useOrbitTheme } from "@/src/theme/orbit";
 // folded until opened as the Kitchen's ingredients are, and a search that
 // reaches all of it.
 export default function ExercisesTab() {
+  const router = useRouter();
   const { colors: c } = useOrbitTheme();
   const [all, setAll] = useState<Exercise[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -33,7 +34,7 @@ export default function ExercisesTab() {
         <Text style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>Exercises</Text>
         <Text style={{ marginTop: 2, marginBottom: 16, fontSize: 14, color: c.muted }}>{all ? `${core} to start with — search all ${all.length}` : "The exercise library"}</Text>
         {all ? (
-          <ExerciseBrowser all={all} />
+          <ExerciseBrowser all={all} onOpen={(exercise) => router.push(`/gym/exercise/${exercise._id}` as Href)} />
         ) : failed ? (
           <Text style={{ textAlign: "center", marginTop: 24, fontSize: 14, color: c.muted }}>Couldn&apos;t load the exercises.</Text>
         ) : (

@@ -4,16 +4,16 @@ import { Modal, Platform, ScrollView, Text, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 
-import { ExerciseThumb } from "@/src/components/gym/ExerciseBrowser";
+import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
 import { Tap } from "@/src/components/ui/Tap";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // A workout's exercises in a sheet, to put in a new order: each row (its
-// photo and name) dragged by the handle on its right — the others slide out
+// icon and name) dragged by the handle on its right — the others slide out
 // of its way — then Done. (`items` by a key of their own; `onDone` gets the
 // keys in the new order.)
 
-type Row = { key: string; name: string; images?: string[] };
+type Row = { key: string; name: string; primary: string[]; secondary: string[] };
 
 const ROW = 64;
 const GAP = 8;
@@ -116,7 +116,7 @@ function DragRow({ row, positions, count, onMoved, colors: c }: { row: Row; posi
         style,
       ]}
     >
-      <ExerciseThumb images={row.images} size={40} />
+      <ExerciseIcon name={row.name} primary={row.primary} secondary={row.secondary} size={40} />
       <Text style={{ flex: 1, fontSize: 16, fontWeight: "600", color: c.text }} numberOfLines={1}>
         {row.name}
       </Text>

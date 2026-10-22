@@ -1,15 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Tap } from "@/src/components/ui/Tap";
 import { getWorkouts, type GymWorkout } from "@/src/services/gymApi";
 import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
-// Gym → Workouts: the workouts you've built — each a card to open and
-// change — and a button to build a new one. (Starting one comes later.)
+// Gym → Workouts: the workouts you've built — each a card, with Edit (to
+// change it) and Start (to do it) under it — and a button to build a new
+// one. (Doing one comes next: for now Start says so.)
 export default function WorkoutsTab() {
   const router = useRouter();
   const { colors: c } = useOrbitTheme();
@@ -49,7 +50,15 @@ export default function WorkoutsTab() {
               <Text style={{ marginTop: 4, fontSize: 14, lineHeight: 20, textAlign: "center", color: c.muted }}>Build one — Push, Legs, Upper A — with its exercises and the sets you aim for.</Text>
             </View>
           ) : (
-            workouts.map((workout) => <WorkoutCard key={workout._id} workout={workout} onPress={() => build(workout._id)} colors={c} />)
+            workouts.map((workout) => (
+              <WorkoutCard
+                key={workout._id}
+                workout={workout}
+                onEdit={() => build(workout._id)}
+                onStart={() => Alert.alert(`Start ${workout.name}`, "Doing a workout — ticking off your sets as you go, with a rest timer — is the next thing being built.")}
+                colors={c}
+              />
+            ))
           )}
         </View>
       </ScrollView>
@@ -57,17 +66,14 @@ export default function WorkoutsTab() {
   );
 }
 
-function WorkoutCard({ workout, onPress, colors: c }: { workout: GymWorkout; onPress: () => void; colors: OrbitColors }) {
+function WorkoutCard({ workout, onEdit, onStart, colors: c }: { workout: GymWorkout; onEdit: () => void; onStart: () => void; colors: OrbitColors }) {
   const exercises = workout.exercises.filter((e) => e.exercise);
   const sets = exercises.reduce((n, e) => n + e.sets.length, 0);
   return (
-    <Tap onPress={onPress} accessibilityRole="button" style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }} pressedStyle={{ backgroundColor: c.pill }}>
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <Text style={{ flex: 1, fontSize: 17, fontWeight: "700", color: c.text }} numberOfLines={1}>
-          {workout.name}
-        </Text>
-        <Ionicons name="chevron-forward" size={18} color={c.faint} />
-      </View>
+    <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
+      <Text style={{ fontSize: 17, fontWeight: "700", color: c.text }} numberOfLines={1}>
+        {workout.name}
+      </Text>
       <Text style={{ marginTop: 3, fontSize: 13, color: c.muted }}>
         {exercises.length} exercise{exercises.length === 1 ? "" : "s"} · {sets} set{sets === 1 ? "" : "s"}
       </Text>
@@ -76,6 +82,17 @@ function WorkoutCard({ workout, onPress, colors: c }: { workout: GymWorkout; onP
           {exercises.map((e) => e.exercise.name).join(", ")}
         </Text>
       )}
-    </Tap>
+      {/* Edit · Start */}
+      <View style={{ marginTop: 14, flexDirection: "row", gap: 10 }}>
+        <Tap onPress={onEdit} accessibilityRole="button" accessibilityLabel={`Edit ${workout.name}`} style={{ flex: 1, height: 44, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: c.pill }} pressedStyle={{ opacity: 0.7 }}>
+          <Ionicons name="create-outline" size={18} color={c.onPill} />
+          <Text style={{ fontSize: 15, fontWeight: "600", color: c.onPill }}>Edit</Text>
+        </Tap>
+        <Tap onPress={onStart} accessibilityRole="button" accessibilityLabel={`Start ${workout.name}`} style={{ flex: 1, height: 44, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: c.ink }} pressedStyle={{ opacity: 0.85 }}>
+          <Ionicons name="play" size={16} color={c.onInk} />
+          <Text style={{ fontSize: 15, fontWeight: "700", color: c.onInk }}>Start</Text>
+        </Tap>
+      </View>
+    </View>
   );
 }
