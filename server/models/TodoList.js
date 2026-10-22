@@ -27,6 +27,10 @@ const todoListSchema = new mongoose.Schema(
     // Exactly one exists (created on first use); it can't be deleted or
     // put in a group.
     isDefault: { type: Boolean, default: false },
+    // Put away (a finished project, say): out of the Lists sidebar, into
+    // its Archived section, and its tasks out of the smart lists, the
+    // dashboard and the calendar. Nothing in it is changed or deleted.
+    archived: { type: Boolean, default: false },
 
     // --- Projects only ---
     description: { type: String, trim: true, default: "" },

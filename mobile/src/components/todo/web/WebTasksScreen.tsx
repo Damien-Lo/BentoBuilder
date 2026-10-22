@@ -29,7 +29,7 @@ import { todayStr } from "@/src/utils/mealPlan";
 
 import { AddTaskBar, type NewTaskInput } from "../AddTaskBar";
 import { openListOptions } from "../listActions";
-import { PriorityPill, StatusPill, TaskNumber } from "../TaskBits";
+import { PriorityPill, ProjectStatusDot, projectDone, StatusPill, TaskNumber } from "../TaskBits";
 import { TaskDetail } from "../TaskDetail";
 import { TextPromptModal } from "../TextPromptModal";
 import { friendlyDate, isOverdue, listAccent, longToday, showActions, SMART_LISTS, useTodoTheme } from "../theme";
@@ -50,6 +50,7 @@ export function WebTasksScreen() {
   const theme = useTodoTheme();
   const [overview, setOverview] = useState<TodoOverview | null>(null);
   const [deletedCount, setDeletedCount] = useState(0);
+  const [showArchived, setShowArchived] = useState(false);
   // A smart list's id ("myday", …) or a list's own id.
   const [selected, setSelected] = useState<string>("myday");
   const [tasks, setTasks] = useState<TodoTask[]>([]);
@@ -79,12 +80,14 @@ export function WebTasksScreen() {
     .filter((l) => l.type !== "checklist")
     .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.order - b.order);
   const list = smart ? null : lists.find((l) => l._id === selected) ?? null;
+  // (Archived ones sit in a section of their own, under the groups.)
+  const archived = lists.filter((l) => l.archived).sort((a, b) => a.name.localeCompare(b.name));
   const groups = [...(overview?.groups ?? [])].sort((a, b) => a.order - b.order);
   const groupName = (id: string | null | undefined) => groups.find((g) => g._id === id)?.name;
   // What sits in a group ("" = in none): its lists, then its projects.
   const inGroup = (id: string) =>
     lists
-      .filter((l) => (l.group && groupName(l.group) !== undefined ? l.group : "") === id)
+      .filter((l) => !l.archived && (l.group && groupName(l.group) !== undefined ? l.group : "") === id)
       .sort((a, b) => Number(a.type === "project") - Number(b.type === "project"));
 
   // Dragging a list or project by its row. It starts once the pointer has
@@ -152,6 +155,16 @@ export function WebTasksScreen() {
       label={l.name}
       count={l.openCount ?? 0}
       on={selected === l._id}
+      list={l}
+      // (Picks it first: its options act on the one that's open.)
+      onMore={
+        l.type === "project"
+          ? () => {
+              pick(l._id);
+              listOptions(l);
+            }
+          : undefined
+      }
       indent={indent}
       faded={drag?.list._id === l._id}
       onPress={() => {
@@ -420,6 +433,20 @@ export function WebTasksScreen() {
 
           <View style={{ height: 1, backgroundColor: "#E2E8F0", marginVertical: 10, marginHorizontal: 8 }} />
 
+          {archived.length > 0 && (
+            <>
+              <ListRow
+                icon="archive-outline"
+                color="#64748B"
+                label="Archived"
+                count={archived.length}
+                on={false}
+                trailing={showArchived ? "chevron-down" : "chevron-forward"}
+                onPress={() => setShowArchived((v) => !v)}
+              />
+              {showArchived && archived.map((l) => rowFor(l, true))}
+            </>
+          )}
           <ListRow
             icon="trash-outline"
             color="#64748B"
@@ -652,6 +679,9 @@ function ListRow({
   label,
   count,
   on,
+  list,
+  onMore,
+  trailing,
   indent,
   faded,
   onPress,
@@ -662,6 +692,12 @@ function ListRow({
   label: string;
   count: number;
   on: boolean;
+  // The list it opens: a project's status dot, its name struck through once done.
+  list?: TodoList;
+  // A ⋯ at the end, for its options (a project's: archiving it among them).
+  onMore?: () => void;
+  // An icon at the end (a section's open/closed chevron).
+  trailing?: keyof typeof Ionicons.glyphMap;
   // Sits under a group's name.
   indent?: boolean;
   // Being dragged somewhere else.
@@ -685,10 +721,24 @@ function ListRow({
       })}
     >
       <Ionicons name={icon} size={18} color={color} />
-      <Text numberOfLines={1} style={{ flex: 1, marginLeft: 12, fontSize: 14, fontWeight: on ? "700" : "500", color: "#0F172A" }}>
+      {list && <ProjectStatusDot list={list} gap={12} />}
+      <Text
+        numberOfLines={1}
+        style={{ flex: 1, marginLeft: list?.type === "project" ? 8 : 12, fontSize: 14, fontWeight: on ? "700" : "500", color: list && projectDone(list) ? "#64748B" : "#0F172A", textDecorationLine: list && projectDone(list) ? "line-through" : "none" }}
+      >
         {label}
       </Text>
-      {count > 0 && <Text style={{ fontSize: 12, color: "#64748B" }}>{count}</Text>}
+      {count > 0 && <Text style={{ marginLeft: 6, fontSize: 12, color: "#64748B" }}>{count}</Text>}
+      {onMore && (
+        <Pressable
+          onPress={onMore}
+          accessibilityLabel={`${label} options`}
+          style={({ hovered }: Row) => ({ width: 24, height: 24, marginLeft: 4, marginRight: -4, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? "#E2E8F0" : "transparent" })}
+        >
+          <Ionicons name="ellipsis-horizontal" size={14} color="#94A3B8" />
+        </Pressable>
+      )}
+      {trailing && <Ionicons name={trailing} size={14} color="#94A3B8" style={{ marginLeft: 6 }} />}
     </Pressable>
   );
 }

@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Text, type LayoutChangeEvent } from "react-native";
+import { Text, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 import type { TodoList } from "@/src/services/todoApi";
 import { useOrbitTheme } from "@/src/theme/orbit";
 
+import { ProjectStatusDot, projectDone } from "./TaskBits";
 import { listAccent, type TodoTheme } from "./theme";
 
 // One list row on the Lists home: tap opens it; long-press then drag moves
@@ -61,7 +62,14 @@ export function DraggableListRow({
       lifted.value = withTiming(0, { duration: 120 });
     });
 
+  // A project's ⋯: its options (archiving it among them). It has the tap
+  // first, so pressing it doesn't open the project too.
+  const more = Gesture.Tap().onEnd(() => {
+    runOnJS(onOptions)();
+  });
+
   const tap = Gesture.Tap()
+    .requireExternalGestureToFail(more)
     .onBegin(() => {
       pressed.value = 1;
     })
@@ -116,10 +124,18 @@ export function DraggableListRow({
         ]}
       >
         <Ionicons name={list.type === "checklist" ? "checkbox-outline" : list.type === "project" ? "git-network-outline" : "list"} size={20} color={listAccent(list.color, theme)} />
-        <Text numberOfLines={1} style={{ flex: 1, marginLeft: 14, fontSize: 16, color: colors.text }}>
+        <ProjectStatusDot list={list} gap={14} />
+        <Text numberOfLines={1} style={{ flex: 1, marginLeft: list.type === "project" ? 8 : 14, fontSize: 16, color: projectDone(list) ? colors.muted : colors.text, textDecorationLine: projectDone(list) ? "line-through" : "none" }}>
           {list.name}
         </Text>
         {!!list.openCount && <Text style={{ fontSize: 15, color: colors.faint }}>{list.openCount}</Text>}
+        {list.type === "project" && (
+          <GestureDetector gesture={more}>
+            <View accessibilityRole="button" accessibilityLabel={`${list.name} options`} style={{ width: 36, height: 36, marginLeft: 4, marginRight: -10, alignItems: "center", justifyContent: "center" }}>
+              <Ionicons name="ellipsis-horizontal" size={18} color={colors.faint} />
+            </View>
+          </GestureDetector>
+        )}
       </Animated.View>
     </GestureDetector>
     </Animated.View>

@@ -69,6 +69,10 @@ export function openListOptions({
     ]);
 
   showActions(list.name, [
+    // (A project done with: put away, and back again.)
+    ...(isProject
+      ? [{ label: list.archived ? "Unarchive project" : "Archive project", onPress: () => updateTodoList(list._id, { archived: !list.archived }).then(onChanged, fail) }]
+      : []),
     { label: `Rename ${noun}`, onPress: onRename },
     { label: "Change colour", onPress: pickColor },
     ...(list.type === "checklist"

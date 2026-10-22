@@ -5,6 +5,7 @@ import { Alert, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DraggableListRow } from "@/src/components/todo/DraggableListRow";
+import { ProjectStatusDot, projectDone } from "@/src/components/todo/TaskBits";
 import { Tap } from "@/src/components/ui/Tap";
 import { WebTasksScreen } from "@/src/components/todo/web/WebTasksScreen";
 import { useWideWeb } from "@/src/utils/useWideWeb";
@@ -67,6 +68,7 @@ function PhoneTasksTabScreen() {
   const [displayName, setDisplayName] = useState("");
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [deletedCount, setDeletedCount] = useState(0);
+  const [showArchived, setShowArchived] = useState(false);
 
   const refresh = useCallback(() => {
     getTodoOverview()
@@ -121,8 +123,10 @@ function PhoneTasksTabScreen() {
   };
   const pressed = { backgroundColor: colors.pill };
 
-  // Checklists have their own tabs.
-  const lists = (overview?.lists ?? []).filter((l) => l.type !== "checklist");
+  // Checklists have their own tabs; archived lists sit in a section of
+  // their own at the bottom.
+  const lists = (overview?.lists ?? []).filter((l) => l.type !== "checklist" && !l.archived);
+  const archived = (overview?.lists ?? []).filter((l) => l.type !== "checklist" && l.archived).sort((a, b) => a.name.localeCompare(b.name));
   const groups = overview?.groups ?? [];
   const defaultList = lists.find((l) => l.isDefault);
   const byOrder = (a: TodoList, b: TodoList) => a.order - b.order;
@@ -222,31 +226,38 @@ function PhoneTasksTabScreen() {
     ]);
   }
 
-  function listRow(list: TodoList, indented = false) {
+  function listRow(list: TodoList, divider = true) {
+    const options = () =>
+      openListOptions({
+        list,
+        groups,
+        onRename: () => setPrompt({ kind: "renameList", list }),
+        onChanged: refresh,
+        allowProject: true,
+        onDeleted: refresh,
+      });
     return (
       <Tap
         key={list._id}
         onPress={() => router.push({ pathname: "/lists/[id]", params: { id: list._id } })}
-        onLongPress={() =>
-          openListOptions({
-            list,
-            groups,
-            onRename: () => setPrompt({ kind: "renameList", list }),
-            onChanged: refresh,
-            allowProject: true,
-            onDeleted: refresh,
-          })
-        }
+        onLongPress={options}
         accessibilityRole="button"
         accessibilityLabel={list.name}
-        style={{ flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.border }}
+        style={{ flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 16, borderTopWidth: divider ? 1 : 0, borderTopColor: colors.border }}
         pressedStyle={pressed}
       >
         <Ionicons name={list.isDefault ? "home-outline" : list.type === "checklist" ? "checkbox-outline" : list.type === "project" ? "git-network-outline" : "list"} size={20} color={listAccent(list.color, theme)} />
-        <Text numberOfLines={1} style={{ flex: 1, marginLeft: 14, fontSize: 16, color: colors.text }}>
+        <ProjectStatusDot list={list} gap={14} />
+        <Text numberOfLines={1} style={{ flex: 1, marginLeft: list.type === "project" ? 8 : 14, fontSize: 16, color: projectDone(list) ? colors.muted : colors.text, textDecorationLine: projectDone(list) ? "line-through" : "none" }}>
           {list.name}
         </Text>
         {!!list.openCount && <Text style={{ fontSize: 15, color: colors.faint }}>{list.openCount}</Text>}
+        {/* A project's ⋯: its options (archiving it among them). */}
+        {list.type === "project" && (
+          <Tap onPress={options} accessibilityLabel={`${list.name} options`} style={{ width: 36, height: 36, marginLeft: 4, marginRight: -10, borderRadius: 18, alignItems: "center", justifyContent: "center" }} pressedStyle={pressed}>
+            <Ionicons name="ellipsis-horizontal" size={18} color={colors.faint} />
+          </Tap>
+        )}
       </Tap>
     );
   }
@@ -391,6 +402,25 @@ function PhoneTasksTabScreen() {
             />
           )}
         </View>
+
+        {/* Archived lists and projects: put away, shown when asked for */}
+        {archived.length > 0 && (
+          <View style={[cardStyle, { marginTop: 24 }]}>
+            <Tap
+              onPress={() => setShowArchived((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={showArchived ? "Hide archived" : "Show archived"}
+              style={{ flexDirection: "row", alignItems: "center", minHeight: 52, paddingHorizontal: 16 }}
+              pressedStyle={pressed}
+            >
+              <Ionicons name="archive-outline" size={20} color={colors.muted} />
+              <Text style={{ flex: 1, marginLeft: 14, fontSize: 16, color: colors.text }}>Archived</Text>
+              <Text style={{ fontSize: 15, color: colors.faint }}>{archived.length}</Text>
+              <Ionicons name={showArchived ? "chevron-down" : "chevron-forward"} size={16} color={colors.faint} style={{ marginLeft: 6 }} />
+            </Tap>
+            {showArchived && archived.map((list) => listRow(list))}
+          </View>
+        )}
 
         {/* Deleted tasks wait here for 30 days. */}
         <Tap

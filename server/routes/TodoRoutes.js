@@ -55,8 +55,9 @@ router.get("/overview", async (req, res) => {
 
     const openByList = new Map();
     for (const t of allOpen) openByList.set(String(t.list), (openByList.get(String(t.list)) ?? 0) + 1);
-    // The smart lists only cover tasks lists, never checklists.
-    const checklistIds = new Set(lists.filter((l) => l.type === "checklist").map((l) => String(l._id)));
+    // The smart lists only cover tasks lists, never checklists (nor
+    // archived lists).
+    const checklistIds = new Set(lists.filter((l) => l.type === "checklist" || l.archived).map((l) => String(l._id)));
     const openTasks = allOpen.filter((t) => !checklistIds.has(String(t.list)));
 
     return res.json({
@@ -183,8 +184,12 @@ router.patch("/lists/:id", async (req, res) => {
   try {
     const list = await TodoList.findById(req.params.id);
     if (!list) return sendError(res, new Error("List not found"), 404);
-    const { name, color, group, type, shopping } = req.body;
+    const { name, color, group, type, shopping, archived } = req.body;
     const previousType = list.type;
+    if (archived !== undefined) {
+      if (list.isDefault && archived) throw new Error("The Tasks list can't be archived.");
+      list.archived = !!archived;
+    }
     if (shopping !== undefined) list.shopping = !!shopping;
     if (type !== undefined) {
       if (list.isDefault && type !== "tasks") throw new Error("The Tasks list can't be a checklist or a project.");
@@ -359,8 +364,10 @@ async function presentMany(tasks) {
   return tasks.map((t) => present(t, collect(t._id)));
 }
 
+// The lists whose tasks show in the smart lists, the dashboard and the
+// calendar: not checklists, and not archived.
 async function taskListIds() {
-  const lists = await TodoList.find({ type: { $ne: "checklist" } }).select("_id");
+  const lists = await TodoList.find({ type: { $ne: "checklist" }, archived: { $ne: true } }).select("_id");
   return lists.map((l) => l._id);
 }
 
@@ -528,9 +535,11 @@ router.get("/calendar", async (req, res) => {
   try {
     const { from, to } = req.query;
     if (!DATE_RE.test(from ?? "") || !DATE_RE.test(to ?? "")) throw new Error("from and to must be YYYY-MM-DD dates");
+    // (Not from archived lists.)
+    const archived = (await TodoList.find({ archived: true }).select("_id")).map((l) => l._id);
     const [due, scheduled] = await Promise.all([
-      TodoTask.find({ showInCalendar: true, dueDate: { $gte: from, $lte: to } }).sort({ dueDate: 1, depth: 1 }).lean(),
-      TodoTask.find({ workBlocks: { $elemMatch: { date: { $gte: from, $lte: to } } } }).lean(),
+      TodoTask.find({ showInCalendar: true, dueDate: { $gte: from, $lte: to }, list: { $nin: archived } }).sort({ dueDate: 1, depth: 1 }).lean(),
+      TodoTask.find({ workBlocks: { $elemMatch: { date: { $gte: from, $lte: to } } }, list: { $nin: archived } }).lean(),
     ]);
     const rooted = await withRoots([...due, ...scheduled]);
     const rootOf = new Map(rooted.map(({ task, root }) => [String(task._id), root]));

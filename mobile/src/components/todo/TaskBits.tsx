@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
-import type { TaskPriority, TaskStatus } from "@/src/services/todoApi";
+import type { ProjectStatus, TaskPriority, TaskStatus, TodoList } from "@/src/services/todoApi";
 import { useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { hexToRgba } from "@/src/utils/mealPlan";
 
@@ -13,6 +13,24 @@ import { TASK_PRIORITY_META, TASK_STATUS_META, useTodoTheme, type TodoTheme } fr
 // "#12" reference and the progress bar (plain, and as a slider). On an
 // Orbit page (useOrbitPage) they take its colours; elsewhere they look as
 // they always have.
+
+// A project's status at a glance where lists are listed: a small dot
+// before its name (`gap`: from the icon before it) — grey while planning, blue when active, amber on hold, green
+// when done — and, once done, its name struck through.
+export const PROJECT_STATUS_DOT: Record<ProjectStatus, { label: string; color: string }> = {
+  planning: { label: "Planning", color: "#94A3B8" },
+  active: { label: "Active", color: "#3B82F6" },
+  on_hold: { label: "On hold", color: "#F59E0B" },
+  done: { label: "Done", color: "#10B981" },
+};
+
+export const projectDone = (list: TodoList) => list.type === "project" && list.projectStatus === "done";
+
+export function ProjectStatusDot({ list, gap }: { list: TodoList; gap: number }) {
+  if (list.type !== "project") return null;
+  const status = PROJECT_STATUS_DOT[list.projectStatus ?? "planning"];
+  return <View accessible accessibilityLabel={status.label} style={{ width: 8, height: 8, borderRadius: 4, marginLeft: gap, backgroundColor: status.color }} />;
+}
 
 // A colour mixed towards white — a list's or a pill's hue made light enough
 // to read as text on the dark theme.

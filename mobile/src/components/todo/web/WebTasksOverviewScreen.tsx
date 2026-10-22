@@ -18,7 +18,7 @@ import {
 } from "@/src/services/todoApi";
 import { todayStr } from "@/src/utils/mealPlan";
 
-import { StatusPill } from "../TaskBits";
+import { projectDone, StatusPill } from "../TaskBits";
 import { listAccent, longToday, useTodoTheme } from "../theme";
 import { PROJECT_STATUS_META } from "./WebProjectView";
 
@@ -46,7 +46,7 @@ export function WebTasksOverviewScreen() {
       getTodoOverview()
         .then((loaded) => {
           setOverview(loaded);
-          for (const project of loaded.lists.filter((l) => l.type === "project")) {
+          for (const project of loaded.lists.filter((l) => l.type === "project" && !l.archived)) {
             getListTasks(project._id)
               .then((tasks) => setProjectTasks((prev) => ({ ...prev, [project._id]: tasks })))
               .catch(() => {});
@@ -59,7 +59,8 @@ export function WebTasksOverviewScreen() {
   const openList = (id: string) => router.navigate({ pathname: "/lists/tasks", params: { list: id } });
   const openTask = (task: TodoTask) => router.navigate({ pathname: "/lists/tasks", params: { list: task.list._id, task: task._id } });
 
-  const lists = (overview?.lists ?? []).filter((l) => l.type !== "checklist");
+  // (Archived lists and projects are put away: not here.)
+  const lists = (overview?.lists ?? []).filter((l) => l.type !== "checklist" && !l.archived);
   const projects = lists.filter((l) => l.type === "project");
   const plain = lists.filter((l) => l.type !== "project").sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.order - b.order);
   const groupName = (id: string | null | undefined) => overview?.groups.find((g) => g._id === id)?.name;
@@ -170,7 +171,7 @@ function ProjectLine({ project, group, tasks, today, color, onPress }: { project
     <Pressable onPress={onPress} style={({ hovered }: Hover) => ({ paddingHorizontal: 18, paddingVertical: 10, backgroundColor: hovered ? "#F8FAFC" : "transparent" })}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         <Ionicons name="git-network-outline" size={16} color={color} />
-        <Text numberOfLines={1} style={{ flexShrink: 1, marginLeft: 10, fontSize: 14, fontWeight: "700", color: WEB.text }}>
+        <Text numberOfLines={1} style={{ flexShrink: 1, marginLeft: 10, fontSize: 14, fontWeight: "700", color: projectDone(project) ? WEB.muted : WEB.text, textDecorationLine: projectDone(project) ? "line-through" : "none" }}>
           {project.name}
         </Text>
         {!!group && <Text style={{ marginLeft: 8, fontSize: 12, color: WEB.faint }}>{group}</Text>}

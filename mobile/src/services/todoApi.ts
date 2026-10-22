@@ -33,6 +33,9 @@ export interface TodoList {
   type: TodoListType;
   // A checklist that's a shopping list (Shopping tab, not Checklists).
   shopping?: boolean;
+  // Put away: in the Archived section, its tasks out of the smart lists,
+  // the dashboard and the calendar.
+  archived?: boolean;
   openCount?: number;
   // Projects only: the goal, the dates it runs between, where it stands,
   // and its phases.
@@ -184,7 +187,7 @@ export const createTodoList = (
   type: TodoListType = "tasks",
   shopping = false,
 ) => request<TodoList>("/lists", { method: "POST", body: body({ name, color, group, type, shopping }) });
-export const updateTodoList = (id: string, changes: Partial<Pick<TodoList, "name" | "color" | "group" | "type" | "shopping">>) =>
+export const updateTodoList = (id: string, changes: Partial<Pick<TodoList, "name" | "color" | "group" | "type" | "shopping" | "archived">>) =>
   request<TodoList>(`/lists/${id}`, { method: "PATCH", body: body(changes) });
 export const deleteTodoList = (id: string) => request<void>(`/lists/${id}`, { method: "DELETE" });
 
