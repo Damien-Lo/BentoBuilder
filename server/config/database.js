@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import mongoose from "mongoose";
 
+import { ensureExerciseCatalog } from "../services/exerciseCatalog.js";
+
 // Which database the server works on.
 //
 // There are two, on the same cluster: the real one (everything actually
@@ -55,6 +57,9 @@ export async function connectDatabase(name) {
   current = target;
   // (A database that's new, or newly reset, has none of the models' indexes.)
   await Promise.all(Object.values(mongoose.models).map((model) => model.createIndexes().catch(() => {})));
+  // (Gym's exercise library, filled in or brought up to date: it doesn't
+  // hold up the server if it fails.)
+  await ensureExerciseCatalog().catch((error) => console.error("Exercise library:", error.message));
   if (canSwitchDatabase()) {
     fs.mkdirSync(path.dirname(CHOICE_FILE), { recursive: true });
     fs.writeFileSync(CHOICE_FILE, target);

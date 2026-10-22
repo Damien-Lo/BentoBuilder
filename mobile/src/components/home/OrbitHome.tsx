@@ -42,7 +42,7 @@ const ORBIT: Section[] = [
   { id: "calendar", label: "Calendar", icon: "calendar-outline", route: "/calendar" },
   { id: "kitchen", label: "Kitchen", icon: "restaurant-outline", route: "/planner" },
   // (Nutrition is part of Health now — its pages are in Health's list.)
-  { id: "gym", label: "Gym", icon: "barbell-outline", soon: true },
+  { id: "gym", label: "Gym", icon: "barbell-outline", route: "/gym" as Href },
   { id: "health", label: "Health", icon: "pulse-outline", route: "/health-section" as Href },
   // (Files, meeting notes, documents and planning — in place of Home: the
   // house's chores and upkeep fit Tasks' lists and projects.)
@@ -96,6 +96,8 @@ function glance(id: SectionId, t: Today): { value: string; ring: number; caption
         ring: t.weightProgress,
         caption: t.latestWeight ? `${Math.round(t.weightProgress * 100)}% of the way to your goal` : "No weigh-ins yet",
       };
+    case "gym":
+      return { value: "—", ring: 0, caption: "No sessions yet" };
     case "tasks":
       return {
         value: t.tasks.length ? `${t.tasks.length} due` : "All done",
@@ -360,7 +362,7 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
       : quiet("Nothing due — nice.");
     actions = <Action label="New task" icon="add" onPress={() => go("/lists")} colors={colors} />;
   } else if (section.id === "gym") {
-    body = quiet("Workouts, logged sessions and progress are on their way.");
+    body = quiet("No sessions yet — workouts, logging and progress are being planned.");
   } else {
     body = quiet("Your files, notes, documents and plans, all in one place — on its way.");
   }

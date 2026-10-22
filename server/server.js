@@ -29,6 +29,8 @@ import { chosenDatabase, connectDatabase, DATABASES } from "./config/database.js
 import developerRoutes from "./routes/DeveloperRoutes.js";
 import photoRoutes from "./routes/PhotoRoutes.js";
 import menuRoutes from "./routes/MenuRoutes.js";
+import exerciseRoutes from "./routes/ExerciseRoutes.js";
+import gymRoutes from "./routes/GymRoutes.js";
 import authRoutes from "./routes/AuthRoutes.js";
 import { adminOrNoAccount, authenticate } from "./services/auth.js";
 
@@ -127,6 +129,8 @@ app.use("/api/calendar", calendarRoutes);
 app.use("/api/developer", adminOrNoAccount, developerRoutes);
 app.use("/api/photos", photoRoutes);
 app.use("/api/menu", menuRoutes);
+app.use("/api/exercises", exerciseRoutes);
+app.use("/api/gym", gymRoutes);
 app.use("/api/auth", authRoutes);
 
 

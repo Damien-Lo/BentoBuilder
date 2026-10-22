@@ -21,13 +21,17 @@ const HUES: Record<Exclude<OrbHue, "main">, { stops: [number, string][]; glow: {
   violet: { stops: [[0, SECTION_PALETTE.tasks.tint], [0.24, "#C3B6FA"], [0.52, SECTION_PALETTE.tasks.base], [0.86, SECTION_PALETTE.tasks.dark], [1, SECTION_PALETTE.tasks.deep]], glow: { light: SECTION_PALETTE.tasks.base, dark: SECTION_PALETTE.tasks.base } },
   green: { stops: [[0, SECTION_PALETTE.nutrition.tint], [0.24, "#A9DC97"], [0.52, SECTION_PALETTE.nutrition.base], [0.86, SECTION_PALETTE.nutrition.dark], [1, SECTION_PALETTE.nutrition.deep]], glow: { light: SECTION_PALETTE.nutrition.base, dark: SECTION_PALETTE.nutrition.base } },
   pink: { stops: [[0, SECTION_PALETTE.health.tint], [0.24, "#F7A1AD"], [0.52, SECTION_PALETTE.health.base], [0.86, SECTION_PALETTE.health.dark], [1, SECTION_PALETTE.health.deep]], glow: { light: SECTION_PALETTE.health.base, dark: SECTION_PALETTE.health.base } },
+  // (Gym's: black and white.)
+  mono: { stops: [[0, "#F8FAFC"], [0.24, "#CBD5E1"], [0.52, "#64748B"], [0.86, "#1E293B"], [1, "#020617"]], glow: { light: "#475569", dark: "#CBD5E1" } },
   orange: { stops: [[0, SECTION_PALETTE.kitchen.tint], [0.24, "#F7AE6E"], [0.52, SECTION_PALETTE.kitchen.base], [0.86, SECTION_PALETTE.kitchen.dark], [1, SECTION_PALETTE.kitchen.deep]], glow: { light: SECTION_PALETTE.kitchen.base, dark: SECTION_PALETTE.kitchen.base } },
 };
 
 // The main orb's colours: every section's hue in turn round it (from 210°,
 // as in the design), and three soft patches over them.
 const P = SECTION_PALETTE;
-const SWEEP = [P.calendar, P.tasks, P.gym, P.health, P.kitchen, P.documents, P.nutrition, P.home].map((s) => s.base);
+// (Gym's slice stays the orb sheet's magenta: Gym's own colour is black and
+// white, which the sweep would show as a gap.)
+const SWEEP = [P.calendar.base, P.tasks.base, "#E36BD6", P.health.base, P.kitchen.base, P.documents.base, P.nutrition.base, P.home.base];
 const PATCHES: { color: string; x: number; y: number; d: number }[] = [
   { color: P.home.base, x: 0.3, y: 0.3, d: 0.62 }, // teal
   { color: P.kitchen.base, x: 0.72, y: 0.28, d: 0.56 }, // tangerine

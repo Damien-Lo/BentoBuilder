@@ -48,6 +48,11 @@ export default function RootLayout() {
           }}
         />
 
+        {/* Gym — workouts, sessions and progress */}
+        <Stack.Screen name="gym/(tabs)" options={{ headerShown: false }} />
+        {/* Building a workout (no swipe away: it asks before losing changes) */}
+        <Stack.Screen name="gym/build" options={{ headerShown: false, gestureEnabled: false }} />
+
         {/* Health — a list: nutrition, weight, and what's to come */}
         <Stack.Screen
           name="health-section"

@@ -104,7 +104,7 @@ export type Appearance = "system" | "light" | "dark";
 // The orb's colour: the main one — every section's colour together, the
 // assistant as a whole (home, and anywhere outside a section) — or a
 // section's own (its agent's).
-export type OrbHue = "main" | "blue" | "orange" | "violet" | "green" | "pink";
+export type OrbHue = "main" | "blue" | "orange" | "violet" | "green" | "pink" | "mono";
 const KEY = "orbit.appearance";
 
 interface ThemeValue {
@@ -153,7 +153,7 @@ export function OrbitPage({ on = true, children }: { on?: boolean; children: Rea
 // orbs): its pages, tab bar, sheets and orb take it in place of the
 // theme's accent (black, or white in the dark). The home screen, the hub
 // for every section, keeps the plain accent. Kitchen first (Oct 2026).
-export type Section = "kitchen" | "calendar" | "tasks" | "nutrition" | "health";
+export type Section = "kitchen" | "calendar" | "tasks" | "nutrition" | "health" | "gym";
 const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark: Partial<OrbitColors> }> = {
   kitchen: {
     orb: "orange",
@@ -186,6 +186,12 @@ const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark
     light: { ink: "#B3264A", onInk: "#FFFFFE", fill: "#F2667A", selectedRing: "#F7A1AD", orbGlow: "rgba(242, 102, 122, 0.45)" },
     dark: { ink: "#F2667A", onInk: "#0D0F14", fill: "#F2667A", selectedRing: "#B3264A", orbGlow: "rgba(242, 102, 122, 0.55)" },
   },
+  gym: {
+    orb: "mono",
+    // (Black and white: the hub's own accent, with a grey ring and glow.)
+    light: { ink: "#0F172B", onInk: "#FFFFFE", fill: "#0F172A", selectedRing: "#94A3B8", orbGlow: "rgba(15, 23, 42, 0.30)" },
+    dark: { ink: "#F1F5F9", onInk: "#0D0F14", fill: "#E2E8F0", selectedRing: "#475569", orbGlow: "rgba(226, 232, 240, 0.35)" },
+  },
 };
 
 export function OrbitSection({ section, children }: { section: Section; children: ReactNode }) {
@@ -211,7 +217,11 @@ export const SECTION_PALETTE: Record<SectionId, { tint: string; base: string; da
   tasks: { tint: "#E2DBFF", base: "#A08CF7", dark: "#5A44C9", deep: "#2F4FB8" },
   home: { tint: "#CBF5EE", base: "#3FC1B0", dark: "#137A73", deep: "#1F5FA0" },
   documents: { tint: "#FFF1C7", base: "#F2C34A", dark: "#B07A12", deep: "#B8551E" },
-  gym: { tint: "#FAD6F5", base: "#E36BD6", dark: "#8E2BA0", deep: "#4A3BB8" },
+  // (Gym in black and white — black in the light theme, white in the dark —
+  // not the sheet's magenta, Oct 22, 2026. The main orb keeps the magenta.)
+  // (`dark` a step off black, as Orbit's own button is: the web's dark mode
+  // turns it white — see components/web/theme.)
+  gym: { tint: "#E5E7EB", base: "#F1F5F9", dark: "#0F172B", deep: "#020617" },
 };
 
 // A section's colour where it's shown outside the section — its node on the
