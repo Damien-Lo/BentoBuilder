@@ -30,7 +30,7 @@ import { useToday, type Today } from "./useToday";
 // day so far, calories, tasks done). Tapping the orb opens quick actions —
 // where the voice assistant will go.
 
-type SectionId = "calendar" | "kitchen" | "gym" | "health" | "home" | "tasks";
+type SectionId = "calendar" | "kitchen" | "gym" | "health" | "documents" | "tasks";
 interface Section {
   id: SectionId;
   label: string;
@@ -44,7 +44,9 @@ const ORBIT: Section[] = [
   // (Nutrition is part of Health now — its pages are in Health's list.)
   { id: "gym", label: "Gym", icon: "barbell-outline", soon: true },
   { id: "health", label: "Health", icon: "pulse-outline", route: "/health-section" as Href },
-  { id: "home", label: "Home", icon: "home-outline", soon: true },
+  // (Files, meeting notes, documents and planning — in place of Home: the
+  // house's chores and upkeep fit Tasks' lists and projects.)
+  { id: "documents", label: "Docs", icon: "document-text-outline", soon: true },
   { id: "tasks", label: "Tasks", icon: "checkmark-circle-outline", route: "/lists" },
 ];
 const STEP = 360 / ORBIT.length;
@@ -360,7 +362,7 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
   } else if (section.id === "gym") {
     body = quiet("Workouts, logged sessions and progress are on their way.");
   } else {
-    body = quiet("Home planning — tasks and projects for the house — is on its way.");
+    body = quiet("Your files, notes, documents and plans, all in one place — on its way.");
   }
 
   return (
