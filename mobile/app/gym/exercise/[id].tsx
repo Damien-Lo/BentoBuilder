@@ -6,13 +6,14 @@ import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
-import { lbs, METRICS, personalRecords, sessionValue, type ExerciseSession, type Metric } from "@/src/components/gym/exerciseStats";
+import { lbs, METRICS_FOR, personalRecords, sessionValue, type ExerciseSession, type Metric } from "@/src/components/gym/exerciseStats";
 import { MuscleDot, MuscleMap, PRIMARY_COLOR, SECONDARY_COLOR } from "@/src/components/gym/MuscleMap";
 import { ProgressChart } from "@/src/components/gym/ProgressChart";
+import { setText, timeText, trackOf, type Track } from "@/src/components/gym/tracking";
 import { showActions } from "@/src/components/todo/theme";
 import { Tap } from "@/src/components/ui/Tap";
 import { exerciseImage, getExercise, groupLabel, type Exercise } from "@/src/services/exerciseApi";
-import { getExerciseSessions, type ExerciseSessionRecord } from "@/src/services/gymApi";
+import { getExerciseSessions, setLabels, setTypeOf, type ExerciseSessionRecord } from "@/src/services/gymApi";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // One exercise: the muscles it works (on the body, front and back), then
@@ -98,7 +99,7 @@ function ExercisePage() {
         failed ? <Text style={{ textAlign: "center", marginTop: 40, fontSize: 14, color: c.muted }}>Couldn&apos;t load this exercise.</Text> : <ActivityIndicator style={{ marginTop: 40 }} color={c.muted} />
       ) : (
         <ScrollView key={tab} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
-          {tab === "summary" ? <Summary exercise={exercise} sessions={sessions} colors={c} /> : tab === "history" ? <History sessions={sessions} colors={c} /> : <HowTo exercise={exercise} colors={c} />}
+          {tab === "summary" ? <Summary exercise={exercise} sessions={sessions} colors={c} /> : tab === "history" ? <History sessions={sessions} track={trackOf(exercise)} colors={c} /> : <HowTo exercise={exercise} colors={c} />}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -107,18 +108,21 @@ function ExercisePage() {
 
 // Summary: the movement, then your progress and your bests.
 function Summary({ exercise, sessions, colors: c }: { exercise: Exercise; sessions: ExerciseSession[]; colors: OrbitColors }) {
-  const [metric, setMetric] = useState<Metric>("heaviest");
+  // (What's charted and kept as bests: by how it's logged.)
+  const track = trackOf(exercise);
+  const metrics = METRICS_FOR[track];
+  const [metric, setMetric] = useState<Metric>(metrics[0].id);
   const [range, setRange] = useState<(typeof RANGES)[number]["id"]>("year");
-  const chosen = METRICS.find((m) => m.id === metric)!;
+  const chosen = metrics.find((m) => m.id === metric) ?? metrics[0];
   const days = RANGES.find((r) => r.id === range)!.days;
   const since = Number.isFinite(days) ? new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10) : "";
   const points = sessions
     .filter((s) => s.date >= since)
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map((s) => ({ date: s.date, value: sessionValue(s, metric) }))
+    .map((s) => ({ date: s.date, value: sessionValue(s, chosen.id, track) }))
     .filter((p) => p.value > 0);
   const last = points[points.length - 1];
-  const records = personalRecords(sessions);
+  const records = personalRecords(sessions, track);
 
   return (
     <View>
@@ -154,7 +158,7 @@ function Summary({ exercise, sessions, colors: c }: { exercise: Exercise; sessio
       {/* Progress */}
       <View style={{ marginTop: 22, flexDirection: "row", alignItems: "baseline" }}>
         <Text style={{ flex: 1, fontSize: 22, fontWeight: "800", color: c.text }}>
-          {last ? `${lbs(last.value)} ${chosen.unit}` : "—"}
+          {last ? (chosen.unit === "min" ? timeText(last.value * 60) : `${lbs(last.value)} ${chosen.unit}`) : "—"}
           {last && <Text style={{ fontSize: 15, fontWeight: "600", color: c.muted }}>{`  ${new Date(`${last.date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}</Text>}
         </Text>
         <Tap onPress={() => showActions("Show", RANGES.map((r) => ({ label: r.id === range ? `${r.label} ✓` : r.label, onPress: () => setRange(r.id) })))} accessibilityRole="button" style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 4 }} pressedStyle={{ opacity: 0.6 }}>
@@ -166,8 +170,8 @@ function Summary({ exercise, sessions, colors: c }: { exercise: Exercise; sessio
         <ProgressChart points={points} unit={chosen.unit} empty={`Do ${exercise.name} in a workout and your ${chosen.label.toLowerCase()} shows here, session by session.`} />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12, marginHorizontal: -16 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-        {METRICS.map((m) => {
-          const on = m.id === metric;
+        {metrics.map((m) => {
+          const on = m.id === chosen.id;
           return (
             <Tap key={m.id} onPress={() => setMetric(m.id)} accessibilityRole="button" accessibilityState={{ selected: on }} style={{ borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: on ? c.ink : c.pill }} pressedStyle={{ opacity: 0.75 }}>
               <Text style={{ fontSize: 14, fontWeight: "600", color: on ? c.onInk : c.onPill }}>{m.label}</Text>
@@ -182,10 +186,9 @@ function Summary({ exercise, sessions, colors: c }: { exercise: Exercise; sessio
         <Text style={{ fontSize: 17, fontWeight: "700", color: c.text }}>Personal records</Text>
       </View>
       <View style={{ marginTop: 10, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, overflow: "hidden" }}>
-        <Record label="Heaviest weight" value={records.heaviest != null ? `${lbs(records.heaviest)} lbs` : "—"} colors={c} />
-        <Record label="Best 1RM" value={records.oneRepMax != null ? `${lbs(records.oneRepMax)} lbs` : "—"} hint="Estimated, from your sets" colors={c} />
-        <Record label="Best set volume" value={records.bestSet ? `${lbs(records.bestSet.weight ?? 0)} lbs × ${records.bestSet.reps}` : "—"} colors={c} />
-        <Record label="Best session volume" value={records.sessionVolume != null ? `${lbs(records.sessionVolume)} lbs` : "—"} last colors={c} />
+        {records.map((r, i) => (
+          <Record key={r.label} label={r.label} value={r.value ?? "—"} hint={r.hint} last={i === records.length - 1} colors={c} />
+        ))}
       </View>
     </View>
   );
@@ -205,13 +208,13 @@ function Record({ label, value, hint, last, colors: c }: { label: string; value:
 
 // History: every session it was done in, the latest first (once workouts
 // are logged).
-function History({ sessions, colors: c }: { sessions: ExerciseSession[]; colors: OrbitColors }) {
+function History({ sessions, track, colors: c }: { sessions: ExerciseSession[]; track: Track; colors: OrbitColors }) {
   if (!sessions.length) {
     return (
       <View style={{ alignItems: "center", paddingHorizontal: 24, paddingVertical: 36, borderRadius: 18, borderWidth: 1, borderStyle: "dashed", borderColor: c.orbit }}>
         <Ionicons name="time-outline" size={30} color={c.faint} />
         <Text style={{ marginTop: 10, fontSize: 16, fontWeight: "700", color: c.text }}>No sessions yet</Text>
-        <Text style={{ marginTop: 4, fontSize: 14, lineHeight: 20, textAlign: "center", color: c.muted }}>Each time you do it in a workout, its sets — weight and reps — are kept here.</Text>
+        <Text style={{ marginTop: 4, fontSize: 14, lineHeight: 20, textAlign: "center", color: c.muted }}>Each time you do it in a workout, its sets are kept here.</Text>
       </View>
     );
   }
@@ -223,7 +226,10 @@ function History({ sessions, colors: c }: { sessions: ExerciseSession[]; colors:
           <View key={s.date + i} style={{ padding: 14, borderRadius: 16, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
             <Text style={{ fontSize: 15, fontWeight: "700", color: c.text }}>{new Date(`${s.date}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</Text>
             {s.sets.map((set, n) => (
-              <Text key={n} style={{ marginTop: 4, fontSize: 14, color: c.muted }}>{`${n + 1}   ${set.weight ?? "—"} lbs × ${set.reps ?? "—"}`}</Text>
+              <View key={n} style={{ marginTop: 4, flexDirection: "row" }}>
+                <Text style={{ width: 28, fontSize: 14, fontWeight: "700", color: setTypeOf(set.type).color ?? c.faint }}>{setLabels(s.sets)[n]}</Text>
+                <Text style={{ fontSize: 14, color: c.muted }}>{setText(set, track)}</Text>
+              </View>
             ))}
           </View>
         ))}

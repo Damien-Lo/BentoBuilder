@@ -4,13 +4,16 @@ import { ownedByUser } from "../services/ownership.js";
 
 // A workout you've built in Gym → Workouts (a "routine" in Hevy): its
 // exercises in order, each with how long to rest between sets, a note, and
-// the sets you aim for — weight and reps. Doing it (ticking sets off as you
+// the sets you aim for — weight and reps (or a time, or a distance). Doing it (ticking sets off as you
 // go) is a session, kept separately (later).
 const setSchema = new mongoose.Schema(
   {
     // In pounds, like the rest of the app's weights. Empty: not set yet.
     weight: { type: Number, default: null, min: 0 },
     reps: { type: Number, default: null, min: 0 },
+    // For a hold or cardio: how long (seconds) and how far (miles).
+    seconds: { type: Number, default: null, min: 0 },
+    distance: { type: Number, default: null, min: 0 },
   },
   { _id: false },
 );

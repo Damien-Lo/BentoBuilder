@@ -11,6 +11,9 @@ export interface ActiveSet {
   id: string;
   weight: string;
   reps: string;
+  // For a hold or cardio: the time as typed ("1:30") and the miles.
+  time: string;
+  distance: string;
   done: boolean;
   type?: SetType;
 }

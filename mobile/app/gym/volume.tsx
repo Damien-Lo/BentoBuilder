@@ -112,7 +112,7 @@ function Volume() {
         />
       </View>
       <Text style={{ marginTop: 8, marginHorizontal: 4, fontSize: 12.5, lineHeight: 18, color: c.faint }}>
-        The average is of the weeks before this one that you trained in.{metric === "volume" ? " Volume is weight × reps; assisted exercises aren't counted." : ""}
+        The average is of the weeks before this one that you trained in.{metric === "volume" ? " Volume is weight × reps (and any weight added to bodyweight moves); help, holds and cardio aren't counted." : ""}
       </Text>
     </>
   );

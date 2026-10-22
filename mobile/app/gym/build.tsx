@@ -8,6 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { PickExercises } from "@/src/components/gym/PickExercises";
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
 import { ReorderExercises } from "@/src/components/gym/ReorderExercises";
+import { cleanField, draftOf, FIELDS, fromDraft, TIME_HINT, trackOf, type DraftField, type SetDraft as TypedSet } from "@/src/components/gym/tracking";
 import { showActions } from "@/src/components/todo/theme";
 import { Tap } from "@/src/components/ui/Tap";
 import { type Exercise } from "@/src/services/exerciseApi";
@@ -17,22 +18,18 @@ import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit
 // Gym → Workouts → building a workout (new, or one you've saved: `id`) —
 // as Hevy's routine editor: its name, then each exercise with how long to
 // rest between sets, a note, and its sets (the weight and reps you aim
-// for); "Add set" under each, "Add exercise" at the end (picked from the
+// for — or the time, or distance and time, by how it's logged:
+// tracking.ts); "Add set" under each, "Add exercise" at the end (picked from the
 // library). Doing it — ticking sets off as you go — comes later.
 //
 // (Weights are in pounds, like the rest of the app.)
 
 // (`id`: so a row keeps its own swipe when one above it is deleted.)
-type SetDraft = { id: string; weight: string; reps: string };
+type SetDraft = TypedSet & { id: string };
 type ExerciseDraft = { key: string; exercise: WorkoutExercise["exercise"]; restSeconds: number; note: string; noteOpen: boolean; sets: SetDraft[] };
 
 let nextKey = 0;
 const newKey = () => `x${nextKey++}`;
-const asText = (n: number | null) => (n == null ? "" : String(n));
-const asNumber = (text: string) => {
-  const n = Number(text.replace(",", "."));
-  return text.trim() === "" || !Number.isFinite(n) || n < 0 ? null : n;
-};
 
 export default function BuildWorkoutScreen() {
   return (
@@ -54,7 +51,7 @@ function BuildWorkout() {
   const [reordering, setReordering] = useState(false);
   // What it was when opened, to tell whether leaving loses anything.
   const start = useRef("");
-  const snapshot = (n: string, list: ExerciseDraft[]) => JSON.stringify([n.trim(), list.map((i) => [i.exercise._id, i.restSeconds, i.note.trim(), i.sets.map((s) => [s.weight, s.reps])])]);
+  const snapshot = (n: string, list: ExerciseDraft[]) => JSON.stringify([n.trim(), list.map((i) => [i.exercise._id, i.restSeconds, i.note.trim(), i.sets.map((s) => [s.weight, s.reps, s.time, s.distance])])]);
 
   useEffect(() => {
     if (!id) {
@@ -65,7 +62,7 @@ function BuildWorkout() {
       .then((workout) => {
         const list = workout.exercises
           .filter((e) => e.exercise)
-          .map((e) => ({ key: newKey(), exercise: e.exercise, restSeconds: e.restSeconds, note: e.note, noteOpen: !!e.note, sets: e.sets.map((s) => ({ id: newKey(), weight: asText(s.weight), reps: asText(s.reps) })) }));
+          .map((e) => ({ key: newKey(), exercise: e.exercise, restSeconds: e.restSeconds, note: e.note, noteOpen: !!e.note, sets: e.sets.map((s) => ({ id: newKey(), ...draftOf(s) })) }));
         setName(workout.name);
         setItems(list);
         start.current = snapshot(workout.name, list);
@@ -91,7 +88,7 @@ function BuildWorkout() {
     if (!name.trim()) return Alert.alert("Name your workout", "Give it a name first — Push, Legs, Upper A…");
     const workout: WorkoutInput = {
       name: name.trim(),
-      exercises: items.map((i) => ({ exercise: i.exercise._id, restSeconds: i.restSeconds, note: i.note.trim(), sets: i.sets.map((s) => ({ weight: asNumber(s.weight), reps: asNumber(s.reps) })) })),
+      exercises: items.map((i) => ({ exercise: i.exercise._id, restSeconds: i.restSeconds, note: i.note.trim(), sets: i.sets.map((s) => fromDraft(s, trackOf(i.exercise))) })),
     };
     setSaving(true);
     try {
@@ -117,12 +114,11 @@ function BuildWorkout() {
   }
 
   const change = (key: string, update: (item: ExerciseDraft) => ExerciseDraft) => setItems((list) => list.map((item) => (item.key === key ? update(item) : item)));
-  const setField = (key: string, index: number, field: "weight" | "reps", value: string) =>
-    change(key, (item) => ({ ...item, sets: item.sets.map((s, i) => (i === index ? { ...s, [field]: value.replace(/[^0-9.,]/g, "") } : s)) }));
+  const setField = (key: string, index: number, field: DraftField, value: string) => change(key, (item) => ({ ...item, sets: item.sets.map((s, i) => (i === index ? { ...s, [field]: value } : s)) }));
   // A new set as the one before it (Hevy's way: the same again, then adjust).
   const addSet = (key: string) => change(key, (item) => {
     const last = item.sets[item.sets.length - 1];
-    return { ...item, sets: [...item.sets, { id: newKey(), weight: last?.weight ?? "", reps: last?.reps ?? "" }] };
+    return { ...item, sets: [...item.sets, { id: newKey(), ...(last ? { weight: last.weight, reps: last.reps, time: last.time, distance: last.distance } : draftOf(null)) }] };
   });
   const deleteSet = (key: string, id: string) => change(key, (item) => ({ ...item, sets: item.sets.filter((s) => s.id !== id) }));
   function exerciseMenu(item: ExerciseDraft) {
@@ -146,7 +142,7 @@ function BuildWorkout() {
     );
   }
   function addExercises(picked: Exercise[]) {
-    setItems((list) => [...list, ...picked.map((exercise) => ({ key: newKey(), exercise, restSeconds: 90, note: "", noteOpen: false, sets: [{ id: newKey(), weight: "", reps: "" }] }))]);
+    setItems((list) => [...list, ...picked.map((exercise) => ({ key: newKey(), exercise, restSeconds: 90, note: "", noteOpen: false, sets: [{ id: newKey(), ...draftOf(null) }] }))]);
     setPicking(false);
   }
 
@@ -215,8 +211,11 @@ function BuildWorkout() {
                 {/* The sets */}
                 <View style={{ marginTop: 14, flexDirection: "row", alignItems: "center", gap: 10 }}>
                   <Text style={[head(c), { width: 38, textAlign: "center" }]}>SET</Text>
-                  <Text style={[head(c), { flex: 1, textAlign: "center" }]}>LBS</Text>
-                  <Text style={[head(c), { flex: 1, textAlign: "center" }]}>REPS</Text>
+                  {FIELDS[trackOf(item.exercise)].map((f) => (
+                    <Text key={f.key} style={[head(c), { flex: 1, textAlign: "center" }]}>
+                      {f.head}
+                    </Text>
+                  ))}
                 </View>
                 {/* Each set: drag it left for Delete (or tap its number) */}
                 {item.sets.map((set, s) => (
@@ -243,8 +242,9 @@ function BuildWorkout() {
                       <Tap onPress={() => setMenu(item, s)} accessibilityLabel={`Set ${s + 1} options`} style={{ width: 38, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: c.pill }} pressedStyle={{ opacity: 0.7 }}>
                         <Text style={{ fontSize: 16, fontWeight: "700", color: c.onPill }}>{s + 1}</Text>
                       </Tap>
-                      <NumberBox value={set.weight} onChange={(v) => setField(item.key, s, "weight", v)} decimal label={`Set ${s + 1} weight`} colors={c} />
-                      <NumberBox value={set.reps} onChange={(v) => setField(item.key, s, "reps", v)} label={`Set ${s + 1} reps`} colors={c} />
+                      {FIELDS[trackOf(item.exercise)].map((f) => (
+                        <NumberBox key={f.key} value={set[f.key]} onChange={(v) => setField(item.key, s, f.key, cleanField(f.kind, v))} kind={f.kind} hint={f.kind === "time" ? TIME_HINT[trackOf(item.exercise)] : "—"} label={`Set ${s + 1} ${f.head.toLowerCase()}`} colors={c} />
+                      ))}
                     </View>
                   </ReanimatedSwipeable>
                 ))}
@@ -286,13 +286,13 @@ function Chip({ icon, label, on, onPress, colors: c }: { icon: keyof typeof Ioni
   );
 }
 
-function NumberBox({ value, onChange, decimal, label, colors: c }: { value: string; onChange: (value: string) => void; decimal?: boolean; label: string; colors: OrbitColors }) {
+function NumberBox({ value, onChange, kind, hint, label, colors: c }: { value: string; onChange: (value: string) => void; kind: "decimal" | "whole" | "time"; hint: string; label: string; colors: OrbitColors }) {
   return (
     <TextInput
       value={value}
       onChangeText={onChange}
-      keyboardType={decimal ? "decimal-pad" : "number-pad"}
-      placeholder="—"
+      keyboardType={kind === "decimal" ? "decimal-pad" : kind === "time" ? "numbers-and-punctuation" : "number-pad"}
+      placeholder={hint}
       placeholderTextColor={c.faint}
       accessibilityLabel={label}
       selectTextOnFocus

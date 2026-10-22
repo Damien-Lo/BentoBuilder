@@ -4,18 +4,18 @@ import { useCallback, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
-import { lbs } from "@/src/components/gym/exerciseStats";
 import { GroupHeading, GymPage } from "@/src/components/gym/GymTabPage";
-import { exerciseBests, isAssisted, recordTimeline } from "@/src/components/gym/progressStats";
+import { exerciseBests, recordTimeline } from "@/src/components/gym/progressStats";
 import { dayLabel } from "@/src/components/gym/schedule";
+import { trackOf, type Track } from "@/src/components/gym/tracking";
 import { Tap } from "@/src/components/ui/Tap";
 import { getSessions, type GymSessionRecord } from "@/src/services/gymApi";
 import { useOrbitTheme } from "@/src/theme/orbit";
 
 // Gym → Progress → Personal records: the records you've set lately (each
-// a heavier lift than ever before, and by how much), then every exercise
-// you've done with its heaviest weight and best estimated one-rep max
-// (1RM) —
+// beating your best before — heavier, more reps, less help, longer — and
+// by how much), then every exercise you've done with its best (and, for a
+// lift, its best estimated one-rep max: 1RM) —
 // tap one for all of it, on its own page.
 export default function RecordsScreen() {
   return (
@@ -24,6 +24,9 @@ export default function RecordsScreen() {
     </GymPage>
   );
 }
+
+// What each track's best is (under the number).
+const BEST_LABEL: Record<Track, string> = { weight: "heaviest", bodyweight: "most reps", assisted: "least help", duration: "longest", cardio: "best" };
 
 // "today", "yesterday", "Tue, Oct 21".
 const lastLabel = (iso: string) => {
@@ -74,12 +77,12 @@ function Records() {
                   {r.exercise.name}
                 </Text>
                 <Text style={{ marginTop: 1, fontSize: 12.5, color: c.muted }}>
-                  {dayLabel(r.finishedAt)} · up from {lbs(r.previous)} lbs
+                  {dayLabel(r.finishedAt)} · {r.best.lower ? `was ${r.previous.text.replace("−", "")} of help` : `up from ${r.previous.text}`}
                 </Text>
               </View>
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={{ fontSize: 15, fontWeight: "800", color: c.text }}>{lbs(r.weight)} lbs</Text>
-                <Text style={{ marginTop: 1, fontSize: 12, fontWeight: "700", color: c.success }}>+{lbs(r.weight - r.previous)}</Text>
+                <Text style={{ fontSize: 15, fontWeight: "800", color: c.text }}>{r.best.text}</Text>
+                <Text style={{ marginTop: 1, fontSize: 12, fontWeight: "700", color: c.success }}>{r.gain}</Text>
               </View>
             </Tap>
           ))
@@ -92,10 +95,11 @@ function Records() {
       )}
 
       {/* Every exercise's bests */}
-      <GroupHeading>Heaviest, by exercise</GroupHeading>
+      <GroupHeading>Best, by exercise</GroupHeading>
       <View style={{ borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, overflow: "hidden" }}>
         {bests.map((b, i) => {
-          const assisted = isAssisted(b.exercise.name);
+          const track = trackOf(b.exercise);
+          const oneRm = track === "weight" ? b.records.find((r) => r.label === "Best 1RM")?.value : null;
           return (
             <Tap key={b.exercise._id} onPress={() => open(b.exercise._id)} accessibilityRole="button" style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderTopWidth: i ? 1 : 0, borderTopColor: c.border }} pressedStyle={{ backgroundColor: c.pill }}>
               <ExerciseIcon name={b.exercise.name} primary={b.exercise.primaryMuscles} secondary={b.exercise.secondaryMuscles} size={40} />
@@ -108,8 +112,8 @@ function Records() {
                 </Text>
               </View>
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={{ fontSize: 15, fontWeight: "800", color: c.text }}>{b.records.heaviest ? `${lbs(b.records.heaviest)} lbs` : "—"}</Text>
-                <Text style={{ marginTop: 1, fontSize: 12, color: c.faint }}>{assisted ? "most help" : b.records.oneRepMax ? `1RM ${lbs(Math.round(b.records.oneRepMax))}` : ""}</Text>
+                <Text style={{ fontSize: 15, fontWeight: "800", color: c.text }}>{b.best?.text ?? "—"}</Text>
+                <Text style={{ marginTop: 1, fontSize: 12, color: c.faint }}>{oneRm ? `1RM ${oneRm.replace(/\.\d+/, "")}` : b.best ? BEST_LABEL[track] : ""}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={c.faint} />
             </Tap>

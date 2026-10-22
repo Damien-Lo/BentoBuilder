@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/src/config/api";
+import type { Track } from "@/src/components/gym/tracking";
 
 // Gym's exercise library (see server/models/Exercise.js): every exercise in
 // free-exercise-db, ~130 of them the core — shown by default, under clean
@@ -15,6 +16,8 @@ export interface Exercise {
   secondaryMuscles: string[];
   level: string | null;
   mechanic: string | null;
+  // How it's logged (see src/components/gym/tracking.ts).
+  track?: Track;
   // Photos (the start and end of the movement): paths in free-exercise-db.
   images: string[];
   instructions?: string[];

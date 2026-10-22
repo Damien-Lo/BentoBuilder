@@ -5,7 +5,7 @@ import Exercise from "../models/Exercise.js";
 const router = express.Router();
 
 // What a list needs (not the instructions).
-const LIST_FIELDS = "name core group category equipment primaryMuscles secondaryMuscles level mechanic images";
+const LIST_FIELDS = "name core group category equipment primaryMuscles secondaryMuscles level mechanic images track";
 
 /**
  * GET /api/exercises

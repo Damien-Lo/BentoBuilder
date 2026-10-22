@@ -7,7 +7,7 @@ import GymWorkout from "../models/GymWorkout.js";
 const router = express.Router();
 
 // Each exercise with what showing it needs: its name, photos and muscles.
-const withExercises = (query) => query.populate("exercises.exercise", "name images group primaryMuscles secondaryMuscles equipment");
+const withExercises = (query) => query.populate("exercises.exercise", "name images group primaryMuscles secondaryMuscles equipment track");
 
 const sendError = (res, error, status = 400) => res.status(status).json({ success: false, message: error.message || String(error) });
 
@@ -28,7 +28,7 @@ async function workoutFrom(body) {
         exercise: item.exercise,
         restSeconds: Math.max(0, Math.round(Number(item.restSeconds ?? 90)) || 0),
         note: String(item.note ?? "").slice(0, 500),
-        sets: (Array.isArray(item.sets) ? item.sets : []).slice(0, 50).map((set) => ({ weight: number(set?.weight), reps: number(set?.reps) })),
+        sets: (Array.isArray(item.sets) ? item.sets : []).slice(0, 50).map((set) => ({ weight: number(set?.weight), reps: number(set?.reps), seconds: number(set?.seconds), distance: number(set?.distance) })),
       })),
   };
 }
@@ -97,7 +97,8 @@ const positive = (value) => (value === null || value === undefined || value === 
 const SET_TYPES = new Set(["normal", "warmup", "drop", "failure"]);
 
 // A session's exercises, from what the app sends: only exercises that
-// exist, only sets with reps, and only exercises with a set left.
+// exist, only sets with something in them, and only exercises with a set
+// left.
 async function sessionExercisesFrom(body) {
   const items = Array.isArray(body.exercises) ? body.exercises : [];
   const known = new Set((await Exercise.find({ _id: { $in: items.map((i) => i?.exercise).filter(Boolean) } }).select("_id").lean()).map((e) => String(e._id)));
@@ -108,8 +109,9 @@ async function sessionExercisesFrom(body) {
       note: String(item.note ?? "").slice(0, 500),
       sets: (Array.isArray(item.sets) ? item.sets : [])
         .slice(0, 100)
-        .map((set) => ({ weight: positive(set?.weight), reps: positive(set?.reps), type: SET_TYPES.has(set?.type) ? set.type : "normal" }))
-        .filter((set) => set.reps !== null),
+        .map((set) => ({ weight: positive(set?.weight), reps: positive(set?.reps), seconds: positive(set?.seconds), distance: positive(set?.distance), type: SET_TYPES.has(set?.type) ? set.type : "normal" }))
+        // (A set counts with reps — or, for a hold or cardio, a time or distance.)
+        .filter((set) => set.reps !== null || set.seconds !== null || set.distance !== null),
     }))
     .filter((item) => item.sets.length > 0);
 }
@@ -146,7 +148,7 @@ router.put("/sessions/:id", async (req, res) => {
     session.name = String(req.body.name ?? session.name).trim() || session.name;
     session.exercises = exercises;
     await session.save();
-    const saved = await GymSession.findById(session._id).populate("exercises.exercise", "name primaryMuscles secondaryMuscles").lean();
+    const saved = await GymSession.findById(session._id).populate("exercises.exercise", "name primaryMuscles secondaryMuscles track").lean();
     return res.json({ success: true, data: saved });
   } catch (error) {
     return sendError(res, error);
@@ -174,7 +176,7 @@ router.get("/sessions", async (req, res) => {
         })),
       });
     }
-    const sessions = await GymSession.find({}).sort({ finishedAt: -1 }).limit(200).populate("exercises.exercise", "name primaryMuscles secondaryMuscles").lean();
+    const sessions = await GymSession.find({}).sort({ finishedAt: -1 }).limit(200).populate("exercises.exercise", "name primaryMuscles secondaryMuscles track").lean();
     return res.json({ success: true, data: sessions });
   } catch (error) {
     return sendError(res, error, 500);
@@ -184,7 +186,7 @@ router.get("/sessions", async (req, res) => {
 /** GET /api/gym/sessions/:id — one session, every exercise and set in it. */
 router.get("/sessions/:id", async (req, res) => {
   try {
-    const session = await GymSession.findById(req.params.id).populate("exercises.exercise", "name primaryMuscles secondaryMuscles").lean();
+    const session = await GymSession.findById(req.params.id).populate("exercises.exercise", "name primaryMuscles secondaryMuscles track").lean();
     if (!session) return sendError(res, new Error("Session not found"), 404);
     return res.json({ success: true, data: session });
   } catch (error) {

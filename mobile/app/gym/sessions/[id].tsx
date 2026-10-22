@@ -6,8 +6,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { clock } from "@/src/components/gym/activeSession";
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
-import { lbs } from "@/src/components/gym/exerciseStats";
 import { sessionRecords, type RecordEvent } from "@/src/components/gym/progressStats";
+import { cleanField, draftOf, FIELDS, fromDraft, setComplete, setText, TIME_HINT, trackOf, type DraftField, type SetDraft } from "@/src/components/gym/tracking";
 import { showActions } from "@/src/components/todo/theme";
 import { Tap } from "@/src/components/ui/Tap";
 import { deleteSession, getSession, getSessions, SET_TYPES, setLabels, setTypeOf, sessionTotals, updateSession, type GymSessionRecord, type SetType } from "@/src/services/gymApi";
@@ -26,21 +26,15 @@ export default function SessionDetailScreen() {
   );
 }
 
-const asText = (n: number | null | undefined) => (n == null ? "" : String(n));
-const asNumber = (text: string) => {
-  const n = Number(text.replace(",", "."));
-  return text.trim() === "" || !Number.isFinite(n) || n < 0 ? null : n;
-};
-
 // A workout being corrected: its numbers as typed.
-type DraftSet = { key: number; weight: string; reps: string; type: SetType };
+type DraftSet = SetDraft & { key: number; type: SetType };
 type Draft = { name: string; exercises: { key: number; exercise: NonNullable<GymSessionRecord["exercises"][number]["exercise"]>; note: string; sets: DraftSet[] }[] };
 let nextKey = 0;
-const draftOf = (session: GymSessionRecord): Draft => ({
+const sessionDraft = (session: GymSessionRecord): Draft => ({
   name: session.name,
   exercises: session.exercises
     .filter((e) => e.exercise)
-    .map((e) => ({ key: nextKey++, exercise: e.exercise!, note: e.note, sets: e.sets.map((s) => ({ key: nextKey++, weight: asText(s.weight), reps: asText(s.reps), type: s.type ?? "normal" })) })),
+    .map((e) => ({ key: nextKey++, exercise: e.exercise!, note: e.note, sets: e.sets.map((s) => ({ key: nextKey++, ...draftOf(s), type: s.type ?? "normal" })) })),
 });
 
 function SessionDetail() {
@@ -81,9 +75,12 @@ function SessionDetail() {
   async function save() {
     if (!session || !draft || saving) return;
     const exercises = draft.exercises
-      .map((e) => ({ exercise: e.exercise._id, note: e.note, sets: e.sets.map((s) => ({ weight: asNumber(s.weight), reps: asNumber(s.reps), type: s.type })).filter((s) => s.reps !== null) }))
+      .map((e) => {
+        const track = trackOf(e.exercise);
+        return { exercise: e.exercise._id, note: e.note, sets: e.sets.map((s) => ({ ...fromDraft(s, track), type: s.type })).filter((s) => setComplete(s, track)) };
+      })
       .filter((e) => e.sets.length > 0);
-    if (!exercises.length) return Alert.alert("Nothing left in it", "A workout needs at least one set with reps — delete it instead.");
+    if (!exercises.length) return Alert.alert("Nothing left in it", "A workout needs at least one set filled in — delete it instead.");
     setSaving(true);
     try {
       setSession(await updateSession(session._id, { name: draft.name.trim() || session.name, exercises }));
@@ -123,7 +120,7 @@ function SessionDetail() {
               <Text style={{ fontSize: 15, fontWeight: "700", color: c.onInk }}>{saving ? "Saving…" : "Save"}</Text>
             </Tap>
           ) : (
-            <Tap onPress={() => setDraft(draftOf(session))} accessibilityRole="button" style={{ flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: c.pill }} pressedStyle={{ opacity: 0.7 }}>
+            <Tap onPress={() => setDraft(sessionDraft(session))} accessibilityRole="button" style={{ flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: c.pill }} pressedStyle={{ opacity: 0.7 }}>
               <Ionicons name="create-outline" size={17} color={c.onPill} />
               <Text style={{ fontSize: 15, fontWeight: "600", color: c.onPill }}>Edit</Text>
             </Tap>
@@ -173,8 +170,11 @@ function SessionDetail() {
                     </View>
                     <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
                       <Text style={[head(c), { width: 34, textAlign: "center" }]}>SET</Text>
-                      <Text style={[head(c), { flex: 1, textAlign: "center" }]}>LBS</Text>
-                      <Text style={[head(c), { flex: 1, textAlign: "center" }]}>REPS</Text>
+                      {FIELDS[trackOf(e.exercise)].map((f) => (
+                        <Text key={f.key} style={[head(c), { flex: 1, textAlign: "center" }]}>
+                          {f.head}
+                        </Text>
+                      ))}
                       <View style={{ width: 36 }} />
                     </View>
                     {e.sets.map((s, n) => {
@@ -184,8 +184,17 @@ function SessionDetail() {
                           <Tap onPress={() => setTypeMenu(e.key, s)} accessibilityRole="button" accessibilityLabel={`Set ${n + 1}: ${kind.label}. Change its type`} style={{ width: 34, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: c.pill }} pressedStyle={{ opacity: 0.7 }}>
                             <Text style={{ fontSize: 15, fontWeight: "800", color: kind.color ?? c.onPill }}>{setLabels(e.sets)[n]}</Text>
                           </Tap>
-                          <Box value={s.weight} decimal onChange={(v) => changeSet(e.key, s.key, (x) => ({ ...x, weight: v.replace(/[^0-9.,]/g, "") }))} label={`Set ${n + 1} weight`} colors={c} />
-                          <Box value={s.reps} onChange={(v) => changeSet(e.key, s.key, (x) => ({ ...x, reps: v.replace(/[^0-9]/g, "") }))} label={`Set ${n + 1} reps`} colors={c} />
+                          {FIELDS[trackOf(e.exercise)].map((f) => (
+                            <Box
+                              key={f.key}
+                              value={s[f.key]}
+                              kind={f.kind}
+                              hint={f.kind === "time" ? TIME_HINT[trackOf(e.exercise)] : "—"}
+                              onChange={(v) => changeSet(e.key, s.key, (x) => ({ ...x, [f.key as DraftField]: cleanField(f.kind, v) }))}
+                              label={`Set ${n + 1} ${f.head.toLowerCase()}`}
+                              colors={c}
+                            />
+                          ))}
                           <Tap onPress={() => changeExercise(e.key, (x) => ({ ...x, sets: x.sets.filter((y) => y.key !== s.key) }))} accessibilityRole="button" accessibilityLabel={`Delete set ${n + 1}`} style={{ width: 36, height: 40, alignItems: "center", justifyContent: "center" }} pressedStyle={{ opacity: 0.6 }}>
                             <Ionicons name="close-circle" size={20} color={c.faint} />
                           </Tap>
@@ -196,7 +205,7 @@ function SessionDetail() {
                       onPress={() =>
                         changeExercise(e.key, (x) => {
                           const last = x.sets[x.sets.length - 1];
-                          return { ...x, sets: [...x.sets, { key: nextKey++, weight: last?.weight ?? "", reps: last?.reps ?? "", type: "normal" }] };
+                          return { ...x, sets: [...x.sets, { key: nextKey++, ...(last ? { weight: last.weight, reps: last.reps, time: last.time, distance: last.distance } : draftOf(null)), type: "normal" }] };
                         })
                       }
                       accessibilityRole="button"
@@ -224,13 +233,13 @@ function SessionDetail() {
                         {!!e.note && <Text style={{ marginTop: 8, fontSize: 14, fontStyle: "italic", color: c.muted }}>{e.note}</Text>}
                         <View style={{ marginTop: 12, flexDirection: "row" }}>
                           <Text style={[head(c), { width: 44 }]}>SET</Text>
-                          <Text style={[head(c), { flex: 1 }]}>WEIGHT × REPS</Text>
+                          <Text style={[head(c), { flex: 1 }]}>DONE</Text>
                         </View>
                         {e.sets.map((s, n) => (
                           <View key={n} style={{ marginTop: 8, flexDirection: "row", alignItems: "center" }}>
                             <Text style={{ width: 44, fontSize: 15, fontWeight: "700", color: setTypeOf(s.type).color ?? c.muted }}>{labels[n]}</Text>
                             <Text style={{ flex: 1, fontSize: 15, fontWeight: "600", color: c.text }}>
-                              {s.weight != null ? `${s.weight} lbs` : "Bodyweight"} × {s.reps ?? "—"}
+                              {setText(s, trackOf(e.exercise))}
                             </Text>
                           </View>
                         ))}
@@ -270,7 +279,7 @@ function Finished({ records, colors: c }: { records: RecordEvent[]; colors: Orbi
                 {r.exercise.name}
               </Text>
               <Text style={{ fontSize: 14, fontWeight: "800", color: "#FFFFFF" }}>
-                {lbs(r.weight)} lbs <Text style={{ fontWeight: "600", opacity: 0.85 }}>(+{lbs(r.weight - r.previous)})</Text>
+                {r.best.text} <Text style={{ fontWeight: "600", opacity: 0.85 }}>({r.gain})</Text>
               </Text>
             </View>
           ))}
@@ -293,13 +302,13 @@ function Stat({ label, value, colors: c }: { label: string; value: string; color
   );
 }
 
-function Box({ value, onChange, decimal, label, colors: c }: { value: string; onChange: (v: string) => void; decimal?: boolean; label: string; colors: OrbitColors }) {
+function Box({ value, onChange, kind, hint, label, colors: c }: { value: string; onChange: (v: string) => void; kind: "decimal" | "whole" | "time"; hint: string; label: string; colors: OrbitColors }) {
   return (
     <TextInput
       value={value}
       onChangeText={onChange}
-      keyboardType={decimal ? "decimal-pad" : "number-pad"}
-      placeholder="—"
+      keyboardType={kind === "decimal" ? "decimal-pad" : kind === "time" ? "numbers-and-punctuation" : "number-pad"}
+      placeholder={hint}
       placeholderTextColor={c.faint}
       accessibilityLabel={label}
       selectTextOnFocus

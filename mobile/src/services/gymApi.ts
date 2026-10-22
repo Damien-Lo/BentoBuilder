@@ -1,14 +1,18 @@
 import { API_BASE_URL } from "@/src/config/api";
+import { setVolume, trackOf } from "@/src/components/gym/tracking";
 import type { Exercise } from "@/src/services/exerciseApi";
 
 // Your workouts in Gym (see server/models/GymWorkout.js): each exercise in
-// order, with its rest, a note, and the sets you aim for.
+// order, with its rest, a note, and the sets you aim for (a time or
+// distance, for a hold or cardio).
 export interface WorkoutSet {
   weight: number | null; // lbs
   reps: number | null;
+  seconds?: number | null;
+  distance?: number | null; // miles
 }
 export interface WorkoutExercise {
-  exercise: Pick<Exercise, "_id" | "name" | "images" | "group" | "primaryMuscles" | "secondaryMuscles" | "equipment">;
+  exercise: Pick<Exercise, "_id" | "name" | "images" | "group" | "primaryMuscles" | "secondaryMuscles" | "equipment" | "track">;
   restSeconds: number;
   note: string;
   sets: WorkoutSet[];
@@ -52,6 +56,8 @@ export type SetType = "normal" | "warmup" | "drop" | "failure";
 export interface DoneSetInput {
   weight: number | null;
   reps: number | null;
+  seconds?: number | null;
+  distance?: number | null;
   type?: SetType;
 }
 // Its letter in place of the set's number ("W"), and its colour.
@@ -101,7 +107,7 @@ export interface GymSessionRecord {
   startedAt: string;
   finishedAt: string;
   workout?: string | null;
-  exercises: { exercise: Pick<Exercise, "_id" | "name" | "primaryMuscles" | "secondaryMuscles"> | null; note: string; sets: DoneSetInput[] }[];
+  exercises: { exercise: Pick<Exercise, "_id" | "name" | "primaryMuscles" | "secondaryMuscles" | "track"> | null; note: string; sets: DoneSetInput[] }[];
 }
 export const getSessions = () => call<GymSessionRecord[]>("/sessions");
 export const getSession = (id: string) => call<GymSessionRecord>(`/sessions/${id}`);
@@ -109,11 +115,11 @@ export const deleteSession = (id: string) => call<void>(`/sessions/${id}`, { met
 // A finished workout, corrected: its name and its exercises' sets.
 export const updateSession = (id: string, session: Pick<SessionInput, "name" | "exercises">) => call<GymSessionRecord>(`/sessions/${id}`, { method: "PUT", body: JSON.stringify(session) });
 
-// What a session came to: how long, the sets, the weight moved. (An
-// assisted exercise's weight is help, not load: it isn't counted.)
+// What a session came to: how long, the sets, the weight moved (by each
+// exercise's track: no help, holds or cardio in it).
 export function sessionTotals(session: Pick<GymSessionRecord, "startedAt" | "finishedAt" | "exercises">) {
   const sets = session.exercises.reduce((n, e) => n + e.sets.length, 0);
-  const volume = session.exercises.filter((e) => !/assisted/i.test(e.exercise?.name ?? "")).reduce((sum, e) => sum + e.sets.reduce((v, s) => v + (s.weight ?? 0) * (s.reps ?? 0), 0), 0);
+  const volume = session.exercises.reduce((sum, e) => sum + e.sets.reduce((v, s) => v + setVolume(s, trackOf(e.exercise)), 0), 0);
   const seconds = Math.max(0, (new Date(session.finishedAt).getTime() - new Date(session.startedAt).getTime()) / 1000);
   return { sets, volume, seconds };
 }

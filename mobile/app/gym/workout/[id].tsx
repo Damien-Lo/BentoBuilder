@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { clearActiveSession, loadActiveSession } from "@/src/components/gym/activeSession";
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
 import { MuscleMap } from "@/src/components/gym/MuscleMap";
+import { draftOf, FIELDS, trackOf } from "@/src/components/gym/tracking";
 import { Tap } from "@/src/components/ui/Tap";
 import { getWorkout, restLabel, type GymWorkout } from "@/src/services/gymApi";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
@@ -114,14 +115,20 @@ function WorkoutPage() {
               )}
               <View style={{ marginTop: 12, flexDirection: "row" }}>
                 <Text style={[head(c), { width: 44 }]}>SET</Text>
-                <Text style={[head(c), { flex: 1 }]}>LBS</Text>
-                <Text style={[head(c), { flex: 1 }]}>REPS</Text>
+                {FIELDS[trackOf(e.exercise)].map((f) => (
+                  <Text key={f.key} style={[head(c), { flex: 1 }]}>
+                    {f.head}
+                  </Text>
+                ))}
               </View>
               {e.sets.map((s, n) => (
                 <View key={n} style={{ marginTop: 6, flexDirection: "row", alignItems: "center", paddingVertical: 4, borderRadius: 8, backgroundColor: n % 2 === 0 ? c.canvas : "transparent" }}>
                   <Text style={{ width: 44, paddingLeft: 6, fontSize: 15, fontWeight: "700", color: c.muted }}>{n + 1}</Text>
-                  <Text style={{ flex: 1, fontSize: 15, fontWeight: "600", color: c.text }}>{s.weight ?? "—"}</Text>
-                  <Text style={{ flex: 1, fontSize: 15, fontWeight: "600", color: c.text }}>{s.reps ?? "—"}</Text>
+                  {FIELDS[trackOf(e.exercise)].map((f) => (
+                    <Text key={f.key} style={{ flex: 1, fontSize: 15, fontWeight: "600", color: c.text }}>
+                      {draftOf(s)[f.key] || "—"}
+                    </Text>
+                  ))}
                 </View>
               ))}
             </View>

@@ -10,6 +10,7 @@ import { clearActiveSession, clock, loadActiveSession, newId, storeActiveSession
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
 import { PickExercises } from "@/src/components/gym/PickExercises";
 import { ReorderExercises } from "@/src/components/gym/ReorderExercises";
+import { cleanField, draftOf, FIELDS, fromDraft, setComplete, setText, setVolume, TIME_HINT, trackOf, type DraftField, type SetDraft } from "@/src/components/gym/tracking";
 import { showActions } from "@/src/components/todo/theme";
 import { Tap } from "@/src/components/ui/Tap";
 import type { Exercise } from "@/src/services/exerciseApi";
@@ -18,8 +19,9 @@ import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit
 
 // Doing a workout (Gym → Workouts → Start), as Hevy's "Log Workout": how
 // long it's been going, the volume and sets so far, then each exercise —
-// its sets with what you did last time (Previous), the weight and reps (the
-// workout's targets to start with), and a tick for each one done. Ticking
+// its sets with what you did last time (Previous), the weight and reps — or
+// the time, or distance and time, by how it's logged (tracking.ts) — the
+// workout's targets to start with, and a tick for each one done. Ticking
 // a set starts its rest timer, at the bottom. A set's number, tapped, makes
 // it a warm-up, drop or failure set. An exercise can be swapped for
 // another. Finish saves the ticked sets as a session (what each exercise's
@@ -28,12 +30,6 @@ import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit
 // It's kept on this device as it goes (gym/activeSession), so leaving it —
 // or the app closing — loses nothing: Workouts offers to resume it.
 // (`workout`: the workout to start; without it, the one under way.)
-
-const asText = (n: number | null | undefined) => (n == null ? "" : String(n));
-const asNumber = (text: string) => {
-  const n = Number(text.replace(",", "."));
-  return text.trim() === "" || !Number.isFinite(n) || n < 0 ? null : n;
-};
 
 // (A tap felt, where the phone has it: a light one for a tick, a stronger
 // one when a rest is up.)
@@ -92,7 +88,7 @@ function Session() {
               restSeconds: e.restSeconds,
               note: e.note,
               noteOpen: !!e.note,
-              sets: (e.sets.length ? e.sets : [{ weight: null, reps: null }]).map((s) => ({ id: newId(), weight: asText(s.weight), reps: asText(s.reps), done: false })),
+              sets: (e.sets.length ? e.sets : [{ weight: null, reps: null }]).map((s) => ({ id: newId(), ...draftOf(s), done: false })),
             })),
         };
         await storeActiveSession(started);
@@ -144,21 +140,25 @@ function Session() {
   // starts. Unticking just unticks.
   function tick(item: ActiveExercise, set: ActiveSet, index: number) {
     if (set.done) return changeSet(item.key, set.id, (s) => ({ ...s, done: false }));
-    const before = previous[item.exercise._id]?.[index];
-    const weight = set.weight || asText(before?.weight);
-    const reps = set.reps || asText(before?.reps);
-    if (!asNumber(reps)) return Alert.alert("How many reps?", "Put in the reps you did, then tick it.");
+    const track = trackOf(item.exercise);
+    const hint = draftOf(previous[item.exercise._id]?.[index]);
+    const filled: SetDraft = { weight: set.weight || hint.weight, reps: set.reps || hint.reps, time: set.time || hint.time, distance: set.distance || hint.distance };
+    if (!setComplete(fromDraft(filled, track), track)) {
+      if (track === "duration") return Alert.alert("How long?", "Put in the time you held it, then tick it.");
+      if (track === "cardio") return Alert.alert("How far, or how long?", "Put in the distance or the time, then tick it.");
+      return Alert.alert("How many reps?", "Put in the reps you did, then tick it.");
+    }
     feel("tick");
     update((s) => ({
       ...s,
-      exercises: s.exercises.map((e) => (e.key === item.key ? { ...e, sets: e.sets.map((x) => (x.id === set.id ? { ...x, weight, reps, done: true } : x)) } : e)),
+      exercises: s.exercises.map((e) => (e.key === item.key ? { ...e, sets: e.sets.map((x) => (x.id === set.id ? { ...x, ...filled, done: true } : x)) } : e)),
       ...(item.restSeconds > 0 ? { restEndsAt: Date.now() + item.restSeconds * 1000, restLength: item.restSeconds } : {}),
     }));
   }
   const addSet = (key: string) =>
     changeExercise(key, (e) => {
       const last = e.sets[e.sets.length - 1];
-      return { ...e, sets: [...e.sets, { id: newId(), weight: last?.weight ?? "", reps: last?.reps ?? "", done: false, type: last?.type === "warmup" ? "normal" : last?.type }] };
+      return { ...e, sets: [...e.sets, { id: newId(), weight: last?.weight ?? "", reps: last?.reps ?? "", time: last?.time ?? "", distance: last?.distance ?? "", done: false, type: last?.type === "warmup" ? "normal" : last?.type }] };
     });
   function setTypeMenu(item: ActiveExercise, set: ActiveSet) {
     showActions(
@@ -192,7 +192,7 @@ function Session() {
   function addExercises(picked: Exercise[]) {
     update((s) => ({
       ...s,
-      exercises: [...s.exercises, ...picked.map((exercise) => ({ key: newId(), exercise, restSeconds: 90, note: "", noteOpen: false, sets: [{ id: newId(), weight: "", reps: "", done: false }] }))],
+      exercises: [...s.exercises, ...picked.map((exercise) => ({ key: newId(), exercise, restSeconds: 90, note: "", noteOpen: false, sets: [{ id: newId(), ...draftOf(null), done: false }] }))],
     }));
     setPicking(false);
   }
@@ -200,7 +200,7 @@ function Session() {
   // without the old one's weights.
   function replace(picked: Exercise[]) {
     const exercise = picked[0];
-    if (exercise && replacing) changeExercise(replacing, (e) => ({ ...e, exercise, sets: e.sets.map((set) => ({ ...set, weight: "", done: false })) }));
+    if (exercise && replacing) changeExercise(replacing, (e) => ({ ...e, exercise, sets: e.sets.map((set) => ({ ...set, weight: "", time: "", distance: "", done: false })) }));
     setReplacing(null);
   }
   function reorder(keys: string[]) {
@@ -234,7 +234,7 @@ function Session() {
           name: session.name,
           startedAt: session.startedAt,
           finishedAt: finishedAt.toISOString(),
-          exercises: done.map((e) => ({ exercise: e.exercise._id, note: e.note.trim(), sets: e.sets.map((s) => ({ weight: asNumber(s.weight), reps: asNumber(s.reps), type: s.type ?? "normal" })) })),
+          exercises: done.map((e) => ({ exercise: e.exercise._id, note: e.note.trim(), sets: e.sets.map((s) => ({ ...fromDraft(s, trackOf(e.exercise)), type: s.type ?? "normal" })) })),
         });
         await clearActiveSession();
         // (How it went: the workout's own page, opened as just finished.)
@@ -294,6 +294,8 @@ function Session() {
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: restLeft > 0 ? 150 : 60 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {session.exercises.map((item) => {
             const before = previous[item.exercise._id] ?? [];
+            const track = trackOf(item.exercise);
+            const fields = FIELDS[track];
             return (
               <View key={item.key} style={{ marginBottom: 16, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
@@ -321,12 +323,15 @@ function Session() {
                   />
                 )}
 
-                {/* SET · PREVIOUS · LBS · REPS · ✓ */}
+                {/* SET · PREVIOUS · LBS · REPS (or TIME…) · ✓ */}
                 <View style={{ marginTop: 14, flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <Text style={[head(c), { width: 34, textAlign: "center" }]}>SET</Text>
                   <Text style={[head(c), { flex: 1.3, textAlign: "center" }]}>PREVIOUS</Text>
-                  <Text style={[head(c), { flex: 1, textAlign: "center" }]}>LBS</Text>
-                  <Text style={[head(c), { flex: 1, textAlign: "center" }]}>REPS</Text>
+                  {fields.map((f) => (
+                    <Text key={f.key} style={[head(c), { flex: 1, textAlign: "center" }]}>
+                      {f.head}
+                    </Text>
+                  ))}
                   <View style={{ width: 40, alignItems: "center" }}>
                     <Ionicons name="checkmark" size={16} color={c.faint} />
                   </View>
@@ -355,10 +360,20 @@ function Session() {
                           <Text style={{ fontSize: 15, fontWeight: "800", color: kind.color ?? c.onPill }}>{label}</Text>
                         </Tap>
                         <Text style={{ flex: 1.3, textAlign: "center", fontSize: 13, color: c.faint }} numberOfLines={1}>
-                          {last && (last.weight != null || last.reps != null) ? `${last.weight ?? 0} lbs × ${last.reps ?? "—"}` : "—"}
+                          {last && setComplete(last, track) ? setText(last, track) : "—"}
                         </Text>
-                        <Box value={set.weight} hint={asText(last?.weight)} decimal done={done} onChange={(v) => changeSet(item.key, set.id, (x) => ({ ...x, weight: v.replace(/[^0-9.,]/g, "") }))} label={`Set ${s + 1} weight`} colors={c} />
-                        <Box value={set.reps} hint={asText(last?.reps)} done={done} onChange={(v) => changeSet(item.key, set.id, (x) => ({ ...x, reps: v.replace(/[^0-9]/g, "") }))} label={`Set ${s + 1} reps`} colors={c} />
+                        {fields.map((f) => (
+                          <Box
+                            key={f.key}
+                            value={set[f.key] ?? ""}
+                            hint={draftOf(last)[f.key] || (f.kind === "time" ? TIME_HINT[track] : "")}
+                            kind={f.kind}
+                            done={done}
+                            onChange={(v) => changeSet(item.key, set.id, (x) => ({ ...x, [f.key as DraftField]: cleanField(f.kind, v) }))}
+                            label={`Set ${s + 1} ${f.head.toLowerCase()}`}
+                            colors={c}
+                          />
+                        ))}
                         <Tap
                           onPress={() => tick(item, set, s)}
                           accessibilityRole="checkbox"
@@ -418,10 +433,13 @@ function Session() {
   );
 }
 
-// The weight moved in the ticked sets. (An assisted exercise's weight is
-// help, not load: it isn't counted.)
+// The weight moved in the ticked sets (by each exercise's track: no help,
+// holds or cardio in it).
 function volumeOf(session: ActiveSession) {
-  return session.exercises.filter((e) => !/assisted/i.test(e.exercise.name)).reduce((sum, e) => sum + e.sets.filter((s) => s.done).reduce((n, s) => n + (asNumber(s.weight) ?? 0) * (asNumber(s.reps) ?? 0), 0), 0);
+  return session.exercises.reduce((sum, e) => {
+    const track = trackOf(e.exercise);
+    return sum + e.sets.filter((s) => s.done).reduce((n, s) => n + setVolume(fromDraft(s, track), track), 0);
+  }, 0);
 }
 
 const head = (c: OrbitColors) => ({ fontSize: 11, fontWeight: "700" as const, letterSpacing: 0.8, color: c.faint });
@@ -446,13 +464,14 @@ function Chip({ icon, label, on, onPress, colors: c }: { icon: keyof typeof Ioni
   );
 }
 
-// A weight or reps box: last time's number as a faint hint when it's empty.
-function Box({ value, hint, onChange, decimal, done, label, colors: c }: { value: string; hint: string; onChange: (v: string) => void; decimal?: boolean; done: boolean; label: string; colors: OrbitColors }) {
+// A weight, reps, time or distance box: last time's as a faint hint when
+// it's empty. (A time takes a colon: "1:30".)
+function Box({ value, hint, onChange, kind, done, label, colors: c }: { value: string; hint: string; onChange: (v: string) => void; kind: "decimal" | "whole" | "time"; done: boolean; label: string; colors: OrbitColors }) {
   return (
     <TextInput
       value={value}
       onChangeText={onChange}
-      keyboardType={decimal ? "decimal-pad" : "number-pad"}
+      keyboardType={kind === "decimal" ? "decimal-pad" : kind === "time" ? "numbers-and-punctuation" : "number-pad"}
       placeholder={hint || "—"}
       placeholderTextColor={c.faint}
       accessibilityLabel={label}

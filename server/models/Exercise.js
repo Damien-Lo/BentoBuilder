@@ -27,6 +27,10 @@ const exerciseSchema = new mongoose.Schema(
     level: { type: String, default: null },
     mechanic: { type: String, default: null },
     force: { type: String, default: null },
+    // How it's logged: weight × reps, bodyweight reps (with any weight
+    // added), the help × reps for an assisted one, a time held, or a
+    // distance and time for cardio. (Worked out in services/exerciseCatalog.js.)
+    track: { type: String, enum: ["weight", "bodyweight", "assisted", "duration", "cardio"], default: "weight" },
     // Photos — the start and end of the movement — as paths in
     // free-exercise-db's `exercises/` folder.
     images: { type: [String], default: [] },

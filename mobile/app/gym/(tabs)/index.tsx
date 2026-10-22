@@ -169,7 +169,7 @@ function LastCard({ session, sessions, onOpen, colors: c }: { session: GymSessio
               <Text style={{ flex: 1, fontSize: 14, color: c.text }} numberOfLines={1}>
                 {r.exercise.name}
               </Text>
-              <Text style={{ fontSize: 14, fontWeight: "700", color: c.text }}>{lbs(r.weight)} lbs</Text>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: c.text }}>{r.best.text}</Text>
             </View>
           ))}
           {records.length > 3 && <Text style={{ fontSize: 13, color: c.muted }}>and {records.length - 3} more record{records.length - 3 === 1 ? "" : "s"}</Text>}
