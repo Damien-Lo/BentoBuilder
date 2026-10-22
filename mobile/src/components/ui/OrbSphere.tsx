@@ -21,20 +21,22 @@ const HUES: Record<Exclude<OrbHue, "main">, { stops: [number, string][]; glow: {
   violet: { stops: [[0, SECTION_PALETTE.tasks.tint], [0.24, "#C3B6FA"], [0.52, SECTION_PALETTE.tasks.base], [0.86, SECTION_PALETTE.tasks.dark], [1, SECTION_PALETTE.tasks.deep]], glow: { light: SECTION_PALETTE.tasks.base, dark: SECTION_PALETTE.tasks.base } },
   green: { stops: [[0, SECTION_PALETTE.nutrition.tint], [0.24, "#A9DC97"], [0.52, SECTION_PALETTE.nutrition.base], [0.86, SECTION_PALETTE.nutrition.dark], [1, SECTION_PALETTE.nutrition.deep]], glow: { light: SECTION_PALETTE.nutrition.base, dark: SECTION_PALETTE.nutrition.base } },
   pink: { stops: [[0, SECTION_PALETTE.health.tint], [0.24, "#F7A1AD"], [0.52, SECTION_PALETTE.health.base], [0.86, SECTION_PALETTE.health.dark], [1, SECTION_PALETTE.health.deep]], glow: { light: SECTION_PALETTE.health.base, dark: SECTION_PALETTE.health.base } },
-  // (Gym's: black and white.)
+  // (Black and white: Gym's, until it went orange — kept to go back to.)
   mono: { stops: [[0, "#F8FAFC"], [0.24, "#CBD5E1"], [0.52, "#64748B"], [0.86, "#1E293B"], [1, "#020617"]], glow: { light: "#475569", dark: "#CBD5E1" } },
-  orange: { stops: [[0, SECTION_PALETTE.kitchen.tint], [0.24, "#F7AE6E"], [0.52, SECTION_PALETTE.kitchen.base], [0.86, SECTION_PALETTE.kitchen.dark], [1, SECTION_PALETTE.kitchen.deep]], glow: { light: SECTION_PALETTE.kitchen.base, dark: SECTION_PALETTE.kitchen.base } },
+  // (Gym's orange; Kitchen's yellow.)
+  orange: { stops: [[0, SECTION_PALETTE.gym.tint], [0.24, "#F7AE6E"], [0.52, SECTION_PALETTE.gym.base], [0.86, SECTION_PALETTE.gym.dark], [1, SECTION_PALETTE.gym.deep]], glow: { light: SECTION_PALETTE.gym.base, dark: SECTION_PALETTE.gym.base } },
+  yellow: { stops: [[0, SECTION_PALETTE.kitchen.tint], [0.24, "#F7DA85"], [0.52, SECTION_PALETTE.kitchen.base], [0.86, SECTION_PALETTE.kitchen.dark], [1, SECTION_PALETTE.kitchen.deep]], glow: { light: SECTION_PALETTE.kitchen.base, dark: SECTION_PALETTE.kitchen.base } },
 };
 
 // The main orb's colours: every section's hue in turn round it (from 210°,
 // as in the design), and three soft patches over them.
 const P = SECTION_PALETTE;
-// (Gym's slice stays the orb sheet's magenta: Gym's own colour is black and
-// white, which the sweep would show as a gap.)
-const SWEEP = [P.calendar.base, P.tasks.base, "#E36BD6", P.health.base, P.kitchen.base, P.documents.base, P.nutrition.base, P.home.base];
+// (Home's old slice the orb sheet's magenta, so that Docs' teal isn't there
+// twice.)
+const SWEEP = [P.calendar.base, P.tasks.base, P.gym.base, P.health.base, P.kitchen.base, P.documents.base, P.nutrition.base, "#E36BD6"];
 const PATCHES: { color: string; x: number; y: number; d: number }[] = [
   { color: P.home.base, x: 0.3, y: 0.3, d: 0.62 }, // teal
-  { color: P.kitchen.base, x: 0.72, y: 0.28, d: 0.56 }, // tangerine
+  { color: P.gym.base, x: 0.72, y: 0.28, d: 0.56 }, // tangerine
   { color: P.tasks.base, x: 0.36, y: 0.74, d: 0.66 }, // violet
 ];
 const rgba = (hex: string, a: number) => `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, ${a})`;

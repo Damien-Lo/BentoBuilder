@@ -104,7 +104,7 @@ export type Appearance = "system" | "light" | "dark";
 // The orb's colour: the main one — every section's colour together, the
 // assistant as a whole (home, and anywhere outside a section) — or a
 // section's own (its agent's).
-export type OrbHue = "main" | "blue" | "orange" | "violet" | "green" | "pink" | "mono";
+export type OrbHue = "main" | "blue" | "orange" | "yellow" | "violet" | "green" | "pink" | "mono";
 const KEY = "orbit.appearance";
 
 interface ThemeValue {
@@ -156,11 +156,11 @@ export function OrbitPage({ on = true, children }: { on?: boolean; children: Rea
 export type Section = "kitchen" | "calendar" | "tasks" | "nutrition" | "health" | "gym";
 const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark: Partial<OrbitColors> }> = {
   kitchen: {
-    orb: "orange",
+    orb: "yellow",
     // (SECTION_PALETTE.kitchen: buttons in its darker shade on the light
     // theme, for white text; the colour itself for rings, and in the dark.)
-    light: { ink: "#C2471A", onInk: "#FFFFFE", fill: "#F28A3C", selectedRing: "#F7AE6E", orbGlow: "rgba(242, 138, 60, 0.45)" },
-    dark: { ink: "#F28A3C", onInk: "#0D0F14", fill: "#F28A3C", selectedRing: "#C2471A", orbGlow: "rgba(242, 138, 60, 0.55)" },
+    light: { ink: "#A06A00", onInk: "#FFFFFE", fill: "#F2C34A", selectedRing: "#F7DA85", orbGlow: "rgba(242, 195, 74, 0.45)" },
+    dark: { ink: "#F2C34A", onInk: "#0D0F14", fill: "#F2C34A", selectedRing: "#A06A00", orbGlow: "rgba(242, 195, 74, 0.55)" },
   },
   calendar: {
     orb: "blue",
@@ -187,10 +187,10 @@ const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark
     dark: { ink: "#F2667A", onInk: "#0D0F14", fill: "#F2667A", selectedRing: "#B3264A", orbGlow: "rgba(242, 102, 122, 0.55)" },
   },
   gym: {
-    orb: "mono",
-    // (Black and white: the hub's own accent, with a grey ring and glow.)
-    light: { ink: "#0F172B", onInk: "#FFFFFE", fill: "#0F172A", selectedRing: "#94A3B8", orbGlow: "rgba(15, 23, 42, 0.30)" },
-    dark: { ink: "#F1F5F9", onInk: "#0D0F14", fill: "#E2E8F0", selectedRing: "#475569", orbGlow: "rgba(226, 232, 240, 0.35)" },
+    orb: "orange",
+    // (SECTION_PALETTE.gym, the same way as the Kitchen's.)
+    light: { ink: "#C2471A", onInk: "#FFFFFE", fill: "#F28A3C", selectedRing: "#F7AE6E", orbGlow: "rgba(242, 138, 60, 0.45)" },
+    dark: { ink: "#F28A3C", onInk: "#0D0F14", fill: "#F28A3C", selectedRing: "#C2471A", orbGlow: "rgba(242, 138, 60, 0.55)" },
   },
 };
 
@@ -210,18 +210,17 @@ export function OrbitSection({ section, children }: { section: Section; children
 // theme), and the deepest (the orb's shading). The main orb is all eight.
 export type SectionId = "kitchen" | "nutrition" | "health" | "calendar" | "tasks" | "home" | "documents" | "gym";
 export const SECTION_PALETTE: Record<SectionId, { tint: string; base: string; dark: string; deep: string }> = {
-  kitchen: { tint: "#FFE0C2", base: "#F28A3C", dark: "#C2471A", deep: "#B8325A" }, // meals, recipes, pantry, groceries
+  // (Kitchen yellow and Gym orange, Oct 22, 2026 — Kitchen was orange, Gym
+  // black and white. Kitchen's darker shade deepened to carry white text.)
+  kitchen: { tint: "#FFF1C7", base: "#F2C34A", dark: "#A06A00", deep: "#B8551E" }, // meals, recipes, pantry, groceries
   nutrition: { tint: "#DDF5C8", base: "#7CC86A", dark: "#2E8A4A", deep: "#1F6E6A" },
   health: { tint: "#FFD6DC", base: "#F2667A", dark: "#B3264A", deep: "#8E2B8A" },
   calendar: { tint: "#CFE5FF", base: "#5FA2F2", dark: "#2C5DC9", deep: "#3A3FB8" },
   tasks: { tint: "#E2DBFF", base: "#A08CF7", dark: "#5A44C9", deep: "#2F4FB8" },
   home: { tint: "#CBF5EE", base: "#3FC1B0", dark: "#137A73", deep: "#1F5FA0" },
-  documents: { tint: "#FFF1C7", base: "#F2C34A", dark: "#B07A12", deep: "#B8551E" },
-  // (Gym in black and white — black in the light theme, white in the dark —
-  // not the sheet's magenta, Oct 22, 2026. The main orb keeps the magenta.)
-  // (`dark` a step off black, as Orbit's own button is: the web's dark mode
-  // turns it white — see components/web/theme.)
-  gym: { tint: "#E5E7EB", base: "#F1F5F9", dark: "#0F172B", deep: "#020617" },
+  // (Docs teal, now Kitchen's yellow.)
+  documents: { tint: "#CBF5EE", base: "#3FC1B0", dark: "#137A73", deep: "#1F5FA0" },
+  gym: { tint: "#FFE0C2", base: "#F28A3C", dark: "#C2471A", deep: "#B8325A" },
 };
 
 // A section's colour where it's shown outside the section — its node on the

@@ -1,4 +1,4 @@
-import { personalRecords, type ExerciseSession } from "@/src/components/gym/exerciseStats";
+import { lbs, personalRecords, type ExerciseSession } from "@/src/components/gym/exerciseStats";
 import { startOfWeek } from "@/src/components/gym/schedule";
 import { beats, bestOf, gainText, setComplete, setVolume, trackOf, type Best } from "@/src/components/gym/tracking";
 import type { GymSessionRecord } from "@/src/services/gymApi";
@@ -50,6 +50,32 @@ export function recordTimeline(sessions: GymSessionRecord[]): RecordEvent[] {
 
 // The records one session set.
 export const sessionRecords = (session: GymSessionRecord, sessions: GymSessionRecord[]) => recordTimeline(sessions).filter((r) => r.sessionId === session._id);
+
+export interface Achievement {
+  exercise: Done;
+  kind: "best" | "total";
+  text: string; // "185 lbs", "6,480 lbs in all"
+  gain: string; // "+10 lbs"
+}
+
+// What one session achieved: each exercise's best beaten (its records), and
+// each exercise's total weight in it beating every session's before. (A
+// first time sets the mark; warm-ups don't count.)
+export function sessionAchievements(session: GymSessionRecord, sessions: GymSessionRecord[]): Achievement[] {
+  const achieved: Achievement[] = sessionRecords(session, sessions).map((r) => ({ exercise: r.exercise, kind: "best", text: r.best.text, gain: r.gain }));
+  const before = sessions.filter((s) => s.finishedAt < session.finishedAt);
+  const total = (sets: GymSessionRecord["exercises"][number]["sets"], track: ReturnType<typeof trackOf>) => sets.filter((s) => s.type !== "warmup").reduce((sum, s) => sum + setVolume(s, track), 0);
+  for (const item of session.exercises) {
+    if (!item.exercise) continue;
+    const track = trackOf(item.exercise);
+    const now = total(item.sets, track);
+    if (!now) continue;
+    const id = item.exercise._id;
+    const most = Math.max(0, ...before.map((s) => s.exercises.filter((e) => e.exercise?._id === id).reduce((sum, e) => sum + total(e.sets, track), 0)));
+    if (most && now > most) achieved.push({ exercise: item.exercise, kind: "total", text: `${lbs(Math.round(now))} lbs in all`, gain: `+${lbs(Math.round(now - most))} lbs` });
+  }
+  return achieved;
+}
 
 export interface ExerciseBests {
   exercise: Done;

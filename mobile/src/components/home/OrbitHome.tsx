@@ -99,11 +99,12 @@ function glance(id: SectionId, t: Today): { value: string; ring: number; caption
         caption: t.latestWeight ? `${Math.round(t.weightProgress * 100)}% of the way to your goal` : "No weigh-ins yet",
       };
     case "gym": {
-      // (The ring: the days of the week trained on.)
-      const done = t.gym.week.sessions.length;
+      // (The time trained this week — "2h 15m"; the ring: the days of the
+      // week trained on.)
+      const seconds = t.gym.week.sessions.reduce((n, session) => n + sessionTotals(session).seconds, 0);
       const when = t.gym.last ? dayLabel(t.gym.last.finishedAt) : "";
       return {
-        value: String(done),
+        value: seconds ? durationLabel(seconds) : "0h",
         ring: t.gym.week.days.filter((d) => d.done).length / 7,
         caption: t.gym.active ? `${t.gym.active.name} under way` : t.gym.last ? `Last: ${t.gym.last.name}, ${when === "Today" || when === "Yesterday" ? when.toLowerCase() : when}` : "No workouts yet",
       };

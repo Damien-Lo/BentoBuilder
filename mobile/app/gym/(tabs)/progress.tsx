@@ -6,7 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { recordTimeline } from "@/src/components/gym/progressStats";
 import { Hairline, IconTile, ListCard, ListRow, neutralTile } from "@/src/components/settings/AccountParts";
 import { getSessions, sessionTotals, type GymSessionRecord } from "@/src/services/gymApi";
-import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { sectionColor, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import type { Ionicons } from "@expo/vector-icons";
 
 // Gym → Progress: this week at a glance, then a list — like Settings — of
@@ -65,8 +65,7 @@ export default function ProgressTab() {
                 label={entry.label}
                 soon={entry.soon}
                 value={entry.soon ? "Coming" : entry.value}
-                // (Gym's black — or, in the dark, a grey: its icon is white either way.)
-                tile={<IconTile icon={entry.icon} color={entry.soon ? neutralTile(dark) : dark ? "#64748B" : c.ink} />}
+                tile={<IconTile icon={entry.icon} color={entry.soon ? neutralTile(dark) : (sectionColor("gym", false) ?? c.ink)} />}
                 onPress={() => entry.path && router.push(entry.path as Href)}
               />
             </Fragment>

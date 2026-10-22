@@ -99,7 +99,8 @@ const EXACT: Record<Role, Record<string, RGB>> = {
     "248,251,255": [26, 29, 37],
     "244,243,240": PAGE, // Orbit's canvas
     "15,23,43": [241, 245, 249], // the main button (the home's, black)
-    "194,71,26": [242, 138, 60], // the Kitchen's, orange
+    "194,71,26": [242, 138, 60], // Gym's, orange
+    "160,106,0": [242, 195, 74], // the Kitchen's, yellow
     "44,93,201": [95, 162, 242], // the Calendar's, blue
     "90,68,201": [160, 140, 247], // Tasks', violet
     "46,138,74": [124, 200, 106], // Nutrition's, green

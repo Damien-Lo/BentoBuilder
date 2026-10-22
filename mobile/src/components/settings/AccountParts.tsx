@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, type Href } from "expo-router";
-import { type ComponentProps, type ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { requireOptionalNativeModule } from "expo";
 import { ActivityIndicator, Alert, Platform, Pressable, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 
@@ -56,17 +56,27 @@ export function Card({ children }: { children: ReactNode }) {
     </View>
   );
 }
-export function Input(props: ComponentProps<typeof TextInput>) {
+// (A password: an eye on its right, to show what's typed or hide it again.)
+export function Input({ secureTextEntry, ...props }: ComponentProps<typeof TextInput>) {
   const o = useOrbitPage();
+  const [shown, setShown] = useState(false);
   return (
-    <TextInput
-      placeholderTextColor={o?.faint ?? "#94A3B8"}
-      autoCapitalize="none"
-      autoCorrect={false}
-      className="mt-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-[15px] text-slate-900"
-      style={[Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : undefined, o && { backgroundColor: o.canvas, borderColor: o.border, color: o.text, borderRadius: 14, paddingVertical: 12 }]}
-      {...props}
-    />
+    <View className="mt-2">
+      <TextInput
+        placeholderTextColor={o?.faint ?? "#94A3B8"}
+        autoCapitalize="none"
+        autoCorrect={false}
+        secureTextEntry={secureTextEntry && !shown}
+        className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-[15px] text-slate-900"
+        style={[Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : undefined, o && { backgroundColor: o.canvas, borderColor: o.border, color: o.text, borderRadius: 14, paddingVertical: 12 }, secureTextEntry ? { paddingRight: 48 } : undefined]}
+        {...props}
+      />
+      {secureTextEntry && (
+        <Pressable onPress={() => setShown((v) => !v)} accessibilityRole="button" accessibilityLabel={shown ? "Hide password" : "Show password"} hitSlop={6} style={{ position: "absolute", right: 2, top: 0, bottom: 0, width: 42, alignItems: "center", justifyContent: "center" }}>
+          <Ionicons name={shown ? "eye-off-outline" : "eye-outline"} size={19} color={o?.muted ?? "#64748B"} />
+        </Pressable>
+      )}
+    </View>
   );
 }
 

@@ -29,19 +29,30 @@ const COPY: Record<Mode, { title: string; lead: string; button: string }> = {
   reset: { title: "Set a new password", lead: "Enter the reset code you were given, and a new password.", button: "Set password and sign in" },
 };
 
-function Field({ label, ...props }: { label: string } & ComponentProps<typeof TextInput>) {
+// (A password: an eye on its right, to show what's typed or hide it again.)
+function Field({ label, secureTextEntry, ...props }: { label: string } & ComponentProps<typeof TextInput>) {
   const { colors } = useOrbitTheme();
+  const [shown, setShown] = useState(false);
   return (
     <View style={{ marginTop: 16 }}>
       <Text style={{ marginBottom: 6, fontSize: 12, fontWeight: "600", color: colors.muted }}>{label}</Text>
-      <TextInput
-        placeholderTextColor={colors.faint}
-        style={[
-          { borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: colors.text },
-          Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null,
-        ]}
-        {...props}
-      />
+      <View>
+        <TextInput
+          placeholderTextColor={colors.faint}
+          secureTextEntry={secureTextEntry && !shown}
+          style={[
+            { borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: colors.text },
+            secureTextEntry ? { paddingRight: 52 } : null,
+            Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null,
+          ]}
+          {...props}
+        />
+        {secureTextEntry && (
+          <Pressable onPress={() => setShown((v) => !v)} accessibilityRole="button" accessibilityLabel={shown ? "Hide password" : "Show password"} hitSlop={6} style={{ position: "absolute", right: 4, top: 0, bottom: 0, width: 44, alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name={shown ? "eye-off-outline" : "eye-outline"} size={20} color={colors.muted} />
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }

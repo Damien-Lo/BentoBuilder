@@ -8,7 +8,7 @@ import { Tap } from "@/src/components/ui/Tap";
 import { OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 
 // A Gym tab's page: its large title on the page (no way back — it's a tab),
-// then what's in it. In Orbit's look, in Gym's black and white.
+// then what's in it. In Orbit's look, in Gym's orange.
 export function GymTabPage({ title, subtitle, children }: { title: string; subtitle: string; children?: ReactNode }) {
   const { colors: c } = useOrbitTheme();
   return (
@@ -61,7 +61,7 @@ export function GroupHeading({ children }: { children: string }) {
   return <Text style={{ marginTop: 22, marginBottom: 8, marginLeft: 4, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, color: c.faint }}>{children.toUpperCase()}</Text>;
 }
 
-// Choices in a row of chips: the chosen one in Gym's black.
+// Choices in a row of chips: the chosen one in Gym's colour.
 export function Chips<T extends string>({ options, value, onChange }: { options: { id: T; label: string }[]; value: T; onChange: (id: T) => void }) {
   const { colors: c } = useOrbitTheme();
   return (

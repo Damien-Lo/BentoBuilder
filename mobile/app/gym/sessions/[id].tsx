@@ -6,7 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { clock } from "@/src/components/gym/activeSession";
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
-import { sessionRecords, type RecordEvent } from "@/src/components/gym/progressStats";
+import { sessionAchievements, type Achievement } from "@/src/components/gym/progressStats";
 import { cleanField, draftOf, FIELDS, fromDraft, setComplete, setText, TIME_HINT, trackOf, type DraftField, type SetDraft } from "@/src/components/gym/tracking";
 import { showActions } from "@/src/components/todo/theme";
 import { Tap } from "@/src/components/ui/Tap";
@@ -14,7 +14,8 @@ import { deleteSession, getSession, getSessions, SET_TYPES, setLabels, setTypeOf
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // One finished workout: when, how long, what it came to, and every set of
-// every exercise (each exercise opens its own page). Just finished
+// every exercise (each exercise opens its own page), and the records it set
+// (each exercise's best, or its total weight, beaten). Just finished
 // (`finished`), it opens with how it went — and any records it set. It can
 // be corrected (Edit: its name, each set's weight, reps and type, sets and
 // exercises taken out or added) or deleted.
@@ -43,16 +44,17 @@ function SessionDetail() {
   const { colors: c } = useOrbitTheme();
   const [session, setSession] = useState<GymSessionRecord | null>(null);
   const [failed, setFailed] = useState(false);
-  const [records, setRecords] = useState<RecordEvent[]>([]);
+  // What it achieved: records beaten (null while loading).
+  const [records, setRecords] = useState<Achievement[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (id) getSession(id).then(setSession, () => setFailed(true));
   }, [id]);
-  // Just finished: the records it set, against every workout before it.
+  // What it achieved, against every workout before it.
   useEffect(() => {
-    if (finished && session) getSessions().then((all) => setRecords(sessionRecords(session, all)), () => {});
-  }, [finished, session]);
+    if (session) getSessions().then((all) => setRecords(sessionAchievements(session, all)), () => setRecords([]));
+  }, [session]);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/gym/history" as Href));
 
   function remove() {
@@ -132,7 +134,7 @@ function SessionDetail() {
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 60 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {/* Just finished: how it went */}
-            {finished && !draft && <Finished records={records} colors={c} />}
+            {finished && !draft && <Finished records={records ?? []} onDone={() => (router.canGoBack() ? router.back() : router.replace("/gym" as Href))} colors={c} />}
 
             {draft ? (
               <TextInput
@@ -153,6 +155,7 @@ function SessionDetail() {
                 <Stat label="Time" value={clock(t.seconds)} colors={c} />
                 <Stat label="Volume" value={`${Math.round(t.volume).toLocaleString()} lbs`} colors={c} />
                 <Stat label="Sets" value={String(t.sets)} colors={c} />
+                <Stat label="Records" value={records ? String(records.length) : " "} icon="trophy" colors={c} />
               </View>
             )}
 
@@ -259,13 +262,17 @@ function SessionDetail() {
   );
 }
 
-// Just finished: done, and the records it set.
-function Finished({ records, colors: c }: { records: RecordEvent[]; colors: OrbitColors }) {
+// Just finished: done, and the records it set — tapped (or Done), it's
+// left, back to where the workout was started from.
+function Finished({ records, onDone, colors: c }: { records: Achievement[]; onDone: () => void; colors: OrbitColors }) {
   return (
-    <View style={{ marginBottom: 18, padding: 16, borderRadius: 18, backgroundColor: c.success }}>
+    <Tap onPress={onDone} accessibilityRole="button" accessibilityLabel="Workout done. Close" style={{ marginBottom: 18, padding: 16, borderRadius: 18, backgroundColor: c.success }} pressedStyle={{ opacity: 0.85 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
         <Ionicons name="checkmark-circle" size={26} color="#FFFFFF" />
         <Text style={{ flex: 1, fontSize: 18, fontWeight: "800", color: "#FFFFFF" }}>Workout done</Text>
+        <View style={{ borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6, backgroundColor: "rgba(255,255,255,0.22)" }}>
+          <Text style={{ fontSize: 14, fontWeight: "700", color: "#FFFFFF" }}>Done</Text>
+        </View>
       </View>
       <Text style={{ marginTop: 4, fontSize: 14, color: "#FFFFFF", opacity: 0.9 }}>
         {records.length ? `${records.length} new record${records.length === 1 ? "" : "s"} — nice work.` : "Saved to your history. Nice work."}
@@ -273,28 +280,36 @@ function Finished({ records, colors: c }: { records: RecordEvent[]; colors: Orbi
       {records.length > 0 && (
         <View style={{ marginTop: 10, gap: 6 }}>
           {records.map((r) => (
-            <View key={r.exercise._id} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View key={`${r.exercise._id}-${r.kind}`} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Ionicons name="trophy" size={15} color="#FFFFFF" />
               <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: "#FFFFFF" }} numberOfLines={1}>
                 {r.exercise.name}
               </Text>
               <Text style={{ fontSize: 14, fontWeight: "800", color: "#FFFFFF" }}>
-                {r.best.text} <Text style={{ fontWeight: "600", opacity: 0.85 }}>({r.gain})</Text>
+                {r.text} <Text style={{ fontWeight: "600", opacity: 0.85 }}>({r.gain})</Text>
               </Text>
             </View>
           ))}
         </View>
       )}
-    </View>
+    </Tap>
   );
 }
 
 const head = (c: OrbitColors) => ({ fontSize: 11, fontWeight: "700" as const, letterSpacing: 1, color: c.faint });
 
-function Stat({ label, value, colors: c }: { label: string; value: string; colors: OrbitColors }) {
+// The records card's trophy: gold, either theme.
+const GOLD = "#EAB308";
+
+function Stat({ label, value, icon, colors: c }: { label: string; value: string; icon?: keyof typeof Ionicons.glyphMap; colors: OrbitColors }) {
   return (
     <View style={{ flex: 1, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
-      <Text style={{ fontSize: 12, color: c.muted }}>{label}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+        {icon && <Ionicons name={icon} size={13} color={GOLD} />}
+        <Text style={{ fontSize: 12, color: c.muted }} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
       <Text style={{ marginTop: 3, fontSize: 18, fontWeight: "800", color: c.text }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
         {value}
       </Text>

@@ -10,7 +10,7 @@ import { OrbitSection } from "@/src/theme/orbit";
 // Progress (records, charts and history).
 export default function GymSectionLayout() {
   return (
-    // (Gym in its own black and white: its tabs, pages and orb.)
+    // (Gym in its own orange: its tabs, pages and orb.)
     <OrbitSection section="gym">
     <Tabs tabBar={(props) => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="index" options={{ title: "Overview", tabBarIcon: ({ color }) => <Ionicons size={24} name="speedometer-outline" color={color} /> }} />
