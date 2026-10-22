@@ -58,5 +58,5 @@ export function personalRecords(sessions: ExerciseSession[]) {
   };
 }
 
-// "63.38" — at most two places, no trailing zeros.
-export const lbs = (n: number) => String(Math.round(n * 100) / 100);
+// "63.38", "1,950" — at most two places, no trailing zeros.
+export const lbs = (n: number) => (Math.round(n * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });

@@ -12,6 +12,7 @@ import { ProgressChart } from "@/src/components/gym/ProgressChart";
 import { showActions } from "@/src/components/todo/theme";
 import { Tap } from "@/src/components/ui/Tap";
 import { exerciseImage, getExercise, groupLabel, type Exercise } from "@/src/services/exerciseApi";
+import { getExerciseSessions, type ExerciseSessionRecord } from "@/src/services/gymApi";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // One exercise: the muscles it works (on the body, front and back), then
@@ -20,8 +21,7 @@ import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit
 //             (by the measure you pick) and your bests;
 //   History   every session you've done it in;
 //   How to    the steps.
-// (Your progress and history come from the workouts you log — the next
-// thing to build — so for now they're there, empty.)
+// (Your progress and history come from the workouts you've finished.)
 
 type Tab = "summary" | "history" | "howto";
 const TABS: { id: Tab; label: string }[] = [
@@ -43,6 +43,12 @@ export default function ExerciseScreen() {
   );
 }
 
+// A moment as its day here, "YYYY-MM-DD".
+const localDate = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 const titled = (text: string | null | undefined) => (text ? text.replace(/\b\w/g, (ch) => ch.toUpperCase()) : "");
 
 function ExercisePage() {
@@ -56,8 +62,12 @@ function ExercisePage() {
     if (id) getExercise(id).then(setExercise, () => setFailed(true));
   }, [id]);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/gym/exercises"));
-  // (The sessions it was done in: from logged workouts, once there are.)
-  const sessions: ExerciseSession[] = useMemo(() => [], []);
+  // The sessions it was done in (from the workouts you've finished).
+  const [records, setRecords] = useState<ExerciseSessionRecord[]>([]);
+  useEffect(() => {
+    if (id) getExerciseSessions(id).then(setRecords, () => {});
+  }, [id]);
+  const sessions: ExerciseSession[] = useMemo(() => records.map((r) => ({ date: localDate(r.finishedAt), sets: r.sets })), [records]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>

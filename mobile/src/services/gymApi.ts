@@ -43,3 +43,30 @@ export function restLabel(seconds: number) {
   return m ? `${m} min${s ? ` ${s} s` : ""}` : `${s} s`;
 }
 export const REST_CHOICES = [0, 30, 45, 60, 90, 120, 150, 180, 240, 300];
+
+// --- Sessions: the workouts you did ---
+
+export interface DoneSetInput {
+  weight: number | null;
+  reps: number | null;
+}
+export interface SessionInput {
+  workout?: string | null;
+  name: string;
+  startedAt: string;
+  finishedAt: string;
+  exercises: { exercise: string; note: string; sets: DoneSetInput[] }[];
+}
+// One exercise's part of a session: when, and its sets.
+export interface ExerciseSessionRecord {
+  _id: string;
+  name: string;
+  finishedAt: string;
+  sets: DoneSetInput[];
+}
+
+export const saveSession = (session: SessionInput) => call<{ _id: string }>("/sessions", { method: "POST", body: JSON.stringify(session) });
+export const getExerciseSessions = (exerciseId: string) => call<ExerciseSessionRecord[]>(`/sessions?exercise=${encodeURIComponent(exerciseId)}`);
+// For each exercise, its sets from the last time it was done.
+export const getPreviousSets = (exerciseIds: string[]) =>
+  exerciseIds.length ? call<Record<string, DoneSetInput[]>>(`/previous?exercises=${exerciseIds.map(encodeURIComponent).join(",")}`) : Promise.resolve({} as Record<string, DoneSetInput[]>);

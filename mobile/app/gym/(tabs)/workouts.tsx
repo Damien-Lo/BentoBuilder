@@ -4,18 +4,20 @@ import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { clearActiveSession, clock, loadActiveSession, type ActiveSession } from "@/src/components/gym/activeSession";
 import { Tap } from "@/src/components/ui/Tap";
 import { getWorkouts, type GymWorkout } from "@/src/services/gymApi";
 import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // Gym → Workouts: the workouts you've built — each a card, with Edit (to
-// change it) and Start (to do it) under it — and a button to build a new
-// one. (Doing one comes next: for now Start says so.)
+// change it) and Start (to do it: gym/session) under it — and a button to
+// build a new one. One under way shows at the top, to go back to.
 export default function WorkoutsTab() {
   const router = useRouter();
   const { colors: c } = useOrbitTheme();
   const [workouts, setWorkouts] = useState<GymWorkout[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [active, setActive] = useState<ActiveSession | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -25,8 +27,20 @@ export default function WorkoutsTab() {
           setFailed(false);
         })
         .catch(() => setFailed(true));
+      loadActiveSession().then(setActive);
     }, []),
   );
+  const resume = () => router.push("/gym/session" as Href);
+  // Start one — unless another's under way: carry on with that, or drop it.
+  function start(workout: GymWorkout) {
+    if (!active) return router.push(`/gym/session?workout=${workout._id}` as Href);
+    if (active.workoutId === workout._id) return resume();
+    Alert.alert("A workout's under way", `${active.name} isn't finished. Carry on with it, or discard it and start ${workout.name}?`, [
+      { text: "Cancel", style: "cancel" },
+      { text: `Resume ${active.name}`, onPress: resume },
+      { text: "Discard it", style: "destructive", onPress: () => void clearActiveSession().then(() => router.push(`/gym/session?workout=${workout._id}` as Href)) },
+    ]);
+  }
   const build = (id?: string) => router.push((id ? `/gym/build?id=${id}` : "/gym/build") as Href);
 
   return (
@@ -34,6 +48,21 @@ export default function WorkoutsTab() {
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
         <Text style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>Workouts</Text>
         <Text style={{ marginTop: 2, fontSize: 14, color: c.muted }}>The workouts you&apos;ve built</Text>
+
+        {/* One under way */}
+        {active && (
+          <Tap onPress={resume} accessibilityRole="button" style={{ marginTop: 18, flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 16, backgroundColor: c.success }} pressedStyle={{ opacity: 0.85 }}>
+            <Ionicons name="barbell" size={22} color="#FFFFFF" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: "#FFFFFF", opacity: 0.85 }}>WORKOUT IN PROGRESS · {clock((Date.now() - new Date(active.startedAt).getTime()) / 1000)}</Text>
+              <Text style={{ marginTop: 1, fontSize: 16, fontWeight: "700", color: "#FFFFFF" }} numberOfLines={1}>
+                {active.name}
+              </Text>
+            </View>
+            <Text style={{ fontSize: 15, fontWeight: "700", color: "#FFFFFF" }}>Resume</Text>
+            <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
+          </Tap>
+        )}
 
         <Tap onPress={() => build()} accessibilityRole="button" style={{ marginTop: 18, height: 52, borderRadius: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: c.ink }} pressedStyle={{ opacity: 0.85 }}>
           <Ionicons name="add" size={22} color={c.onInk} />
@@ -55,7 +84,7 @@ export default function WorkoutsTab() {
                 key={workout._id}
                 workout={workout}
                 onEdit={() => build(workout._id)}
-                onStart={() => Alert.alert(`Start ${workout.name}`, "Doing a workout — ticking off your sets as you go, with a rest timer — is the next thing being built.")}
+                onStart={() => start(workout)}
                 colors={c}
               />
             ))
