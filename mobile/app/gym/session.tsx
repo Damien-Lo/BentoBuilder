@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { requireOptionalNativeModule } from "expo";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -13,15 +13,17 @@ import { ReorderExercises } from "@/src/components/gym/ReorderExercises";
 import { showActions } from "@/src/components/todo/theme";
 import { Tap } from "@/src/components/ui/Tap";
 import type { Exercise } from "@/src/services/exerciseApi";
-import { getPreviousSets, getWorkout, REST_CHOICES, restLabel, saveSession, type DoneSetInput } from "@/src/services/gymApi";
+import { getPreviousSets, getWorkout, REST_CHOICES, restLabel, saveSession, SET_TYPES, setLabels, setTypeOf, type DoneSetInput, type SetType } from "@/src/services/gymApi";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // Doing a workout (Gym → Workouts → Start), as Hevy's "Log Workout": how
 // long it's been going, the volume and sets so far, then each exercise —
 // its sets with what you did last time (Previous), the weight and reps (the
 // workout's targets to start with), and a tick for each one done. Ticking
-// a set starts its rest timer, at the bottom. Finish saves the ticked sets
-// as a session (what each exercise's history and progress come from).
+// a set starts its rest timer, at the bottom. A set's number, tapped, makes
+// it a warm-up, drop or failure set. An exercise can be swapped for
+// another. Finish saves the ticked sets as a session (what each exercise's
+// history and progress come from) and shows how it went.
 //
 // It's kept on this device as it goes (gym/activeSession), so leaving it —
 // or the app closing — loses nothing: Workouts offers to resume it.
@@ -58,6 +60,8 @@ function Session() {
   const [previous, setPrevious] = useState<Record<string, DoneSetInput[]>>({});
   const [now, setNow] = useState(Date.now());
   const [picking, setPicking] = useState(false);
+  // The exercise being swapped for another (its key).
+  const [replacing, setReplacing] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -154,14 +158,21 @@ function Session() {
   const addSet = (key: string) =>
     changeExercise(key, (e) => {
       const last = e.sets[e.sets.length - 1];
-      return { ...e, sets: [...e.sets, { id: newId(), weight: last?.weight ?? "", reps: last?.reps ?? "", done: false }] };
+      return { ...e, sets: [...e.sets, { id: newId(), weight: last?.weight ?? "", reps: last?.reps ?? "", done: false, type: last?.type === "warmup" ? "normal" : last?.type }] };
     });
+  function setTypeMenu(item: ActiveExercise, set: ActiveSet) {
+    showActions(
+      "Set type",
+      SET_TYPES.map((t) => ({ label: t.id === (set.type ?? "normal") ? `${t.label} ✓` : t.label, onPress: () => changeSet(item.key, set.id, (x) => ({ ...x, type: t.id as SetType })) })),
+    );
+  }
   const deleteSet = (key: string, id: string) => changeExercise(key, (e) => ({ ...e, sets: e.sets.filter((s) => s.id !== id) }));
   const rest = (seconds: number) => update((s) => ({ ...s, restEndsAt: seconds > 0 ? Date.now() + seconds * 1000 : null, restLength: seconds }));
   const nudgeRest = (by: number) => update((s) => (s.restEndsAt ? { ...s, restEndsAt: s.restEndsAt + by * 1000, restLength: Math.max(1, (s.restLength ?? 0) + by) } : s));
 
   function exerciseMenu(item: ActiveExercise) {
     showActions(item.exercise.name, [
+      { label: "Replace exercise", onPress: () => setReplacing(item.key) },
       ...((session?.exercises.length ?? 0) > 1 ? [{ label: "Reorder exercises", onPress: () => setReordering(true) }] : []),
       { label: "Remove exercise", destructive: true, onPress: () => update((s) => ({ ...s, exercises: s.exercises.filter((e) => e.key !== item.key) })) },
     ]);
@@ -184,6 +195,13 @@ function Session() {
       exercises: [...s.exercises, ...picked.map((exercise) => ({ key: newId(), exercise, restSeconds: 90, note: "", noteOpen: false, sets: [{ id: newId(), weight: "", reps: "", done: false }] }))],
     }));
     setPicking(false);
+  }
+  // The swap: the new exercise in its place, with its sets — unticked, and
+  // without the old one's weights.
+  function replace(picked: Exercise[]) {
+    const exercise = picked[0];
+    if (exercise && replacing) changeExercise(replacing, (e) => ({ ...e, exercise, sets: e.sets.map((set) => ({ ...set, weight: "", done: false })) }));
+    setReplacing(null);
   }
   function reorder(keys: string[]) {
     update((s) => ({ ...s, exercises: keys.map((k) => s.exercises.find((e) => e.key === k)).filter((e): e is ActiveExercise => !!e) }));
@@ -211,17 +229,16 @@ function Session() {
       setSaving(true);
       try {
         const finishedAt = new Date();
-        await saveSession({
+        const saved = await saveSession({
           workout: session.workoutId,
           name: session.name,
           startedAt: session.startedAt,
           finishedAt: finishedAt.toISOString(),
-          exercises: done.map((e) => ({ exercise: e.exercise._id, note: e.note.trim(), sets: e.sets.map((s) => ({ weight: asNumber(s.weight), reps: asNumber(s.reps) })) })),
+          exercises: done.map((e) => ({ exercise: e.exercise._id, note: e.note.trim(), sets: e.sets.map((s) => ({ weight: asNumber(s.weight), reps: asNumber(s.reps), type: s.type ?? "normal" })) })),
         });
         await clearActiveSession();
-        const sets = done.reduce((n, e) => n + e.sets.length, 0);
-        Alert.alert("Workout done", `${clock((finishedAt.getTime() - new Date(session.startedAt).getTime()) / 1000)} · ${sets} set${sets === 1 ? "" : "s"} · ${Math.round(volumeOf(session)).toLocaleString()} lbs`);
-        leave();
+        // (How it went: the workout's own page, opened as just finished.)
+        router.replace(`/gym/sessions/${saved._id}?finished=1` as Href);
       } catch (error) {
         setSaving(false);
         Alert.alert("Couldn't save the workout", error instanceof Error ? error.message : "Something went wrong.");
@@ -317,6 +334,8 @@ function Session() {
                 {item.sets.map((set, s) => {
                   const last = before[s];
                   const done = set.done;
+                  const kind = setTypeOf(set.type);
+                  const label = setLabels(item.sets)[s];
                   return (
                     <ReanimatedSwipeable
                       key={set.id}
@@ -332,9 +351,9 @@ function Session() {
                       )}
                     >
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 2, borderRadius: 10, backgroundColor: done ? `${c.success}26` : c.surface }}>
-                        <View style={{ width: 34, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: done ? "transparent" : c.pill }}>
-                          <Text style={{ fontSize: 15, fontWeight: "700", color: c.onPill }}>{s + 1}</Text>
-                        </View>
+                        <Tap onPress={() => setTypeMenu(item, set)} accessibilityRole="button" accessibilityLabel={`Set ${s + 1}: ${kind.label}. Change its type`} style={{ width: 34, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: done ? "transparent" : c.pill }} pressedStyle={{ opacity: 0.7 }}>
+                          <Text style={{ fontSize: 15, fontWeight: "800", color: kind.color ?? c.onPill }}>{label}</Text>
+                        </Tap>
                         <Text style={{ flex: 1.3, textAlign: "center", fontSize: 13, color: c.faint }} numberOfLines={1}>
                           {last && (last.weight != null || last.reps != null) ? `${last.weight ?? 0} lbs × ${last.reps ?? "—"}` : "—"}
                         </Text>
@@ -393,14 +412,16 @@ function Session() {
       )}
 
       <PickExercises visible={picking} onClose={() => setPicking(false)} onAdd={addExercises} />
+      <PickExercises visible={!!replacing} replacing={session.exercises.find((e) => e.key === replacing)?.exercise.name} onClose={() => setReplacing(null)} onAdd={replace} />
       <ReorderExercises visible={reordering} items={reorderRows} onClose={() => setReordering(false)} onDone={reorder} />
     </SafeAreaView>
   );
 }
 
-// The weight moved in the ticked sets.
+// The weight moved in the ticked sets. (An assisted exercise's weight is
+// help, not load: it isn't counted.)
 function volumeOf(session: ActiveSession) {
-  return session.exercises.reduce((sum, e) => sum + e.sets.filter((s) => s.done).reduce((n, s) => n + (asNumber(s.weight) ?? 0) * (asNumber(s.reps) ?? 0), 0), 0);
+  return session.exercises.filter((e) => !/assisted/i.test(e.exercise.name)).reduce((sum, e) => sum + e.sets.filter((s) => s.done).reduce((n, s) => n + (asNumber(s.weight) ?? 0) * (asNumber(s.reps) ?? 0), 0), 0);
 }
 
 const head = (c: OrbitColors) => ({ fontSize: 11, fontWeight: "700" as const, letterSpacing: 0.8, color: c.faint });
@@ -409,7 +430,9 @@ function Stat({ label, value, colors: c }: { label: string; value: string; color
   return (
     <View style={{ flex: 1 }}>
       <Text style={{ fontSize: 12, color: c.muted }}>{label}</Text>
-      <Text style={{ marginTop: 2, fontSize: 18, fontWeight: "700", color: c.text }}>{value}</Text>
+      <Text style={{ marginTop: 2, fontSize: 18, fontWeight: "700", color: c.text }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        {value}
+      </Text>
     </View>
   );
 }

@@ -3,15 +3,16 @@ import { Fragment, useCallback, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { recordTimeline } from "@/src/components/gym/progressStats";
 import { Hairline, IconTile, ListCard, ListRow, neutralTile } from "@/src/components/settings/AccountParts";
 import { getSessions, sessionTotals, type GymSessionRecord } from "@/src/services/gymApi";
 import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import type { Ionicons } from "@expo/vector-icons";
 
 // Gym → Progress: this week at a glance, then a list — like Settings — of
-// the ways to look back: History (every workout you've finished) and, to
-// come, your records, the muscles you've trained, and your volume over
-// time.
+// the ways to look back: History (every workout you've finished), your
+// records, the muscles you've trained, and your volume over time — each
+// its own page.
 
 type Entry = { label: string; icon: keyof typeof Ionicons.glyphMap; path?: string; soon?: boolean; value?: string };
 
@@ -36,9 +37,9 @@ export default function ProgressTab() {
 
   const entries: Entry[] = [
     { label: "History", icon: "time", path: "/gym/history", value: sessions ? `${sessions.length}` : undefined },
-    { label: "Personal records", icon: "trophy", soon: true },
-    { label: "Muscles trained", icon: "body", soon: true },
-    { label: "Volume over time", icon: "stats-chart", soon: true },
+    { label: "Personal records", icon: "trophy", path: "/gym/records", value: sessions ? recordsValue(sessions) : undefined },
+    { label: "Muscles trained", icon: "body", path: "/gym/muscles" },
+    { label: "Volume over time", icon: "stats-chart", path: "/gym/volume" },
   ];
 
   return (
@@ -76,10 +77,19 @@ export default function ProgressTab() {
   );
 }
 
+// "3 this month" — records set in the last 30 days.
+function recordsValue(sessions: GymSessionRecord[]) {
+  const since = Date.now() - 30 * 86_400_000;
+  const recent = recordTimeline(sessions).filter((r) => new Date(r.finishedAt).getTime() >= since).length;
+  return recent ? `${recent} this month` : undefined;
+}
+
 function Stat({ value, label, colors: c }: { value: string; label: string; colors: OrbitColors }) {
   return (
     <View style={{ flex: 1, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
-      <Text style={{ fontSize: 24, fontWeight: "800", color: c.text }}>{value}</Text>
+      <Text style={{ fontSize: 24, fontWeight: "800", color: c.text }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        {value}
+      </Text>
       <Text style={{ marginTop: 2, fontSize: 12.5, color: c.muted }}>{label}</Text>
     </View>
   );

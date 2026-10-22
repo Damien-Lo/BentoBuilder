@@ -46,9 +46,32 @@ export const REST_CHOICES = [0, 30, 45, 60, 90, 120, 150, 180, 240, 300];
 
 // --- Sessions: the workouts you did ---
 
+// A set's kind: an ordinary one, a warm-up (not counted toward records), a
+// drop set, or one to failure.
+export type SetType = "normal" | "warmup" | "drop" | "failure";
 export interface DoneSetInput {
   weight: number | null;
   reps: number | null;
+  type?: SetType;
+}
+// Its letter in place of the set's number ("W"), and its colour.
+export const SET_TYPES: { id: SetType; label: string; letter: string | null; color: string | null }[] = [
+  { id: "normal", label: "Normal set", letter: null, color: null },
+  { id: "warmup", label: "Warm-up set", letter: "W", color: "#F59E0B" },
+  { id: "drop", label: "Drop set", letter: "D", color: "#8B5CF6" },
+  { id: "failure", label: "Failure set", letter: "F", color: "#EF4444" },
+];
+export const setTypeOf = (type?: SetType) => SET_TYPES.find((t) => t.id === (type ?? "normal")) ?? SET_TYPES[0];
+// Each set's label: warm-ups by their letter, the rest numbered in order
+// (a drop or failure set by its letter, keeping its place in the count).
+export function setLabels(sets: { type?: SetType }[]) {
+  let n = 0;
+  return sets.map((s) => {
+    const kind = setTypeOf(s.type);
+    if (kind.id === "warmup") return kind.letter!;
+    n++;
+    return kind.letter ?? String(n);
+  });
 }
 export interface SessionInput {
   workout?: string | null;
@@ -83,11 +106,14 @@ export interface GymSessionRecord {
 export const getSessions = () => call<GymSessionRecord[]>("/sessions");
 export const getSession = (id: string) => call<GymSessionRecord>(`/sessions/${id}`);
 export const deleteSession = (id: string) => call<void>(`/sessions/${id}`, { method: "DELETE" });
+// A finished workout, corrected: its name and its exercises' sets.
+export const updateSession = (id: string, session: Pick<SessionInput, "name" | "exercises">) => call<GymSessionRecord>(`/sessions/${id}`, { method: "PUT", body: JSON.stringify(session) });
 
-// What a session came to: how long, the sets, the weight moved.
+// What a session came to: how long, the sets, the weight moved. (An
+// assisted exercise's weight is help, not load: it isn't counted.)
 export function sessionTotals(session: Pick<GymSessionRecord, "startedAt" | "finishedAt" | "exercises">) {
   const sets = session.exercises.reduce((n, e) => n + e.sets.length, 0);
-  const volume = session.exercises.reduce((sum, e) => sum + e.sets.reduce((v, s) => v + (s.weight ?? 0) * (s.reps ?? 0), 0), 0);
+  const volume = session.exercises.filter((e) => !/assisted/i.test(e.exercise?.name ?? "")).reduce((sum, e) => sum + e.sets.reduce((v, s) => v + (s.weight ?? 0) * (s.reps ?? 0), 0), 0);
   const seconds = Math.max(0, (new Date(session.finishedAt).getTime() - new Date(session.startedAt).getTime()) / 1000);
   return { sets, volume, seconds };
 }

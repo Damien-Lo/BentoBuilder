@@ -7,7 +7,9 @@ import { getExercises, type Exercise } from "@/src/services/exerciseApi";
 import { OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 
 // "Add exercise": the library, to tick one or more, then add them.
-export function PickExercises({ visible, onClose, onAdd }: { visible: boolean; onClose: () => void; onAdd: (picked: Exercise[]) => void }) {
+// (`replacing`: the name of an exercise being swapped — then one is picked,
+// and picking it is choosing it.)
+export function PickExercises({ visible, onClose, onAdd, replacing }: { visible: boolean; onClose: () => void; onAdd: (picked: Exercise[]) => void; replacing?: string }) {
   const { colors: c } = useOrbitTheme();
   const [all, setAll] = useState<Exercise[] | null>(null);
   const [picked, setPicked] = useState<Exercise[]>([]);
@@ -17,7 +19,10 @@ export function PickExercises({ visible, onClose, onAdd }: { visible: boolean; o
     if (!all) getExercises().then(setAll, () => setAll([]));
   }, [visible, all]);
   const ids = useMemo(() => new Set(picked.map((e) => e._id)), [picked]);
-  const toggle = (exercise: Exercise) => setPicked((list) => (list.some((e) => e._id === exercise._id) ? list.filter((e) => e._id !== exercise._id) : [...list, exercise]));
+  const toggle = (exercise: Exercise) => {
+    if (replacing) return onAdd([exercise]);
+    setPicked((list) => (list.some((e) => e._id === exercise._id) ? list.filter((e) => e._id !== exercise._id) : [...list, exercise]));
+  };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -27,7 +32,9 @@ export function PickExercises({ visible, onClose, onAdd }: { visible: boolean; o
             <Tap onPress={onClose} accessibilityRole="button" style={{ borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: c.pill }} pressedStyle={{ opacity: 0.7 }}>
               <Text style={{ fontSize: 15, fontWeight: "600", color: c.onPill }}>Cancel</Text>
             </Tap>
-            <Text style={{ flex: 1, textAlign: "center", fontSize: 17, fontWeight: "700", color: c.text }}>Add exercises</Text>
+            <Text style={{ flex: 1, textAlign: "center", fontSize: 17, fontWeight: "700", color: c.text }} numberOfLines={1}>
+              {replacing ? `Replace ${replacing}` : "Add exercises"}
+            </Text>
             <View style={{ width: 80 }} />
           </View>
           <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>

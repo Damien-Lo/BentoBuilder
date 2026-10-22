@@ -94,29 +94,60 @@ router.delete("/workouts/:id", async (req, res) => {
 
 const positive = (value) => (value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) || Number(value) < 0 ? null : Number(value));
 
+const SET_TYPES = new Set(["normal", "warmup", "drop", "failure"]);
+
+// A session's exercises, from what the app sends: only exercises that
+// exist, only sets with reps, and only exercises with a set left.
+async function sessionExercisesFrom(body) {
+  const items = Array.isArray(body.exercises) ? body.exercises : [];
+  const known = new Set((await Exercise.find({ _id: { $in: items.map((i) => i?.exercise).filter(Boolean) } }).select("_id").lean()).map((e) => String(e._id)));
+  return items
+    .filter((item) => known.has(String(item?.exercise)))
+    .map((item) => ({
+      exercise: item.exercise,
+      note: String(item.note ?? "").slice(0, 500),
+      sets: (Array.isArray(item.sets) ? item.sets : [])
+        .slice(0, 100)
+        .map((set) => ({ weight: positive(set?.weight), reps: positive(set?.reps), type: SET_TYPES.has(set?.type) ? set.type : "normal" }))
+        .filter((set) => set.reps !== null),
+    }))
+    .filter((item) => item.sets.length > 0);
+}
+
 /**
  * POST /api/gym/sessions — a finished workout: its ticked sets.
- * Body: { workout?, name, startedAt, finishedAt, exercises: [{ exercise, note, sets: [{ weight, reps }] }] }
+ * Body: { workout?, name, startedAt, finishedAt, exercises: [{ exercise, note, sets: [{ weight, reps, type }] }] }
  */
 router.post("/sessions", async (req, res) => {
   try {
     const startedAt = new Date(req.body.startedAt);
     const finishedAt = new Date(req.body.finishedAt ?? Date.now());
     if (Number.isNaN(startedAt.getTime()) || Number.isNaN(finishedAt.getTime()) || finishedAt < startedAt) throw new Error("When the workout started and finished are needed.");
-    const items = Array.isArray(req.body.exercises) ? req.body.exercises : [];
-    const known = new Set((await Exercise.find({ _id: { $in: items.map((i) => i?.exercise).filter(Boolean) } }).select("_id").lean()).map((e) => String(e._id)));
-    const exercises = items
-      .filter((item) => known.has(String(item?.exercise)))
-      .map((item) => ({
-        exercise: item.exercise,
-        note: String(item.note ?? "").slice(0, 500),
-        sets: (Array.isArray(item.sets) ? item.sets : []).slice(0, 100).map((set) => ({ weight: positive(set?.weight), reps: positive(set?.reps) })).filter((set) => set.reps !== null),
-      }))
-      .filter((item) => item.sets.length > 0);
+    const exercises = await sessionExercisesFrom(req.body);
     if (!exercises.length) throw new Error("Tick off at least one set first.");
     const workout = req.body.workout && (await GymWorkout.findById(req.body.workout).select("_id"))?._id;
     const session = await GymSession.create({ workout: workout ?? null, name: String(req.body.name ?? "Workout").trim() || "Workout", startedAt, finishedAt, exercises });
     return res.status(201).json({ success: true, data: session });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
+
+/**
+ * PUT /api/gym/sessions/:id — a finished workout, corrected: its name and
+ * its exercises' sets. (When it was stays as it was.)
+ */
+router.put("/sessions/:id", async (req, res) => {
+  try {
+    const session = await GymSession.findById(req.params.id);
+    if (!session) return sendError(res, new Error("Session not found"), 404);
+    const exercises = await sessionExercisesFrom(req.body);
+    if (!exercises.length) throw new Error("A workout needs at least one set — delete it instead.");
+    session.name = String(req.body.name ?? session.name).trim() || session.name;
+    session.exercises = exercises;
+    await session.save();
+    const saved = await GymSession.findById(session._id).populate("exercises.exercise", "name primaryMuscles secondaryMuscles").lean();
+    return res.json({ success: true, data: saved });
   } catch (error) {
     return sendError(res, error);
   }

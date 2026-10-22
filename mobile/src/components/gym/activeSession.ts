@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import type { WorkoutExercise } from "@/src/services/gymApi";
+import type { SetType, WorkoutExercise } from "@/src/services/gymApi";
 
 // The workout being done right now, kept on this device as it goes — every
 // tick and number — so leaving the screen, or the app closing, loses
@@ -12,6 +12,7 @@ export interface ActiveSet {
   weight: string;
   reps: string;
   done: boolean;
+  type?: SetType;
 }
 export interface ActiveExercise {
   key: string;

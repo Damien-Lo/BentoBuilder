@@ -10,6 +10,9 @@ const doneSetSchema = new mongoose.Schema(
   {
     weight: { type: Number, default: null, min: 0 }, // lbs
     reps: { type: Number, default: null, min: 0 },
+    // A warm-up (not counted toward records), a drop set, a set to failure —
+    // or an ordinary one.
+    type: { type: String, enum: ["normal", "warmup", "drop", "failure"], default: "normal" },
   },
   { _id: false },
 );

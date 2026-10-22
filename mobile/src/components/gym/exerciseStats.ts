@@ -5,7 +5,10 @@
 export interface DoneSet {
   weight: number | null;
   reps: number | null;
+  type?: "normal" | "warmup" | "drop" | "failure";
 }
+// The sets that count: weighed, with reps, and not warm-ups.
+const counted = (sets: DoneSet[]) => sets.filter((s) => (s.weight ?? 0) > 0 && (s.reps ?? 0) > 0 && s.type !== "warmup");
 export interface ExerciseSession {
   date: string; // YYYY-MM-DD
   sets: DoneSet[];
@@ -30,7 +33,7 @@ const volume = (set: DoneSet) => (set.weight ?? 0) * (set.reps ?? 0);
 
 // A session's value for a metric.
 export function sessionValue(session: ExerciseSession, metric: Metric) {
-  const sets = session.sets.filter((s) => (s.weight ?? 0) > 0 && (s.reps ?? 0) > 0);
+  const sets = counted(session.sets);
   if (!sets.length) return 0;
   switch (metric) {
     case "heaviest":
@@ -46,9 +49,9 @@ export function sessionValue(session: ExerciseSession, metric: Metric) {
 
 // The bests over every session: the heaviest weight, the best estimated
 // one-rep max, the best single set (weight × reps), the most moved in one
-// session.
+// session. (Warm-ups don't count.)
 export function personalRecords(sessions: ExerciseSession[]) {
-  const sets = sessions.flatMap((s) => s.sets).filter((s) => (s.weight ?? 0) > 0 && (s.reps ?? 0) > 0);
+  const sets = counted(sessions.flatMap((s) => s.sets));
   const bestSet = sets.reduce<DoneSet | null>((best, s) => (!best || volume(s) > volume(best) ? s : best), null);
   return {
     heaviest: sets.length ? Math.max(...sets.map((s) => s.weight ?? 0)) : null,

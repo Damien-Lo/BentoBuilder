@@ -43,7 +43,7 @@ const ALL_PARTS: Slug[] = ["abs", "adductors", "ankles", "biceps", "calves", "ch
 // Whether it's the phone's dark theme or the web's. (The drawing's own
 // colours aren't styles, so the web's dark mode can't turn them: it's told
 // which theme it's in.)
-function useDark() {
+export function useDark() {
   const { dark } = useOrbitTheme();
   const webDark = useWebTheme().dark;
   return Platform.OS === "web" ? webDark : dark;
@@ -88,6 +88,43 @@ export function MuscleMap({ primary, secondary = [], size = 1, keyless }: { prim
       </View>
     </View>
   );
+}
+
+// How much each muscle's been trained, on the body front and back: the
+// more sets, the stronger the colour (four steps, up to the most-trained
+// muscle). `sets`: by the library's muscles.
+export function MuscleHeatMap({ sets, size = 1 }: { sets: Record<string, number>; size?: number }) {
+  const dark = useDark();
+  const muscle = dark ? "#3A4150" : "#CDD3DB";
+  const skin = dark ? "#4A5263" : "#E2E6EB";
+  // (Several muscles can be one part of the drawing: their sets together.)
+  const bySlug = new Map<Slug, number>();
+  for (const [m, n] of Object.entries(sets)) for (const slug of PARTS[m] ?? []) bySlug.set(slug, (bySlug.get(slug) ?? 0) + n);
+  const most = Math.max(0, ...bySlug.values());
+  const data: ExtendedBodyPart[] = ALL_PARTS.map((slug) => {
+    const n = bySlug.get(slug) ?? 0;
+    return { slug, color: n > 0 && most ? heatColor(n / most, dark) : ["head", "hair", "hands", "feet", "ankles", "knees"].includes(slug) ? skin : muscle };
+  });
+  const body = { data, scale: 0.62 * size, border: "none", defaultStroke: dark ? "#1F242D" : "#FFFFFF", defaultStrokeWidth: 1 } as const;
+  return (
+    <View style={{ flexDirection: "row", justifyContent: "center" }}>
+      <View pointerEvents="none">
+        <Body {...body} side="front" />
+      </View>
+      <View pointerEvents="none">
+        <Body {...body} side="back" />
+      </View>
+    </View>
+  );
+}
+
+// A share of the most (0–1) as one of four steps from the body's grey to
+// the primary colour.
+export function heatColor(share: number, dark: boolean) {
+  const step = share > 0.75 ? 1 : share > 0.5 ? 0.78 : share > 0.25 ? 0.56 : 0.34;
+  const from = hexRgb(dark ? "#3A4150" : "#CDD3DB").split(",").map(Number);
+  const to = hexRgb(MAIN).split(",").map(Number);
+  return `#${from.map((f, i) => Math.round(f + (to[i] - f) * step).toString(16).padStart(2, "0")).join("")}`;
 }
 
 // An exercise as a round icon: its muscle map, close up on where its primary

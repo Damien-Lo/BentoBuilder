@@ -99,12 +99,13 @@ function glance(id: SectionId, t: Today): { value: string; ring: number; caption
         caption: t.latestWeight ? `${Math.round(t.weightProgress * 100)}% of the way to your goal` : "No weigh-ins yet",
       };
     case "gym": {
-      const { week, next } = t.gym;
-      const done = week.sessions.length;
+      // (The ring: the days of the week trained on.)
+      const done = t.gym.week.sessions.length;
+      const when = t.gym.last ? dayLabel(t.gym.last.finishedAt) : "";
       return {
-        value: week.target ? `${done}/${week.target}` : String(done),
-        ring: week.target ? Math.min(1, done / week.target) : done ? 1 : 0,
-        caption: t.gym.active ? `${t.gym.active.name} under way` : next ? `${next.workout.name} ${next.when === "Next" ? "is next" : next.when.toLowerCase()}` : done ? `${done} workout${done === 1 ? "" : "s"} this week` : "No workouts yet",
+        value: String(done),
+        ring: t.gym.week.days.filter((d) => d.done).length / 7,
+        caption: t.gym.active ? `${t.gym.active.name} under way` : t.gym.last ? `Last: ${t.gym.last.name}, ${when === "Today" || when === "Yesterday" ? when.toLowerCase() : when}` : "No workouts yet",
       };
     }
     case "tasks":
@@ -371,20 +372,20 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
       : quiet("Nothing due — nice.");
     actions = <Action label="New task" icon="add" onPress={() => go("/lists")} colors={colors} />;
   } else if (section.id === "gym") {
-    // (What's up next — or under way — then the last one.)
-    const { week, next, last, active } = t.gym;
+    // (This week, what's planned today — nothing yet — or the one under
+    // way, then the last one.)
+    const { week, last, active } = t.gym;
     const lastTotals = last ? sessionTotals(last) : null;
     body = (
       <>
         <Text style={{ fontSize: 24, fontWeight: "700", color: colors.text }}>
-          {week.sessions.length}
-          {week.target ? ` of ${week.target}` : ""} <Text style={{ fontSize: 14, fontWeight: "400", color: colors.muted }}>workout{(week.target ?? week.sessions.length) === 1 ? "" : "s"} this week</Text>
+          {week.sessions.length} <Text style={{ fontSize: 14, fontWeight: "400", color: colors.muted }}>workout{week.sessions.length === 1 ? "" : "s"} this week</Text>
         </Text>
         {active ? (
           <Row icon="barbell" iconColor={colors.success} title={active.name} detail="Under way" onPress={() => go("/gym/session" as Href)} colors={colors} />
-        ) : next ? (
-          <Row icon="play-circle-outline" iconColor={colors.text} title={next.workout.name} detail={`Up next · ${next.when}`} onPress={() => go(`/gym/workout/${next.workout._id}` as Href)} colors={colors} />
-        ) : null}
+        ) : (
+          <Row icon="calendar-clear-outline" title="Nothing planned today" colors={colors} />
+        )}
         {last && lastTotals && (
           <Row
             icon="checkmark-circle-outline"
@@ -394,13 +395,10 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
             colors={colors}
           />
         )}
-        {!next && !last && !active && quiet("No workouts yet — build one to get started.")}
       </>
     );
     actions = active ? (
       <Action label="Resume" icon="play" onPress={() => go("/gym/session" as Href)} colors={colors} />
-    ) : next?.when === "Today" ? (
-      <Action label={`Start ${next.workout.name}`} icon="play" onPress={() => go(`/gym/session?workout=${next.workout._id}` as Href)} colors={colors} />
     ) : null;
   } else {
     body = quiet("Your files, notes, documents and plans, all in one place — on its way.");
