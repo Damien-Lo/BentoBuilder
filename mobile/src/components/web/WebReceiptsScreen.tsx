@@ -6,14 +6,14 @@ import { ActivityIndicator, Alert, Modal, Pressable, Text, View } from "react-na
 
 import { compactDate } from "@/src/components/web/fields";
 import { NoPhoneYet } from "@/src/components/devices/NoPhoneYet";
+import { BackLink } from "@/src/components/pantry/web/orbitWeb";
 import { WebcamModal, type WebPhoto } from "@/src/components/web/WebcamModal";
 import { hasPhone, requestCapture, watchCapture } from "@/src/services/deviceApi";
 import { createReceiptDraftFrom, finishReceiptDraft, getReceiptDrafts, type ReceiptDraftSummary } from "@/src/services/receiptApi";
+import { OrbitPage, SECTION_PALETTE, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { photoUri } from "@/src/utils/photos";
 
-import { Button, Card, PageTitle, WEB, WebPage } from "./ui";
-
-type Hover = { hovered?: boolean };
+import { Button, Card, hoverable, PageTitle, WebPage } from "./ui";
 
 // Receipts on the desktop: scans waiting to be reviewed. A receipt is
 // photographed on the phone and saved with "Review on desktop"; it's read
@@ -25,16 +25,21 @@ type Hover = { hovered?: boolean };
 // webcam, or a file), or taken on the phone this computer's paired with
 // (Settings → Devices) — the phone's "computer's camera" screen opens its
 // camera for it.
+//
+// In Orbit's look, in the Kitchen's orange (under the Pantry in the
+// desktop's tabs, with a way back to it over the title).
 
-const STATUS: Record<string, { label: string; fg: string; bg: string }> = {
-  parsing: { label: "Reading…", fg: "#B45309", bg: "#FEF3C7" },
-  ready: { label: "Ready to review", fg: "#1D4ED8", bg: "#DBEAFE" },
-  reviewing: { label: "In progress", fg: "#7C3AED", bg: "#EDE9FE" },
-  failed: { label: "Couldn't read", fg: "#B91C1C", bg: "#FEE2E2" },
-};
+const statusOf = (c: OrbitColors): Record<string, { label: string; fg: string; bg: string }> => ({
+  parsing: { label: "Reading…", fg: c.warning, bg: "#FEF3C7" },
+  ready: { label: "Ready to review", fg: c.ink, bg: SECTION_PALETTE.kitchen.tint },
+  reviewing: { label: "In progress", fg: c.onPill, bg: c.pill },
+  failed: { label: "Couldn't read", fg: c.danger, bg: "#FEE2E2" },
+});
 
 export function WebReceiptsScreen() {
   const router = useRouter();
+  const { colors: c } = useOrbitTheme();
+  const STATUS = statusOf(c);
   const [drafts, setDrafts] = useState<ReceiptDraftSummary[] | null>(null);
 
   const load = useCallback(() => {
@@ -101,7 +106,9 @@ export function WebReceiptsScreen() {
   }
 
   return (
+    <OrbitPage>
     <WebPage>
+      <BackLink label="Pantry" onPress={() => router.navigate("/PantryMainPage")} />
       <PageTitle
         title="Receipts"
         subtitle={drafts?.length ? `${drafts.length} to review` : "Scanned on your phone, reviewed here"}
@@ -114,18 +121,18 @@ export function WebReceiptsScreen() {
       />
 
       {drafts === null ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={WEB.blue} />
+        <ActivityIndicator style={{ marginTop: 40 }} color={c.ink} />
       ) : drafts.length === 0 ? (
         <Card>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <View style={{ width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: WEB.blueSoft }}>
-              <Ionicons name="receipt-outline" size={20} color={WEB.blue} />
+            <View style={{ width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: SECTION_PALETTE.kitchen.tint }}>
+              <Ionicons name="receipt-outline" size={21} color={c.ink} />
             </View>
-            <Text style={{ marginLeft: 12, fontSize: 15, fontWeight: "700", color: WEB.text }}>No receipts waiting</Text>
+            <Text style={{ marginLeft: 12, fontSize: 16, fontWeight: "700", color: c.text }}>No receipts waiting</Text>
           </View>
-          <Text style={{ marginTop: 10, fontSize: 13, lineHeight: 20, color: WEB.muted }}>
-            Use <Text style={{ fontWeight: "700", color: WEB.body }}>Take it with my phone</Text> or <Text style={{ fontWeight: "700", color: WEB.body }}>From this computer</Text> (webcam or a file) above, or on your phone scan
-            a receipt from the Pantry or the Grocery list and choose <Text style={{ fontWeight: "700", color: WEB.body }}>Review on desktop</Text>. It shows up here while it&apos;s read, then
+          <Text style={{ marginTop: 10, fontSize: 13, lineHeight: 20, color: c.muted }}>
+            Use <Text style={{ fontWeight: "700", color: c.text }}>Take it with my phone</Text> or <Text style={{ fontWeight: "700", color: c.text }}>From this computer</Text> (webcam or a file) above, or on your phone scan
+            a receipt from the Pantry or the Grocery list and choose <Text style={{ fontWeight: "700", color: c.text }}>Review on desktop</Text>. It shows up here while it&apos;s read, then
             you can check each line against the photo and add it all to the pantry.
           </Text>
         </Card>
@@ -141,29 +148,29 @@ export function WebReceiptsScreen() {
                 key={draft._id}
                 disabled={!canOpen}
                 onPress={() => open(draft)}
-                style={({ hovered }: Hover) => ({
+                style={hoverable(({ hovered }) => ({
                   width: 260,
-                  borderRadius: 16,
+                  borderRadius: 18,
                   overflow: "hidden",
                   borderWidth: 1,
-                  borderColor: hovered && canOpen ? "#93C5FD" : WEB.border,
-                  backgroundColor: WEB.card,
-                  boxShadow: hovered && canOpen ? "0 8px 20px rgba(15,23,42,0.10)" : undefined,
-                })}
+                  borderColor: hovered && canOpen ? c.selectedRing : c.border,
+                  backgroundColor: c.surface,
+                  boxShadow: hovered && canOpen ? "0 8px 20px rgba(15,23,42,0.08)" : undefined,
+                }))}
               >
-                <View style={{ height: 180, backgroundColor: "#E2E8F0" }}>
+                <View style={{ height: 180, backgroundColor: c.track }}>
                   {uri ? <Image source={{ uri }} style={{ width: "100%", height: "100%" }} contentFit="cover" contentPosition="top" transition={120} /> : null}
                 </View>
                 <View style={{ padding: 14 }}>
                   <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: "700", color: WEB.text }}>
+                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, fontWeight: "700", color: c.text }}>
                       {draft.storeName || (draft.status === "parsing" ? "New receipt" : "Receipt")}
                     </Text>
                     <Pressable onPress={() => discard(draft)} hitSlop={8} accessibilityLabel="Discard this receipt">
-                      {({ hovered }: Hover) => <Ionicons name="trash-outline" size={16} color={hovered ? "#DC2626" : WEB.faint} />}
+                      {({ hovered }: { hovered?: boolean }) => <Ionicons name="trash-outline" size={16} color={hovered ? c.danger : c.faint} />}
                     </Pressable>
                   </View>
-                  <Text style={{ marginTop: 2, fontSize: 12, color: WEB.muted }}>
+                  <Text style={{ marginTop: 2, fontSize: 12, color: c.muted }}>
                     {[when, draft.lineCount ? `${draft.lineCount} line${draft.lineCount === 1 ? "" : "s"}` : null, `scanned ${compactDate(draft.createdAt.slice(0, 10))}`].filter(Boolean).join(" · ")}
                   </Text>
                   <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
@@ -171,10 +178,10 @@ export function WebReceiptsScreen() {
                       {draft.status === "parsing" && <ActivityIndicator size="small" color={state.fg} style={{ marginRight: 5, transform: [{ scale: 0.7 }] }} />}
                       <Text style={{ fontSize: 11, fontWeight: "700", color: state.fg }}>{state.label}</Text>
                     </View>
-                    {canOpen && <Text style={{ marginLeft: "auto", fontSize: 12, fontWeight: "600", color: WEB.blue }}>{draft.reviewing ? "Continue" : "Review"} ›</Text>}
+                    {canOpen && <Text style={{ marginLeft: "auto", fontSize: 12, fontWeight: "600", color: c.accent }}>{draft.reviewing ? "Continue" : "Review"} ›</Text>}
                   </View>
                   {draft.status === "failed" && !!draft.error && (
-                    <Text numberOfLines={2} style={{ marginTop: 6, fontSize: 11, color: WEB.faint }}>
+                    <Text numberOfLines={2} style={{ marginTop: 6, fontSize: 11, color: c.faint }}>
                       {draft.error}
                     </Text>
                   )}
@@ -189,17 +196,17 @@ export function WebReceiptsScreen() {
 
       {/* Taking one with the phone */}
       <Modal visible={!!phone} transparent animationType="fade" onRequestClose={() => (phone?.stop?.(), setPhone(null))}>
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: "rgba(15,23,42,0.45)" }}>
-          <View style={{ width: "100%", maxWidth: 440, alignItems: "center", padding: 26, borderRadius: 20, backgroundColor: WEB.card }}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: c.scrim }}>
+          <View style={{ width: "100%", maxWidth: 440, alignItems: "center", padding: 26, borderRadius: 20, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
             {phone && (() => {
               const open = ["waiting", "capturing"].includes(phone.status);
               return (
                 <>
-                  {open ? <ActivityIndicator color={WEB.blue} /> : <Ionicons name="close-circle-outline" size={30} color={WEB.faint} />}
-                  <Text style={{ marginTop: 12, fontSize: 17, fontWeight: "700", color: WEB.text }}>
+                  {open ? <ActivityIndicator color={c.ink} /> : <Ionicons name="close-circle-outline" size={30} color={c.faint} />}
+                  <Text style={{ marginTop: 12, fontSize: 17, fontWeight: "700", color: c.text }}>
                     {phone.status === "waiting" ? "Waiting for your phone…" : phone.status === "capturing" ? "Camera open on your phone" : "That didn't work"}
                   </Text>
-                  <Text style={{ marginTop: 6, textAlign: "center", fontSize: 13, lineHeight: 19, color: WEB.muted }}>
+                  <Text style={{ marginTop: 6, textAlign: "center", fontSize: 13, lineHeight: 19, color: c.muted }}>
                     {phone.status === "waiting"
                       ? "On your phone, keep Orbit open at Settings → Devices → Be my computer's camera: the camera opens by itself."
                       : phone.status === "capturing"
@@ -218,12 +225,12 @@ export function WebReceiptsScreen() {
 
       {/* No phone on the account yet */}
       <Modal visible={pairing} transparent animationType="fade" onRequestClose={() => setPairing(false)}>
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: "rgba(15,23,42,0.45)" }}>
-          <View style={{ width: "100%", maxWidth: 680, padding: 24, borderRadius: 20, backgroundColor: WEB.card }}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: c.scrim }}>
+          <View style={{ width: "100%", maxWidth: 680, padding: 24, borderRadius: 20, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
-              <Text style={{ flex: 1, fontSize: 17, fontWeight: "700", color: WEB.text }}>Use your phone&apos;s camera</Text>
+              <Text style={{ flex: 1, fontSize: 17, fontWeight: "700", color: c.text }}>Use your phone&apos;s camera</Text>
               <Pressable onPress={() => setPairing(false)} accessibilityLabel="Close">
-                <Ionicons name="close" size={22} color={WEB.muted} />
+                <Ionicons name="close" size={22} color={c.muted} />
               </Pressable>
             </View>
             {pairing && <NoPhoneYet onFound={() => setPairing(false)} />}
@@ -231,5 +238,6 @@ export function WebReceiptsScreen() {
         </View>
       </Modal>
     </WebPage>
+    </OrbitPage>
   );
 }

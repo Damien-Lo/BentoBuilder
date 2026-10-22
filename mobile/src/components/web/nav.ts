@@ -47,16 +47,16 @@ export const WEB_SECTIONS: WebSection[] = [
     id: "kitchen",
     label: "Kitchen",
     icon: "restaurant-outline",
-    path: "/kitchen",
-    also: ["/archive"],
+    // (The phone's four tabs: Log, the week plan; Recipes; Pantry, with the
+    // receipts; and Plan, the hub for the menu, prep & shopping and the
+    // grocery list — the old Overview's tasks on it.)
+    path: "/planner",
+    also: ["/kitchen"],
     tabs: [
-      { label: "Overview", path: "/kitchen", exact: true, also: ["/overview"] },
-      { label: "Week plan", path: "/planner", also: ["/menu"] },
-      { label: "Prep & shopping", path: "/kitchen/needs" },
-      { label: "Recipes & meals", path: "/RecipesMainPage", also: ["/recipes", "/meals", "/restaurant-meals"] },
-      { label: "Pantry", path: "/PantryMainPage", also: ["/pantry", "/ingredients"] },
-      { label: "Grocery list", path: "/grocery-list" },
-      { label: "Receipts", path: "/receipts" },
+      { label: "Log", path: "/planner" },
+      { label: "Recipes", path: "/RecipesMainPage", also: ["/recipes", "/meals", "/restaurant-meals", "/archive"] },
+      { label: "Pantry", path: "/PantryMainPage", also: ["/pantry", "/ingredients", "/receipts"] },
+      { label: "Plan", path: "/plan", also: ["/kitchen", "/overview", "/menu", "/grocery-list"] },
     ],
   },
   {
@@ -164,7 +164,7 @@ export function resolveWebRoute(pathname: string): { section: WebSection | null;
 
 // Pages laid out for the desktop, given the whole pane. Everything else is
 // a phone-shaped page, shown as a column in the middle.
-const DESKTOP_PAGES = ["/", "/calendar", "/calendar/meal-times", "/calendar/sessions", "/kitchen", "/kitchen/needs", "/grocery-list", "/planner", "/RecipesMainPage", "/PantryMainPage", "/health", "/lists", "/lists/tasks", "/lists/checklists", "/lists/shopping", "/receipts"];
+const DESKTOP_PAGES = ["/", "/calendar", "/calendar/meal-times", "/calendar/sessions", "/kitchen", "/kitchen/needs", "/plan", "/menu", "/grocery-list", "/planner", "/RecipesMainPage", "/PantryMainPage", "/health", "/lists", "/lists/tasks", "/lists/checklists", "/lists/shopping", "/receipts"];
 
 // Pages for one thing (its id in the path) that have a desktop layout.
 const DESKTOP_PAGES_UNDER = [

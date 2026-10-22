@@ -146,9 +146,9 @@ function PhonePlannerScreen() {
   const { colors: oc, dark } = useOrbitTheme();
   // The add sheet in a desktop browser (it opens from the week plan there).
   const wideAdd = useWideWeb();
-  // The add sheet and an item's info in Orbit's look on the phone (`o`);
-  // in a desktop browser they keep the older look, like the week plan.
-  const o = wideAdd ? null : oc;
+  // The add sheet and an item's info in Orbit's look (`o`) — in a desktop
+  // browser too, like the week plan it opens from.
+  const o = oc;
   // (Shared by those sheets: a small heading, a card, a field, the main button.)
   const sheetEyebrow = { fontSize: 11, fontWeight: "700" as const, letterSpacing: 1.2, color: oc.faint, marginBottom: 8, marginLeft: 4 };
   const sheetCard = { backgroundColor: oc.surface, borderRadius: 18, borderWidth: 1, borderColor: oc.border };

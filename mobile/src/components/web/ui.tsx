@@ -19,7 +19,7 @@ export const hoverable = <T,>(style: (state: Hover) => T): T | ((state: Hover) =
 
 // The chosen segment of a Segmented control: raised off its track in
 // either theme (white on grey, or a lighter slate on the dark).
-const SEGMENT_ON = themeColor("255,255,255", "55,70,96");
+const SEGMENT_ON = themeColor("255,255,255", "51,57,70");
 
 export const WEB = {
   page: "#F8FAFC",
@@ -41,19 +41,22 @@ export const WEB = {
 // A scrolling page with comfortable margins, its content held to a width
 // that still reads well on a very wide monitor.
 export function WebPage({ children, maxWidth = 1480 }: { children: ReactNode; maxWidth?: number }) {
+  // (On an Orbit page, its canvas.)
+  const o = useOrbitPage();
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: WEB.page }} contentContainerStyle={{ alignItems: "center", padding: 24, paddingBottom: 48 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: o?.canvas ?? WEB.page }} contentContainerStyle={{ alignItems: "center", padding: 24, paddingBottom: 48 }}>
       <View style={{ width: "100%", maxWidth }}>{children}</View>
     </ScrollView>
   );
 }
 
 export function PageTitle({ title, subtitle, right }: { title: string; subtitle?: string; right?: ReactNode }) {
+  const o = useOrbitPage();
   return (
     <View style={{ flexDirection: "row", alignItems: "flex-end", marginBottom: 18 }}>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 26, fontWeight: "700", color: WEB.text }}>{title}</Text>
-        {!!subtitle && <Text style={{ marginTop: 2, fontSize: 14, color: WEB.muted }}>{subtitle}</Text>}
+        <Text style={{ fontSize: o ? 28 : 26, fontWeight: o ? "800" : "700", letterSpacing: o ? -0.5 : 0, color: o?.text ?? WEB.text }}>{title}</Text>
+        {!!subtitle && <Text style={{ marginTop: 2, fontSize: 14, color: o?.muted ?? WEB.muted }}>{subtitle}</Text>}
       </View>
       {right}
     </View>
@@ -178,6 +181,10 @@ export function Button({
   small?: boolean;
 }) {
   const primary = kind === "primary";
+  // (On an Orbit page: the primary filled in its accent, the other white
+  // with a hairline.)
+  const o = useOrbitPage();
+  const ink = primary ? (o?.onInk ?? "#FFFFFF") : (o?.text ?? WEB.body);
   return (
     <Pressable
       onPress={onPress}
@@ -186,14 +193,17 @@ export function Button({
         alignItems: "center",
         height: small ? 30 : 36,
         paddingHorizontal: small ? 10 : 14,
-        borderRadius: 10,
+        borderRadius: o ? 12 : 10,
         borderWidth: primary ? 0 : 1,
-        borderColor: "#CBD5E1",
-        backgroundColor: primary ? (hovered ? WEB.blueDark : WEB.blue) : hovered ? "#F1F5F9" : "#FFFFFF",
+        borderColor: o?.border ?? "#CBD5E1",
+        backgroundColor: o
+          ? primary ? o.ink : hovered ? o.pill : o.surface
+          : primary ? (hovered ? WEB.blueDark : WEB.blue) : hovered ? "#F1F5F9" : "#FFFFFF",
+        opacity: o && primary && hovered ? 0.88 : 1,
       })}
     >
-      {!!icon && <Ionicons name={icon} size={small ? 14 : 16} color={primary ? "#FFFFFF" : WEB.body} style={{ marginRight: 6 }} />}
-      <Text style={{ fontSize: 13, fontWeight: "600", color: primary ? "#FFFFFF" : WEB.body }}>{label}</Text>
+      {!!icon && <Ionicons name={icon} size={small ? 14 : 16} color={ink} style={{ marginRight: 6 }} />}
+      <Text style={{ fontSize: 13, fontWeight: "600", color: ink }}>{label}</Text>
     </Pressable>
   );
 }
@@ -221,7 +231,9 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
   // (On an Orbit page: its track, the chosen one in its accent.)
   const o = useOrbitPage();
   return (
-    <View style={{ flexDirection: "row", borderRadius: 10, backgroundColor: o?.pill ?? "#EEF2F7", padding: 3 }}>
+    // (A hairline round its track on an Orbit page: the track alone is
+    // close to the canvas, in the dark especially.)
+    <View style={{ flexDirection: "row", borderRadius: 10, backgroundColor: o?.pill ?? "#EEF2F7", padding: 3, borderWidth: o ? 1 : 0, borderColor: o?.border }}>
       {options.map((option) => {
         const on = option.value === value;
         return (

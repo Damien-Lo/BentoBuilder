@@ -256,7 +256,7 @@ export function WebHomeScreen() {
         </Card>
 
         {/* Kitchen: what needs doing today and tomorrow */}
-        <Card title="Kitchen tasks" subtitle="Today and tomorrow" action={<CardLink label="Kitchen" onPress={() => router.navigate("/kitchen")} />} style={{ flex: 1, minWidth: 320 }} padded={false}>
+        <Card title="Kitchen tasks" subtitle="Today and tomorrow" action={<CardLink label="Plan" onPress={() => router.navigate("/plan")} />} style={{ flex: 1, minWidth: 320 }} padded={false}>
           <KitchenTasks plan={kitchenPlan} days={1} />
         </Card>
 

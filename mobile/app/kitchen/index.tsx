@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 
 import { KitchenIssues, KitchenTasks } from "@/src/components/planner/KitchenTasks";
@@ -75,6 +75,9 @@ export function KitchenOverview({ inTabs = false }: { inTabs?: boolean }) {
   );
 }
 
+// (In a desktop browser the Overview is part of Kitchen → Plan.)
 export default function KitchenOverviewScreen() {
+  const wide = useWideWeb();
+  if (wide) return <Redirect href="/plan" />;
   return <KitchenOverview />;
 }

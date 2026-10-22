@@ -28,9 +28,12 @@ export type RGB = readonly [number, number, number];
 export type WebThemeChoice = "system" | "light" | "dark";
 
 // --- The dark palette ---
+//
+// Orbit's dark (theme/orbit.tsx DARK, as on the phone): near-black, not
+// navy, with greys that are only faintly cool.
 
-const PAGE: RGB = [11, 17, 32]; // behind everything (slate-50 in the light theme)
-const SURFACE: RGB = [19, 28, 46]; // cards, bars, panels (white)
+const PAGE: RGB = [13, 15, 20]; // behind everything (slate-50, or Orbit's canvas, in the light theme)
+const SURFACE: RGB = [23, 26, 33]; // cards, bars, panels (white)
 
 // Neutrals (white, the slates and greys) by how light the original is:
 // [lightness, dark colour]. Between two rows the colour is blended.
@@ -39,19 +42,19 @@ const NEUTRAL: Record<Role, readonly (readonly [number, RGB])[]> = {
   // the light theme's dark blocks stay visible as blocks.
   bg: [
     [1, SURFACE],
-    [0.99, [23, 33, 52]],
+    [0.99, [26, 29, 37]],
     [0.98, PAGE],
-    [0.961, [27, 38, 57]],
-    [0.951, [31, 43, 63]],
-    [0.914, [37, 50, 72]],
-    [0.839, [50, 65, 91]],
-    [0.651, [84, 98, 122]],
-    [0.455, [88, 102, 127]],
-    [0.337, [72, 86, 110]],
-    [0.267, [62, 76, 99]],
-    [0.173, [55, 68, 91]],
-    [0.112, [51, 65, 85]],
-    [0.02, [40, 52, 71]],
+    [0.961, [30, 34, 43]],
+    [0.951, [35, 40, 51]],
+    [0.914, [38, 43, 53]],
+    [0.839, [51, 57, 70]],
+    [0.651, [80, 88, 102]],
+    [0.455, [86, 94, 108]],
+    [0.337, [72, 79, 92]],
+    [0.267, [62, 68, 80]],
+    [0.173, [55, 61, 72]],
+    [0.112, [51, 57, 68]],
+    [0.02, [40, 45, 54]],
   ],
   // Dark text becomes light and keeps its rank: titles brightest, hints
   // dimmest. Text that was already light (on a coloured button) stays.
@@ -68,28 +71,41 @@ const NEUTRAL: Record<Role, readonly (readonly [number, RGB])[]> = {
   ],
   bd: [
     [1, SURFACE],
-    [0.98, [24, 34, 52]],
-    [0.961, [31, 42, 61]],
-    [0.914, [43, 56, 78]],
-    [0.839, [58, 72, 96]],
-    [0.651, [85, 99, 123]],
-    [0.455, [100, 116, 139]],
-    [0.337, [133, 147, 168]],
-    [0.267, [160, 172, 190]],
-    [0.112, [203, 213, 225]],
+    [0.98, [28, 31, 39]],
+    [0.961, [33, 37, 46]],
+    [0.914, [38, 43, 53]],
+    [0.839, [51, 57, 70]],
+    [0.651, [80, 88, 102]],
+    [0.455, [100, 110, 126]],
+    [0.337, [133, 142, 156]],
+    [0.267, [160, 168, 180]],
+    [0.112, [203, 210, 220]],
     [0, [226, 232, 240]],
   ],
 };
 
 // Colours that don't follow the rules above.
+// Orbit's own light colours land on exactly its dark ones (orbit.tsx LIGHT
+// → DARK, and each section's): its canvas; the main button, filled in the
+// light colour in the dark, as on the phone; and the text on that button,
+// dark on it there. (`#0F172B` and `#FFFFFE`, a step off black and white,
+// are Orbit's button and its text — so that other blacks and whites keep
+// to the rules above.)
 const EXACT: Record<Role, Record<string, RGB>> = {
   bg: {
     // React Navigation's own page colour, behind every screen.
     "242,242,242": PAGE,
     // A barely-blue white used for table headings.
-    "248,251,255": [23, 33, 52],
+    "248,251,255": [26, 29, 37],
+    "244,243,240": PAGE, // Orbit's canvas
+    "15,23,43": [241, 245, 249], // the main button (the home's, black)
+    "194,71,26": [242, 138, 60], // the Kitchen's, orange
+    "44,93,201": [95, 162, 242], // the Calendar's, blue
+    "90,68,201": [160, 140, 247], // Tasks', violet
   },
-  fg: {},
+  fg: {
+    "255,255,254": [13, 15, 20], // the text on a main button
+  },
   bd: {},
 };
 

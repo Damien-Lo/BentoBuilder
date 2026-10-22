@@ -5,17 +5,20 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { addDays } from "@/src/components/calendar/calendarUtils";
 import { friendlyDate } from "@/src/components/todo/theme";
-import { Button, Empty, PageTitle, Row, Segmented, Stat, WEB, WebPage } from "@/src/components/web/ui";
+import { Button, Empty, hoverable, PageTitle, Row, Segmented, WebPage } from "@/src/components/web/ui";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import type { PantryItem } from "@/src/types/pantry";
+import { OrbitPage, useOrbitTheme } from "@/src/theme/orbit";
 import { todayStr } from "@/src/utils/mealPlan";
+
+import { OrbitStat } from "./orbitWeb";
 
 // The pantry in a desktop browser: everything in stock as one sortable,
 // searchable table (the phone groups it by location and shows a shelf at a
-// time), with the ingredient catalogue as a second table.
+// time), with the ingredient catalogue as a second table. In Orbit's look,
+// in the Kitchen's orange.
 
-type Hover = { hovered?: boolean };
 type View_ = "stock" | "ingredients";
 type Status = "all" | "soon" | "expired";
 type SortKey = "name" | "location" | "expires" | "bought";
@@ -27,6 +30,7 @@ const nameOf = (value: unknown): string =>
 
 export function WebPantryScreen() {
   const router = useRouter();
+  const { colors: c } = useOrbitTheme();
   const today = todayStr();
   const soon = addDays(today, 7);
   const [items, setItems] = useState<PantryItem[]>([]);
@@ -86,27 +90,29 @@ export function WebPantryScreen() {
   const sortBy = (key: SortKey) => setSort((prev) => (prev.key === key ? { key, dir: prev.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
 
   return (
+    <OrbitPage>
     <WebPage>
       <PageTitle
         title="Pantry"
         subtitle={view === "stock" ? "Everything in stock" : "Every ingredient the app knows, in stock or not"}
         right={
           <View style={{ flexDirection: "row", gap: 8 }}>
+            <Button label="Receipts" icon="receipt-outline" onPress={() => router.push("/receipts")} />
             <Button label="New ingredient" icon="nutrition-outline" onPress={() => router.push("/ingredients/add_manual")} />
             <Button label="Add to pantry" icon="add" kind="primary" onPress={() => router.push("/pantry/add_by_ingredient")} />
           </View>
         }
       />
 
-      <Row>
-        <Stat label="In stock" value={String(inStock.length)} sub={`across ${locations.length} location${locations.length === 1 ? "" : "s"}`} icon="basket-outline" />
-        <Stat label="Expired" value={String(expired.length)} sub="past their date" tone={expired.length ? "bad" : "default"} icon="alert-circle-outline" />
-        <Stat label="Expiring soon" value={String(expiring.length)} sub="within 7 days" tone={expiring.length ? "warn" : "default"} icon="time-outline" />
-        <Stat label="Stock value" value={value > 0 ? `$${value.toFixed(0)}` : "—"} sub="what the items in stock cost" icon="pricetag-outline" />
+      <Row gap={12}>
+        <OrbitStat label="In stock" value={String(inStock.length)} sub={`across ${locations.length} location${locations.length === 1 ? "" : "s"}`} icon="basket-outline" />
+        <OrbitStat label="Expired" value={String(expired.length)} sub="past their date" tone={expired.length ? "bad" : undefined} icon="alert-circle-outline" />
+        <OrbitStat label="Expiring soon" value={String(expiring.length)} sub="within 7 days" tone={expiring.length ? "warn" : undefined} icon="time-outline" />
+        <OrbitStat label="Stock value" value={value > 0 ? `$${value.toFixed(0)}` : "—"} sub="what the items in stock cost" icon="pricetag-outline" />
       </Row>
 
       {/* Filters */}
-      <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 16, marginBottom: 12 }}>
         <Segmented
           options={[
             { value: "stock", label: "In stock" },
@@ -115,14 +121,14 @@ export function WebPantryScreen() {
           value={view}
           onChange={setView}
         />
-        <View style={{ flexDirection: "row", alignItems: "center", height: 36, width: 280, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1, borderColor: "#CBD5E1", backgroundColor: "#FFFFFF" }}>
-          <Ionicons name="search" size={15} color={WEB.faint} />
+        <View style={{ flexDirection: "row", alignItems: "center", height: 36, width: 280, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
+          <Ionicons name="search" size={15} color={c.faint} />
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder={view === "stock" ? "Search the pantry" : "Search ingredients"}
-            placeholderTextColor={WEB.faint}
-            style={{ flex: 1, marginLeft: 8, fontSize: 14, color: WEB.text, outlineStyle: "none" } as object}
+            placeholderTextColor={c.faint}
+            style={{ flex: 1, marginLeft: 8, fontSize: 14, color: c.text, outlineStyle: "none" } as object}
           />
         </View>
         {view === "stock" && (
@@ -143,17 +149,15 @@ export function WebPantryScreen() {
                   <Pressable
                     key={name ?? "all"}
                     onPress={() => setLocation(name)}
-                    style={({ hovered }: Hover) => ({
+                    style={hoverable(({ hovered }) => ({
                       height: 30,
-                      paddingHorizontal: 12,
+                      paddingHorizontal: 13,
                       justifyContent: "center",
                       borderRadius: 15,
-                      borderWidth: 1,
-                      borderColor: on ? WEB.blue : "#CBD5E1",
-                      backgroundColor: on ? WEB.blueSoft : hovered ? "#F1F5F9" : "#FFFFFF",
-                    })}
+                      backgroundColor: on ? c.ink : hovered ? c.track : c.pill,
+                    }))}
                   >
-                    <Text style={{ fontSize: 12, fontWeight: "600", color: on ? WEB.blueDark : WEB.body }}>{name ?? "Everywhere"}</Text>
+                    <Text style={{ fontSize: 12.5, fontWeight: on ? "700" : "600", color: on ? c.onInk : c.onPill }}>{name ?? "Everywhere"}</Text>
                   </Pressable>
                 );
               })}
@@ -163,10 +167,10 @@ export function WebPantryScreen() {
       </View>
 
       {/* Table */}
-      <View style={{ backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, borderRadius: 16, overflow: "hidden" }}>
+      <View style={{ backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 18, overflow: "hidden" }}>
         {view === "stock" ? (
           <>
-            <View style={{ flexDirection: "row", backgroundColor: "#F8FAFC", borderBottomWidth: 1, borderBottomColor: WEB.border }}>
+            <View style={{ flexDirection: "row", backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border }}>
               <HeadCell label="Item" flex={2.4} sort={sort} sortKey="name" onSort={sortBy} />
               <HeadCell label="Category" flex={1.2} />
               <HeadCell label="Location" flex={1.1} sort={sort} sortKey="location" onSort={sortBy} />
@@ -182,14 +186,14 @@ export function WebPantryScreen() {
                 <Pressable
                   key={item._id}
                   onPress={() => router.push({ pathname: "/pantry/edit/[id]", params: { id: item._id } })}
-                  style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", minHeight: 44, borderBottomWidth: 1, borderBottomColor: WEB.line, backgroundColor: hovered ? "#F8FAFC" : "#FFFFFF" })}
+                  style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", minHeight: 46, borderBottomWidth: 1, borderBottomColor: c.track, backgroundColor: hovered ? c.pill : c.surface }))}
                 >
                   <Cell flex={2.4}>
-                    <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: WEB.text }}>
+                    <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: c.text }}>
                       {item.ingredient?.name ?? "Item"}
                     </Text>
                     {!!nameOf(item.ingredient?.brand) && (
-                      <Text numberOfLines={1} style={{ fontSize: 12, color: WEB.muted }}>
+                      <Text numberOfLines={1} style={{ fontSize: 12, color: c.muted }}>
                         {nameOf(item.ingredient?.brand)}
                       </Text>
                     )}
@@ -201,13 +205,13 @@ export function WebPantryScreen() {
                   <Cell flex={1.1}>
                     {expiry ? (
                       <View style={{ flexDirection: "row", alignItems: "center" }}>
-                        {state !== "all" && <View style={{ width: 7, height: 7, borderRadius: 4, marginRight: 6, backgroundColor: state === "expired" ? WEB.red : WEB.amber }} />}
-                        <Text style={{ fontSize: 13, fontWeight: state === "all" ? "400" : "600", color: state === "expired" ? WEB.red : state === "soon" ? WEB.amber : WEB.body }}>
+                        {state !== "all" && <View style={{ width: 7, height: 7, borderRadius: 4, marginRight: 6, backgroundColor: state === "expired" ? c.danger : c.warning }} />}
+                        <Text style={{ fontSize: 13, fontWeight: state === "all" ? "400" : "600", color: state === "expired" ? c.danger : state === "soon" ? c.warning : c.icon }}>
                           {friendlyDate(expiry)}
                         </Text>
                       </View>
                     ) : (
-                      <Text style={{ fontSize: 13, color: WEB.faint }}>No date</Text>
+                      <Text style={{ fontSize: 13, color: c.faint }}>No date</Text>
                     )}
                   </Cell>
                 </Pressable>
@@ -216,7 +220,7 @@ export function WebPantryScreen() {
           </>
         ) : (
           <>
-            <View style={{ flexDirection: "row", backgroundColor: "#F8FAFC", borderBottomWidth: 1, borderBottomColor: WEB.border }}>
+            <View style={{ flexDirection: "row", backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border }}>
               <HeadCell label="Ingredient" flex={2.4} />
               <HeadCell label="Category" flex={1.2} />
               <HeadCell label="Portion" flex={0.9} />
@@ -235,14 +239,14 @@ export function WebPantryScreen() {
                 <Pressable
                   key={ingredient._id}
                   onPress={() => router.push({ pathname: "/ingredients/edit/[id]", params: { id: ingredient._id } })}
-                  style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", minHeight: 44, borderBottomWidth: 1, borderBottomColor: WEB.line, backgroundColor: hovered ? "#F8FAFC" : "#FFFFFF" })}
+                  style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", minHeight: 46, borderBottomWidth: 1, borderBottomColor: c.track, backgroundColor: hovered ? c.pill : c.surface }))}
                 >
                   <Cell flex={2.4}>
-                    <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: WEB.text }}>
+                    <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: c.text }}>
                       {ingredient.name}
                     </Text>
                     {!!nameOf(ingredient.brand) && (
-                      <Text numberOfLines={1} style={{ fontSize: 12, color: WEB.muted }}>
+                      <Text numberOfLines={1} style={{ fontSize: 12, color: c.muted }}>
                         {nameOf(ingredient.brand)}
                       </Text>
                     )}
@@ -254,7 +258,7 @@ export function WebPantryScreen() {
                   <Cell flex={0.7} text={g(n.carbs)} />
                   <Cell flex={0.7} text={g(n.fats)} />
                   <Cell flex={0.7}>
-                    {stocked > 0 ? <Ionicons name="checkmark-circle" size={16} color={WEB.green} /> : <Text style={{ fontSize: 13, color: WEB.faint }}>—</Text>}
+                    {stocked > 0 ? <Ionicons name="checkmark-circle" size={16} color={c.success} /> : <Text style={{ fontSize: 13, color: c.faint }}>—</Text>}
                   </Cell>
                 </Pressable>
               );
@@ -262,10 +266,11 @@ export function WebPantryScreen() {
           </>
         )}
       </View>
-      <Text style={{ marginTop: 10, fontSize: 12, color: WEB.faint }}>
+      <Text style={{ marginTop: 10, fontSize: 12, color: c.faint }}>
         {view === "stock" ? `${rows.length} of ${inStock.length} items` : `${catalogue.length} of ${ingredients.length} ingredients`} · click a row to open it
       </Text>
     </WebPage>
+    </OrbitPage>
   );
 }
 
@@ -282,6 +287,7 @@ function HeadCell({
   sortKey?: SortKey;
   onSort?: (key: SortKey) => void;
 }) {
+  const { colors: c } = useOrbitTheme();
   const active = !!sortKey && sort?.key === sortKey;
   return (
     <Pressable
@@ -289,19 +295,20 @@ function HeadCell({
       onPress={() => sortKey && onSort?.(sortKey)}
       style={{ flex, flexDirection: "row", alignItems: "center", height: 38, paddingHorizontal: 14 }}
     >
-      <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.6, color: active ? WEB.blueDark : WEB.muted }}>{label.toUpperCase()}</Text>
+      <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.6, color: active ? c.ink : c.muted }}>{label.toUpperCase()}</Text>
       {!!sortKey && (
-        <Ionicons name={active ? (sort!.dir === 1 ? "arrow-up" : "arrow-down") : "swap-vertical"} size={11} color={active ? WEB.blueDark : "#CBD5E1"} style={{ marginLeft: 4 }} />
+        <Ionicons name={active ? (sort!.dir === 1 ? "arrow-up" : "arrow-down") : "swap-vertical"} size={11} color={active ? c.ink : c.orbit} style={{ marginLeft: 4 }} />
       )}
     </Pressable>
   );
 }
 
 function Cell({ flex, text, strong, children }: { flex: number; text?: string; strong?: boolean; children?: React.ReactNode }) {
+  const { colors: c } = useOrbitTheme();
   return (
     <View style={{ flex, paddingHorizontal: 14, paddingVertical: 6 }}>
       {children ?? (
-        <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: strong ? "600" : "400", color: strong ? WEB.text : WEB.body }}>
+        <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: strong ? "600" : "400", color: strong ? c.text : c.icon }}>
           {text}
         </Text>
       )}

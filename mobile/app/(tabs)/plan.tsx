@@ -6,9 +6,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { minutesLabel, shortDateLabel } from "@/src/components/calendar/calendarUtils";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
+import { WebPlanHub } from "@/src/components/planner/web/WebPlanHub";
 import { Tap } from "@/src/components/ui/Tap";
 import { getGroceryItems, type GroceryItem } from "@/src/services/groceryListApi";
 import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Kitchen → Plan: getting ready for the meals planned. The top half is what
 // stands out now (a first go — what belongs here isn't settled yet); the
@@ -38,6 +40,9 @@ export default function PlanTab() {
     .sort((a, b) => a.date.localeCompare(b.date) || a.startMinutes - b.startMinutes)[0];
   const tasksToday = plan.tasks.filter((t) => t.date <= plan.today).length;
   const onMenu = plan.menu.filter((m) => m.state === "menu").length;
+  // (In a desktop browser: the same, with room, and the week's kitchen tasks.)
+  const wide = useWideWeb();
+  if (wide) return <WebPlanHub plan={plan} toBuy={toBuy} toLog={toLog} next={next} onMenu={onMenu} />;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "left", "right"]}>

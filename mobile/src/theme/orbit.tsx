@@ -50,8 +50,10 @@ export const LIGHT: OrbitColors = {
   muted: "#64748B",
   faint: "#94A3B8",
   icon: "#334155",
-  ink: "#0F172A",
-  onInk: "#FFFFFF",
+  // (A step off black and white, which look the same: the web's dark mode
+  // knows them as the main button and its text — components/web/theme.)
+  ink: "#0F172B",
+  onInk: "#FFFFFE",
   pill: "#EEF0F3",
   onPill: "#334155",
   track: "#EEF0F3",
@@ -157,19 +159,19 @@ const SECTIONS: Record<Section, { orb: OrbHue; light: Partial<OrbitColors>; dark
     orb: "orange",
     // (SECTION_PALETTE.kitchen: buttons in its darker shade on the light
     // theme, for white text; the colour itself for rings, and in the dark.)
-    light: { ink: "#C2471A", onInk: "#FFFFFF", fill: "#F28A3C", selectedRing: "#F7AE6E", orbGlow: "rgba(242, 138, 60, 0.45)" },
+    light: { ink: "#C2471A", onInk: "#FFFFFE", fill: "#F28A3C", selectedRing: "#F7AE6E", orbGlow: "rgba(242, 138, 60, 0.45)" },
     dark: { ink: "#F28A3C", onInk: "#0D0F14", fill: "#F28A3C", selectedRing: "#C2471A", orbGlow: "rgba(242, 138, 60, 0.55)" },
   },
   calendar: {
     orb: "blue",
     // (SECTION_PALETTE.calendar, the same way as the Kitchen's.)
-    light: { ink: "#2C5DC9", onInk: "#FFFFFF", fill: "#5FA2F2", selectedRing: "#9CC4F6", orbGlow: "rgba(95, 162, 242, 0.45)" },
+    light: { ink: "#2C5DC9", onInk: "#FFFFFE", fill: "#5FA2F2", selectedRing: "#9CC4F6", orbGlow: "rgba(95, 162, 242, 0.45)" },
     dark: { ink: "#5FA2F2", onInk: "#0D0F14", fill: "#5FA2F2", selectedRing: "#2C5DC9", orbGlow: "rgba(95, 162, 242, 0.55)" },
   },
   tasks: {
     orb: "violet",
     // (SECTION_PALETTE.tasks, the same way as the Kitchen's.)
-    light: { ink: "#5A44C9", onInk: "#FFFFFF", fill: "#A08CF7", selectedRing: "#C9BDFB", orbGlow: "rgba(160, 140, 247, 0.45)" },
+    light: { ink: "#5A44C9", onInk: "#FFFFFE", fill: "#A08CF7", selectedRing: "#C9BDFB", orbGlow: "rgba(160, 140, 247, 0.45)" },
     dark: { ink: "#A08CF7", onInk: "#0D0F14", fill: "#A08CF7", selectedRing: "#5A44C9", orbGlow: "rgba(160, 140, 247, 0.55)" },
   },
 };

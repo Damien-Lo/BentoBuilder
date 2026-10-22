@@ -9,6 +9,7 @@ import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { SessionBooker } from "@/src/components/planner/web/SessionBooker";
 import { compactDate } from "@/src/components/web/fields";
 import { KitchenPage } from "@/src/components/planner/KitchenPage";
+import { PlanSubPage } from "@/src/components/planner/web/PlanFrame";
 import { Button, Card, CardLink, Empty, hoverable, WEB } from "@/src/components/web/ui";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
@@ -42,9 +43,10 @@ export function WebPrepShoppingScreen({ inTabs = false }: { inTabs?: boolean } =
   const plan = usePlanNeeds();
   const { today } = plan;
   const wide = useWideWeb();
-  // (The page itself is drawn in Orbit's look on a phone: see KitchenPage.)
+  // (The page itself is drawn in Orbit's look, on a phone and on the
+  // desktop: see KitchenPage and PlanSubPage.)
   const { colors, dark } = useOrbitTheme();
-  const look = lookOf(wide ? null : colors, dark);
+  const look = lookOf(colors, dark);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   useFocusEffect(
     useCallback(() => {
@@ -93,8 +95,23 @@ export function WebPrepShoppingScreen({ inTabs = false }: { inTabs?: boolean } =
     ].filter((group) => group.session || group.rows.length);
 
 
-  return (
-    <KitchenPage title="Prep & shopping" subtitle="Worked out from the meals you've planned, the pantry and your booked sessions. Nothing here is saved: change the plan and it changes." right={wide ? <Button label="Week plan" onPress={() => router.push("/planner")} /> : undefined} back={!inTabs} bare={inTabs} orbit>
+  const title = "Prep & shopping";
+  const subtitle = "Worked out from the meals you've planned, the pantry and your booked sessions. Nothing here is saved: change the plan and it changes.";
+  // (On the desktop: under Plan, with the way back to it over the title.)
+  // (A plain function, not a component: the page isn't drawn afresh each time.)
+  const frame = (children: React.ReactNode) =>
+    wide ? (
+      <PlanSubPage title={title} subtitle={subtitle} crumb={!inTabs} right={<Button label="Week plan" icon="calendar-outline" onPress={() => router.push("/planner")} />}>
+        {children}
+      </PlanSubPage>
+    ) : (
+      <KitchenPage title={title} subtitle={subtitle} back={!inTabs} bare={inTabs} orbit>
+        {children}
+      </KitchenPage>
+    );
+
+  return frame(
+    <>
       {(inTabs || !wide) && (
         <Card title="Kitchen tasks" subtitle="The next seven days" padded={false} style={{ marginBottom: 16 }}>
           <KitchenTasks plan={plan} days={7} />
@@ -232,13 +249,14 @@ export function WebPrepShoppingScreen({ inTabs = false }: { inTabs?: boolean } =
           }}
         />
       )}
-    </KitchenPage>
+    </>,
   );
 }
 
 // One side of it on the week plan: how much there is, and only what's
 // wrong. The rest is a click away.
 export function NeedsSummaryCard({ side, plan, onOpen, onBook }: { side: "prep" | "buy"; plan: Plan; onOpen: () => void; onBook: () => void }) {
+  const look = useLook();
   const rows = side === "prep" ? plan.prep : plan.buy;
   const issues = plan.issues.filter((issue) => issue.about === side || (side === "buy" && issue.kind === "past-date"));
   const sessions = plan.sessions.filter((s) => s.kind === (side === "prep" ? "prep" : "shop"));
@@ -261,8 +279,8 @@ export function NeedsSummaryCard({ side, plan, onOpen, onBook }: { side: "prep" 
       ) : (
         plan.ready &&
         rows.length > 0 && (
-          <Text style={{ paddingHorizontal: 18, paddingBottom: 14, fontSize: 12, color: WEB.faint }}>
-            <Ionicons name="checkmark-circle-outline" size={12} color={WEB.green} /> Nothing wrong: every one has a {side === "prep" ? "session" : "trip"} in time
+          <Text style={{ paddingHorizontal: 18, paddingBottom: 14, fontSize: 12, color: look.faint }}>
+            <Ionicons name="checkmark-circle-outline" size={12} color={look.green} /> Nothing wrong: every one has a {side === "prep" ? "session" : "trip"} in time
           </Text>
         )
       )}

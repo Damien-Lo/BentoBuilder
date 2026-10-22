@@ -3,19 +3,23 @@ import { useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { DragSource } from "@/src/components/web/dragDrop";
-import { Card, CardLink, WEB } from "@/src/components/web/ui";
+import { Button, Card, CardLink, hoverable } from "@/src/components/web/ui";
 import type { Meal } from "@/src/services/mealApi";
 import { addToMenu, menuName, removeFromMenu, updateMenuItem, type MenuItem } from "@/src/services/menuApi";
 import type { Recipe } from "@/src/services/recipeApi";
+import { SECTION_PALETTE, useOrbitTheme } from "@/src/theme/orbit";
 import { getMealKcal } from "@/src/utils/mealPlan";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
-type Hover = { hovered?: boolean };
 
 // The menu beside the week plan: what you'd like to have soon, not yet on a
 // day (see services/menuApi.ts). Each item "on the menu" is shopped for —
 // its servings not yet placed — and can be put on a day: "Place", then a
 // meal on the week ("Place here"). "Someday" keeps one for later.
+// (Desktop only: in Orbit's look, the item being placed in the Kitchen's
+// orange.)
+const TINT = SECTION_PALETTE.kitchen.tint;
+
 export function MenuCard({
   menu,
   recipes,
@@ -46,6 +50,7 @@ export function MenuCard({
   onDrag?: (item: MenuItem | null) => void;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { colors: c } = useOrbitTheme();
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
   const [showSomeday, setShowSomeday] = useState(false);
@@ -81,22 +86,22 @@ export function MenuCard({
             onChangeText={setQuery}
             autoFocus
             placeholder="Find a recipe or meal…"
-            placeholderTextColor={WEB.faint}
-            style={{ height: 34, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: WEB.border, fontSize: 13, color: WEB.text, outlineStyle: "none" } as object}
+            placeholderTextColor={c.faint}
+            style={{ height: 36, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, fontSize: 13, color: c.text, outlineStyle: "none" } as object}
           />
           {found.map((f) => (
-            <Pressable key={f.key} onPress={() => (run(f.add()), setQuery(""))} style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingHorizontal: 4, borderRadius: 6, backgroundColor: hovered ? WEB.page : "transparent" })}>
-              <Ionicons name="add-circle-outline" size={15} color={WEB.blue} />
-              <Text numberOfLines={1} style={{ marginLeft: 6, flex: 1, fontSize: 13, color: WEB.text }}>
+            <Pressable key={f.key} onPress={() => (run(f.add()), setQuery(""))} style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingHorizontal: 6, borderRadius: 8, backgroundColor: hovered ? c.pill : "transparent" }))}>
+              <Ionicons name="add-circle-outline" size={15} color={c.ink} />
+              <Text numberOfLines={1} style={{ marginLeft: 6, flex: 1, fontSize: 13, color: c.text }}>
                 {f.name}
               </Text>
             </Pressable>
           ))}
-          {!!q && !found.length && <Text style={{ paddingTop: 6, fontSize: 12, color: WEB.faint }}>Nothing by that name</Text>}
+          {!!q && !found.length && <Text style={{ paddingTop: 6, fontSize: 12, color: c.faint }}>Nothing by that name</Text>}
         </View>
       )}
 
-      {!on.length && !adding && <Text style={{ paddingHorizontal: 18, paddingBottom: 14, fontSize: 12, color: WEB.faint }}>Add recipes you&apos;d like this week: what they need goes on the grocery list, and you put them on days when you know when.</Text>}
+      {!on.length && !adding && <Text style={{ paddingHorizontal: 18, paddingBottom: 14, fontSize: 12, lineHeight: 17, color: c.muted }}>Add recipes you&apos;d like this week: what they need goes on the grocery list, and you put them on days when you know when.</Text>}
 
       {/* (Beside the week, a long menu scrolls inside the card.) */}
       <ScrollView style={{ flexShrink: 1 }}>
@@ -112,64 +117,64 @@ export function MenuCard({
             style={
               onDrag
                 ? // (Beside the week: each its own card, to pick up and drag.)
-                  ({ marginHorizontal: 12, marginTop: 8, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderRadius: 10, borderColor: active ? "#C4B5FD" : WEB.border, backgroundColor: active ? "#F5F3FF" : WEB.card, cursor: "grab" } as object)
-                : { paddingHorizontal: 18, paddingVertical: 8, borderTopWidth: 1, borderTopColor: WEB.border, backgroundColor: active ? "#F5F3FF" : "transparent" }
+                  ({ marginHorizontal: 12, marginTop: 8, paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderRadius: 12, borderColor: active ? c.selectedRing : c.border, backgroundColor: active ? TINT : c.surface, cursor: "grab" } as object)
+                : { paddingHorizontal: 18, paddingVertical: 9, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: active ? TINT : "transparent" }
             }
           >
             <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "600", color: WEB.text }}>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: "600", color: c.text }}>
                 {menuName(item)}
               </Text>
               {/* (Beside the week it's dragged onto a meal: tagged, like on the
                   grocery list. Opened, it's placed with a click.) */}
               {onDrag && !active ? (
-                <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, backgroundColor: "#EDE9FE" }}>
-                  <Text style={{ fontSize: 10, fontWeight: "700", color: "#6D28D9" }}>Menu</Text>
+                <View style={{ paddingHorizontal: 7, paddingVertical: 1, borderRadius: 999, backgroundColor: TINT }}>
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: c.ink }}>Menu</Text>
                 </View>
               ) : (
-                <Pressable onPress={() => onPlace(active ? null : item)} style={({ hovered }: Hover) => ({ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7, backgroundColor: active ? "#7C3AED" : hovered ? "#EDE9FE" : "#F5F3FF" })}>
-                  <Text style={{ fontSize: 11, fontWeight: "700", color: active ? "#FFFFFF" : "#7C3AED" }}>{active ? "Cancel" : "Place"}</Text>
+                <Pressable onPress={() => onPlace(active ? null : item)} style={hoverable(({ hovered }) => ({ paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: active ? c.ink : TINT, opacity: hovered ? 0.85 : 1 }))}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: active ? c.onInk : c.ink }}>{active ? "Cancel" : "Place"}</Text>
                 </Pressable>
               )}
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
-              <Text style={{ flex: 1, fontSize: 11, color: WEB.muted }}>
+              <Text style={{ flex: 1, fontSize: 11, color: c.muted }}>
                 {item.servings} serving{item.servings === 1 ? "" : "s"}{kcal != null ? ` · ${Math.round(kcal)} kcal each` : ""}
               </Text>
               {!compact && (
                 <>
                   <Pressable onPress={() => run(updateMenuItem(item._id, { state: "someday" }))}>
-                    <Text style={{ fontSize: 11, color: WEB.faint }}>Someday</Text>
+                    <Text style={{ fontSize: 11, color: c.faint }}>Someday</Text>
                   </Pressable>
                   <Pressable onPress={() => run(removeFromMenu(item._id))} accessibilityLabel={`Take ${menuName(item)} off the menu`} style={{ marginLeft: 8 }}>
-                    <Ionicons name="close" size={13} color={WEB.faint} />
+                    <Ionicons name="close" size={13} color={c.faint} />
                   </Pressable>
                 </>
               )}
             </View>
-            {active && <Text style={{ marginTop: 4, fontSize: 11, color: "#7C3AED" }}>Pick a meal on the week: &quot;Place here&quot;.</Text>}
+            {active && <Text style={{ marginTop: 4, fontSize: 11, color: c.ink }}>Pick a meal on the week: &quot;Place here&quot;.</Text>}
           </DragSource>
         );
       })}
 
       </ScrollView>
       {someday.length > 0 && !compact && (
-        <View style={{ borderTopWidth: 1, borderTopColor: WEB.border }}>
+        <View style={{ borderTopWidth: 1, borderTopColor: c.border }}>
           <Pressable onPress={() => setShowSomeday((s) => !s)} style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingVertical: 8 }}>
-            <Ionicons name={showSomeday ? "chevron-down" : "chevron-forward"} size={13} color={WEB.muted} />
-            <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: "600", color: WEB.muted }}>Someday · {someday.length}</Text>
+            <Ionicons name={showSomeday ? "chevron-down" : "chevron-forward"} size={13} color={c.muted} />
+            <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: "600", color: c.muted }}>Someday · {someday.length}</Text>
           </Pressable>
           {showSomeday &&
             someday.map((item) => (
               <View key={item._id} style={{ flexDirection: "row", alignItems: "center", paddingLeft: 37, paddingRight: 18, paddingVertical: 5 }}>
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: WEB.text }}>
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: c.text }}>
                   {menuName(item)}
                 </Text>
                 <Pressable onPress={() => run(addToMenu(item.recipe ? { recipe: item.recipe._id } : { meal: item.meal!._id }))}>
-                  <Text style={{ fontSize: 11, fontWeight: "600", color: WEB.blue }}>On the menu</Text>
+                  <Text style={{ fontSize: 11, fontWeight: "600", color: c.accent }}>On the menu</Text>
                 </Pressable>
                 <Pressable onPress={() => run(removeFromMenu(item._id))} accessibilityLabel={`Remove ${menuName(item)}`} style={{ marginLeft: 8 }}>
-                  <Ionicons name="close" size={13} color={WEB.faint} />
+                  <Ionicons name="close" size={13} color={c.faint} />
                 </Pressable>
               </View>
             ))}
@@ -184,9 +189,10 @@ export function MenuCard({
 // which closes it so the week can be clicked.
 export function MenuOverlay(props: Omit<Parameters<typeof MenuCard>[0], "compact" | "onOpen"> & { onClose: () => void }) {
   const { onClose, onPlace, ...rest } = props;
+  const { colors: c } = useOrbitTheme();
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: "rgba(15,23,42,0.45)" }}>
+      <Pressable onPress={onClose} style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: c.scrim }}>
         <Pressable onPress={() => {}} style={{ width: "100%", maxWidth: 520, maxHeight: "85%" }}>
           <ScrollView>
             <MenuCard
@@ -197,9 +203,9 @@ export function MenuOverlay(props: Omit<Parameters<typeof MenuCard>[0], "compact
               }}
             />
           </ScrollView>
-          <Pressable onPress={onClose} style={{ alignSelf: "flex-end", marginTop: 10, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: WEB.border, backgroundColor: WEB.card }}>
-            <Text style={{ fontSize: 13, fontWeight: "600", color: WEB.body }}>Close</Text>
-          </Pressable>
+          <View style={{ alignSelf: "flex-end", marginTop: 10 }}>
+            <Button label="Close" onPress={onClose} />
+          </View>
         </Pressable>
       </Pressable>
     </Modal>

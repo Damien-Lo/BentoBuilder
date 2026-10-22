@@ -17,7 +17,8 @@ import type { AmountSlot, PieceSlot } from "@/src/utils/pieceSizing";
 import { noteSuggestions, recordSuggestion, settleSuggestions, type SuggestionAction } from "@/src/components/planner/suggestionRecord";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { showActions } from "@/src/components/todo/theme";
-import { Button, Card, GoalBar, IconButton, WEB, WebPage } from "@/src/components/web/ui";
+import { TickRing } from "@/src/components/ui/TickRing";
+import { Button, Card, hoverable, WebPage } from "@/src/components/web/ui";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
 import { addToMenu, getMenu, menuName, type MenuItem } from "@/src/services/menuApi";
@@ -39,15 +40,23 @@ import { stopUsualMeal } from "@/src/services/usualMealApi";
 import type { PantryItem } from "@/src/types/pantry";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
 import { suggestMeals, type Dish, type Macros, type Suggestion, type Suggestions } from "@/src/utils/recommend";
-import { nutrientColor } from "@/src/theme/nutrients";
+import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
+import { OrbitPage, SECTION_PALETTE, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // The planner in a desktop browser: the whole week at once. A column per
 // day and a row per meal, each cell holding what's planned or eaten, with
 // the day's calories on top and the week's totals down the side. The phone
 // planner shows one day at a time, for logging; this is for laying the
-// week out.
+// week out. In Orbit's look, in the Kitchen's orange (today, the day picked,
+// something being placed); the suggestions as the phone's, and the
+// nutrients in their own colours.
 
 type Hover = { hovered?: boolean };
+type IconName = keyof typeof Ionicons.glyphMap;
+// The Kitchen's pale wash: icon wells, the day picked, where a drop lands;
+// fainter, today's column.
+const TINT = SECTION_PALETTE.kitchen.tint;
+const TODAY_WASH = "rgba(255, 224, 194, 0.3)";
 // What's dragged on the week: a menu item, or a planned meal.
 type Carried = { menu: MenuItem } | { entry: MealPlanEntry };
 
@@ -58,6 +67,7 @@ const PAGE_WIDTH = SUMMARY_WIDTH - 2;
 
 export function WebWeekPlanScreen() {
   const router = useRouter();
+  const { colors: c } = useOrbitTheme();
   const today = todayStr();
   // `date`: the day to open on — set on the way back from adding food, so
   // the week that was being planned is still the one on show.
@@ -425,14 +435,17 @@ export function WebWeekPlanScreen() {
   }, []);
   useEffect(fitToWindow, [fitToWindow, windowHeight]);
 
+  const kcalColor = nutrientColor("calories");
+
   return (
+    <OrbitPage>
     <WebPage maxWidth={1760}>
-      {/* Toolbar */}
-      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16, gap: 8 }}>
+      {/* Toolbar: the week on show as the page's title */}
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 18, gap: 8 }}>
         <Button label="This week" onPress={() => setFocusDate(today)} />
-        <IconButton icon="chevron-back" label="Previous week" onPress={() => setFocusDate((d) => addDays(d, -7))} />
-        <IconButton icon="chevron-forward" label="Next week" onPress={() => setFocusDate((d) => addDays(d, 7))} />
-        <Text style={{ flex: 1, marginLeft: 6, fontSize: 20, fontWeight: "700", color: WEB.text }}>{range}</Text>
+        <RoundButton icon="chevron-back" label="Previous week" onPress={() => setFocusDate((d) => addDays(d, -7))} colors={c} />
+        <RoundButton icon="chevron-forward" label="Next week" onPress={() => setFocusDate((d) => addDays(d, 7))} colors={c} />
+        <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>{range}</Text>
         <Button label={suggesting ? "Suggestions on" : "Suggestions off"} icon={suggesting ? "sparkles" : "sparkles-outline"} onPress={() => setSuggesting(!suggesting)} />
         <Button label="Grocery list" icon="cart-outline" onPress={() => router.navigate("/grocery-list")} />
       </View>
@@ -440,9 +453,9 @@ export function WebWeekPlanScreen() {
       {/* (The side column as tall as the week, its menu filling what's left.) */}
       <View ref={weekRow} onLayout={fitToWindow} style={{ flexDirection: "row", alignItems: "stretch", gap: 16, minHeight: fitHeight }}>
         {/* The week */}
-        <View style={{ flex: 1, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, borderRadius: 16, overflow: "hidden" }}>
+        <View style={{ flex: 1, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 18, overflow: "hidden" }}>
           {/* Days */}
-          <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: WEB.border }}>
+          <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: c.border }}>
             <View style={{ width: LABEL_WIDTH }} />
             {week.map((day) => {
               const d = parseLocalDate(day);
@@ -462,33 +475,34 @@ export function WebWeekPlanScreen() {
                     turnTo(0);
                   }}
                   accessibilityLabel={`Show ${longDay(day)}`}
-                  style={({ hovered }: { hovered?: boolean }) => ({
+                  style={hoverable(({ hovered }) => ({
                     flex: 1,
                     padding: 10,
                     borderLeftWidth: 1,
-                    borderLeftColor: WEB.border,
+                    borderLeftColor: c.border,
                     borderTopWidth: 3,
-                    borderTopColor: isToday || chosen ? WEB.blue : "transparent",
-                    backgroundColor: chosen ? "#DBEAFE" : hovered ? "#EEF2F7" : isToday ? "#F8FBFF" : WEB.card,
-                  })}
+                    borderTopColor: isToday || chosen ? c.ink : "transparent",
+                    backgroundColor: chosen ? TINT : hovered ? c.pill : isToday ? TODAY_WASH : c.surface,
+                  }))}
                 >
                   <View style={{ flexDirection: "row", alignItems: "baseline" }}>
-                    <Text style={{ fontSize: 20, fontWeight: isToday ? "700" : "500", color: isToday ? WEB.blue : WEB.text }}>{d.getDate()}</Text>
-                    <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: "600", color: isToday ? WEB.blue : WEB.muted }}>{WEEKDAYS_SHORT[d.getDay()]}</Text>
+                    <Text style={{ fontSize: 20, fontWeight: isToday ? "800" : "600", letterSpacing: -0.3, color: isToday ? c.ink : c.text }}>{d.getDate()}</Text>
+                    <Text style={{ marginLeft: 6, fontSize: 12, fontWeight: "600", color: isToday ? c.ink : c.muted }}>{WEEKDAYS_SHORT[d.getDay()]}</Text>
                   </View>
-                  <Text style={{ marginTop: 4, fontSize: 12, color: WEB.muted }}>
-                    <Text style={{ fontWeight: "700", color: over ? WEB.red : WEB.text }}>{Math.round(done)}</Text>
-                    {ahead > 0 && <Text style={{ color: WEB.faint }}> +{Math.round(ahead)}</Text>} kcal
+                  <Text style={{ marginTop: 4, fontSize: 12, color: c.muted }}>
+                    <Text style={{ fontWeight: "700", color: over ? c.danger : c.text }}>{Math.round(done)}</Text>
+                    {ahead > 0 && <Text style={{ color: c.faint }}> +{Math.round(ahead)}</Text>} kcal
                   </Text>
                   {/* What the suggestions showing would add, in their colour. */}
                   {suggestedOn(day).calories > 0 && (
-                    <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 11, fontWeight: "600", color: "#7C3AED" }}>
-                      <Ionicons name="sparkles" size={9} color="#7C3AED" /> +{Math.round(suggestedOn(day).calories)} suggested
+                    <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 11, fontWeight: "600", color: c.accent }}>
+                      <Ionicons name="sparkles" size={9} color={c.accent} /> +{Math.round(suggestedOn(day).calories)} suggested
                     </Text>
                   )}
-                  <View style={{ marginTop: 5, height: 5, borderRadius: 3, backgroundColor: "#EEF2F7", overflow: "hidden", flexDirection: "row" }}>
-                    <View style={{ width: pct(done), backgroundColor: over ? WEB.red : WEB.blue }} />
-                    <View style={{ width: pct(Math.min(ahead, Math.max(0, (goal ?? 0) - done))), backgroundColor: WEB.blue, opacity: 0.3 }} />
+                  {/* (The calories' own colour, over the goal too: the number turns red.) */}
+                  <View style={{ marginTop: 6, height: 5, borderRadius: 2.5, backgroundColor: c.track, overflow: "hidden", flexDirection: "row" }}>
+                    <View style={{ width: pct(done), backgroundColor: kcalColor }} />
+                    <View style={{ width: pct(Math.min(ahead, Math.max(0, (goal ?? 0) - done))), backgroundColor: kcalColor, opacity: 0.35 }} />
                   </View>
                 </Pressable>
               );
@@ -497,10 +511,14 @@ export function WebWeekPlanScreen() {
 
           {/* A row per meal */}
           {SLOTS.map((slot, row) => (
-            <View key={slot.id} style={{ flexDirection: "row", flexGrow: 1, borderBottomWidth: row < SLOTS.length - 1 ? 1 : 0, borderBottomColor: WEB.border }}>
+            <View key={slot.id} style={{ flexDirection: "row", flexGrow: 1, borderBottomWidth: row < SLOTS.length - 1 ? 1 : 0, borderBottomColor: c.border }}>
+              {/* (Its icon in a node, as on the phone's Log.) */}
               <View style={{ width: LABEL_WIDTH, padding: 12 }}>
-                <Ionicons name={slot.icon} size={18} color={slot.iconColor} />
-                <Text style={{ marginTop: 4, fontSize: 13, fontWeight: "700", color: WEB.body }}>{slot.label}</Text>
+                <View style={{ width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: c.node, borderWidth: 1, borderColor: c.nodeBorder }}>
+                  <Ionicons name={slot.icon} size={16} color={c.icon} />
+                </View>
+                <Text style={{ marginTop: 8, fontSize: 14, fontWeight: "700", color: c.text }}>{slot.label}</Text>
+                <Text style={{ marginTop: 1, fontSize: 12, color: c.faint }}>{slot.time}</Text>
               </View>
               {week.map((day) => {
                 const inCell = weekEntries.filter((e) => e.date === day && e.slot === slot.id);
@@ -512,39 +530,40 @@ export function WebWeekPlanScreen() {
                     accepts={() => day >= today}
                     onDrop={(carried) => dropOn(day, slot.id, carried as Carried)}
                     onHover={(over) => setDropOver((at) => (over ? `${day}|${slot.id}` : at === `${day}|${slot.id}` ? null : at))}
-                    style={{ flex: 1, minHeight: 118, padding: 6, borderLeftWidth: 1, borderLeftColor: WEB.border, backgroundColor: dropOver === `${day}|${slot.id}` ? "#EDE9FE" : day === today ? "#F8FBFF" : WEB.card }}
+                    style={{ flex: 1, minHeight: 118, padding: 6, borderLeftWidth: 1, borderLeftColor: c.border, backgroundColor: dropOver === `${day}|${slot.id}` ? TINT : day === today ? TODAY_WASH : c.surface }}
                   >
                     {inCell.map((entry) => {
                       const isEaten = entry.status === "confirmed";
                       return (
                         // (Still to come: dragged to another day or meal, or onto the menu.)
+                        // (As on the phone's Log: eaten, a card; planned, a dashed outline.)
                         <DragSource key={entry._id} payload={isEaten ? null : { entry }} onStart={() => setCarrying({ entry })} onEnd={() => (setCarrying(null), setDropOver(null))} style={isEaten ? undefined : ({ cursor: "grab" } as object)}>
                         <Pressable
                           onPress={() => entryMenu(entry)}
-                          style={({ hovered }: Hover) => ({
+                          style={hoverable(({ hovered }) => ({
                             flexDirection: "row",
                             marginBottom: 5,
-                            borderRadius: 9,
+                            borderRadius: 12,
                             borderWidth: 1,
                             borderStyle: isEaten ? "solid" : "dashed",
-                            borderColor: isEaten ? "#BBF7D0" : "#CBD5E1",
-                            backgroundColor: hovered ? "#F1F5F9" : isEaten ? "#F0FDF4" : "#FFFFFF",
-                          })}
+                            borderColor: isEaten ? c.border : c.orbit,
+                            backgroundColor: hovered ? c.pill : isEaten ? c.surface : "transparent",
+                          }))}
                         >
                           <Pressable
                             onPress={() => toggleEaten(entry)}
                             accessibilityLabel={isEaten ? "Mark as not eaten" : "Mark as eaten"}
                             style={{ width: 26, alignItems: "center", paddingTop: 7 }}
                           >
-                            <Ionicons name={isEaten ? "checkmark-circle" : "ellipse-outline"} size={16} color={isEaten ? WEB.green : WEB.faint} />
+                            <Ionicons name={isEaten ? "checkmark-circle" : "ellipse-outline"} size={16} color={isEaten ? c.ink : c.faint} />
                           </Pressable>
                           <View style={{ flex: 1, paddingVertical: 5, paddingRight: 6 }}>
-                            <Text numberOfLines={2} style={{ fontSize: 12, fontWeight: "600", lineHeight: 15, color: WEB.text }}>
+                            <Text numberOfLines={2} style={{ fontSize: 12, fontWeight: "600", lineHeight: 15, color: isEaten ? c.text : c.icon }}>
                               {entryName(entry)}
                               {entry.usual ? " " : ""}
-                              {entry.usual && <Ionicons name="repeat" size={11} color={WEB.blue} />}
+                              {entry.usual && <Ionicons name="repeat" size={11} color={c.muted} />}
                             </Text>
-                            <Text style={{ marginTop: 1, fontSize: 11, color: WEB.muted }}>{Math.round(kcalOf([entry]))} kcal</Text>
+                            <Text style={{ marginTop: 1, fontSize: 11, color: c.muted }}>{Math.round(kcalOf([entry]))} kcal</Text>
                           </View>
                         </Pressable>
                         </DragSource>
@@ -564,16 +583,17 @@ export function WebWeekPlanScreen() {
                             const index = offer.beside ? position + 1 : position;
                             const next = index ? (sideOptions(day, slot.id, offer)[0] ?? null) : null;
                             return (
-                              <View key={dish.key} style={{ marginBottom: 4, borderRadius: 9, borderWidth: 1, borderStyle: "dashed", borderColor: "#C4B5FD", backgroundColor: "#F5F3FF", paddingLeft: 8, paddingRight: 4, paddingVertical: 5 }}>
+                              // (As the phone's suggestion card: the assistant's pale blue, a dashed ring in the Kitchen's colour.)
+                              <View key={dish.key} style={{ marginBottom: 4, borderRadius: 12, borderWidth: 1, borderStyle: "dashed", borderColor: c.selectedRing, backgroundColor: c.accentSoft, paddingLeft: 8, paddingRight: 4, paddingVertical: 5 }}>
                                 <Pressable onPress={() => (dish.recipe ? router.push({ pathname: "/recipes/[id]", params: { id: dish.recipe._id } }) : undefined)}>
-                                  <Text numberOfLines={2} style={{ fontSize: 12, fontWeight: "600", lineHeight: 15, color: "#5B21B6" }}>
-                                    {index === 0 && <Ionicons name="sparkles" size={10} color="#7C3AED" />}
+                                  <Text numberOfLines={2} style={{ fontSize: 12, fontWeight: "600", lineHeight: 15, color: c.text }}>
+                                    {index === 0 && <Ionicons name="sparkles" size={10} color={c.accent} />}
                                     {index === 0 ? " " : ""}
                                     {dish.name}
                                   </Text>
                                 </Pressable>
                                 <View style={{ flexDirection: "row", alignItems: "center", marginTop: 1 }}>
-                                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 11, color: "#7C3AED" }}>
+                                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 11, color: c.muted }}>
                                     {Math.round(dish.calories)} kcal · P {Math.round(dish.protein)} g
                                   </Text>
                                   {index === 0 && offers.length > 1 && (
@@ -584,33 +604,34 @@ export function WebWeekPlanScreen() {
                                         record("another", day, slot.id, offer, rank);
                                         setTurn((prev) => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }));
                                       }}
+                                      colors={c}
                                     />
                                   )}
-                                  {index > 0 && next && <SuggestionButton icon="swap-horizontal" label={`Swap ${dish.name}`} onPress={() => chooseSide(day, slot.id, offer, rank, dish)} />}
-                                  {index > 0 && <SuggestionButton icon="close" label={`Drop ${dish.name}`} onPress={() => changeSide(day, slot.id, offer, rank, dish, null)} />}
+                                  {index > 0 && next && <SuggestionButton icon="swap-horizontal" label={`Swap ${dish.name}`} onPress={() => chooseSide(day, slot.id, offer, rank, dish)} colors={c} />}
+                                  {index > 0 && <SuggestionButton icon="close" label={`Drop ${dish.name}`} onPress={() => changeSide(day, slot.id, offer, rank, dish, null)} colors={c} />}
                                 </View>
                               </View>
                             );
                           })}
                           {/* The plate as a whole. */}
                           <View style={{ paddingLeft: 4 }}>
-                            <Text numberOfLines={2} style={{ fontSize: 11, lineHeight: 14, color: "#7C3AED" }}>
-                              {offer.sides.length > 0 && <Text style={{ fontWeight: "700" }}>{offer.beside ? "+" : ""}{Math.round(offer.calories)} kcal · P {Math.round(offer.protein)} g</Text>}
+                            <Text numberOfLines={2} style={{ fontSize: 11, lineHeight: 14, color: c.muted }}>
+                              {offer.sides.length > 0 && <Text style={{ fontWeight: "700", color: c.text }}>{offer.beside ? "+" : ""}{Math.round(offer.calories)} kcal · P {Math.round(offer.protein)} g</Text>}
                               {offer.sides.length > 0 && offer.reasons[0] ? " · " : ""}
                               {offer.reasons[0] ?? ""}
                             </Text>
-                            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
+                            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
                               <Pressable
                                 onPress={() => void acceptSuggestion(day, slot.id, offer, rank)}
                                 accessibilityLabel="Plan it"
-                                style={({ hovered }: Hover) => ({ flexDirection: "row", alignItems: "center", height: 24, paddingHorizontal: 9, borderRadius: 7, backgroundColor: hovered ? "#6D28D9" : "#7C3AED" })}
+                                style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", height: 24, paddingHorizontal: 10, borderRadius: 12, backgroundColor: c.ink, opacity: hovered ? 0.85 : 1 }))}
                               >
-                                <Ionicons name="checkmark" size={13} color="#FFFFFF" />
-                                <Text style={{ marginLeft: 3, fontSize: 11, fontWeight: "700", color: "#FFFFFF" }}>Plan</Text>
+                                <Ionicons name="checkmark" size={13} color={c.onInk} />
+                                <Text style={{ marginLeft: 3, fontSize: 11, fontWeight: "700", color: c.onInk }}>Plan</Text>
                               </Pressable>
                               <View style={{ flex: 1 }} />
                               {offer.sides.length < 3 && sideOptions(day, slot.id, offer).length > 0 && (
-                                <SuggestionButton icon="add" label="Add a side" onPress={() => chooseSide(day, slot.id, offer, rank, null)} />
+                                <SuggestionButton icon="add" label="Add a side" onPress={() => chooseSide(day, slot.id, offer, rank, null)} colors={c} />
                               )}
                               <SuggestionButton
                                 icon="close"
@@ -619,29 +640,30 @@ export function WebWeekPlanScreen() {
                                   record("dismissed", day, slot.id, offer, rank);
                                   setWaved((prev) => [...prev, key]);
                                 }}
+                                colors={c}
                               />
                             </View>
                           </View>
                         </View>
                       );
                     })()}
-                    {/* (While a menu item's being placed: "Place here".) */}
+                    {/* (While a menu item's being placed: "Place here", in the Kitchen's colour.) */}
                     <Pressable
                       onPress={() => (placing && target ? placeHere(day, slot.id) : addFood(day, slot.id))}
                       accessibilityLabel={placing && target ? `Place ${menuName(placing)} here` : `Add ${slot.label.toLowerCase()}`}
-                      style={({ hovered }: Hover) => ({
+                      style={hoverable(({ hovered }) => ({
                         flexDirection: "row",
                         alignItems: "center",
                         justifyContent: "center",
                         height: 26,
-                        borderRadius: 8,
-                        backgroundColor: target ? (hovered ? "#DDD6FE" : "#F5F3FF") : hovered ? WEB.blueSoft : "transparent",
-                      })}
+                        borderRadius: 13,
+                        backgroundColor: target ? (hovered ? c.selectedRing : TINT) : hovered ? c.pill : "transparent",
+                      }))}
                     >
                       {({ hovered }: Hover) => (
                         <>
-                          <Ionicons name="add" size={14} color={target ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1"} />
-                          <Text style={{ marginLeft: 2, fontSize: 11, fontWeight: "600", color: target ? "#7C3AED" : hovered ? WEB.blue : "#CBD5E1" }}>{target ?? "Add"}</Text>
+                          <Ionicons name="add" size={14} color={target ? c.ink : hovered ? c.onPill : c.orbit} />
+                          <Text style={{ marginLeft: 2, fontSize: 11, fontWeight: "600", color: target ? c.ink : hovered ? c.onPill : c.faint }}>{target ?? "Add"}</Text>
                         </>
                       )}
                     </Pressable>
@@ -690,13 +712,13 @@ export function WebWeekPlanScreen() {
             </ScrollView>
             <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 18, paddingBottom: 14 }}>
               <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 14 }}>
-                <Legend color="#F0FDF4" border="#BBF7D0" label="Eaten" />
-                <Legend color="#FFFFFF" border="#CBD5E1" dashed label="Planned" />
+                <Legend color={c.surface} border={c.border} label="Eaten" colors={c} />
+                <Legend color="transparent" border={c.orbit} dashed label="Planned" colors={c} />
               </View>
-              {/* Which page is showing; click to turn. */}
+              {/* Which page is showing; click to turn (the phone's dots). */}
               {([0, 1] as const).map((n) => (
                 <Pressable key={n} onPress={() => turnTo(n)} accessibilityLabel={n ? "The week" : "The day"} style={{ padding: 4 }}>
-                  <View style={{ width: page === n ? 16 : 7, height: 7, borderRadius: 4, backgroundColor: page === n ? WEB.blue : "#CBD5E1" }} />
+                  <View style={{ width: page === n ? 16 : 6, height: 6, borderRadius: 3, backgroundColor: page === n ? c.ink : c.track }} />
                 </Pressable>
               ))}
             </View>
@@ -728,10 +750,12 @@ export function WebWeekPlanScreen() {
           {carrying && "entry" in carrying && (carrying.entry.recipe || carrying.entry.meal) && (
             <View
               pointerEvents="none"
-              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", padding: 24, borderRadius: 16, borderWidth: 2, borderStyle: "dashed", borderColor: "#A78BFA", backgroundColor: dropOver === "menu" ? "rgba(237,233,254,0.92)" : "rgba(245,243,255,0.8)" }}
+              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", padding: 24, borderRadius: 18, borderWidth: 2, borderStyle: "dashed", borderColor: dropOver === "menu" ? c.fill : c.selectedRing, backgroundColor: dropOver === "menu" ? "rgba(255, 224, 194, 0.95)" : "rgba(255, 224, 194, 0.8)" }}
             >
-              <Ionicons name="restaurant-outline" size={22} color="#7C3AED" />
-              <Text style={{ marginTop: 6, textAlign: "center", fontSize: 13, fontWeight: "700", color: "#6D28D9" }}>Drop here to take it off the day and put it back on the menu</Text>
+              <View style={{ width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: c.surface }}>
+                <Ionicons name="restaurant-outline" size={21} color={c.ink} />
+              </View>
+              <Text style={{ marginTop: 8, textAlign: "center", fontSize: 13, fontWeight: "700", color: c.ink }}>Drop here to take it off the day and put it back on the menu</Text>
             </View>
           )}
           </DropTarget>
@@ -795,6 +819,20 @@ export function WebWeekPlanScreen() {
         />
       )}
     </WebPage>
+    </OrbitPage>
+  );
+}
+
+// A round button for an arrow, like the phone's way back.
+function RoundButton({ icon, label, onPress, colors: c }: { icon: IconName; label: string; onPress: () => void; colors: OrbitColors }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityLabel={label}
+      style={hoverable(({ hovered }) => ({ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: c.border, backgroundColor: hovered ? c.pill : c.surface }))}
+    >
+      <Ionicons name={icon} size={18} color={c.text} />
+    </Pressable>
   );
 }
 
@@ -831,34 +869,57 @@ function Numbers({
     return { total, over: target != null && total > target * 1.05, target };
   };
   const shifted = week && settings.dailyCalorieLimit && Math.abs(week.aim - settings.dailyCalorieLimit) >= 10 ? week : null;
+  const { colors: c } = useOrbitTheme();
+  // Calories as the phone's ring of marks (NutritionRings), what's left of
+  // the goal in it; the macros as a bar each, in their own colours.
+  const kcal = eaten.calories ?? 0;
+  const kcalPlanned = planned.calories ?? 0;
+  const kcalGoal = goal(settings.dailyCalorieLimit);
+  const share = (n: number, of: number | null) => (of && of > 0 ? n / of : 0);
+  // (A little over isn't flagged: within 5% reads as on target.)
+  const kcalOver = kcalGoal != null && kcal > kcalGoal * 1.05;
+  const left = kcalGoal != null ? kcalGoal - kcal : null;
   return (
     <View style={{ width: PAGE_WIDTH, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14 }}>
-      <Text style={{ fontSize: 15, fontWeight: "700", color: WEB.text }}>{title}</Text>
-      <Text style={{ marginTop: 1, marginBottom: 10, fontSize: 12, color: WEB.muted }}>{subtitle}</Text>
-      <View style={{ flexDirection: "row", alignItems: "baseline" }}>
-        <Text style={{ fontSize: 28, fontWeight: "700", color: WEB.text }}>{Math.round(eaten.calories ?? 0)}</Text>
-        {(planned.calories ?? 0) > 0 && <Text style={{ marginLeft: 6, fontSize: 15, fontWeight: "600", color: WEB.faint }}>+{Math.round(planned.calories ?? 0)}</Text>}
-        <Text style={{ marginLeft: 6, fontSize: 13, color: WEB.muted }}>kcal</Text>
+      <Text style={{ fontSize: 16, fontWeight: "700", color: c.text }}>{title}</Text>
+      <Text style={{ marginTop: 1, fontSize: 12, color: c.muted }}>{subtitle}</Text>
+      <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center" }}>
+        <View style={{ width: 104, height: 104, alignItems: "center", justifyContent: "center" }}>
+          <TickRing size={104} value={share(kcal, kcalGoal)} extra={share(kcalPlanned, kcalGoal)} marks={44} tick={7} color={nutrientColor("calories")} track={c.track} />
+          <Text style={{ fontSize: 22, fontWeight: "800", letterSpacing: -0.5, color: kcalOver ? c.danger : c.text }}>{Math.round(kcal)}</Text>
+          <Text style={{ fontSize: 11, fontWeight: left != null ? "600" : "400", color: kcalOver ? c.danger : c.muted }}>
+            {left != null ? `${Math.abs(Math.round(left))} ${left < 0 ? "over" : "left"}` : "kcal"}
+          </Text>
+        </View>
+        <View style={{ flex: 1, marginLeft: 14 }}>
+          {kcalPlanned > 0 && (
+            <Text style={{ marginBottom: 3, fontSize: 13, fontWeight: "700", color: c.text }}>
+              +{Math.round(kcalPlanned)}
+              <Text style={{ fontWeight: "500", color: c.muted }}> kcal planned</Text>
+            </Text>
+          )}
+          <Text style={{ fontSize: 12, lineHeight: 16, color: c.muted }}>
+            {[line, settings.dailyCalorieLimit ? `goal ${settings.dailyCalorieLimit}${days === 1 ? " kcal" : ""}` : ""].filter(Boolean).join(" · ")}
+          </Text>
+        </View>
       </View>
-      <Text style={{ marginTop: 2, fontSize: 12, color: WEB.muted }}>
-        {[line, settings.dailyCalorieLimit ? `goal ${settings.dailyCalorieLimit}${days === 1 ? " kcal" : ""}` : ""].filter(Boolean).join(" · ")}
-      </Text>
       {shifted && (
-        <Text style={{ marginTop: 2, fontSize: 12, lineHeight: 16, color: "#7C3AED" }}>
-          <Ionicons name="sparkles" size={10} color="#7C3AED" /> Suggesting towards <Text style={{ fontWeight: "700" }}>{Math.round(shifted.aim)} kcal</Text>: the week is {Math.abs(Math.round(shifted.carry))} kcal {shifted.carry > 0 ? "over" : "under"} so far
+        <Text style={{ marginTop: 8, fontSize: 12, lineHeight: 16, color: c.muted }}>
+          <Ionicons name="sparkles" size={10} color={c.accent} /> Suggesting towards <Text style={{ fontWeight: "700", color: c.text }}>{Math.round(shifted.aim)} kcal</Text>: the week is {Math.abs(Math.round(shifted.carry))} kcal {shifted.carry > 0 ? "over" : "under"} so far
         </Text>
       )}
-      <GoalBar label="Calories" value={eaten.calories ?? 0} planned={planned.calories ?? 0} goal={goal(settings.dailyCalorieLimit)} unit="kcal" color={nutrientColor("calories")} />
-      <GoalBar label="Protein" value={eaten.protein ?? 0} planned={planned.protein ?? 0} goal={goal(settings.dailyProteinLimit)} unit="g" color={nutrientColor("protein")} />
-      <GoalBar label="Carbs" value={eaten.carbs ?? 0} planned={planned.carbs ?? 0} goal={goal(settings.dailyCarbsLimit)} unit="g" color={nutrientColor("carbs")} />
-      <GoalBar label="Fats" value={eaten.fats ?? 0} planned={planned.fats ?? 0} goal={goal(settings.dailyFatsLimit)} unit="g" color={nutrientColor("fats")} />
-      {/* Where the suggestions on show would take it. */}
+      <View style={{ marginTop: 6 }}>
+        <MacroBar nutrient="protein" label="Protein" value={eaten.protein ?? 0} planned={planned.protein ?? 0} goal={goal(settings.dailyProteinLimit)} colors={c} />
+        <MacroBar nutrient="carbs" label="Carbs" value={eaten.carbs ?? 0} planned={planned.carbs ?? 0} goal={goal(settings.dailyCarbsLimit)} colors={c} />
+        <MacroBar nutrient="fats" label="Fats" value={eaten.fats ?? 0} planned={planned.fats ?? 0} goal={goal(settings.dailyFatsLimit)} colors={c} />
+      </View>
+      {/* Where the suggestions on show would take it (as the phone's suggestion card). */}
       {!!suggested && suggested.calories > 0 && (
-        <View style={{ marginTop: 14, borderRadius: 10, borderWidth: 1, borderStyle: "dashed", borderColor: "#C4B5FD", backgroundColor: "#F5F3FF", paddingHorizontal: 10, paddingVertical: 8 }}>
-          <Text style={{ fontSize: 12, fontWeight: "700", color: "#5B21B6" }}>
-            <Ionicons name="sparkles" size={11} color="#7C3AED" /> With the suggestions
+        <View style={{ marginTop: 14, borderRadius: 12, borderWidth: 1, borderStyle: "dashed", borderColor: c.selectedRing, backgroundColor: c.accentSoft, paddingHorizontal: 10, paddingVertical: 8 }}>
+          <Text style={{ fontSize: 12, fontWeight: "700", color: c.text }}>
+            <Ionicons name="sparkles" size={11} color={c.accent} /> With the suggestions
           </Text>
-          <Text style={{ marginTop: 2, fontSize: 11, color: "#7C3AED" }}>
+          <Text style={{ marginTop: 2, fontSize: 11, color: c.muted }}>
             they add {Math.round(suggested.calories)} kcal · P {Math.round(suggested.protein)} · C {Math.round(suggested.carbs)} · F {Math.round(suggested.fats)} g
           </Text>
           <View style={{ marginTop: 6, flexDirection: "row", flexWrap: "wrap", columnGap: 12, rowGap: 2 }}>
@@ -870,8 +931,8 @@ function Numbers({
                 ["F", withAll("fats", goal(settings.dailyFatsLimit))],
               ] as const
             ).map(([label, sum]) => (
-              <Text key={label} style={{ fontSize: 12, color: "#5B21B6" }}>
-                <Text style={{ fontWeight: "700", color: sum.over ? WEB.red : "#5B21B6" }}>{sum.total}</Text>
+              <Text key={label} style={{ fontSize: 12, color: c.muted }}>
+                <Text style={{ fontWeight: "700", color: sum.over ? c.danger : c.text }}>{sum.total}</Text>
                 {sum.target != null ? ` / ${Math.round(sum.target)}` : ""} {label}
               </Text>
             ))}
@@ -882,23 +943,51 @@ function Numbers({
   );
 }
 
-function SuggestionButton({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+// A macro against its goal, as on the phone's Log: eaten in its own colour,
+// what's planned faded after it; over the goal, the number turns red (the
+// bar keeps its colour).
+function MacroBar({ nutrient, label, value, planned, goal, colors: c }: { nutrient: MainNutrient; label: string; value: number; planned: number; goal: number | null; colors: OrbitColors }) {
+  const of = goal && goal > 0 ? goal : null;
+  const pct = (n: number) => `${Math.max(0, Math.min(100, of ? (n / of) * 100 : 0))}%` as const;
+  // (A little over isn't flagged: within 5% reads as on target.)
+  const over = !!of && value > of * 1.05;
+  const tone = nutrientColor(nutrient);
+  return (
+    <View style={{ marginTop: 10 }}>
+      <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+        <Text style={{ flex: 1, fontSize: 12.5, fontWeight: "600", color: c.text }}>{label}</Text>
+        <Text style={{ fontSize: 12, fontWeight: "700", color: over ? c.danger : c.text }}>{Math.round(value)}</Text>
+        <Text style={{ fontSize: 11, color: c.faint }}>
+          {of ? ` / ${Math.round(of)} g` : " g"}
+          {planned > 0 ? ` +${Math.round(planned)}` : ""}
+        </Text>
+      </View>
+      <View style={{ marginTop: 4, height: 5, borderRadius: 2.5, overflow: "hidden", flexDirection: "row", backgroundColor: c.track }}>
+        <View style={{ width: pct(value), backgroundColor: tone }} />
+        <View style={{ width: pct(Math.min(planned, Math.max(0, (of ?? 0) - value))), backgroundColor: tone, opacity: 0.35 }} />
+      </View>
+    </View>
+  );
+}
+
+// A small round button on a suggestion (another, swap, drop, add a side).
+function SuggestionButton({ icon, label, onPress, colors: c }: { icon: IconName; label: string; onPress: () => void; colors: OrbitColors }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityLabel={label}
-      style={({ hovered }: { hovered?: boolean }) => ({ width: 24, height: 22, alignItems: "center", justifyContent: "center", borderRadius: 6, backgroundColor: hovered ? "#DDD6FE" : "transparent" })}
+      style={hoverable(({ hovered }) => ({ width: 24, height: 22, alignItems: "center", justifyContent: "center", borderRadius: 11, backgroundColor: hovered ? c.pill : "transparent" }))}
     >
-      <Ionicons name={icon} size={14} color="#6D28D9" />
+      <Ionicons name={icon} size={14} color={c.accent} />
     </Pressable>
   );
 }
 
-function Legend({ color, border, dashed, label }: { color: string; border: string; dashed?: boolean; label: string }) {
+function Legend({ color, border, dashed, label, colors: c }: { color: string; border: string; dashed?: boolean; label: string; colors: OrbitColors }) {
   return (
     <View style={{ flexDirection: "row", alignItems: "center" }}>
       <View style={{ width: 16, height: 12, borderRadius: 4, backgroundColor: color, borderWidth: 1, borderColor: border, borderStyle: dashed ? "dashed" : "solid" }} />
-      <Text style={{ marginLeft: 6, fontSize: 11, color: WEB.muted }}>{label}</Text>
+      <Text style={{ marginLeft: 6, fontSize: 11, color: c.muted }}>{label}</Text>
     </View>
   );
 }
@@ -913,13 +1002,14 @@ function PieceChooser({ title, slots, amountSlots, choices, kept, keptSizes, cal
   // (PieceSizePicker), saved together.
   const [picked, setPicked] = useState<string[]>(kept);
   const [sizes, setSizes] = useState<PieceSizeInput[]>(keptSizes);
+  const { colors: c } = useOrbitTheme();
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(15,23,42,0.45)", padding: 24 }}>
-        <Pressable onPress={() => {}} style={{ width: "100%", maxWidth: 520, maxHeight: "86%", borderRadius: 18, backgroundColor: WEB.card, borderWidth: 1, borderColor: WEB.border, overflow: "hidden" }}>
+      <Pressable onPress={onClose} style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.scrim, padding: 24 }}>
+        <Pressable onPress={() => {}} style={{ width: "100%", maxWidth: 520, maxHeight: "86%", borderRadius: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, overflow: "hidden" }}>
           <View style={{ paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10 }}>
-            <Text style={{ fontSize: 17, fontWeight: "700", color: WEB.text }}>{slots.length ? (amountSlots.length ? "How big, and how much?" : "How big?") : "How much?"}</Text>
-            <Text numberOfLines={1} style={{ marginTop: 2, fontSize: 13, color: WEB.muted }}>
+            <Text style={{ fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: c.text }}>{slots.length ? (amountSlots.length ? "How big, and how much?" : "How big?") : "How much?"}</Text>
+            <Text numberOfLines={1} style={{ marginTop: 2, fontSize: 13, color: c.muted }}>
               {title}
             </Text>
           </View>
@@ -941,14 +1031,10 @@ function PieceChooser({ title, slots, amountSlots, choices, kept, keptSizes, cal
               </View>
             )}
           </ScrollView>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: WEB.border }}>
-            <Text style={{ flex: 1, fontSize: 12, color: WEB.faint }}>Once it&apos;s eaten, the piece really used is logged.</Text>
-            <Pressable onPress={onClose} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1, borderColor: WEB.border }}>
-              <Text style={{ fontSize: 13, fontWeight: "600", color: WEB.body }}>Cancel</Text>
-            </Pressable>
-            <Pressable onPress={() => onChoose(picked, sizes)} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, backgroundColor: WEB.blue }}>
-              <Text style={{ fontSize: 13, fontWeight: "600", color: "#FFFFFF" }}>Save</Text>
-            </Pressable>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: c.border }}>
+            <Text style={{ flex: 1, fontSize: 12, color: c.faint }}>Once it&apos;s eaten, the piece really used is logged.</Text>
+            <Button label="Cancel" onPress={onClose} />
+            <Button label="Save" kind="primary" onPress={() => onChoose(picked, sizes)} />
           </View>
         </Pressable>
       </Pressable>

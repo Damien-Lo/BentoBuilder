@@ -14,11 +14,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Tap } from "@/src/components/ui/Tap";
-import { OrbitPage, OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { OrbitPage, OrbitSection, SECTION_PALETTE, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 import { useWideWeb } from "@/src/utils/useWideWeb";
 import { useFocusEffect, useRouter } from "expo-router";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
+import { PlanCrumb } from "@/src/components/planner/web/PlanFrame";
+import { Button } from "@/src/components/web/ui";
 import { Ionicons } from "@expo/vector-icons";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
@@ -127,14 +129,17 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
   const addWidth = wide ? { maxWidth: 640 } : undefined;
   const column = wide ? { flex: 1, minWidth: 0 } : undefined;
   const router = useRouter();
-  // On a phone, in Orbit's look, light or dark (`o`: its colours); a
-  // desktop browser keeps the desktop's for now. The fields, dropdowns and
-  // switches in it follow by themselves (OrbitPage).
+  // In Orbit's look, light or dark (`o`: its colours), on a phone and in a
+  // desktop browser. The fields, dropdowns and switches in it follow by
+  // themselves (OrbitPage).
   const { colors, dark } = useOrbitTheme();
-  const o = wide ? null : colors;
+  const o: OrbitColors | null = colors;
   const card = o && { backgroundColor: o.surface, borderColor: o.border };
   const fieldText = o && { color: o.text };
   const placeholder = o?.faint ?? "#94A3B8";
+  // An ingredient's icon in a list: on a phone in the accent, on the
+  // desktop in the Kitchen's colour (its pale tint behind).
+  const well = wide ? { backgroundColor: SECTION_PALETTE.kitchen.tint, color: colors.ink } : { backgroundColor: colors.accentSoft, color: colors.accent };
   // Soft tints behind an icon, in either theme.
   const tint = (light: string, darkTint: string) => (dark ? darkTint : light);
 
@@ -886,26 +891,28 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
   }
 
   return (
-    <OrbitPage on={!!o}>
+    <OrbitPage>
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        // In a desktop browser: a page's width, centred, under its own heading.
-        style={wide ? { width: "100%", maxWidth: 1180, alignSelf: "center", paddingHorizontal: 4 } : undefined}
+        // In a desktop browser: a page's width, centred, under its own
+        // heading (its content as wide as the other desktop pages').
+        style={wide ? { width: "100%", maxWidth: 1180 + 48, alignSelf: "center", paddingHorizontal: 8 } : undefined}
       >
-        {/* Heading (desktop): the title, and the list / shopping switch beside it */}
+        {/* Heading (desktop): the way back to Plan over the title, and the
+            list / shopping switch beside it (in shopping mode, the receipt
+            camera first) */}
         {wide && (
-          <View style={{ flexDirection: "row", alignItems: "flex-end", paddingHorizontal: 20, paddingTop: 24 }}>
+          <View style={{ paddingHorizontal: 16, paddingTop: 24 }}>
+            {!inTabs && <PlanCrumb />}
+            <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12 }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 26, fontWeight: "700", color: "#0F172A" }}>Grocery list</Text>
-              <Text style={{ marginTop: 2, fontSize: 14, color: "#64748B" }}>What to buy, what&apos;s bought and waiting to be put away, and what&apos;s done</Text>
+              <Text style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: colors.text }}>Grocery list</Text>
+              <Text style={{ marginTop: 2, fontSize: 14, color: colors.muted }}>What to buy, what&apos;s bought and waiting to be put away, and what&apos;s done</Text>
             </View>
-            {viewMode === "shopping" && (
-              <Pressable className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-blue-50 active:bg-blue-100" onPress={() => setReceiptScannerVisible(true)} accessibilityLabel="Scan a receipt">
-                <Ionicons name="camera-outline" size={19} color="#2563EB" />
-              </Pressable>
-            )}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            {viewMode === "shopping" && <Button label="Scan receipt" icon="camera-outline" kind="primary" onPress={() => setReceiptScannerVisible(true)} />}
             <View style={{ width: 300 }}>
               <SegmentedToggle<"list" | "shopping">
                 value={viewMode}
@@ -916,12 +923,14 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                 onChange={setViewMode}
               />
             </View>
+            </View>
+            </View>
           </View>
         )}
 
         {/* Header (phone): the way back (and in shopping mode, the receipt
             camera) over a large title, on the page itself */}
-        {o && (
+        {o && !wide && (
           <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
             <View style={[{ flexDirection: "row", alignItems: "center", marginLeft: -4, minHeight: 40 }, inTabs && viewMode !== "shopping" && { display: "none" }]}>
               {!inTabs && (
@@ -968,7 +977,8 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
               placeholder="Search ingredients or add any item…"
               placeholderTextColor={placeholder}
               className="flex-1 text-base text-slate-900"
-              style={fieldText}
+              // (No browser focus ring in the desktop's rounded box.)
+              style={[fieldText, wide && ({ outlineStyle: "none" } as object)]}
             />
             {nameInput.length > 0 && (
               <Pressable
@@ -1008,8 +1018,8 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                   }`}
                   style={o && { borderTopColor: o.border }}
                 >
-                  <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.accentSoft }}>
-                    <Ionicons name="nutrition-outline" size={16} color={o?.accent ?? "#2563EB"} />
+                  <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: well.backgroundColor }}>
+                    <Ionicons name="nutrition-outline" size={16} color={o ? well.color : "#2563EB"} />
                   </View>
                   <View className="ml-3 flex-1">
                     <Text className="font-medium text-slate-900" style={fieldText}>{ing.name}</Text>
@@ -1020,7 +1030,7 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                     </Text>
                   </View>
                   {selectedIngredientId === ing._id && (
-                    <Ionicons name="checkmark-circle" size={20} color={o?.accent ?? "#2563EB"} />
+                    <Ionicons name="checkmark-circle" size={20} color={o ? well.color : "#2563EB"} />
                   )}
                 </Pressable>
               );
@@ -1445,12 +1455,12 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                     className="flex-row items-center border-b border-slate-100 px-1 py-3 active:bg-slate-50"
                     style={o && { borderBottomColor: o.border }}
                   >
-                    <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.accentSoft }}>
-                      <Ionicons name="nutrition-outline" size={16} color={o?.accent ?? "#2563EB"} />
+                    <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: well.backgroundColor }}>
+                      <Ionicons name="nutrition-outline" size={16} color={o ? well.color : "#2563EB"} />
                     </View>
                     <Text className="ml-3 flex-1 font-medium text-slate-900" style={fieldText}>{ing.name}</Text>
                     {linkingItemIngredientId === ing._id && (
-                      <Ionicons name="checkmark-circle" size={18} color={o?.accent ?? "#2563EB"} />
+                      <Ionicons name="checkmark-circle" size={18} color={o ? well.color : "#2563EB"} />
                     )}
                   </Pressable>
                 ))}
@@ -1515,8 +1525,8 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                 openLogModal(item, generic._id, generic.name);
               }}
             >
-              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.accentSoft }}>
-                <Ionicons name="pricetag-outline" size={16} color={o?.accent ?? "#2563EB"} />
+              <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: well.backgroundColor }}>
+                <Ionicons name="pricetag-outline" size={16} color={o ? well.color : "#2563EB"} />
               </View>
               <View className="flex-1">
                 <Text className="font-semibold text-slate-900" style={fieldText}>

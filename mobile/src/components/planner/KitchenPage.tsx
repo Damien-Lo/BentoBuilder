@@ -22,10 +22,13 @@ export function KitchenPage({ title, subtitle, right, back = true, bare = false,
   const goBack = () => (router.canGoBack() ? router.back() : router.replace("/overview"));
   if (wide) {
     return (
-      <WebPage maxWidth={1180}>
-        <PageTitle title={title} subtitle={subtitle} right={right} />
-        {children}
-      </WebPage>
+      // (`orbit`: in Orbit's look on the desktop too.)
+      <OrbitPage on={orbit}>
+        <WebPage maxWidth={1180}>
+          <PageTitle title={title} subtitle={subtitle} right={right} />
+          {children}
+        </WebPage>
+      </OrbitPage>
     );
   }
   if (orbit) {
