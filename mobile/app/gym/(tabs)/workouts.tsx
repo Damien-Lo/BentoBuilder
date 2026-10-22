@@ -1,17 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { clearActiveSession, clock, loadActiveSession, type ActiveSession } from "@/src/components/gym/activeSession";
+import { clock, loadActiveSession, type ActiveSession } from "@/src/components/gym/activeSession";
+import { sortWorkouts } from "@/src/components/gym/schedule";
+import { useStartWorkout } from "@/src/components/gym/useStartWorkout";
 import { Tap } from "@/src/components/ui/Tap";
 import { getWorkouts, type GymWorkout } from "@/src/services/gymApi";
 import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // Gym → Workouts: the workouts you've built — each a card, with Edit (to
 // change it) and Start (to do it: gym/session) under it — and a button to
-// build a new one. One under way shows at the top, to go back to.
+// build a new one. In the order of the week (from their names: Monday's
+// first). One under way shows at the top, to go back to.
 export default function WorkoutsTab() {
   const router = useRouter();
   const { colors: c } = useOrbitTheme();
@@ -23,24 +26,14 @@ export default function WorkoutsTab() {
     useCallback(() => {
       getWorkouts()
         .then((list) => {
-          setWorkouts(list);
+          setWorkouts(sortWorkouts(list));
           setFailed(false);
         })
         .catch(() => setFailed(true));
       loadActiveSession().then(setActive);
     }, []),
   );
-  const resume = () => router.push("/gym/session" as Href);
-  // Start one — unless another's under way: carry on with that, or drop it.
-  function start(workout: GymWorkout) {
-    if (!active) return router.push(`/gym/session?workout=${workout._id}` as Href);
-    if (active.workoutId === workout._id) return resume();
-    Alert.alert("A workout's under way", `${active.name} isn't finished. Carry on with it, or discard it and start ${workout.name}?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: `Resume ${active.name}`, onPress: resume },
-      { text: "Discard it", style: "destructive", onPress: () => void clearActiveSession().then(() => router.push(`/gym/session?workout=${workout._id}` as Href)) },
-    ]);
-  }
+  const { start, resume } = useStartWorkout(active);
   const build = (id?: string) => router.push((id ? `/gym/build?id=${id}` : "/gym/build") as Href);
 
   return (

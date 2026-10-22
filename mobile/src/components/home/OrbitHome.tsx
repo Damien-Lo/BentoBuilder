@@ -14,6 +14,8 @@ import { QuickActions } from "@/src/components/ui/QuickActions";
 import { Tap } from "@/src/components/ui/Tap";
 import { minutesLabel } from "@/src/components/calendar/calendarUtils";
 import { mealLine } from "@/src/components/calendar/mealFood";
+import { dayLabel, durationLabel } from "@/src/components/gym/schedule";
+import { sessionTotals } from "@/src/services/gymApi";
 import { updateTodoTask } from "@/src/services/todoApi";
 import { nutrientColor } from "@/src/theme/nutrients";
 import { sectionColor, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
@@ -96,8 +98,15 @@ function glance(id: SectionId, t: Today): { value: string; ring: number; caption
         ring: t.weightProgress,
         caption: t.latestWeight ? `${Math.round(t.weightProgress * 100)}% of the way to your goal` : "No weigh-ins yet",
       };
-    case "gym":
-      return { value: "—", ring: 0, caption: "No sessions yet" };
+    case "gym": {
+      const { week, next } = t.gym;
+      const done = week.sessions.length;
+      return {
+        value: week.target ? `${done}/${week.target}` : String(done),
+        ring: week.target ? Math.min(1, done / week.target) : done ? 1 : 0,
+        caption: t.gym.active ? `${t.gym.active.name} under way` : next ? `${next.workout.name} ${next.when === "Next" ? "is next" : next.when.toLowerCase()}` : done ? `${done} workout${done === 1 ? "" : "s"} this week` : "No workouts yet",
+      };
+    }
     case "tasks":
       return {
         value: t.tasks.length ? `${t.tasks.length} due` : "All done",
@@ -362,7 +371,37 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
       : quiet("Nothing due — nice.");
     actions = <Action label="New task" icon="add" onPress={() => go("/lists")} colors={colors} />;
   } else if (section.id === "gym") {
-    body = quiet("No sessions yet — workouts, logging and progress are being planned.");
+    // (What's up next — or under way — then the last one.)
+    const { week, next, last, active } = t.gym;
+    const lastTotals = last ? sessionTotals(last) : null;
+    body = (
+      <>
+        <Text style={{ fontSize: 24, fontWeight: "700", color: colors.text }}>
+          {week.sessions.length}
+          {week.target ? ` of ${week.target}` : ""} <Text style={{ fontSize: 14, fontWeight: "400", color: colors.muted }}>workout{(week.target ?? week.sessions.length) === 1 ? "" : "s"} this week</Text>
+        </Text>
+        {active ? (
+          <Row icon="barbell" iconColor={colors.success} title={active.name} detail="Under way" onPress={() => go("/gym/session" as Href)} colors={colors} />
+        ) : next ? (
+          <Row icon="play-circle-outline" iconColor={colors.text} title={next.workout.name} detail={`Up next · ${next.when}`} onPress={() => go(`/gym/workout/${next.workout._id}` as Href)} colors={colors} />
+        ) : null}
+        {last && lastTotals && (
+          <Row
+            icon="checkmark-circle-outline"
+            title={last.name}
+            detail={`${dayLabel(last.finishedAt)} · ${durationLabel(lastTotals.seconds)} · ${lastTotals.sets} sets · ${Math.round(lastTotals.volume).toLocaleString()} lbs`}
+            onPress={() => go(`/gym/sessions/${last._id}` as Href)}
+            colors={colors}
+          />
+        )}
+        {!next && !last && !active && quiet("No workouts yet — build one to get started.")}
+      </>
+    );
+    actions = active ? (
+      <Action label="Resume" icon="play" onPress={() => go("/gym/session" as Href)} colors={colors} />
+    ) : next?.when === "Today" ? (
+      <Action label={`Start ${next.workout.name}`} icon="play" onPress={() => go(`/gym/session?workout=${next.workout._id}` as Href)} colors={colors} />
+    ) : null;
   } else {
     body = quiet("Your files, notes, documents and plans, all in one place — on its way.");
   }

@@ -3,7 +3,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { addDays, nowMinutes as currentMinutes } from "@/src/components/calendar/calendarUtils";
 import { useCalendarData } from "@/src/components/calendar/useCalendarData";
+import { loadActiveSession, type ActiveSession } from "@/src/components/gym/activeSession";
+import { thisWeek, upNext } from "@/src/components/gym/schedule";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
+import { getSessions, getWorkouts, type GymSessionRecord, type GymWorkout } from "@/src/services/gymApi";
 import { getMealPlanRange, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import { DEFAULT_SETTINGS, loadSettings, type AppSettings } from "@/src/services/settingsService";
@@ -14,7 +17,7 @@ import { computeDayNutrition, todayStr } from "@/src/utils/mealPlan";
 
 // Today, gathered for the home screen: what's on (events, meals at their
 // times), what's been eaten against the day's goals, what's due, what's
-// about to expire, and how the weight is going — reloaded whenever home is
+// about to expire, how the weight is going, and the training week — reloaded whenever home is
 // shown, and the time kept current.
 
 const dayOf = (iso?: string | null) => (iso ? iso.slice(0, 10) : null);
@@ -29,6 +32,9 @@ export function useToday() {
   const [myDay, setMyDay] = useState<TodoTask[]>([]);
   const [pantry, setPantry] = useState<PantryItem[]>([]);
   const [weights, setWeights] = useState<WeightEntry[]>([]);
+  const [workouts, setWorkouts] = useState<GymWorkout[]>([]);
+  const [sessions, setSessions] = useState<GymSessionRecord[]>([]);
+  const [activeWorkout, setActiveWorkout] = useState<ActiveSession | null>(null);
   const [now, setNow] = useState(currentMinutes);
 
   const reload = useCallback(() => {
@@ -39,6 +45,9 @@ export function useToday() {
     getSmartTasks("myday").then(setMyDay, () => {});
     getPantryItems().then(setPantry, () => {});
     getWeightEntries().then(setWeights, () => {});
+    getWorkouts().then(setWorkouts, () => {});
+    getSessions().then(setSessions, () => {});
+    loadActiveSession().then(setActiveWorkout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useFocusEffect(reload);
@@ -95,6 +104,10 @@ export function useToday() {
     const target = settings.goalWeight;
     const weightProgress = latest && start != null && target != null && start !== target ? Math.max(0, Math.min(1, (start - latest.weight) / (start - target))) : 0;
 
+    // Training: this week against the plan, what's next, the last one.
+    const gymWeek = thisWeek(workouts, sessions);
+    const gym = { week: gymWeek, next: upNext(workouts, sessions), last: sessions[0] ?? null, active: activeWorkout };
+
     // How far through the waking day (7:00 to 23:00).
     const dayProgress = Math.max(0, Math.min(1, (now - 7 * 60) / (16 * 60)));
 
@@ -122,9 +135,10 @@ export function useToday() {
       weightChange,
       weightProgress,
       dayProgress,
+      gym,
       reload,
     };
-  }, [today, now, calendar.visibleEvents, calendar.loaded, settings, entries, plan, dashboard, myDay, pantry, weights, reload]);
+  }, [today, now, calendar.visibleEvents, calendar.loaded, settings, entries, plan, dashboard, myDay, pantry, weights, workouts, sessions, activeWorkout, reload]);
 }
 
 export type Today = ReturnType<typeof useToday>;
