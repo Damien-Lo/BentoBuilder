@@ -87,6 +87,7 @@ import {
   getMealKcal,
   getRecipeKcal,
   getRestaurantMealKcal,
+  restaurantKcalRange,
   getRollingDates,
   parseLocalDate,
   scaleIngredientNutrition,
@@ -1550,7 +1551,7 @@ function PhonePlannerScreen() {
   }
 
   function renderRestaurantMealInfo(restaurantMeal: RestaurantMeal) {
-    const kcal = getRestaurantMealKcal(restaurantMeal);
+    const kcal = restaurantKcalRange(restaurantMeal);
     const tags = (restaurantMeal.tags ?? []).filter((t): t is SelectOption => typeof t !== "string");
     return (
       <View>
@@ -1564,7 +1565,7 @@ function PhonePlannerScreen() {
           <Text className="mb-4 text-sm leading-5 text-slate-600" style={o && { color: o.muted }}>{restaurantMeal.notes}</Text>
         )}
 
-        {infoRow("Total calories", kcal, kcal != null ? " kcal" : "")}
+        {infoRow("Per dish", kcal)}
 
         {infoHeading(`Dishes (${restaurantMeal.dishes.length})`)}
         {restaurantMeal.dishes.map(dish => (
@@ -3394,7 +3395,8 @@ function PhonePlannerScreen() {
                     </>
                   }
                   renderItem={({ item: restaurantMeal }) => {
-                    const kcal = getRestaurantMealKcal(restaurantMeal);
+                    // (A dish's worth, not the whole menu summed.)
+                    const kcal = restaurantKcalRange(restaurantMeal);
                     const slotCfg = SLOT_MAP[addSlot];
                     return (
                       <Pressable
@@ -3417,7 +3419,7 @@ function PhonePlannerScreen() {
                           </Text>
                         </View>
                         {kcal != null && (
-                          <Text className="mr-2 text-sm font-semibold text-slate-500" style={o && { fontSize: 13, color: o.muted }}>{kcal} kcal</Text>
+                          <Text className="mr-2 text-sm font-semibold text-slate-500" style={o && { fontSize: 13, color: o.muted }}>{kcal}</Text>
                         )}
                         <Pressable
                           hitSlop={8}

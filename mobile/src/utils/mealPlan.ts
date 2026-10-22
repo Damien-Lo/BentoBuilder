@@ -197,6 +197,18 @@ export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal, selections
   return hasAny ? Math.round(total) : null;
 }
 
+// What one dish there comes to, for browsing a restaurant before picking:
+// "450 kcal" when its dishes agree (or there's one), "450–1,200 kcal" when
+// they don't. (The whole menu summed reads as one meal's worth — it isn't:
+// you have a dish or two of it.) Null when no dish has a calorie estimate.
+export function restaurantKcalRange(restaurantMeal: RestaurantMeal): string | null {
+  const values = (restaurantMeal.dishes ?? []).map((d) => d.nutrition?.calories).filter((c): c is number => c != null);
+  if (!values.length) return null;
+  const low = Math.round(Math.min(...values));
+  const high = Math.round(Math.max(...values));
+  return low === high ? `${low.toLocaleString()} kcal` : `${low.toLocaleString()}–${high.toLocaleString()} kcal`;
+}
+
 // ── Recipe nutrition scaling (per-serving nutrition × servings eaten) ──────────
 
 export function scaleRecipeNutrition(recipe: Recipe, servings: number): NullableNutrition {
