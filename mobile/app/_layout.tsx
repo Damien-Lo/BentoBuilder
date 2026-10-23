@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ServerGate } from "@/src/components/ServerGate";
 import { AuthGate } from "@/src/components/auth/AuthGate";
+import { HealthAutoSync } from "@/src/components/health/HealthAutoSync";
 import { OrbitThemeProvider } from "@/src/theme/orbit";
 import { OrbitStatusBar } from "@/src/theme/OrbitStatusBar";
 import { WebAlertHost } from "@/src/components/web/WebAlert";
@@ -33,6 +34,8 @@ export default function RootLayout() {
     >
       <ServerGate>
       <AuthGate>
+      {/* (Apple Health, synced as the app comes to the front.) */}
+      <HealthAutoSync />
       <WebShell>
       <Stack>
         <Stack.Screen

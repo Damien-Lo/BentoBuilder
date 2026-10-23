@@ -10,7 +10,7 @@ module.exports = {
     version: "1.0.0",
     orientation: "portrait",
     // The tilted orbit (design/Orbit app icons.pdf).
-    icon: IS_DEV ? "./assets/images/orbit-icon-beta.png" : "./assets/images/orbit-icon-light.png",
+    icon: IS_DEV ? "./assets/images/orbit-icon-beta-light.png" : "./assets/images/orbit-icon-light.png",
     scheme: "mobile",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
@@ -22,10 +22,11 @@ module.exports = {
       bundleIdentifier: IS_DEV
         ? "com.damienlo.bentobuilder.dev"
         : "com.damienlo.bentobuilder",
-      // On a light home screen the light icon, on a dark one the dark (the
-      // beta build has the one, marked BETA).
+      // On a light home screen the light icon, on a dark one the dark — the
+      // beta build's marked BETA (a black band on the light, yellow on the
+      // dark).
       icon: IS_DEV
-        ? "./assets/images/orbit-icon-beta.png"
+        ? { light: "./assets/images/orbit-icon-beta-light.png", dark: "./assets/images/orbit-icon-beta-dark.png" }
         : { light: "./assets/images/orbit-icon-light.png", dark: "./assets/images/orbit-icon-dark.png" },
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,

@@ -17,8 +17,9 @@ import { API_BASE_URL } from "@/src/config/api";
 // — the Watch's and the phone's — is read from Apple Health a day at a
 // time and kept on the server as readings (server/models/HealthMetric.js),
 // for Health to show and the rest of the app to use. Synced when asked
-// (and when Health opens): from a couple of days before the last sync, or
-// the last 90 days the first time. Nothing here on the web or Android.
+// (Sync now), when Health opens, and whenever the app comes to the front
+// (HealthAutoSync) — each an hour or more after the last: from a couple of
+// days before the last sync, or the last 90 days the first time. Nothing here on the web or Android.
 
 // What's read: each quantity a day at a time — a total, or a figure for
 // the day — in the unit it's kept in.
@@ -124,8 +125,18 @@ function nights(samples: readonly { startDate: Date; endDate: Date; value: numbe
 }
 
 // Reads Apple Health since a little before the last sync and sends it to
-// the server. What came of it: how many readings went in.
-export async function syncAppleHealth(): Promise<{ sent: number; added: number; updated: number; from: Date }> {
+// the server. What came of it: how many readings went in. (One at a time:
+// asked again while one's running, it's that one.)
+type SyncResult = { sent: number; added: number; updated: number; from: Date };
+let running: Promise<SyncResult> | null = null;
+export function syncAppleHealth(): Promise<SyncResult> {
+  running ??= runSync().finally(() => {
+    running = null;
+  });
+  return running;
+}
+
+async function runSync(): Promise<SyncResult> {
   const now = new Date();
   const last = await lastSynced();
   const from = midnight(last ? new Date(last.getTime() - 2 * 86_400_000) : new Date(now.getTime() - 90 * 86_400_000));
