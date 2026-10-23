@@ -11,6 +11,7 @@ import {
   type EventCalendar,
   type EventOccurrence,
 } from "@/src/services/calendarApi";
+import { useGymLines } from "@/src/components/calendar/gymLine";
 import { usePlanNeeds } from "@/src/components/planner/usePlanNeeds";
 import { getMealPlanRange, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { loadSettings } from "@/src/services/settingsService";
@@ -44,6 +45,7 @@ export function useCalendarData(focusDate: string) {
   const kitchenPlan = usePlanNeeds();
   const mealFood = useMemo<Map<string, MealFood>>(() => buildMealFood(kitchenPlan.sized(mealPlan.entries), mealPlan.conversions), [mealPlan, kitchenPlan]);
   const [usualMeals, setUsualMeals] = useState<UsualMeal[]>([]);
+  const [withWorkout, loadWorkouts] = useGymLines();
   const [weekStartDay, setWeekStartDay] = useState(1);
   const [loaded, setLoaded] = useState(false);
   const windowRef = useRef<{ from: string; to: string } | null>(null);
@@ -68,10 +70,11 @@ export function useCalendarData(focusDate: string) {
         .then(([entries, settings]) => setMealPlan({ entries, conversions: settings.unitConversions }))
         .catch(() => {});
       getUsualMeals().then(setUsualMeals).catch(() => {});
+      loadWorkouts();
     } catch {
       // Keep whatever was showing.
     }
-  }, []);
+  }, [loadWorkouts]);
 
   const loadCalendars = useCallback(async () => {
     try {
@@ -107,6 +110,8 @@ export function useCalendarData(focusDate: string) {
         ]
       : [];
     const withFood = events.map((e) => {
+      // A planned workout: its routine, or the session that did it.
+      if (calendarsById.get(e.calendar)?.isGym) return withWorkout(e, calendarsById.get(e.calendar), today);
       if (!e.mealSlot) return e;
       const food = mealFood.get(mealKey(e.occurrenceDate, e.mealSlot)) ?? null;
       const usually =
@@ -119,7 +124,7 @@ export function useCalendarData(focusDate: string) {
       return { ...e, meal: { food, usually: usually || undefined } };
     });
     return [...taskOccurrences, ...withFood].filter((e) => eventShown(e, calendarsById.get(e.calendar)));
-  }, [events, tasks, mealFood, usualMeals, calendars, calendarsById, today]);
+  }, [events, tasks, mealFood, usualMeals, calendars, calendarsById, today, withWorkout]);
 
   async function toggleCalendar(calendar: EventCalendar) {
     const visible = !calendar.visible;

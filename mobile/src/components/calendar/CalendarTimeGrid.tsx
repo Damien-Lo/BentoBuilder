@@ -319,7 +319,15 @@ function DayColumn({
                   {mealLine(event)}
                 </Text>
               )}
-              {height >= (event.meal ? 58 : 40) && (
+              {/* A planned workout: the routine, or the session that did it. */}
+              {event.workout && height >= 30 && (
+                <Text numberOfLines={height >= 56 ? 2 : 1} className="text-[10px]" style={{ color: event.workout.status === "done" ? o.icon : o.faint }}>
+                  {event.workout.status === "done" && <Ionicons name="checkmark-circle" size={10} color={o.success} />}
+                  {event.workout.status === "done" ? " " : ""}
+                  {event.workout.line}
+                </Text>
+              )}
+              {height >= (event.meal || event.workout ? 58 : 40) && (
                 <Text numberOfLines={1} className="text-[10px]" style={{ color: o.muted }}>
                   {minutesLabel(event.startMinutes)}–{minutesLabel(event.endMinutes)}
                   {event.location ? ` · ${event.location}` : ""}

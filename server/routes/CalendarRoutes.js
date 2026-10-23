@@ -124,6 +124,25 @@ async function getMealsCalendar() {
   return calendar;
 }
 
+// The Gym's calendar: planned workouts. (Gym's colour is orange; the
+// Kitchen's calendar, orange before the sections swapped colours, turns
+// yellow — if it's still the colour it started with.)
+async function getGymCalendar() {
+  const existing = await EventCalendar.findOne({ isGym: true });
+  if (existing) return existing;
+  await EventCalendar.updateOne({ isMeals: true, color: "orange" }, { $set: { color: "yellow" } });
+  return EventCalendar.create({ name: "Gym", color: "orange", isGym: true, order: 998 });
+}
+
+// An event's workout follows its calendar: kept in the Gym calendar,
+// never set anywhere else.
+async function withGymRules(fields) {
+  if (fields.calendar === undefined) return fields;
+  const calendar = await EventCalendar.findById(fields.calendar).select("isGym");
+  if (calendar?.isGym) return fields;
+  return { ...fields, gymWorkout: null };
+}
+
 const MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"];
 const MEAL_LABELS = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
 
@@ -247,6 +266,7 @@ router.get("/calendars", async (req, res) => {
       await EventCalendar.create({ name: "Tasks", color: "indigo", isTasks: true, order: 1000 });
     }
     await getMealsCalendar();
+    await getGymCalendar();
     const calendars = await EventCalendar.find().sort({ order: 1, createdAt: 1 });
     return res.json({ success: true, data: calendars });
   } catch (error) {
@@ -303,6 +323,7 @@ router.delete("/calendars/:id", async (req, res) => {
     if (calendar.isDefault) return fail(res, "The default calendar can't be deleted");
     if (calendar.isTasks) return fail(res, "The Tasks calendar can't be deleted — hide it instead");
     if (calendar.isMeals || calendar.isKitchen) return fail(res, "The Kitchen calendar can't be deleted — hide it instead");
+    if (calendar.isGym) return fail(res, "The Gym calendar can't be deleted — hide it instead");
     await CalendarEvent.deleteMany({ calendar: calendar._id });
     await calendar.deleteOne();
     return res.json({ success: true });
@@ -401,11 +422,13 @@ router.post("/events", async (req, res) => {
   try {
     const calendar = req.body.calendar || (await getDefaultCalendar())._id;
     const event = await CalendarEvent.create(
-      await withMealRules({
-        ...eventFields(req.body),
-        calendar,
-        endDate: req.body.endDate || req.body.date,
-      }),
+      await withGymRules(
+        await withMealRules({
+          ...eventFields(req.body),
+          calendar,
+          endDate: req.body.endDate || req.body.date,
+        }),
+      ),
     );
     return res.status(201).json({ success: true, data: event });
   } catch (error) {
@@ -427,7 +450,7 @@ router.patch("/events/:id", async (req, res) => {
       current.mealSlot,
       current.kitchenKind,
     );
-    const event = await CalendarEvent.findByIdAndUpdate(req.params.id, ruled, { new: true, runValidators: true });
+    const event = await CalendarEvent.findByIdAndUpdate(req.params.id, await withGymRules(ruled), { new: true, runValidators: true });
     return res.json({ success: true, data: event });
   } catch (error) {
     return fail(res, error);
@@ -436,9 +459,58 @@ router.patch("/events/:id", async (req, res) => {
 
 // Fields a client may set on an event (never ids or bookkeeping).
 function eventFields(body) {
-  const { _id, createdAt, updatedAt, __v, seriesId, originalDate, excludedDates, mealAuto, ...fields } = body ?? {};
+  const { _id, createdAt, updatedAt, __v, seriesId, originalDate, excludedDates, mealAuto, gymDone, gymSkipped, ...fields } = body ?? {};
   return fields;
 }
+
+// --- Planned workouts ---
+
+// POST /events/:id/gym-status  { date, status: "done" | "skipped" | "open", session? }
+// A planned workout, on one of its days: done (with the session, if
+// there's one), skipped, or back to not yet.
+router.post("/events/:id/gym-status", async (req, res) => {
+  try {
+    const { date, status, session } = req.body ?? {};
+    if (!DATE_RE.test(date ?? "")) return fail(res, "date must be a YYYY-MM-DD date");
+    if (!["done", "skipped", "open"].includes(status)) return fail(res, "status must be done, skipped or open");
+    const event = await CalendarEvent.findById(req.params.id);
+    if (!event) return fail(res, "Event not found", 404);
+    event.gymDone = event.gymDone.filter((d) => d.date !== date);
+    event.gymSkipped = event.gymSkipped.filter((d) => d !== date);
+    if (status === "done") event.gymDone.push({ date, session: session || null });
+    if (status === "skipped") event.gymSkipped.push(date);
+    await event.save();
+    return res.json({ success: true, data: event });
+  } catch (error) {
+    return fail(res, error);
+  }
+});
+
+// POST /gym/link  { date, session, workout?, event? }
+// A finished Gym session, on its day: marks that day's planned workout done
+// with it — the event it was started from, if given; else the one for the
+// same routine; else the first not yet done. Nothing planned: nothing.
+router.post("/gym/link", async (req, res) => {
+  try {
+    const { date, session, workout, event: eventId } = req.body ?? {};
+    if (!DATE_RE.test(date ?? "") || !session) return fail(res, "date and session are needed");
+    const calendar = await getGymCalendar();
+    const events = (await CalendarEvent.find({ calendar: calendar._id, date: { $lte: date }, $or: [{ repeat: { $ne: null } }, { endDate: { $gte: date } }] })).filter((e) => occurrenceDates(e.toObject(), date, date).includes(date));
+    const open = events.filter((e) => !e.gymDone.some((d) => d.date === date) && !e.gymSkipped.includes(date));
+    const target =
+      (eventId && events.find((e) => String(e._id) === String(eventId))) ||
+      (workout && open.find((e) => String(e.gymWorkout) === String(workout))) ||
+      open[0];
+    if (!target) return res.json({ success: true, data: null });
+    target.gymDone = target.gymDone.filter((d) => d.date !== date);
+    target.gymSkipped = target.gymSkipped.filter((d) => d !== date);
+    target.gymDone.push({ date, session });
+    await target.save();
+    return res.json({ success: true, data: target });
+  } catch (error) {
+    return fail(res, error);
+  }
+});
 
 // POST /events/:id/detach  { occurrence, ...event fields }
 // "Only this event": the series skips that date, and the edited occurrence

@@ -37,6 +37,9 @@ export interface ActiveSession {
   restLength?: number;
   // The reminder to start a workout on the Watch, put away.
   watchNoted?: boolean;
+  // The planned workout (a Gym calendar event, on its day) it was started
+  // from — marked done with it when it's finished.
+  plan?: { event: string; date: string } | null;
 }
 
 const KEY = "gym.activeSession";

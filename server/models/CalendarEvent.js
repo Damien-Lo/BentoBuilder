@@ -55,6 +55,24 @@ const calendarEventSchema = new mongoose.Schema(
     mealAuto: { type: Boolean, default: false },
     // Events in the Kitchen calendar: a meal-prep session or a shopping trip.
     kitchenKind: { type: String, enum: ["prep", "shop", null], default: null },
+    // Events in the Gym calendar: a planned workout — the routine to do (a
+    // Gym workout; none for "a workout"), and, day by day (a repeating one
+    // has many), whether it was done (and the session that did it, if
+    // there's one) or skipped. A date in neither: not yet, or missed.
+    gymWorkout: { type: mongoose.Schema.Types.ObjectId, ref: "GymWorkout", default: null },
+    gymDone: {
+      type: [
+        new mongoose.Schema(
+          {
+            date: { type: String, required: true, match: DATE_RE },
+            session: { type: mongoose.Schema.Types.ObjectId, ref: "GymSession", default: null },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
+    gymSkipped: [{ type: String, match: DATE_RE }],
   },
   { timestamps: true },
 );

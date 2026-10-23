@@ -289,7 +289,7 @@ export function CalendarEditSheet({
               <Text className="text-sm font-semibold text-white" style={o && { fontSize: 15, color: o.onInk }}>{calendar ? "Save" : "Create"}</Text>
             </Pressable>
           </View>
-          {calendar && !calendar.isDefault && !calendar.isTasks && !calendar.isMeals && (
+          {calendar && !calendar.isDefault && !calendar.isTasks && !calendar.isMeals && !calendar.isGym && (
             <Pressable onPress={() => onDelete(calendar)} className="mt-3 items-center py-2 active:opacity-60">
               <Text className="text-sm font-semibold text-red-600" style={o && { color: o.danger }}>Delete calendar</Text>
             </Pressable>

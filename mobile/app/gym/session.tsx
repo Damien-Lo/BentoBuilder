@@ -15,6 +15,7 @@ import { showActions } from "@/src/components/todo/theme";
 import { Tap } from "@/src/components/ui/Tap";
 import type { Exercise } from "@/src/services/exerciseApi";
 import { getPreviousSets, getWorkout, REST_CHOICES, restLabel, saveSession, SET_TYPES, setLabels, setTypeOf, type DoneSetInput, type SetType } from "@/src/services/gymApi";
+import { linkGymSession } from "@/src/services/calendarApi";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // Doing a workout (Gym → Workouts → Start), as Hevy's "Log Workout": how
@@ -50,7 +51,8 @@ export default function SessionScreen() {
 
 function Session() {
   const router = useRouter();
-  const { workout: workoutId } = useLocalSearchParams<{ workout?: string }>();
+  // (`plan` and `planDate`: started from a planned workout in the Gym calendar.)
+  const { workout: workoutId, plan: planEvent, planDate } = useLocalSearchParams<{ workout?: string; plan?: string; planDate?: string }>();
   const { colors: c } = useOrbitTheme();
   const [session, setSession] = useState<ActiveSession | null>(null);
   const [previous, setPrevious] = useState<Record<string, DoneSetInput[]>>({});
@@ -64,10 +66,14 @@ function Session() {
   // Start: the one under way, or a new one from the workout.
   useEffect(() => {
     let cancelled = false;
+    const plan = planEvent && planDate ? { event: planEvent, date: planDate } : null;
     (async () => {
       const existing = await loadActiveSession();
       if (existing && (!workoutId || existing.workoutId === workoutId)) {
-        if (!cancelled) setSession(existing);
+        // (Opened again from its planned workout: it's linked to it.)
+        const linked = plan && !existing.plan ? { ...existing, plan } : existing;
+        if (linked !== existing) await storeActiveSession(linked);
+        if (!cancelled) setSession(linked);
         return;
       }
       if (!workoutId) {
@@ -78,6 +84,7 @@ function Session() {
         const workout = await getWorkout(workoutId);
         const started: ActiveSession = {
           workoutId,
+          plan,
           name: workout.name,
           startedAt: new Date().toISOString(),
           exercises: workout.exercises
@@ -101,7 +108,7 @@ function Session() {
     return () => {
       cancelled = true;
     };
-  }, [workoutId, router]);
+  }, [workoutId, planEvent, planDate, router]);
 
   // What each exercise came to last time.
   const ids = session?.exercises.map((e) => e.exercise._id).join(",") ?? "";
@@ -237,6 +244,11 @@ function Session() {
           exercises: done.map((e) => ({ exercise: e.exercise._id, note: e.note.trim(), sets: e.sets.map((s) => ({ ...fromDraft(s, trackOf(e.exercise)), type: s.type ?? "normal", doneAt: s.doneAt ?? null })) })),
         });
         await clearActiveSession();
+        // (On a day with a workout planned — the one it was started from, or
+        // that day's — it's marked done with this.)
+        const start = new Date(session.startedAt);
+        const day = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+        await linkGymSession(session.plan?.date ?? day, saved._id, session.workoutId, session.plan?.event).catch(() => null);
         // (How it went: the workout's own page, opened as just finished.)
         router.replace(`/gym/sessions/${saved._id}?finished=1` as Href);
       } catch (error) {

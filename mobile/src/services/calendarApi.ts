@@ -15,6 +15,8 @@ export interface EventCalendar {
   // The same calendar is the Kitchen's whole calendar: meals, prep
   // sessions and shopping trips.
   isKitchen?: boolean;
+  // The built-in Gym calendar: planned workouts.
+  isGym?: boolean;
   // Kinds of thing in it that are switched off while the rest still shows
   // (the Kitchen's "meals", "prep", "shop").
   hiddenKinds?: string[];
@@ -29,8 +31,8 @@ export const KITCHEN_KINDS: { value: string; label: string }[] = [
 
 // A calendar the app fills for you from one of its sections (the Kitchen's
 // meals and sessions, your tasks), as against one you keep yourself.
-export const isAssistantCalendar = (calendar: Pick<EventCalendar, "isTasks" | "isMeals" | "isKitchen">) =>
-  !!(calendar.isTasks || calendar.isMeals || calendar.isKitchen);
+export const isAssistantCalendar = (calendar: Pick<EventCalendar, "isTasks" | "isMeals" | "isKitchen" | "isGym">) =>
+  !!(calendar.isTasks || calendar.isMeals || calendar.isKitchen || calendar.isGym);
 
 // Whether an event is on show: its calendar is, and so is its kind.
 export function eventShown(event: { kitchenKind?: string | null; mealSlot?: string | null }, calendar: Pick<EventCalendar, "visible" | "hiddenKinds"> | undefined): boolean {
@@ -96,6 +98,11 @@ export interface CalendarEvent {
   // Kitchen calendar: a meal-prep session or a shopping trip. What it's
   // for is worked out from the meal plan (src/utils/planNeeds.ts).
   kitchenKind?: "prep" | "shop" | null;
+  // Gym calendar: a planned workout — the routine (a Gym workout, or none
+  // for "a workout"), and day by day, done (with the session) or skipped.
+  gymWorkout?: string | null;
+  gymDone?: { date: string; session: string | null }[];
+  gymSkipped?: string[];
   // Set when this was one occurrence of a repeating event, edited on its
   // own and split off ("only this event").
   seriesId?: string | null;
@@ -123,9 +130,23 @@ export interface EventOccurrence extends CalendarEvent {
   // meal type from the planner (`food` is null when nothing's planned).
   // `usually`: with no food yet, the usual meals due that day.
   meal?: { food: import("@/src/components/calendar/mealFood").MealFood | null; usually?: string };
+  // Set by the calendar screen on a Gym event: how its workout stands that
+  // day, and its line (the routine, or the session that did it).
+  workout?: { status: GymStatus; line: string };
 }
 
-export type EventInput = Omit<CalendarEvent, "_id" | "excludedDates">;
+export type EventInput = Omit<CalendarEvent, "_id" | "excludedDates" | "gymDone" | "gymSkipped">;
+
+// A planned workout, on one of its days: done (with the session that did
+// it, if there's one), skipped, missed (a day gone by with neither), or
+// not yet.
+export type GymStatus = "done" | "skipped" | "missed" | "open";
+export function gymStatusOn(event: Pick<CalendarEvent, "gymDone" | "gymSkipped">, date: string, today: string): { status: GymStatus; session: string | null } {
+  const done = (event.gymDone ?? []).find((d) => d.date === date);
+  if (done) return { status: "done", session: done.session };
+  if ((event.gymSkipped ?? []).includes(date)) return { status: "skipped", session: null };
+  return { status: date < today ? "missed" : "open", session: null };
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}/api/calendar${path}`, {
@@ -176,6 +197,16 @@ export const deleteCalendarEvent = (id: string, scope: SeriesScope = "all", occu
     occurrence && scope === "one" ? `?occurrence=${occurrence}` : occurrence && scope === "following" ? `?from=${occurrence}` : "";
   return request<void>(`/events/${id}${query}`, { method: "DELETE" });
 };
+
+// A planned workout's day marked done (with the session), skipped, or back
+// to not yet.
+export const setGymStatus = (id: string, date: string, status: "done" | "skipped" | "open", session?: string | null) =>
+  request<CalendarEvent>(`/events/${id}/gym-status`, { method: "POST", body: body({ date, status, session }) });
+// A finished session, on its day: marks that day's planned workout done with
+// it (the event it was started from, else the same routine's, else the first
+// not yet done). Null when nothing was planned.
+export const linkGymSession = (date: string, session: string, workout?: string | null, event?: string | null) =>
+  request<CalendarEvent | null>("/gym/link", { method: "POST", body: body({ date, session, workout, event }) });
 
 // "Only this event": the series skips `occurrence`, which becomes its own
 // event with these details.

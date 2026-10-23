@@ -25,6 +25,10 @@ const eventCalendarSchema = new mongoose.Schema(
     // with isMeals): meals, and when you prep and when you shop. What a
     // session is for is worked out from the meal plan, not kept here.
     isKitchen: { type: Boolean, default: false },
+    // The built-in "Gym" calendar: your planned workouts (each a routine
+    // from Gym, on its day and time, done or skipped day by day). Created on
+    // first use, can't be deleted.
+    isGym: { type: Boolean, default: false },
     // The kinds of thing in a calendar that are switched off while the rest
     // still shows — the Kitchen's "meals", "prep" and "shop".
     hiddenKinds: { type: [String], default: [] },

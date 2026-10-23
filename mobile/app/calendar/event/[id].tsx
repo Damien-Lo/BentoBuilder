@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { PlannedWorkout } from "@/src/components/gym/PlannedWorkout";
 import { KitchenSessionNeeds } from "@/src/components/planner/KitchenSessionNeeds";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
@@ -326,6 +327,9 @@ function CalendarEventPage() {
   // What the event is for: a meal's food, or a session's prep and shopping.
   const purpose = (
     <>
+        {/* A planned workout: the routine, done or not, and starting it. */}
+        {calendar?.isGym && <PlannedWorkout event={event} date={date ?? event.date} onChange={setEvent} colors={o} />}
+
         {/* A prep session or shopping trip: what it's for, from the plan. */}
         {!!event.kitchenKind && (
           <View className="mb-3">

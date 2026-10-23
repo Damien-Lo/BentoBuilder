@@ -378,7 +378,14 @@ function DayColumn({
                   {mealLine(event)}
                 </Text>
               )}
-              {height >= (event.meal ? 50 : 36) && (
+              {event.workout && height >= 32 && (
+                <Text numberOfLines={1} style={{ fontSize: 11, color: event.workout.status === "done" ? g.body : g.faint }}>
+                  {event.workout.status === "done" && <Ionicons name="checkmark-circle" size={10} color="#16A34A" />}
+                  {event.workout.status === "done" ? " " : ""}
+                  {event.workout.line}
+                </Text>
+              )}
+              {height >= (event.meal || event.workout ? 50 : 36) && (
                 <Text numberOfLines={1} style={{ fontSize: 11, color: g.subtle }}>
                   {minutesLabel(event.startMinutes)} – {minutesLabel(event.endMinutes)}
                   {event.location ? ` · ${event.location}` : ""}

@@ -29,6 +29,7 @@ import {
   untilAfter,
   weeklyDays,
 } from "@/src/components/calendar/calendarUtils";
+import { getWorkouts, type GymWorkout } from "@/src/services/gymApi";
 import { loadSettings } from "@/src/services/settingsService";
 import { DatePickerModal } from "@/src/components/forms";
 import {
@@ -94,6 +95,9 @@ function EditCalendarEventPage() {
     // the edit is for it alone, it and the following ones, or the series.
     occurrence?: string;
     scope?: SeriesScope;
+    // A new event in the Gym calendar ("gym"), and the routine to plan.
+    calendar?: string;
+    workout?: string;
   }>();
   const editingId = params.id;
   const occurrence = params.occurrence;
@@ -126,6 +130,9 @@ function EditCalendarEventPage() {
   const [mealSlot, setMealSlot] = useState<MealType | null>(null);
   // Kitchen calendar, instead of a meal: a prep session or a shopping trip.
   const [kitchenKind, setKitchenKind] = useState<KitchenKind | null>(null);
+  // Gym calendar: the routine planned (none: "a workout"), and the routines.
+  const [gymWorkout, setGymWorkout] = useState<string | null>(params.workout ?? null);
+  const [routines, setRoutines] = useState<GymWorkout[]>([]);
   // "Until … or after N times": the N being typed.
   const [times, setTimes] = useState("");
 
@@ -172,9 +179,19 @@ function EditCalendarEventPage() {
           setRemindMinutes(event.remindMinutes);
           setMealSlot(event.mealSlot ?? null);
           setKitchenKind(event.kitchenKind ?? null);
+          setGymWorkout(event.gymWorkout ?? null);
         } else {
-          setCalendarId((loadedCalendars.find((c) => c.isDefault) ?? loadedCalendars[0])?._id ?? "");
+          const gym = params.calendar === "gym" ? loadedCalendars.find((c) => c.isGym) : null;
+          setCalendarId((gym ?? loadedCalendars.find((c) => c.isDefault) ?? loadedCalendars[0])?._id ?? "");
         }
+        getWorkouts()
+          .then((list) => {
+            if (cancelled) return;
+            setRoutines(list);
+            // (Planning a routine: titled "Gym", the routine attached.)
+            if (!event && params.calendar === "gym") setTitle((t) => t || "Gym");
+          })
+          .catch(() => {});
       } catch (error) {
         Alert.alert("Couldn't load", error instanceof Error ? error.message : "Something went wrong.", [
           { text: "OK", onPress: () => router.back() },
@@ -192,6 +209,14 @@ function EditCalendarEventPage() {
   const calendar = calendars.find((c) => c._id === calendarId);
   const color = calendarColor(calendar);
   const isMeal = !!calendar?.isMeals;
+  const isGym = !!calendar?.isGym;
+
+  // A routine for a planned workout (the event's own title stays "Gym" —
+  // the routine is attached, and shown on the event).
+  function pickRoutine(id: string | null) {
+    if (!title.trim()) setTitle("Gym");
+    setGymWorkout(id);
+  }
 
   function pickMeal(slot: MealType) {
     // An untouched or default title follows the meal.
@@ -288,6 +313,7 @@ function EditCalendarEventPage() {
       remindMinutes,
       mealSlot: isMeal && !kitchenKind ? mealSlot : null,
       kitchenKind: isMeal ? kitchenKind : null,
+      gymWorkout: isGym ? gymWorkout : null,
     };
     try {
       setSaving(true);
@@ -463,6 +489,25 @@ function EditCalendarEventPage() {
                   );
                 })}
               </View>
+            </View>
+          )}
+
+          {/* Which workout — only in the Gym calendar */}
+          {isGym && (
+            <View className="mb-3 rounded-3xl border border-slate-200 bg-white p-4" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 }}>
+              <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>Workout</Text>
+              <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>The routine to do — start it from here on the day, and it&apos;s marked done when you finish.</Text>
+              <View style={{ marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {[{ _id: null as string | null, name: "Any workout" }, ...routines].map((w) => {
+                  const on = gymWorkout === w._id;
+                  return (
+                    <Tap key={w._id ?? "any"} onPress={() => pickRoutine(w._id)} className={`items-center rounded-xl px-3 py-2.5 ${on ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"}`} style={choice(on)} pressedStyle={o ? { opacity: 0.75 } : {}}>
+                      <Text className={`text-[13px] font-semibold ${on ? "text-white" : "text-slate-700"}`} style={choiceText(on)}>{w.name}</Text>
+                    </Tap>
+                  );
+                })}
+              </View>
+              {routines.length === 0 && <Text className="mt-2 text-xs text-slate-500" style={o && { color: o.faint }}>Build a routine in Gym → Workouts to plan it here.</Text>}
             </View>
           )}
 

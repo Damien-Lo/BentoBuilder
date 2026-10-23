@@ -418,6 +418,18 @@ export function AgendaView({
                             </Text>
                           </View>
                         )}
+                        {event.workout && (
+                          <View className="mt-0.5 flex-row items-center">
+                            <Ionicons
+                              name={event.workout.status === "done" ? "checkmark-circle" : event.workout.status === "missed" ? "alert-circle-outline" : "barbell-outline"}
+                              size={12}
+                              color={event.workout.status === "done" ? o.success : event.workout.status === "missed" ? o.warning : o.faint}
+                            />
+                            <Text style={{ marginLeft: 4, flex: 1, fontSize: 12, color: event.workout.status === "done" ? o.muted : o.faint }} numberOfLines={1}>
+                              {event.workout.line}
+                            </Text>
+                          </View>
+                        )}
                         {!!event.location && (
                           <View className="mt-0.5 flex-row items-center">
                             <Ionicons name="location-outline" size={12} color={o.faint} />

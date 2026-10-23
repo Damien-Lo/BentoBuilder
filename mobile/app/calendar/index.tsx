@@ -43,6 +43,7 @@ import {
   ScheduleStrip,
   type ScheduleTarget,
 } from "@/src/components/calendar/ScheduleStrip";
+import { useGymLines } from "@/src/components/calendar/gymLine";
 import { TaskBlockSheet } from "@/src/components/calendar/TaskBlockSheet";
 import { taskBlockToOccurrence, taskToOccurrence } from "@/src/components/calendar/TaskChip";
 import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
@@ -164,10 +165,12 @@ function PhoneCalendarScreen() {
 
   // Refetch on every return to this screen (an event may have been added
   // or edited).
+  const [withWorkout, loadWorkouts] = useGymLines();
   useFocusEffect(
     useCallback(() => {
       void loadCalendars();
       void loadEvents(focusDate);
+      loadWorkouts();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []),
   );
@@ -192,6 +195,8 @@ function PhoneCalendarScreen() {
         ]
       : [];
     const withFood = events.map((e) => {
+      // A planned workout: its routine, or the session that did it.
+      if (calendarsById.get(e.calendar)?.isGym) return withWorkout(e, calendarsById.get(e.calendar), today);
       if (!e.mealSlot) return e;
       const food = mealFood.get(mealKey(e.occurrenceDate, e.mealSlot)) ?? null;
       // Usual meals are only filled in a couple of weeks ahead; beyond
@@ -206,7 +211,7 @@ function PhoneCalendarScreen() {
       return { ...e, meal: { food, usually: usually || undefined } };
     });
     return [...taskOccurrences, ...withFood].filter((e) => eventShown(e, calendarsById.get(e.calendar)));
-  }, [events, tasks, mealFood, usualMeals, calendars, calendarsById, today]);
+  }, [events, tasks, mealFood, usualMeals, calendars, calendarsById, today, withWorkout]);
   const eventDays = useMemo(() => {
     const days = new Set<string>();
     for (const e of visibleEvents) {
