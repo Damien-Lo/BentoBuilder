@@ -35,6 +35,8 @@ export interface ActiveSession {
   // it was.
   restEndsAt?: number | null;
   restLength?: number;
+  // The reminder to start a workout on the Watch, put away.
+  watchNoted?: boolean;
 }
 
 const KEY = "gym.activeSession";

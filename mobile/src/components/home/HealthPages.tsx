@@ -1,20 +1,19 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, type Href } from "expo-router";
 import { useCallback, useState } from "react";
-import { ScrollView } from "react-native-gesture-handler";
 import { Text, View } from "react-native";
 
 import { durationLabel } from "@/src/components/gym/schedule";
 import { todayBalance, type Balance } from "@/src/components/health/energy";
 import { workOutTargets } from "@/src/components/health/targets";
 import { showMeasure, useUnits } from "@/src/components/health/units";
-import { mergeWorkouts, type WorkoutItem } from "@/src/components/health/workouts";
-import { Tap } from "@/src/components/ui/Tap";
+import { kcalLabel, mergeWorkouts, type WorkoutItem } from "@/src/components/health/workouts";
 import { getSessions } from "@/src/services/gymApi";
 import { loadHealthInputs } from "@/src/services/healthInputs";
 import { nutrientColor } from "@/src/theme/nutrients";
 import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
+import { PagedCard, type CardPage } from "./PagedCard";
 import type { Today } from "./useToday";
 
 // The home screen's Health card, a page at a time — swiped across, the dots
@@ -41,8 +40,6 @@ type Glance = {
 export function HealthPages({ t, go, colors: c }: { t: Today; go: (route: Href) => void; colors: OrbitColors }) {
   const { dark } = useOrbitTheme();
   const [units] = useUnits("weight");
-  const [width, setWidth] = useState(0);
-  const [page, setPage] = useState(0);
   const [g, setG] = useState<Glance | null>(null);
 
   useFocusEffect(
@@ -57,7 +54,7 @@ export function HealthPages({ t, go, colors: c }: { t: Today; go: (route: Href) 
           const yesterday = dayOf(new Date(Date.now() - 86_400_000));
           setG({
             balance: todayBalance(energy, cal.current ?? cal.value, burn.value),
-            workouts: mergeWorkouts(inputs.metrics, sessions, monday),
+            workouts: mergeWorkouts(inputs.metrics, sessions, monday, inputs.weights, energy.ratio),
             lastNight: sleep[0] && sleep[0].date >= yesterday ? sleep[0].value : null,
             week: recent.length ? recent.reduce((s, m) => s + m.value, 0) / recent.length : null,
             nights: recent.length,
@@ -96,8 +93,8 @@ export function HealthPages({ t, go, colors: c }: { t: Today; go: (route: Href) 
   const macro = (label: string, value: number | null | undefined, limit: number | null, color: string) => bar(limit ? (value ?? 0) / limit : 0, color, label, `${Math.round(value ?? 0)}${limit ? ` / ${limit}` : ""} g`);
   const workouts = g?.workouts ?? [];
   const minutes = workouts.reduce((n, w) => n + w.minutes, 0);
-  const kcal = workouts.reduce((n, w) => n + (w.kcal ?? 0), 0);
-  const pages: { title: string; route: Href; body: React.ReactNode }[] = [
+  const kcal = kcalLabel(workouts);
+  const pages: CardPage[] = [
     {
       title: "Overview",
       route: "/health-section" as Href,
@@ -132,7 +129,7 @@ export function HealthPages({ t, go, colors: c }: { t: Today; go: (route: Href) 
       body: (
         <>
           {big(String(workouts.length), `workout${workouts.length === 1 ? "" : "s"} this week`)}
-          {line(workouts.length ? `${durationLabel(minutes * 60)}${kcal ? ` · ${n0(kcal)} active kcal` : ""}` : "None yet this week")}
+          {line(workouts.length ? `${durationLabel(minutes * 60)}${kcal ? ` · ${kcal} active` : ""}` : "None yet this week")}
           {workouts.slice(0, 2).map((w) => (
             <View key={w.key} style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Ionicons name={w.gym ? "barbell-outline" : "walk-outline"} size={16} color={c.muted} />
@@ -166,33 +163,5 @@ export function HealthPages({ t, go, colors: c }: { t: Today; go: (route: Href) 
     },
   ];
 
-  return (
-    <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-      {width > 0 && (
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
-          style={{ marginHorizontal: -20 }}
-        >
-          {pages.map((p) => (
-            <Tap key={p.title} onPress={() => go(p.route)} accessibilityRole="button" accessibilityLabel={`${p.title}. Open`} style={{ width: width + 40, paddingHorizontal: 20 }} pressedStyle={{ opacity: 0.7 }}>
-              <View style={{ marginBottom: 6, flexDirection: "row", alignItems: "center", gap: 4 }}>
-                <Text style={{ fontSize: 13, fontWeight: "700", color: c.ink }}>{p.title}</Text>
-                <Ionicons name="chevron-forward" size={13} color={c.ink} />
-              </View>
-              {p.body}
-            </Tap>
-          ))}
-        </ScrollView>
-      )}
-      {/* Where you are */}
-      <View style={{ marginTop: 12, flexDirection: "row", justifyContent: "center", gap: 6 }}>
-        {pages.map((p, i) => (
-          <View key={p.title} style={{ width: i === page ? 16 : 6, height: 6, borderRadius: 3, backgroundColor: i === page ? c.ink : c.track }} />
-        ))}
-      </View>
-    </View>
-  );
+  return <PagedCard pages={pages} go={go} colors={c} />;
 }

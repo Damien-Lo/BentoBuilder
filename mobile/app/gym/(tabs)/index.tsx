@@ -7,23 +7,30 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { clock, loadActiveSession, type ActiveSession } from "@/src/components/gym/activeSession";
 import { lbs } from "@/src/components/gym/exerciseStats";
 import { sessionRecords } from "@/src/components/gym/progressStats";
+import { sessionCalories, weightOn } from "@/src/components/gym/sessionEnergy";
 import { dayLabel, durationLabel, thisWeek, weekStreak, type WeekDay } from "@/src/components/gym/schedule";
+import { useWatchRatio } from "@/src/components/health/watchCorrection";
 import { Tap } from "@/src/components/ui/Tap";
 import { getSessions, sessionTotals, type GymSessionRecord } from "@/src/services/gymApi";
+import { getWeightEntries, type WeightEntry } from "@/src/services/weightEntryApi";
 import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // Gym → Overview: how training's going at a glance — what's planned today
 // (nothing yet: planning comes later, as its own page, linked with the
 // calendar) or the workout under way, this week day by day, the weeks in a
-// row you've trained, and how the last workout went.
+// row you've trained, the time trained and calories burned (each session's,
+// measured or estimated: sessionEnergy.ts), and how the last workout went.
 export default function GymOverviewTab() {
   const router = useRouter();
   const { colors: c } = useOrbitTheme();
   const [sessions, setSessions] = useState<GymSessionRecord[] | null>(null);
   const [active, setActive] = useState<ActiveSession | null>(null);
   const [failed, setFailed] = useState(false);
+  const [weights, setWeights] = useState<WeightEntry[]>([]);
+  const ratio = useWatchRatio();
   useFocusEffect(
     useCallback(() => {
+      getWeightEntries().then(setWeights, () => {});
       getSessions().then(
         (s) => {
           setSessions(s);
@@ -91,7 +98,29 @@ export default function GymOverviewTab() {
                       <Day key={day.date.toISOString()} day={day} colors={c} />
                     ))}
                   </View>
-                  <View style={{ marginTop: 16, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  {week.sessions.length > 0 && (
+                    <View style={{ marginTop: 16, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Ionicons name="time-outline" size={18} color={c.text} />
+                      <Text style={{ flex: 1, fontSize: 14, color: c.muted }}>
+                        <Text style={{ fontWeight: "700", color: c.text }}>{durationLabel(week.sessions.reduce((n, s) => n + sessionTotals(s).seconds, 0))}</Text> trained
+                        {(() => {
+                          const cals = week.sessions.map((s) => sessionCalories(s, sessions!, weightOn(weights, s.startedAt), ratio));
+                          const kcal = cals.reduce((n, x) => n + (x?.kcal ?? 0), 0);
+                          return kcal ? (
+                            <>
+                              {" · "}
+                              <Text style={{ fontWeight: "700", color: c.text }}>
+                                {cals.some((x) => x && !x.measured) ? "~" : ""}
+                                {kcal.toLocaleString()} kcal
+                              </Text>{" "}
+                              burned
+                            </>
+                          ) : null;
+                        })()}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <Ionicons name="flame" size={18} color={streak ? c.text : c.faint} />
                     <Text style={{ flex: 1, fontSize: 14, color: c.muted }}>
                       {streak ? (

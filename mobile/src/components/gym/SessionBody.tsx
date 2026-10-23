@@ -3,13 +3,14 @@ import { useEffect, useState } from "react";
 import { Alert, Text, View } from "react-native";
 
 import { ageOn } from "@/src/components/health/bodyStats";
+import { useWatchRatio } from "@/src/components/health/watchCorrection";
 import { Tap } from "@/src/components/ui/Tap";
 import type { GymSessionRecord } from "@/src/services/gymApi";
 import { loadSettings } from "@/src/services/settingsService";
 import { getWeightEntries } from "@/src/services/weightEntryApi";
 import type { OrbitColors } from "@/src/theme/orbit";
 
-import { sessionCalories, type SessionCalories } from "./sessionEnergy";
+import { sessionCalories, weightOn, type SessionCalories } from "./sessionEnergy";
 
 // A session's body side, from your Watch (Apple Health) lined up with the
 // session's own time: the calories it cost (measured, or estimated from
@@ -30,20 +31,19 @@ const zoneOf = (share: number) => [...ZONES].reverse().find((z) => share >= z.fr
 export function SessionBody({ session, all, colors: c }: { session: GymSessionRecord; all: GymSessionRecord[]; colors: OrbitColors }) {
   const [me, setMe] = useState<{ kg: number | null; age: number | null } | null>(null);
   const [width, setWidth] = useState(0);
+  const ratio = useWatchRatio();
   useEffect(() => {
     Promise.all([getWeightEntries().catch(() => []), loadSettings()])
       .then(([weights, settings]) => {
         // (Your weight then: the weigh-in nearest before the session.)
-        const day = session.startedAt.slice(0, 10);
-        const then = [...weights].sort((a, b) => b.date.localeCompare(a.date)).find((w) => w.date <= day) ?? weights[weights.length - 1];
-        setMe({ kg: then?.weight ?? null, age: ageOn(settings.birthDate, new Date(session.startedAt)) });
+        setMe({ kg: weightOn(weights, session.startedAt), age: ageOn(settings.birthDate, new Date(session.startedAt)) });
       })
       .catch(() => setMe({ kg: null, age: null }));
   }, [session.startedAt]);
 
   if (!me) return null;
   const v = session.vitals;
-  const cal: SessionCalories | null = sessionCalories(session, all, me.kg);
+  const cal: SessionCalories | null = sessionCalories(session, all, me.kg, ratio);
   const hr = v?.hr ?? [];
   const max = Math.max(me.age != null ? 220 - me.age : 190, v?.maxHr ?? 0);
   const beats = hr.filter((b) => b > 0);

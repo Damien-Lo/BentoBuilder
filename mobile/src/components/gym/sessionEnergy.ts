@@ -1,4 +1,5 @@
 import type { GymSessionRecord } from "@/src/services/gymApi";
+import type { WeightEntry } from "@/src/services/weightEntryApi";
 
 // A session's calories (burned moving, on top of at rest): your Watch's,
 // when it measured them in a workout (heart rate every few seconds) —
@@ -44,15 +45,25 @@ export interface SessionCalories {
   how: string[]; // in your numbers
 }
 
-// `all`: your sessions (the measured ones teach the rate); `weightKg`: yours.
-export function sessionCalories(session: GymSessionRecord, all: GymSessionRecord[], weightKg: number | null): SessionCalories | null {
+// `all`: your sessions (the measured ones teach the rate); `weightKg`:
+// yours; `ratio`: your Watch's correction (Your burn) — a measured session's
+// calories are corrected by it, the same as your days are.
+export function sessionCalories(session: GymSessionRecord, all: GymSessionRecord[], weightKg: number | null, ratio: number | null = null): SessionCalories | null {
   const v = session.vitals;
   if (v?.watchWorkout && v.kcal != null && v.kcal > 0) {
-    return { kcal: v.kcal, measured: true, how: ["Measured by your Watch during the session — a workout was running on it, so your heart rate was taken every few seconds."] };
+    const kcal = Math.round(v.kcal * (ratio ?? 1));
+    return {
+      kcal,
+      measured: true,
+      how: [
+        "Measured by your Watch during the session — a workout was running on it, so your heart rate was taken every few seconds.",
+        ratio != null ? `It counted ${Math.round(v.kcal)} kcal; × ${ratio.toFixed(2)}, your Watch's correction from your measured burn (Your burn), = ${kcal}.` : "Not corrected yet — your Watch's correction comes once your burn is measured.",
+      ],
+    };
   }
   if (weightKg == null) return null;
   const mine = all.filter((s) => s.vitals?.watchWorkout && s.vitals.kcal != null && s.vitals.kcal > 0 && shape(s).hours >= 1 / 6);
-  const rates = mine.map((s) => s.vitals!.kcal! / (weightKg * shape(s).hours));
+  const rates = mine.map((s) => (s.vitals!.kcal! * (ratio ?? 1)) / (weightKg * shape(s).hours));
   const rate = median(rates) ?? STANDARD_RATE;
   const usualDensity = median(mine.map((s) => shape(s).density));
   const usualBig = median(mine.map((s) => shape(s).big));
@@ -70,6 +81,14 @@ export function sessionCalories(session: GymSessionRecord, all: GymSessionRecord
     ...(denser !== 1 ? [`${me.density.toFixed(2)} working sets a minute against your usual ${usualDensity!.toFixed(2)}: ×${denser.toFixed(2)}.`] : []),
     ...(bigger !== 1 ? [`${Math.round(me.big * 100)}% big lower-body lifts against your usual ${Math.round(usualBig! * 100)}%: ×${bigger.toFixed(2)}.`] : []),
     ...(v?.kcal ? [`Your Watch counted ${Math.round(v.kcal)} kcal, worn without a workout started — it checks your heart rate only every few minutes then and counts mostly movement, so lifting reads far too low.`] : []),
+    "An estimate, so it isn't counted in your day's burn — only sessions your Watch measures are.",
   ];
   return { kcal, measured: false, how };
+}
+
+// Your weight (kg) on a day: the weigh-in nearest before it (or the first).
+export function weightOn(weights: WeightEntry[], when: string) {
+  const day = when.slice(0, 10);
+  const sorted = [...weights].sort((a, b) => b.date.localeCompare(a.date));
+  return (sorted.find((w) => w.date <= day) ?? sorted[sorted.length - 1])?.weight ?? null;
 }

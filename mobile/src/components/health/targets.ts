@@ -1,6 +1,7 @@
 import { ACTIVITY, ageOn, bmr, KG_PER_LB, tdee } from "@/src/components/health/bodyStats";
 import { NEED_DAYS, NEED_WEIGH_INS, workOutEnergy, type Energy } from "@/src/components/health/energy";
 import { showMeasure } from "@/src/components/health/units";
+import { rememberWatchRatio } from "@/src/components/health/watchCorrection";
 import type { HealthMetric } from "@/src/services/healthSync";
 import type { ActivityLevel, AppSettings, Sex, Units } from "@/src/services/settingsService";
 import type { WeightEntry } from "@/src/services/weightEntryApi";
@@ -133,6 +134,8 @@ export function workOutTargets({ settings, weights, metrics, intake, workoutsPer
   // less what the scale says it did — energy.ts), Apple Watch's (at rest +
   // moving), or the formula (Mifflin–St Jeor × how active).
   const energy = workOutEnergy({ weights, intake, metrics, today: dayOf(new Date()), showWeight: kg });
+  // (Kept for Gym's pages, to correct sessions' calories the same way.)
+  rememberWatchRatio(energy.ratio);
   const active = ofType("activeEnergy", 14);
   const rest = bmr(w, h, a, s.sex);
   let burn: Burn;

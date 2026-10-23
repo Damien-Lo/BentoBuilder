@@ -292,6 +292,19 @@ function Session() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: restLeft > 0 ? 150 : 60 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {/* A reminder: a strength workout on the Watch, so the session's
+              calories and heart rate are measured (until put away). */}
+          {Platform.OS === "ios" && !session.watchNoted && (
+            <View style={{ marginBottom: 16, flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
+              <Ionicons name="watch-outline" size={22} color={c.ink} />
+              <Text style={{ flex: 1, fontSize: 13.5, lineHeight: 19, color: c.text }}>
+                <Text style={{ fontWeight: "700" }}>Started your Watch workout?</Text> Traditional Strength Training on your Watch measures this session&apos;s calories and heart rate.
+              </Text>
+              <Tap onPress={() => update((x) => ({ ...x, watchNoted: true }))} accessibilityRole="button" style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: c.pill }} pressedStyle={{ opacity: 0.7 }}>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: c.onPill }}>Done</Text>
+              </Tap>
+            </View>
+          )}
           {session.exercises.map((item) => {
             const before = previous[item.exercise._id] ?? [];
             const track = trackOf(item.exercise);

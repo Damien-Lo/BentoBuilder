@@ -5,15 +5,18 @@ import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, View } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { KCAL_PER_KG, todayBalance, type Balance, type Energy, type EnergyDay } from "@/src/components/health/energy";
+import { sessionCalories, weightOn } from "@/src/components/gym/sessionEnergy";
 import { MetricChart } from "@/src/components/health/MetricChart";
 import { DayPlan } from "@/src/components/health/EnergyCard";
 import { workOutTargets, type Aim, type Burn } from "@/src/components/health/targets";
 import { showMeasure, UnitsToggle, useUnits } from "@/src/components/health/units";
 import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
+import { getSessions, type GymSessionRecord } from "@/src/services/gymApi";
 import { loadHealthInputs } from "@/src/services/healthInputs";
 import { addHealthReading, deleteHealthReading } from "@/src/services/healthSync";
 import type { Units } from "@/src/services/settingsService";
+import type { WeightEntry } from "@/src/services/weightEntryApi";
 import { OrbitPage, OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
 // Health → Your burn: the calories you use in a day, and how they're known
@@ -41,14 +44,14 @@ function YourBurn() {
   const leave = useGoBack("/health-section");
   const { colors: c } = useOrbitTheme();
   const [units] = useUnits("weight");
-  const [data, setData] = useState<{ energy: Energy; burn: Burn; balance: Balance; suggested: number; aim: Aim } | null>(null);
+  const [data, setData] = useState<{ energy: Energy; burn: Burn; balance: Balance; suggested: number; aim: Aim; sessions: GymSessionRecord[]; weights: WeightEntry[] } | null>(null);
   const [info, setInfo] = useState(false);
 
   const load = useCallback(() => {
-    loadHealthInputs().then((inputs) => {
+    Promise.all([loadHealthInputs(), getSessions().catch(() => [] as GymSessionRecord[])]).then(([inputs, sessions]) => {
       const { energy, burn, targets, aim } = workOutTargets({ ...inputs, workoutsPerWeek: [], units });
       const cal = targets.find((t) => t.key === "calories")!;
-      setData({ energy, burn, balance: todayBalance(energy, cal.current ?? cal.value, burn.value), suggested: cal.value, aim });
+      setData({ energy, burn, balance: todayBalance(energy, cal.current ?? cal.value, burn.value), suggested: cal.value, aim, sessions, weights: inputs.weights });
     });
   }, [units]);
   useFocusEffect(load);
@@ -80,7 +83,7 @@ function YourBurn() {
     );
   }
 
-  const { energy: e, burn, balance, suggested, aim } = data;
+  const { energy: e, burn, balance, suggested, aim, sessions, weights } = data;
   const W = (kg: number, places = 1) => showMeasure("weight", kg, units, places);
   const today = e.days[0];
   const ratio = e.ratio;
@@ -209,6 +212,9 @@ function YourBurn() {
           )}
         </Card>
 
+        {/* Gym sessions this week: what each counts for */}
+        <SessionsCard sessions={sessions} weights={weights} ratio={ratio} colors={c} />
+
         {/* Why this week might not line up */}
         {e.reasons.length > 0 && (
           <Card colors={c} style={{ marginTop: 14 }}>
@@ -237,6 +243,46 @@ function YourBurn() {
 
       <HowItWorks open={info} onClose={() => setInfo(false)} e={e} burn={burn} units={units} colors={c} />
     </SafeAreaView>
+  );
+}
+
+// This week's Gym sessions, and what each counts for in your burn: one
+// your Watch measured (a workout running on it), its calories corrected by
+// your Watch's ratio — already in the day's burn, through the Watch; one it
+// didn't, an estimate, not counted.
+function SessionsCard({ sessions, weights, ratio, colors: c }: { sessions: GymSessionRecord[]; weights: WeightEntry[]; ratio: number | null; colors: OrbitColors }) {
+  const monday = new Date();
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const week = sessions.filter((s) => new Date(s.startedAt) >= monday);
+  return (
+    <Card colors={c} style={{ marginTop: 14 }}>
+      <Label colors={c}>GYM THIS WEEK</Label>
+      {week.length === 0 && <Text style={{ marginTop: 6, fontSize: 13.5, color: c.muted }}>No sessions yet this week.</Text>}
+      {week.map((s) => {
+        const cal = sessionCalories(s, sessions, weightOn(weights, s.startedAt), ratio);
+        const raw = s.vitals?.kcal;
+        return (
+          <View key={s._id} style={{ marginTop: 10, flexDirection: "row", gap: 10 }}>
+            <Ionicons name={cal?.measured ? "checkmark-circle" : "remove-circle-outline"} size={17} color={cal?.measured ? c.success : c.faint} style={{ marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: c.text }} numberOfLines={1}>
+                  {s.name}
+                </Text>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: cal?.measured ? c.text : c.muted, fontVariant: ["tabular-nums"] }}>{cal ? `${cal.measured ? "" : "~"}${cal.kcal.toLocaleString()} kcal` : "—"}</Text>
+              </View>
+              <Text style={{ marginTop: 1, fontSize: 12.5, lineHeight: 17, color: c.muted }}>
+                {cal?.measured && raw != null
+                  ? `Watch ${Math.round(raw)}${ratio != null ? ` × ${ratio.toFixed(2)} = ${cal.kcal}` : ""} · counted, in the day's burn`
+                  : "Estimated — no Watch workout, so not counted"}
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+      <Text style={{ marginTop: 10, fontSize: 12, lineHeight: 17, color: c.faint }}>Start a strength workout on your Watch when you lift: only sessions it measures count toward your burn.</Text>
+    </Card>
   );
 }
 

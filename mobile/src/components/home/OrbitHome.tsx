@@ -21,7 +21,9 @@ import { sessionTotals } from "@/src/services/gymApi";
 import { updateTodoTask } from "@/src/services/todoApi";
 import { sectionColor, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
+import { GymPages } from "./GymPages";
 import { HealthPages } from "./HealthPages";
+import { KitchenPages } from "./KitchenPages";
 import { useToday, type Today } from "./useToday";
 
 // The phone's home screen: the assistant — the orb — at the centre, and
@@ -291,29 +293,8 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
       : quiet("Nothing else today.");
     actions = <Action label="New event" icon="add" onPress={() => go("/calendar/edit")} colors={colors} />;
   } else if (section.id === "kitchen") {
-    const meals = t.meals.filter((e) => e.endMinutes > t.now).slice(0, 2);
-    body = (
-      <>
-        {meals.map((e) => (
-          <Row key={`${e._id}-${e.occurrenceDate}`} icon="restaurant-outline" iconColor={colors.success} title={`${e.title} · ${minutesLabel(e.startMinutes)}`} detail={mealLine(e)} colors={colors} />
-        ))}
-        {t.expiring.slice(0, 2).map((p) => {
-          const day = (p.expiryDate ?? "").slice(0, 10);
-          return (
-            <Row
-              key={p._id}
-              icon="hourglass-outline"
-              iconColor={colors.warning}
-              title={`${p.ingredient?.name ?? "Something"} ${day < t.today ? "is past its date" : `expires ${day === t.today ? "today" : day.slice(5).split("-").reverse().join("/")}`}`}
-              onPress={() => go("/PantryMainPage")}
-              colors={colors}
-            />
-          );
-        })}
-        {!meals.length && !t.expiring.length && quiet("No more meals planned today.")}
-      </>
-    );
-    actions = <Action label="Grocery list" icon="cart-outline" onPress={() => go("/grocery-list")} colors={colors} />;
+    // (A page at a time: meals, pantry, groceries.)
+    body = <KitchenPages t={t} go={go} colors={colors} />;
   } else if (section.id === "health") {
     // (A page at a time: overview, nutrition, workouts, sleep.)
     body = <HealthPages t={t} go={go} colors={colors} />;
@@ -335,34 +316,8 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
       : quiet("Nothing due — nice.");
     actions = <Action label="New task" icon="add" onPress={() => go("/lists")} colors={colors} />;
   } else if (section.id === "gym") {
-    // (This week, what's planned today — nothing yet — or the one under
-    // way, then the last one.)
-    const { week, last, active } = t.gym;
-    const lastTotals = last ? sessionTotals(last) : null;
-    body = (
-      <>
-        <Text style={{ fontSize: 24, fontWeight: "700", color: colors.text }}>
-          {week.sessions.length} <Text style={{ fontSize: 14, fontWeight: "400", color: colors.muted }}>workout{week.sessions.length === 1 ? "" : "s"} this week</Text>
-        </Text>
-        {active ? (
-          <Row icon="barbell" iconColor={colors.success} title={active.name} detail="Under way" onPress={() => go("/gym/session" as Href)} colors={colors} />
-        ) : (
-          <Row icon="calendar-clear-outline" title="Nothing planned today" colors={colors} />
-        )}
-        {last && lastTotals && (
-          <Row
-            icon="checkmark-circle-outline"
-            title={last.name}
-            detail={`${dayLabel(last.finishedAt)} · ${durationLabel(lastTotals.seconds)} · ${lastTotals.sets} sets · ${Math.round(lastTotals.volume).toLocaleString()} lbs`}
-            onPress={() => go(`/gym/sessions/${last._id}` as Href)}
-            colors={colors}
-          />
-        )}
-      </>
-    );
-    actions = active ? (
-      <Action label="Resume" icon="play" onPress={() => go("/gym/session" as Href)} colors={colors} />
-    ) : null;
+    // (A page at a time: the one under way, this week, the last one, records.)
+    body = <GymPages t={t} go={go} colors={colors} />;
   } else {
     body = quiet("Your files, notes, documents and plans, all in one place — on its way.");
   }

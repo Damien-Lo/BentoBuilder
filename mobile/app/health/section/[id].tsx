@@ -9,10 +9,12 @@ import { durationLabel } from "@/src/components/gym/schedule";
 import { formatValue, hasMeasures, SECTIONS, shownValue, STORED_UNIT, unitLabel, type MetricDef } from "@/src/components/health/healthSections";
 import { toShown, toStored, UnitsToggle, useUnits, type UnitPage } from "@/src/components/health/units";
 import { MetricChart } from "@/src/components/health/MetricChart";
-import { mergeWorkouts } from "@/src/components/health/workouts";
+import { useWatchRatio } from "@/src/components/health/watchCorrection";
+import { kcalLabel, mergeWorkouts } from "@/src/components/health/workouts";
 import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
 import { getSessions, type GymSessionRecord } from "@/src/services/gymApi";
+import { getWeightEntries, type WeightEntry } from "@/src/services/weightEntryApi";
 import { addHealthReading, getHealthMetrics, type HealthMetric } from "@/src/services/healthSync";
 import { OrbitPage, OrbitSection, SECTION_PALETTE, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { todayDateInputString } from "@/src/utils/date";
@@ -74,12 +76,16 @@ function SectionPage() {
   const [range, setRange] = useState<Range>("1W");
   const [metrics, setMetrics] = useState<HealthMetric[] | null>(null);
   const [sessions, setSessions] = useState<GymSessionRecord[]>([]);
+  const [weights, setWeights] = useState<WeightEntry[]>([]);
   const [adding, setAdding] = useState<MetricDef | null>(null);
 
   const types = useMemo(() => (id === "sleep" ? ["sleep"] : id === "workouts" ? ["workout"] : (section?.metrics ?? []).flatMap((m) => [m.type, ...(m.pairWith ? [m.pairWith] : [])])), [id, section]);
   const load = useCallback(() => {
     getHealthMetrics(types, daysAgo(366)).then(setMetrics, () => setMetrics([]));
-    if (id === "workouts") getSessions().then(setSessions, () => {});
+    if (id === "workouts") {
+      getSessions().then(setSessions, () => {});
+      getWeightEntries().then(setWeights, () => {});
+    }
   }, [types, id]);
   useFocusEffect(load);
 
@@ -115,7 +121,7 @@ function SectionPage() {
         ) : id === "sleep" ? (
           <Sleep metrics={metrics} from={from} to={to} colors={c} />
         ) : id === "workouts" ? (
-          <Workouts metrics={metrics} sessions={sessions} from={from} colors={c} />
+          <Workouts metrics={metrics} sessions={sessions} weights={weights} from={from} colors={c} />
         ) : (
           section!.metrics.map((def) => <MetricCard key={def.type} def={def} page={id as UnitPage} metrics={metrics} from={from} to={to} onAdd={() => setAdding(def)} colors={c} />)
         )}
@@ -351,12 +357,12 @@ function Sleep({ metrics, from, to, colors: c }: { metrics: HealthMetric[]; from
 // --- Workouts: the Watch's and Gym's, by day ---
 
 // Strength workouts (traditional and functional): the kind a Gym session is.
-function Workouts({ metrics, sessions, from, colors: c }: { metrics: HealthMetric[]; sessions: GymSessionRecord[]; from: string; colors: OrbitColors }) {
+function Workouts({ metrics, sessions, weights, from, colors: c }: { metrics: HealthMetric[]; sessions: GymSessionRecord[]; weights: WeightEntry[]; from: string; colors: OrbitColors }) {
   const router = useRouter();
   const [units] = useUnits("workouts");
-  const items = mergeWorkouts(metrics, sessions, from);
+  const ratio = useWatchRatio();
+  const items = mergeWorkouts(metrics, sessions, from, weights, ratio);
   const minutes = items.reduce((s, w) => s + w.minutes, 0);
-  const kcal = items.reduce((s, w) => s + (w.kcal ?? 0), 0);
 
   return (
     <>
@@ -364,7 +370,7 @@ function Workouts({ metrics, sessions, from, colors: c }: { metrics: HealthMetri
         {[
           { label: "Workouts", value: String(items.length) },
           { label: "Time", value: durationLabel(minutes * 60) },
-          { label: "Active", value: kcal ? `${Math.round(kcal).toLocaleString()} kcal` : "—" },
+          { label: "Active", value: kcalLabel(items) ?? "—" },
         ].map((f) => (
           <View key={f.label} style={{ flex: 1, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
             <Text style={{ fontSize: 12, color: c.muted }}>{f.label}</Text>
@@ -389,7 +395,7 @@ function Workouts({ metrics, sessions, from, colors: c }: { metrics: HealthMetri
                 </Text>
                 <Text style={{ marginTop: 1, fontSize: 12.5, color: c.muted }}>
                   {whenLabel(w.date)} · {durationLabel(w.minutes * 60)}
-                  {w.kcal ? ` · ${w.kcal} kcal` : ""}
+                  {w.kcal ? ` · ${w.estimated ? "~" : ""}${w.kcal.toLocaleString()} kcal` : ""}
                   {w.km ? ` · ${Math.round(toShown("distance", w.km, units) * 100) / 100} ${units === "metric" ? "km" : "mi"}` : ""}
                   {w.gym ? " · Gym" : ""}
                 </Text>
