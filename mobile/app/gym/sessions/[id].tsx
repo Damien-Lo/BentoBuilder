@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { clock } from "@/src/components/gym/activeSession";
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
+import { SessionBody } from "@/src/components/gym/SessionBody";
 import { sessionAchievements, type Achievement } from "@/src/components/gym/progressStats";
 import { cleanField, draftOf, FIELDS, fromDraft, setComplete, setText, TIME_HINT, trackOf, type DraftField, type SetDraft } from "@/src/components/gym/tracking";
 import { showActions } from "@/src/components/todo/theme";
@@ -28,14 +29,14 @@ export default function SessionDetailScreen() {
 }
 
 // A workout being corrected: its numbers as typed.
-type DraftSet = SetDraft & { key: number; type: SetType };
+type DraftSet = SetDraft & { key: number; type: SetType; doneAt?: string | null };
 type Draft = { name: string; exercises: { key: number; exercise: NonNullable<GymSessionRecord["exercises"][number]["exercise"]>; note: string; sets: DraftSet[] }[] };
 let nextKey = 0;
 const sessionDraft = (session: GymSessionRecord): Draft => ({
   name: session.name,
   exercises: session.exercises
     .filter((e) => e.exercise)
-    .map((e) => ({ key: nextKey++, exercise: e.exercise!, note: e.note, sets: e.sets.map((s) => ({ key: nextKey++, ...draftOf(s), type: s.type ?? "normal" })) })),
+    .map((e) => ({ key: nextKey++, exercise: e.exercise!, note: e.note, sets: e.sets.map((s) => ({ key: nextKey++, ...draftOf(s), type: s.type ?? "normal", doneAt: s.doneAt ?? null })) })),
 });
 
 function SessionDetail() {
@@ -46,6 +47,7 @@ function SessionDetail() {
   const [failed, setFailed] = useState(false);
   // What it achieved: records beaten (null while loading).
   const [records, setRecords] = useState<Achievement[] | null>(null);
+  const [all, setAll] = useState<GymSessionRecord[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -53,7 +55,14 @@ function SessionDetail() {
   }, [id]);
   // What it achieved, against every workout before it.
   useEffect(() => {
-    if (session) getSessions().then((all) => setRecords(sessionAchievements(session, all)), () => setRecords([]));
+    if (session)
+      getSessions().then(
+        (sessions) => {
+          setAll(sessions);
+          setRecords(sessionAchievements(session, sessions));
+        },
+        () => setRecords([]),
+      );
   }, [session]);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/gym/history" as Href));
 
@@ -79,7 +88,7 @@ function SessionDetail() {
     const exercises = draft.exercises
       .map((e) => {
         const track = trackOf(e.exercise);
-        return { exercise: e.exercise._id, note: e.note, sets: e.sets.map((s) => ({ ...fromDraft(s, track), type: s.type })).filter((s) => setComplete(s, track)) };
+        return { exercise: e.exercise._id, note: e.note, sets: e.sets.map((s) => ({ ...fromDraft(s, track), type: s.type, doneAt: s.doneAt ?? null })).filter((s) => setComplete(s, track)) };
       })
       .filter((e) => e.sets.length > 0);
     if (!exercises.length) return Alert.alert("Nothing left in it", "A workout needs at least one set filled in — delete it instead.");
@@ -158,6 +167,7 @@ function SessionDetail() {
                 <Stat label="Records" value={records ? String(records.length) : " "} icon="trophy" colors={c} />
               </View>
             )}
+            {!draft && <SessionBody session={session} all={all} colors={c} />}
 
             {draft
               ? draft.exercises.map((e) => (

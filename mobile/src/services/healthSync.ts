@@ -5,6 +5,7 @@ import {
   queryCategorySamples,
   queryQuantitySamples,
   querySources,
+  queryStatisticsForQuantity,
   queryStatisticsCollectionForQuantity,
   queryWorkoutSamples,
   requestAuthorization,
@@ -14,6 +15,7 @@ import {
 import { Platform } from "react-native";
 
 import { API_BASE_URL } from "@/src/config/api";
+import { getSessions, putSessionVitals } from "@/src/services/gymApi";
 import { syncWeightEntries } from "@/src/services/weightEntryApi";
 
 // Apple Health → Orbit. On an iPhone, with your say-so, your health data
@@ -54,6 +56,16 @@ const QUANTITIES: { type: string; id: QuantityTypeIdentifier; stat: StatisticsOp
 const SLEEP = "HKCategoryTypeIdentifierSleepAnalysis" as const;
 const MINDFUL = "HKCategoryTypeIdentifierMindfulSession" as const;
 const WORKOUTS = "HKWorkoutTypeIdentifier" as const;
+// Heart rate, sample by sample — read only for Gym sessions' own time.
+const HEART_RATE = "HKQuantityTypeIdentifierHeartRate" as const;
+const ACTIVE_ENERGY = "HKQuantityTypeIdentifierActiveEnergyBurned" as const;
+// What's asked to be read; when it grows, the sync asks again (iOS shows
+// its sheet only for what's new).
+const TO_READ = () => [...QUANTITIES.map((q) => q.id), SLEEP, MINDFUL, WORKOUTS, HEART_RATE];
+const ASKED = "health.askedFor";
+const ASKING_VERSION = "2"; // 2: heart rate (Oct 23, 2026)
+// Set once Gym sessions have been read from 90 days back.
+const SESSION_VITALS = "health.sessionVitals";
 
 // A distance in km, from whatever unit it came in (a workout's comes in
 // metres — under a name that isn't always "m" — so anything unknown is
@@ -100,7 +112,9 @@ export function healthAvailable() {
 // Asks once (iOS shows its sheet the first time; after that it's settled
 // in Settings → Health → Data Access).
 export async function connectAppleHealth() {
-  return requestAuthorization({ toRead: [...QUANTITIES.map((q) => q.id), SLEEP, MINDFUL, WORKOUTS] });
+  const granted = await requestAuthorization({ toRead: TO_READ() });
+  await AsyncStorage.setItem(ASKED, ASKING_VERSION).catch(() => {});
+  return granted;
 }
 
 export async function lastSynced(): Promise<Date | null> {
@@ -142,6 +156,50 @@ function nights(samples: readonly { startDate: Date; endDate: Date; value: numbe
   });
 }
 
+// Gym sessions, with what your Watch measured in their own time: the
+// calories burned moving (from the Watch and iPhone, as above), and your
+// heart rate — its average, highest, lowest, and a minute at a time. Each
+// session since a little before the last sync (from 90 days back, the first
+// time). In a Watch workout, heart rate is taken every few seconds; worn
+// without one, every few minutes — `watchWorkout` is which it was (a reading
+// at least every 30 seconds, on average). Nothing's sent for a session with
+// no Watch data at all.
+async function syncSessionVitals(now: Date, from: Date) {
+  const once = (await AsyncStorage.getItem(SESSION_VITALS).catch(() => null)) !== "1";
+  const since = once ? new Date(now.getTime() - 90 * 86_400_000) : from;
+  const sessions = (await getSessions()).filter((s) => new Date(s.finishedAt) >= since);
+  const devices = (await querySources(ACTIVE_ENERGY)).filter((src) => src.bundleIdentifier.startsWith("com.apple.health"));
+  for (const session of sessions) {
+    const start = new Date(session.startedAt);
+    const end = new Date(session.finishedAt);
+    const minutes = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 60_000));
+    const beats = await queryQuantitySamples(HEART_RATE, { limit: 0, filter: { date: { startDate: start, endDate: end } }, unit: "count/min" as never }).catch(() => []);
+    const energy = await queryStatisticsForQuantity(ACTIVE_ENERGY, ["cumulativeSum"], { filter: { date: { startDate: start, endDate: end }, ...(devices.length ? { sources: devices } : {}) }, unit: "kcal" as never }).catch(() => null);
+    const kcal = energy?.sumQuantity?.quantity ?? null;
+    if (!beats.length && !kcal) continue;
+    const bpm = beats.map((b) => b.quantity);
+    // A minute at a time.
+    const sums = new Array(Math.min(minutes, 600)).fill(0);
+    const counts = new Array(sums.length).fill(0);
+    for (const b of beats) {
+      const i = Math.floor((new Date(b.startDate).getTime() - start.getTime()) / 60_000);
+      if (i >= 0 && i < sums.length) {
+        sums[i] += b.quantity;
+        counts[i]++;
+      }
+    }
+    await putSessionVitals(session._id, {
+      kcal: kcal != null ? Math.round(kcal) : null,
+      avgHr: bpm.length ? Math.round(bpm.reduce((a, b) => a + b, 0) / bpm.length) : null,
+      maxHr: bpm.length ? Math.round(Math.max(...bpm)) : null,
+      minHr: bpm.length ? Math.round(Math.min(...bpm)) : null,
+      hr: sums.map((sum, i) => (counts[i] ? Math.round(sum / counts[i]) : 0)),
+      watchWorkout: bpm.length >= minutes * 2,
+    });
+  }
+  await AsyncStorage.setItem(SESSION_VITALS, "1").catch(() => {});
+}
+
 // Reads Apple Health since a little before the last sync and sends it to
 // the server. What came of it: how many readings went in. (One at a time:
 // asked again while one's running, it's that one.)
@@ -159,6 +217,8 @@ async function runSync(): Promise<SyncResult> {
   const last = await lastSynced();
   const from = midnight(last ? new Date(last.getTime() - 2 * 86_400_000) : new Date(now.getTime() - 90 * 86_400_000));
   const metrics: HealthMetricInput[] = [];
+  // (Something new to read since you said yes: asked for, once.)
+  if ((await AsyncStorage.getItem(ASKED).catch(() => null)) !== ASKING_VERSION) await connectAppleHealth().catch(() => {});
 
   // Calories burned come from your Watch and iPhone only — measured — not
   // from apps that write an estimate (a smart scale's app writes its guess
@@ -289,6 +349,7 @@ async function runSync(): Promise<SyncResult> {
     updated += body.data.updated;
   }
   for (const id of stale) await deleteHealthReading(id).catch(() => {});
+  await syncSessionVitals(now, from).catch(() => {});
   await AsyncStorage.setItem(LAST_SYNC, now.toISOString()).catch(() => {});
   await AsyncStorage.setItem(ENERGY_SOURCES, "1").catch(() => {});
   return { sent: readings.length + weights.length, added, updated, from };

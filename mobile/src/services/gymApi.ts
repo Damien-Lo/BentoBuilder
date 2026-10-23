@@ -59,6 +59,7 @@ export interface DoneSetInput {
   seconds?: number | null;
   distance?: number | null;
   type?: SetType;
+  doneAt?: string | null; // when it was ticked off (since Oct 23, 2026)
 }
 // Its letter in place of the set's number ("W"), and its colour.
 export const SET_TYPES: { id: SetType; label: string; letter: string | null; color: string | null }[] = [
@@ -108,7 +109,21 @@ export interface GymSessionRecord {
   finishedAt: string;
   workout?: string | null;
   exercises: { exercise: Pick<Exercise, "_id" | "name" | "primaryMuscles" | "secondaryMuscles" | "track"> | null; note: string; sets: DoneSetInput[] }[];
+  vitals?: SessionVitals | null;
 }
+// What your body did during a session, from your Watch (Apple Health): the
+// calories burned moving, and your heart rate — its average, highest and
+// lowest, and a minute at a time (0: none that minute).
+export interface SessionVitals {
+  kcal: number | null;
+  avgHr: number | null;
+  maxHr: number | null;
+  minHr: number | null;
+  hr: number[];
+  watchWorkout: boolean;
+  syncedAt: string | null;
+}
+export const putSessionVitals = (id: string, vitals: Omit<SessionVitals, "syncedAt">) => call<SessionVitals>(`/sessions/${id}/vitals`, { method: "PUT", body: JSON.stringify(vitals) });
 export const getSessions = () => call<GymSessionRecord[]>("/sessions");
 export const getSession = (id: string) => call<GymSessionRecord>(`/sessions/${id}`);
 export const deleteSession = (id: string) => call<void>(`/sessions/${id}`, { method: "DELETE" });

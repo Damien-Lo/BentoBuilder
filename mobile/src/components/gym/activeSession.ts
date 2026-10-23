@@ -15,6 +15,7 @@ export interface ActiveSet {
   time: string;
   distance: string;
   done: boolean;
+  doneAt?: string | null; // when it was ticked (ISO) — lines heart rate up with it
   type?: SetType;
 }
 export interface ActiveExercise {

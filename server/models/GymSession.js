@@ -16,6 +16,28 @@ const doneSetSchema = new mongoose.Schema(
     // A warm-up (not counted toward records), a drop set, a set to failure —
     // or an ordinary one.
     type: { type: String, enum: ["normal", "warmup", "drop", "failure"], default: "normal" },
+    // When it was ticked off (since Oct 23, 2026) — what lines your heart
+    // rate up with each set.
+    doneAt: { type: Date, default: null },
+  },
+  { _id: false },
+);
+
+// What your body did during it, from Apple Health (your Watch), in the
+// session's own time: the calories burned moving, your heart rate (its
+// average, highest and lowest, and a minute at a time — `hr[i]` the
+// average in minute i, 0 for a minute with none), and whether a workout was
+// recorded on the Watch for it. Filled in by the phone's sync; null until
+// then (or without the Watch).
+const vitalsSchema = new mongoose.Schema(
+  {
+    kcal: { type: Number, default: null, min: 0 },
+    avgHr: { type: Number, default: null, min: 0 },
+    maxHr: { type: Number, default: null, min: 0 },
+    minHr: { type: Number, default: null, min: 0 },
+    hr: { type: [Number], default: [] },
+    watchWorkout: { type: Boolean, default: false },
+    syncedAt: { type: Date, default: null },
   },
   { _id: false },
 );
@@ -36,6 +58,7 @@ const gymSessionSchema = new mongoose.Schema(
     startedAt: { type: Date, required: true },
     finishedAt: { type: Date, required: true },
     exercises: { type: [doneExerciseSchema], default: [] },
+    vitals: { type: vitalsSchema, default: null },
   },
   { timestamps: true },
 );

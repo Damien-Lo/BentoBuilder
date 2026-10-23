@@ -139,7 +139,7 @@ function Session() {
   // A tick: an empty box takes what's hinted (last time's), then the rest
   // starts. Unticking just unticks.
   function tick(item: ActiveExercise, set: ActiveSet, index: number) {
-    if (set.done) return changeSet(item.key, set.id, (s) => ({ ...s, done: false }));
+    if (set.done) return changeSet(item.key, set.id, (s) => ({ ...s, done: false, doneAt: null }));
     const track = trackOf(item.exercise);
     const hint = draftOf(previous[item.exercise._id]?.[index]);
     const filled: SetDraft = { weight: set.weight || hint.weight, reps: set.reps || hint.reps, time: set.time || hint.time, distance: set.distance || hint.distance };
@@ -151,7 +151,7 @@ function Session() {
     feel("tick");
     update((s) => ({
       ...s,
-      exercises: s.exercises.map((e) => (e.key === item.key ? { ...e, sets: e.sets.map((x) => (x.id === set.id ? { ...x, ...filled, done: true } : x)) } : e)),
+      exercises: s.exercises.map((e) => (e.key === item.key ? { ...e, sets: e.sets.map((x) => (x.id === set.id ? { ...x, ...filled, done: true, doneAt: new Date().toISOString() } : x)) } : e)),
       ...(item.restSeconds > 0 ? { restEndsAt: Date.now() + item.restSeconds * 1000, restLength: item.restSeconds } : {}),
     }));
   }
@@ -234,7 +234,7 @@ function Session() {
           name: session.name,
           startedAt: session.startedAt,
           finishedAt: finishedAt.toISOString(),
-          exercises: done.map((e) => ({ exercise: e.exercise._id, note: e.note.trim(), sets: e.sets.map((s) => ({ ...fromDraft(s, trackOf(e.exercise)), type: s.type ?? "normal" })) })),
+          exercises: done.map((e) => ({ exercise: e.exercise._id, note: e.note.trim(), sets: e.sets.map((s) => ({ ...fromDraft(s, trackOf(e.exercise)), type: s.type ?? "normal", doneAt: s.doneAt ?? null })) })),
         });
         await clearActiveSession();
         // (How it went: the workout's own page, opened as just finished.)

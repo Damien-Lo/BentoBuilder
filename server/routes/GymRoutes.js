@@ -100,6 +100,13 @@ const SET_TYPES = new Set(["normal", "warmup", "drop", "failure"]);
 // A session's exercises, from what the app sends: only exercises that
 // exist, only sets with something in them, and only exercises with a set
 // left.
+// A set's time ticked off, if it's a real one.
+function whenDone(value) {
+  if (!value) return null;
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? null : at;
+}
+
 async function sessionExercisesFrom(body) {
   const items = Array.isArray(body.exercises) ? body.exercises : [];
   const known = new Set((await Exercise.find({ _id: { $in: items.map((i) => i?.exercise).filter(Boolean) }, ...visibleExercises() }).select("_id").lean()).map((e) => String(e._id)));
@@ -110,7 +117,7 @@ async function sessionExercisesFrom(body) {
       note: String(item.note ?? "").slice(0, 500),
       sets: (Array.isArray(item.sets) ? item.sets : [])
         .slice(0, 100)
-        .map((set) => ({ weight: positive(set?.weight), reps: positive(set?.reps), seconds: positive(set?.seconds), distance: positive(set?.distance), type: SET_TYPES.has(set?.type) ? set.type : "normal" }))
+        .map((set) => ({ weight: positive(set?.weight), reps: positive(set?.reps), seconds: positive(set?.seconds), distance: positive(set?.distance), type: SET_TYPES.has(set?.type) ? set.type : "normal", doneAt: whenDone(set?.doneAt) }))
         // (A set counts with reps — or, for a hold or cardio, a time or distance.)
         .filter((set) => set.reps !== null || set.seconds !== null || set.distance !== null),
     }))
@@ -213,6 +220,24 @@ router.get("/previous", async (req, res) => {
     return res.json({ success: true, data: previous });
   } catch (error) {
     return sendError(res, error, 500);
+  }
+});
+
+/**
+ * PUT /api/gym/sessions/:id/vitals — what your body did during a session,
+ * from Apple Health (the phone's sync): { kcal, avgHr, maxHr, minHr, hr: [bpm a minute], watchWorkout }.
+ */
+router.put("/sessions/:id/vitals", async (req, res) => {
+  try {
+    const session = await GymSession.findById(req.params.id);
+    if (!session) return sendError(res, new Error("Session not found"), 404);
+    const n = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Number(v) * 10) / 10 : null);
+    const hr = Array.isArray(req.body.hr) ? req.body.hr.slice(0, 600).map((v) => Math.max(0, Math.round(Number(v) || 0))) : [];
+    session.vitals = { kcal: n(req.body.kcal), avgHr: n(req.body.avgHr), maxHr: n(req.body.maxHr), minHr: n(req.body.minHr), hr, watchWorkout: !!req.body.watchWorkout, syncedAt: new Date() };
+    await session.save();
+    return res.json({ success: true, data: session.vitals });
+  } catch (error) {
+    return sendError(res, error);
   }
 });
 
