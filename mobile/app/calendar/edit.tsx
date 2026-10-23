@@ -95,9 +95,11 @@ function EditCalendarEventPage() {
     // the edit is for it alone, it and the following ones, or the series.
     occurrence?: string;
     scope?: SeriesScope;
-    // A new event in the Gym calendar ("gym"), and the routine to plan.
+    // A new event in the Gym calendar ("gym"), and the routine to plan;
+    // `repeat`: "weekly" — on the start date's day each week (a plan's).
     calendar?: string;
     workout?: string;
+    repeat?: "weekly";
   }>();
   const editingId = params.id;
   const occurrence = params.occurrence;
@@ -182,6 +184,10 @@ function EditCalendarEventPage() {
           setGymWorkout(event.gymWorkout ?? null);
         } else {
           const gym = params.calendar === "gym" ? loadedCalendars.find((c) => c.isGym) : null;
+          if (params.repeat === "weekly") {
+            setRepeatFrequency("weekly");
+            setRepeatDays([parseLocalDate(initialDate).getDay()]);
+          }
           setCalendarId((gym ?? loadedCalendars.find((c) => c.isDefault) ?? loadedCalendars[0])?._id ?? "");
         }
         getWorkouts()
