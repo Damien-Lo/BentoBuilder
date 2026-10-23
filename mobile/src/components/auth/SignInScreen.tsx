@@ -176,6 +176,8 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
                 returnKeyType="go"
               />
 
+              {/* (Common passwords are refused: say what works.) */}
+              {newPassword && !error && <Text style={{ marginTop: 8, fontSize: 12.5, lineHeight: 18, color: colors.muted }}>A few words together works well. Common passwords aren&apos;t allowed.</Text>}
               {!!error && <Text style={{ marginTop: 16, fontSize: 14, color: colors.danger }}>{error}</Text>}
 
               <Pressable

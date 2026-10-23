@@ -1,18 +1,26 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import { promisify } from "node:util";
 
+import AuthFailure from "../models/AuthFailure.js";
 import Session from "../models/Session.js";
 import User from "../models/User.js";
 
 // Signing in: passwords, sessions, and who a request is from.
 //
 // Passwords are hashed with scrypt (Node's own; nothing to install), kept as
-// "scrypt$N$r$p$salt$hash". A session token is 32 random bytes, handed to
-// the device once; the server keeps only its SHA-256. A session lasts
-// SESSION_DAYS from when it was last used.
+// "scrypt$N$r$p$salt$hash" — at OWASP's recommended strength (N 2^15, r 8,
+// p 3: 32 MB a hash, the same work as 2^17 with p 1 in a quarter of the
+// memory, for a small server). A hash made at the older strength is
+// remade at this one the next time its password is entered (needsRehash).
+// A session token is 32 random bytes, handed to the device once; the
+// server keeps only its SHA-256. A session lasts SESSION_DAYS from when it
+// was last used.
 
 const scrypt = promisify(crypto.scrypt);
-const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
+const SCRYPT = { N: 32768, r: 8, p: 3, keylen: 64 };
+// (Node allows 32 MB by default: room for this strength.)
+const MAXMEM = 128 * 1024 * 1024;
 export const SESSION_DAYS = 90;
 const DAY = 24 * 60 * 60 * 1000;
 // (A session's last use is saved at most this often.)
@@ -22,7 +30,7 @@ export const MIN_PASSWORD = 8;
 
 export async function hashPassword(password) {
   const salt = crypto.randomBytes(16);
-  const hash = await scrypt(password, salt, SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p });
+  const hash = await scrypt(password, salt, SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: MAXMEM });
   return ["scrypt", SCRYPT.N, SCRYPT.r, SCRYPT.p, salt.toString("base64url"), hash.toString("base64url")].join("$");
 }
 
@@ -32,8 +40,15 @@ export async function verifyPassword(password, stored) {
   const [kind, N, r, p, salt, hash] = String(stored ?? "").split("$");
   if (kind !== "scrypt" || !salt || !hash) return false;
   const expected = Buffer.from(hash, "base64url");
-  const actual = await scrypt(String(password), Buffer.from(salt, "base64url"), expected.length, { N: Number(N), r: Number(r), p: Number(p) });
+  const actual = await scrypt(String(password), Buffer.from(salt, "base64url"), expected.length, { N: Number(N), r: Number(r), p: Number(p), maxmem: MAXMEM });
   return crypto.timingSafeEqual(actual, expected);
+}
+
+// Whether a stored hash was made at an older strength (and so is remade
+// once its password is entered and checked).
+export function needsRehash(stored) {
+  const [kind, N, r, p] = String(stored ?? "").split("$");
+  return kind !== "scrypt" || Number(N) !== SCRYPT.N || Number(r) !== SCRYPT.r || Number(p) !== SCRYPT.p;
 }
 
 // (Checked against when there's no such account, so a wrong email takes as
@@ -41,10 +56,22 @@ export async function verifyPassword(password, stored) {
 const DECOY = hashPassword(crypto.randomBytes(16).toString("hex"));
 export const verifyDecoy = async (password) => verifyPassword(password, await DECOY);
 
-// What's wrong with a new password, if anything.
-export function passwordProblem(password) {
+// The 10,000 most common passwords (SecLists, Passwords/Common-Credentials/
+// 10k-most-common.txt; lower-cased), refused as new ones — what NIST
+// recommends in place of rules about symbols and capitals, which only
+// lead to "Password1!".
+const COMMON = new Set(fs.readFileSync(new URL("../data/common-passwords.txt", import.meta.url), "utf8").split("\n").map((p) => p.trim()).filter(Boolean));
+
+// What's wrong with a new password, if anything. (`email`: the account's —
+// a password that's just the email, or its name part, is refused too.)
+export function passwordProblem(password, email = "") {
   if (typeof password !== "string" || password.length < MIN_PASSWORD) return `Use at least ${MIN_PASSWORD} characters.`;
   if (password.length > 200) return "That password is too long.";
+  const plain = password.trim().toLowerCase();
+  const name = String(email).toLowerCase().split("@")[0];
+  if (COMMON.has(plain) || COMMON.has(plain.replace(/[^a-z0-9]+$/, "")) || /^(.)\1+$/.test(plain)) return "That's one of the most common passwords — choose something less guessable (a few words together works well).";
+  if (plain === String(email).toLowerCase() || (name.length >= 4 && plain.includes(name))) return "Don't use your email in your password.";
+  if (/orbit|bentobuilder/.test(plain) && plain.replace(/orbit|bentobuilder|[^a-z]/g, "").length < 4) return "Choose something less guessable than the app's name.";
   return null;
 }
 
@@ -144,38 +171,37 @@ export function adminOrNoAccount(req, res, next) {
 // the network address; the email from that address (so one person's typos
 // don't lock anyone else out); and the email from anywhere, with a higher
 // limit (a guesser spread over many addresses is still slowed, and can't
-// lock an account out with a handful of tries). Kept in memory: a restart
-// forgets it, which is fine for this purpose.
+// lock an account out with a handful of tries). Kept in the database
+// (models/AuthFailure.js, each key as its SHA-256), so a restart doesn't
+// reset them; gone once their window has passed.
 const LIMIT = { perAddress: 20, perEmailHere: 5, perEmail: 50 };
 const WINDOW = 15 * 60 * 1000;
-const failures = new Map();
 
-function failuresFor(key) {
-  const entry = failures.get(key);
-  if (!entry || Date.now() - entry.since > WINDOW) return null;
-  return entry;
-}
+const keyOf = (key) => sha256(`auth-failure:${key}`);
 
 // Minutes to wait before trying again, or 0.
-export function waitMinutes(keys) {
+export async function waitMinutes(keys) {
+  const found = await AuthFailure.find({ key: { $in: keys.map(([key]) => keyOf(key)) }, since: { $gt: new Date(Date.now() - WINDOW) } }).lean();
   for (const [key, limit] of keys) {
-    const entry = failuresFor(key);
-    if (entry && entry.count >= limit) return Math.max(1, Math.ceil((entry.since + WINDOW - Date.now()) / 60000));
+    const entry = found.find((f) => f.key === keyOf(key));
+    if (entry && entry.count >= limit) return Math.max(1, Math.ceil((entry.since.getTime() + WINDOW - Date.now()) / 60000));
   }
   return 0;
 }
 
-export function noteFailure(keys) {
+export async function noteFailure(keys) {
+  const now = new Date();
   for (const [key] of keys) {
-    const entry = failuresFor(key) ?? { count: 0, since: Date.now() };
-    entry.count += 1;
-    failures.set(key, entry);
+    const k = keyOf(key);
+    // (A window that's passed starts again.)
+    await AuthFailure.deleteOne({ key: k, since: { $lte: new Date(now.getTime() - WINDOW) } });
+    await AuthFailure.updateOne({ key: k }, { $inc: { count: 1 }, $setOnInsert: { since: now, expiresAt: new Date(now.getTime() + WINDOW) } }, { upsert: true });
   }
-  // (Old entries don't pile up.)
-  if (failures.size > 5000) for (const [key, entry] of failures) if (Date.now() - entry.since > WINDOW) failures.delete(key);
 }
 
-export const clearFailures = (keys) => keys.forEach(([key]) => failures.delete(key));
+export const clearFailures = async (keys) => {
+  await AuthFailure.deleteMany({ key: { $in: keys.map(([key]) => keyOf(key)) } });
+};
 
 // The limiter keys for a request: its address, and the email if there is
 // one. (Only a real-looking email is kept: anything else — a huge string

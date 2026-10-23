@@ -191,7 +191,7 @@ export default function AccountSettingsScreen() {
                 <Input value={next} onChangeText={setNext} placeholder="New password (at least 8 characters)" secureTextEntry textContentType="newPassword" autoComplete="new-password" />
                 <Input value={again} onChangeText={setAgain} placeholder="New password again" secureTextEntry textContentType="newPassword" autoComplete="new-password" />
                 {!!passwordState?.error && <Text className="mt-2 text-sm text-red-600" style={errorStyle}>{passwordState.error}</Text>}
-                <Text className="mt-2 text-xs text-slate-400" style={{ color: o.faint }}>Your other devices will be signed out.</Text>
+                <Text className="mt-2 text-xs text-slate-400" style={{ color: o.faint }}>A few words together works well; common passwords aren&apos;t allowed. Your other devices will be signed out.</Text>
                 <View className="mt-3 flex-row gap-2">
                   <Button label="Change password" fill busy={passwordState?.busy} onPress={() => void savePassword()} />
                   <Button

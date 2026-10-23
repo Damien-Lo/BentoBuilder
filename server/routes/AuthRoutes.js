@@ -10,6 +10,7 @@ import {
   clearFailures,
   codeHash,
   hashPassword,
+  needsRehash,
   isEmail,
   newCode,
   normalEmail,
@@ -53,16 +54,18 @@ router.post("/signin", async (req, res) => {
   try {
     const email = normalEmail(req.body.email);
     const keys = attemptKeys(req, email);
-    const wait = waitMinutes(keys);
+    const wait = await waitMinutes(keys);
     if (wait) return tooMany(res, wait);
     const user = isEmail(email) ? await User.findOne({ email }).select("+passwordHash") : null;
     const ok = user ? await verifyPassword(req.body.password ?? "", user.passwordHash) : await verifyDecoy(req.body.password ?? "");
     if (!user || !ok) {
-      noteFailure(keys);
+      await noteFailure(keys);
       return fail(res, 401, "That email and password don't match an account.");
     }
-    clearFailures(keys);
+    await clearFailures(keys);
     if (user.disabledAt) return fail(res, 403, BLOCKED);
+    // (A hash made at an older strength, remade at today's now the password's known.)
+    if (needsRehash(user.passwordHash)) await User.updateOne({ _id: user._id }, { passwordHash: await hashPassword(req.body.password) });
     const { token } = await startSession(user, req.body.deviceName);
     return res.json({ success: true, data: { token, user: shownUser(user) } });
   } catch (error) {
@@ -77,21 +80,21 @@ router.post("/signin", async (req, res) => {
 router.post("/signup", async (req, res) => {
   try {
     const keys = attemptKeys(req);
-    const wait = waitMinutes(keys);
+    const wait = await waitMinutes(keys);
     if (wait) return tooMany(res, wait);
     const invite = await openCode("invite", req.body.code);
     if (!invite) {
-      noteFailure(keys);
+      await noteFailure(keys);
       return fail(res, 400, "That invite code isn't valid, or has been used or expired.");
     }
     const email = normalEmail(req.body.email);
     if (!isEmail(email)) return fail(res, 400, "Enter a valid email address.");
     if (invite.email && invite.email !== email) return fail(res, 400, "This invite is for a different email address.");
-    const problem = passwordProblem(req.body.password);
+    const problem = passwordProblem(req.body.password, email);
     if (problem) return fail(res, 400, problem);
     if (await User.exists({ email })) {
       // (Counted, so an invite code can't be used to test emails endlessly.)
-      noteFailure(keys);
+      await noteFailure(keys);
       return fail(res, 409, "There's already an account with that email. Sign in instead.");
     }
 
@@ -102,7 +105,7 @@ router.post("/signup", async (req, res) => {
       await User.deleteOne({ _id: user._id });
       return fail(res, 400, "That invite code has just been used.");
     }
-    clearFailures(keys);
+    await clearFailures(keys);
     const { token } = await startSession(user, req.body.deviceName);
     return res.status(201).json({ success: true, data: { token, user: shownUser(user) } });
   } catch (error) {
@@ -119,22 +122,22 @@ router.post("/reset", async (req, res) => {
   try {
     const email = normalEmail(req.body.email);
     const keys = attemptKeys(req, email);
-    const wait = waitMinutes(keys);
+    const wait = await waitMinutes(keys);
     if (wait) return tooMany(res, wait);
     const reset = await openCode("reset", req.body.code);
     const user = reset && (await User.findOne({ _id: reset.user, email }));
     if (!user) {
-      noteFailure(keys);
+      await noteFailure(keys);
       return fail(res, 400, "That reset code isn't valid for this email, or has been used or expired.");
     }
-    const problem = passwordProblem(req.body.password);
+    const problem = passwordProblem(req.body.password, user.email);
     if (problem) return fail(res, 400, problem);
     if (user.disabledAt) return fail(res, 403, BLOCKED);
     const claimed = await AccessCode.updateOne({ _id: reset._id, usedAt: null }, { usedAt: new Date(), usedBy: user._id });
     if (!claimed.modifiedCount) return fail(res, 400, "That reset code has just been used.");
     await User.updateOne({ _id: user._id }, { passwordHash: await hashPassword(req.body.password) });
     await Session.deleteMany({ user: user._id });
-    clearFailures(keys);
+    await clearFailures(keys);
     const { token } = await startSession(user, req.body.deviceName);
     return res.json({ success: true, data: { token, user: shownUser(user) } });
   } catch (error) {
@@ -162,11 +165,11 @@ router.patch("/me", requireUser, async (req, res) => {
       if (email !== req.user.email) {
         if (!isEmail(email)) return fail(res, 400, "Enter a valid email address.");
         const keys = attemptKeys(req, req.user.email);
-        const wait = waitMinutes(keys);
+        const wait = await waitMinutes(keys);
         if (wait) return tooMany(res, wait);
         const me = await User.findById(req.user._id).select("+passwordHash");
         if (!(await verifyPassword(req.body.currentPassword ?? "", me.passwordHash))) {
-          noteFailure(keys);
+          await noteFailure(keys);
           return fail(res, 400, "Your current password isn't right.");
         }
         if (await User.exists({ email })) return fail(res, 409, "There's already an account with that email.");
@@ -187,18 +190,18 @@ router.patch("/me", requireUser, async (req, res) => {
 router.post("/password", requireUser, async (req, res) => {
   try {
     const keys = attemptKeys(req, req.user.email);
-    const wait = waitMinutes(keys);
+    const wait = await waitMinutes(keys);
     if (wait) return tooMany(res, wait);
     const me = await User.findById(req.user._id).select("+passwordHash");
     if (!(await verifyPassword(req.body.currentPassword ?? "", me.passwordHash))) {
-      noteFailure(keys);
+      await noteFailure(keys);
       return fail(res, 400, "Your current password isn't right.");
     }
-    const problem = passwordProblem(req.body.newPassword);
+    const problem = passwordProblem(req.body.newPassword, me.email);
     if (problem) return fail(res, 400, problem);
     await User.updateOne({ _id: me._id }, { passwordHash: await hashPassword(req.body.newPassword) });
     const ended = await Session.deleteMany({ user: me._id, _id: { $ne: req.session._id } });
-    clearFailures(keys);
+    await clearFailures(keys);
     return res.json({ success: true, data: { signedOut: ended.deletedCount } });
   } catch (error) {
     return fail(res, 400, error.message);
@@ -348,11 +351,11 @@ router.delete("/me", requireUser, async (req, res) => {
   try {
     if (req.user.role === "admin") return fail(res, 400, "The admin's account can't be deleted from the app.");
     const keys = attemptKeys(req, req.user.email);
-    const wait = waitMinutes(keys);
+    const wait = await waitMinutes(keys);
     if (wait) return tooMany(res, wait);
     const me = await User.findById(req.user._id).select("+passwordHash");
     if (!(await verifyPassword(req.body?.password ?? "", me.passwordHash))) {
-      noteFailure(keys);
+      await noteFailure(keys);
       return fail(res, 400, "That password isn't right.");
     }
     const removed = await deleteAccount(me._id);
