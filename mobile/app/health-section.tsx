@@ -11,7 +11,8 @@ import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit
 import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Health on the phone: your body, what you eat, and how you're doing — one
-// list, like Settings, each row opening its own page. Nutrition is part of
+// list, like Settings, each row opening its own page — About you (what the
+// health numbers are worked out from) first. Nutrition is part of
 // it (its pages are the ones that were the Nutrition section's), with
 // weight beside it and what's still to come under them. Today's two
 // numbers at the top. In Health's own colour.
@@ -22,6 +23,10 @@ import { useWideWeb } from "@/src/utils/useWideWeb";
 type Entry = { label: string; icon: keyof typeof Ionicons.glyphMap; path?: string; soon?: boolean };
 
 const GROUPS: { title: string; entries: Entry[] }[] = [
+  {
+    title: "You",
+    entries: [{ label: "About you", icon: "person", path: "/health/about" }],
+  },
   {
     title: "Nutrition",
     entries: [

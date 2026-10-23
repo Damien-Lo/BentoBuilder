@@ -30,7 +30,15 @@ export interface AppSettings {
   startingWeight: number | null;
   startingWeightDate: string | null;
   goalWeight: number | null;
+  // About you (Health → About you): what the health numbers are worked out
+  // from. Height in cm; born "YYYY-MM-DD".
+  sex: Sex | null;
+  birthDate: string | null;
+  heightCm: number | null;
+  activityLevel: ActivityLevel | null;
 }
+export type Sex = "male" | "female";
+export type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very";
 
 // Also the initial state for screens that show settings before loadSettings
 // resolves.
@@ -51,6 +59,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   startingWeight: null,
   startingWeightDate: null,
   goalWeight: null,
+  sex: null,
+  birthDate: null,
+  heightCm: null,
+  activityLevel: null,
 };
 const DEFAULTS = DEFAULT_SETTINGS;
 
@@ -94,6 +106,10 @@ export async function loadSettings(): Promise<AppSettings> {
       startingWeight:     typeof d.startingWeight     === "number" ? d.startingWeight     : DEFAULTS.startingWeight,
       startingWeightDate: typeof d.startingWeightDate === "string" ? d.startingWeightDate : DEFAULTS.startingWeightDate,
       goalWeight:         typeof d.goalWeight         === "number" ? d.goalWeight         : DEFAULTS.goalWeight,
+      sex:           d.sex === "male" || d.sex === "female" ? d.sex : null,
+      birthDate:     typeof d.birthDate === "string" ? d.birthDate : null,
+      heightCm:      typeof d.heightCm === "number" ? d.heightCm : null,
+      activityLevel: typeof d.activityLevel === "string" && ["sedentary", "light", "moderate", "active", "very"].includes(d.activityLevel) ? (d.activityLevel as ActivityLevel) : null,
     };
   } catch {
     return { ...DEFAULTS, extendedNutrientGoals: {} };

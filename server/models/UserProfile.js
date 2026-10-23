@@ -34,6 +34,14 @@ const userProfileSchema = new mongoose.Schema(
     startingWeightDate: { type: String, default: null }, // YYYY-MM-DD
     goalWeight:         { type: Number, default: null },
 
+    // About you (Health → About you): what your health numbers are worked
+    // out from — BMI, the calories you burn, a calorie and protein target.
+    // Height in cm (shown in feet and inches); born YYYY-MM-DD.
+    sex:           { type: String, enum: ["male", "female", null], default: null },
+    birthDate:     { type: String, default: null, match: /^\d{4}-\d{2}-\d{2}$/ },
+    heightCm:      { type: Number, min: 50, max: 272, default: null },
+    activityLevel: { type: String, enum: ["sedentary", "light", "moderate", "active", "very", null], default: null },
+
     // User-defined unit conversions on top of the app's built-in mass/volume
     // table, e.g. { unit: "packet", baseUnit: "g", factor: 340 } means
     // 1 packet = 340 g.
