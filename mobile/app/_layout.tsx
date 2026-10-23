@@ -90,6 +90,14 @@ export default function RootLayout() {
           }}
         />
 
+        {/* Targets — what to aim for, worked out from everything Health knows */}
+        <Stack.Screen
+          name="health/targets"
+          options={{
+            headerShown: false,
+          }}
+        />
+
         {/* A Health section — Activity, Heart, Sleep, Workouts… */}
         <Stack.Screen
           name="health/section/[id]"
@@ -98,13 +106,6 @@ export default function RootLayout() {
           }}
         />
 
-        {/* Goals — starting/goal weight targets */}
-        <Stack.Screen
-          name="health/goals"
-          options={{
-            headerShown: false,
-          }}
-        />
 
         {/* All Nutrients — every tracked nutrient for a day, plus their goals */}
         <Stack.Screen

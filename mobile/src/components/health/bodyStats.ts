@@ -56,14 +56,15 @@ export function bmr(weightKg: number, heightCm: number, age: number, sex: Sex | 
 }
 export const tdee = (rest: number, level: ActivityLevel) => rest * (ACTIVITY.find((a) => a.id === level)?.factor ?? 1.2);
 
-// A day's calories toward the goal weight: about a pound a week (500 a day)
-// under, to lose; 250 over, to gain; the same, within a kilo (about 2 lbs).
-// Never under a floor (1,500 for men, 1,200 for women) or your BMR.
-export function calorieTarget(burn: number, rest: number, weightKg: number, goalKg: number | null, sex: Sex | null) {
+// A day's calories toward the goal weight, at your pace (Health → Targets;
+// half a kilo a week to lose, a quarter to gain, unless you've chosen):
+// 1,100 kcal a day for each kilo a week; the same, within a kilo (about 2
+// lbs). Never under a floor (1,500 for men, 1,200 for women) or your BMR.
+export function calorieTarget(burn: number, rest: number, weightKg: number, goalKg: number | null, sex: Sex | null, pace: { losePace?: number; gainPace?: number } = {}) {
   const diff = goalKg == null ? 0 : goalKg - weightKg;
   const aim = Math.abs(diff) < 0.9 ? "maintain" : diff < 0 ? "lose" : "gain";
   const floor = Math.max(rest, sex === "female" ? 1200 : 1500);
-  const kcal = aim === "lose" ? Math.max(floor, burn - 500) : aim === "gain" ? burn + 250 : burn;
+  const kcal = aim === "lose" ? Math.max(floor, burn - (pace.losePace ?? 0.5) * 1100) : aim === "gain" ? burn + (pace.gainPace ?? 0.25) * 1100 : burn;
   return { kcal: Math.round(kcal / 10) * 10, aim } as const;
 }
 

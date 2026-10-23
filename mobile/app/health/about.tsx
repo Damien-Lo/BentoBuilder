@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DatePickerField } from "@/src/components/forms/DatePickerField";
 import { ACTIVITY, ageOn, bmi, bmiCategory, bmr, calorieTarget, cmFrom, feetInches, healthyRange, PROTEIN_PER_KG, proteinRange, tdee } from "@/src/components/health/bodyStats";
+import { defaultPace } from "@/src/components/health/targets";
 import { toShown, UnitsToggle, useUnits } from "@/src/components/health/units";
 import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
@@ -117,7 +118,7 @@ function AboutYou() {
   const range = h ? healthyRange(h) : null;
   const rest = w != null && h && age != null ? bmr(w, h, age, settings.sex) : null;
   const burn = rest != null && settings.activityLevel ? tdee(rest, settings.activityLevel) : null;
-  const target = burn != null && rest != null && w != null ? calorieTarget(burn, rest, w, goal, settings.sex) : null;
+  const target = burn != null && rest != null && w != null ? calorieTarget(burn, rest, w, goal, settings.sex, { losePace: settings.targets.losePace ?? defaultPace("lose", units), gainPace: settings.targets.gainPace ?? defaultPace("gain", units) }) : null;
   const protein = w != null ? proteinRange(w, goal) : null;
   const missing = [!settings.birthDate && "your date of birth", !h && "your height", w == null && "a weigh-in", !settings.activityLevel && "how active you are"].filter(Boolean) as string[];
   const proteinGoal = protein ? round((protein.low + protein.high) / 2, 5) : null;
@@ -131,6 +132,10 @@ function AboutYou() {
   const activity = ACTIVITY.find((a) => a.id === settings.activityLevel);
   const floor = rest != null ? Math.max(rest, settings.sex === "female" ? 1200 : 1500) : null;
   const needs = (what: string) => [`Add ${what} to work it out.`];
+  // Your pace toward the goal (kg a week), as calories a day.
+  const pace = target?.aim === "gain" ? (settings.targets.gainPace ?? defaultPace("gain", units)) : (settings.targets.losePace ?? defaultPace("lose", units));
+  const shift = pace * 1100;
+  const paceText = `${Number(W(pace).toFixed(2))} ${U}`;
   const infos: Record<string, Info> = {
     bmi: {
       title: "BMI",
@@ -181,16 +186,16 @@ function AboutYou() {
       value: target ? `${n(target.kcal)} kcal a day` : "—",
       what:
         target?.aim === "lose"
-          ? "A day's calories to lose about a pound a week, toward your goal weight. A pound of fat is about 3,500 kcal, so it's 500 a day under what you burn."
+          ? `A day's calories to lose ${paceText} a week, toward your goal weight (your pace, set in Targets). A kilo is about 7,700 kcal, so it's ${n(shift)} a day under what you burn.`
           : target?.aim === "gain"
-            ? "A day's calories to gain slowly, toward your goal weight: 250 a day over what you burn."
+            ? `A day's calories to gain ${paceText} a week, toward your goal weight (your pace, set in Targets): ${n(shift)} a day over what you burn.`
             : "A day's calories to stay where you are: what you burn in a day.",
       how:
         target && burn && floor != null
           ? [
               ...(goal != null && w != null ? [`Goal ${Number(W(goal).toFixed(1))} ${U} — ${Number(W(Math.abs(w - goal)).toFixed(1))} ${U} ${goal < w ? "to lose" : goal > w ? "to gain" : "away"}`] : ["No goal weight: to stay where you are"]),
-              target.aim === "lose" ? `${n(burn)} − 500 = ${n(burn - 500)}` : target.aim === "gain" ? `${n(burn)} + 250 = ${n(burn + 250)}` : `${n(burn)}`,
-              ...(target.aim === "lose" && burn - 500 < floor ? [`Kept at ${n(floor)}: never under ${settings.sex === "female" ? "1,200" : "1,500"} kcal or your burn at rest`] : []),
+              target.aim === "lose" ? `${n(burn)} − ${n(shift)} = ${n(burn - shift)}` : target.aim === "gain" ? `${n(burn)} + ${n(shift)} = ${n(burn + shift)}` : `${n(burn)}`,
+              ...(target.aim === "lose" && burn - shift < floor ? [`Kept at ${n(floor)}: never under ${settings.sex === "female" ? "1,200" : "1,500"} kcal or your burn at rest`] : []),
               `Rounded to ${n(target.kcal)}`,
             ]
           : needs("everything above"),
@@ -264,7 +269,7 @@ function AboutYou() {
               <Ionicons name="chevron-forward" size={16} color={c.faint} />
             </Row>
             <Line colors={c} />
-            <Row label="Goal weight" onPress={() => router.push("/health/goals" as Href)} colors={c}>
+            <Row label="Goal weight" onPress={() => router.push("/health/targets" as Href)} colors={c}>
               <Text style={{ fontSize: 15, fontWeight: "600", color: goal != null ? c.text : c.faint }}>{goal != null ? `${Number(W(goal).toFixed(1))} ${U}` : "Set one"}</Text>
               <Ionicons name="chevron-forward" size={16} color={c.faint} />
             </Row>

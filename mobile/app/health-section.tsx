@@ -29,7 +29,10 @@ type Entry = { label: string; icon: keyof typeof Ionicons.glyphMap; path?: strin
 const GROUPS: { title: string; entries: Entry[] }[] = [
   {
     title: "You",
-    entries: [{ label: "About you", icon: "person", path: "/health/about" }],
+    entries: [
+      { label: "About you", icon: "person", path: "/health/about" },
+      { label: "Targets", icon: "locate", path: "/health/targets" },
+    ],
   },
   {
     title: "Activity & fitness",
@@ -66,7 +69,6 @@ const GROUPS: { title: string; entries: Entry[] }[] = [
       { label: "All nutrients", icon: "list", path: "/health/nutrients" },
       { label: "Water & caffeine", icon: "water", path: "/health/section/drinks" },
       { label: "Weekly report", icon: "bar-chart", path: "/health/weekly-report" },
-      { label: "Goals", icon: "flag", path: "/health/goals" },
     ],
   },
   {

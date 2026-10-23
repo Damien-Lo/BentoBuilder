@@ -69,7 +69,7 @@ export const WEB_SECTIONS: WebSection[] = [
       { label: "All nutrients", path: "/health/nutrients" },
       { label: "Weight", path: "/health/weight" },
       { label: "Weekly report", path: "/health/weekly-report" },
-      { label: "Goals", path: "/health/goals" },
+      { label: "Targets", path: "/health/targets" },
     ],
   },
   {

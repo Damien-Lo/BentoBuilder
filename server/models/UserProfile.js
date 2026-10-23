@@ -46,6 +46,12 @@ const userProfileSchema = new mongoose.Schema(
     // the default) or kilograms, cm, km, mL, °C. Stored the same either way:
     // the app converts.
     unitPrefs: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
+    // Health → Targets: how fast to move toward the goal weight (kg a week,
+    // losing and gaining each), and your own targets beyond the daily
+    // nutrition goals above — { losePace, gainPace, water (mL), steps,
+    // exercise (min a week), workouts (a week), sleep (min) }. Unset: the
+    // suggestion.
+    targets: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
 
     // User-defined unit conversions on top of the app's built-in mass/volume
     // table, e.g. { unit: "packet", baseUnit: "g", factor: 340 } means

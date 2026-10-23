@@ -39,6 +39,18 @@ export interface AppSettings {
   // How each Health page shows its measurements (stored the same either
   // way): { weight: "metric", … } — imperial unless said.
   unitPrefs: Partial<Record<string, Units>>;
+  // Health → Targets: your pace toward the goal weight, and your own
+  // targets beyond the daily nutrition goals (unset: the suggestion).
+  targets: TargetPrefs;
+}
+export interface TargetPrefs {
+  losePace?: number; // kg a week
+  gainPace?: number; // kg a week
+  water?: number; // mL a day
+  steps?: number; // a day
+  exercise?: number; // minutes a week
+  workouts?: number; // a week
+  sleep?: number; // minutes a night
 }
 export type Units = "imperial" | "metric";
 export type Sex = "male" | "female";
@@ -68,6 +80,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   heightCm: null,
   activityLevel: null,
   unitPrefs: {},
+  targets: {},
 };
 const DEFAULTS = DEFAULT_SETTINGS;
 
@@ -117,6 +130,10 @@ export async function loadSettings(): Promise<AppSettings> {
       unitPrefs:
         d.unitPrefs && typeof d.unitPrefs === "object"
           ? Object.fromEntries(Object.entries(d.unitPrefs as Record<string, unknown>).filter(([, v]) => v === "metric" || v === "imperial")) as Partial<Record<string, Units>>
+          : {},
+      targets:
+        d.targets && typeof d.targets === "object"
+          ? (Object.fromEntries(Object.entries(d.targets as Record<string, unknown>).filter(([, v]) => typeof v === "number" && v > 0)) as TargetPrefs)
           : {},
       activityLevel: typeof d.activityLevel === "string" && ["sedentary", "light", "moderate", "active", "very"].includes(d.activityLevel) ? (d.activityLevel as ActivityLevel) : null,
     };

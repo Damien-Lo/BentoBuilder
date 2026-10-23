@@ -1,13 +1,12 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Modal, Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { addDays, MONTHS_SHORT, WEEKDAYS_SHORT } from "@/src/components/calendar/calendarUtils";
 import { entryName } from "@/src/components/calendar/mealFood";
-import { BarChart, Button, Card, CardLink, Empty, GoalBar, LineChart, PageTitle, Planned, Row, Segmented, Stat, WebPage } from "@/src/components/web/ui";
+import { BarChart, Card, CardLink, Empty, GoalBar, LineChart, PageTitle, Planned, Row, Segmented, Stat, WebPage } from "@/src/components/web/ui";
 import { getMealPlanRange, type MealPlanEntry } from "@/src/services/mealPlanApi";
-import { SettingsNumericInput, SettingsRow } from "@/src/components/forms";
-import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
+import { DEFAULT_SETTINGS, loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { getWeightEntries, type WeightEntry } from "@/src/services/weightEntryApi";
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
 import { nutrientColor } from "@/src/theme/nutrients";
@@ -41,27 +40,6 @@ export function WebNutritionScreen() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [entries, setEntries] = useState<MealPlanEntry[]>([]);
   const [weights, setWeights] = useState<WeightEntry[]>([]);
-  // The daily goals being edited (the phone edits these on its Nutrition tab).
-  const [goals, setGoals] = useState<AppSettings | null>(null);
-
-  async function saveGoals() {
-    if (!goals) return;
-    try {
-      await saveSettings({
-        dailyCalorieLimit: goals.dailyCalorieLimit,
-        dailyProteinLimit: goals.dailyProteinLimit,
-        dailyCarbsLimit: goals.dailyCarbsLimit,
-        dailyFatsLimit: goals.dailyFatsLimit,
-        dailyFiberLimit: goals.dailyFiberLimit,
-        dailySodiumLimit: goals.dailySodiumLimit,
-      });
-      setSettings(goals);
-      setGoals(null);
-    } catch {
-      Alert.alert("Couldn't save", "Your goals weren't saved. Please try again.");
-    }
-  }
-
   const days = useMemo(() => Array.from({ length: Number(range) }, (_, i) => addDays(today, i - Number(range) + 1)), [today, range]);
 
   const load = useCallback(() => {
@@ -149,7 +127,7 @@ export function WebNutritionScreen() {
           </View>
         </Card>
 
-        <Card title="Daily averages" subtitle="Against your goals" action={<CardLink label="Edit goals" onPress={() => setGoals(settings)} />} style={{ flex: 1, minWidth: 320 }}>
+        <Card title="Daily averages" subtitle="Against your goals" action={<CardLink label="Edit in Targets" onPress={() => router.push("/health/targets")} />} style={{ flex: 1, minWidth: 320 }}>
           <GoalBar label="Calories" value={avg(total.calories)} goal={settings.dailyCalorieLimit} unit="kcal" color={nutrientColor("calories")} />
           <GoalBar label="Protein" value={avg(total.protein)} goal={settings.dailyProteinLimit} unit="g" color={nutrientColor("protein")} />
           <GoalBar label="Carbs" value={avg(total.carbs)} goal={settings.dailyCarbsLimit} unit="g" color={nutrientColor("carbs")} />
@@ -232,38 +210,6 @@ export function WebNutritionScreen() {
         />
       </Row>
 
-      {/* Daily goals */}
-      <Modal visible={!!goals} transparent animationType="fade" onRequestClose={() => setGoals(null)}>
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.scrim, padding: 24 }}>
-          <Pressable style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} onPress={() => setGoals(null)} />
-          {goals && (
-            <View style={{ width: "100%", maxWidth: 440, borderRadius: 22, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, padding: 22, boxShadow: "0 16px 40px rgba(15,23,42,0.22)" }}>
-              <Text style={{ fontSize: 20, fontWeight: "800", letterSpacing: -0.3, color: c.text }}>Daily nutrition goals</Text>
-              <Text style={{ marginTop: 2, marginBottom: 14, fontSize: 13, color: c.muted }}>Leave one empty to stop tracking it.</Text>
-              <View style={{ borderWidth: 1, borderColor: c.border, borderRadius: 14, overflow: "hidden" }}>
-                {(
-                  [
-                    ["Calories", "dailyCalorieLimit", "kcal"],
-                    ["Protein", "dailyProteinLimit", "g"],
-                    ["Carbohydrates", "dailyCarbsLimit", "g"],
-                    ["Fats", "dailyFatsLimit", "g"],
-                    ["Fiber", "dailyFiberLimit", "g"],
-                    ["Sodium", "dailySodiumLimit", "mg"],
-                  ] as const
-                ).map(([label, key, unit]) => (
-                  <SettingsRow key={key} label={label}>
-                    <SettingsNumericInput value={goals[key]} onChange={(v) => setGoals((prev) => prev && { ...prev, [key]: v })} placeholder="—" unit={unit} />
-                  </SettingsRow>
-                ))}
-              </View>
-              <View style={{ marginTop: 18, flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
-                <Button label="Cancel" onPress={() => setGoals(null)} />
-                <Button label="Save goals" kind="primary" onPress={() => void saveGoals()} />
-              </View>
-            </View>
-          )}
-        </View>
-      </Modal>
     </WebPage>
     </OrbitPage>
   );

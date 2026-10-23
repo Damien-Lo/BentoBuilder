@@ -3,7 +3,6 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,9 +15,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
 import { WebNutritionScreen } from "@/src/components/health/web/WebNutritionScreen";
 import { useWideWeb } from "@/src/utils/useWideWeb";
-import { SettingsNumericInput, SettingsRow, SettingsSectionHeader } from "@/src/components/forms";
+import { SettingsSectionHeader } from "@/src/components/forms";
 import { getMealPlanForDate, type MealPlanEntry } from "@/src/services/mealPlanApi";
-import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
+import { DEFAULT_SETTINGS, loadSettings, type AppSettings } from "@/src/services/settingsService";
 import { computeDayNutrition, todayStr } from "@/src/utils/mealPlan";
 import { OrbitSection } from "@/src/theme/orbit";
 
@@ -29,12 +28,12 @@ interface MoreRow {
   route: string;
 }
 
-// Weight & Measurements and Goals live here for now — they'll move to a
-// dedicated Health section once there's more than nutrition under it (gym
-// tracker, etc.), so their routes stay under /health/ rather than /nutrition/.
+// The daily goals (calories, macros, fibre, sodium) are set in Health →
+// Targets, with the rest of what to aim for; Weight and the weekly report
+// are a row away too. (Their routes are under /health/.)
 const MORE_ROWS: MoreRow[] = [
   { id: "nutrients", label: "All Nutrients", icon: "nutrition-outline", route: "/health/nutrients" },
-  { id: "goals", label: "Goals", icon: "locate-outline", route: "/health/goals" },
+  { id: "targets", label: "Targets", icon: "locate-outline", route: "/health/targets" },
   { id: "weight", label: "Weight & Measurements", icon: "bar-chart-outline", route: "/health/weight" },
   { id: "weekly-report", label: "My Weekly Report", icon: "stats-chart-outline", route: "/health/weekly-report" },
 ];
@@ -55,7 +54,6 @@ export default function NutritionScreen() {
 function PhoneNutritionScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [entries, setEntries] = useState<MealPlanEntry[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
@@ -72,29 +70,6 @@ function PhoneNutritionScreen() {
         .finally(() => setIsLoading(false));
     }, []),
   );
-
-  function patch(partial: Partial<AppSettings>) {
-    setSettings(prev => ({ ...prev, ...partial }));
-  }
-
-  async function handleSave() {
-    try {
-      setIsSaving(true);
-      await saveSettings({
-        dailyCalorieLimit: settings.dailyCalorieLimit,
-        dailyProteinLimit: settings.dailyProteinLimit,
-        dailyCarbsLimit: settings.dailyCarbsLimit,
-        dailyFatsLimit: settings.dailyFatsLimit,
-        dailyFiberLimit: settings.dailyFiberLimit,
-        dailySodiumLimit: settings.dailySodiumLimit,
-      });
-      Alert.alert("Saved", "Your nutrition goals have been saved.");
-    } catch {
-      Alert.alert("Error", "Could not save your goals. Please try again.");
-    } finally {
-      setIsSaving(false);
-    }
-  }
 
   const confirmedNutrition = useMemo(
     () => computeDayNutrition(entries.filter(e => e.status === "confirmed"), settings.unitConversions),
@@ -122,7 +97,7 @@ function PhoneNutritionScreen() {
         {/* Header */}
         <View className="border-b border-slate-200 bg-white px-5 py-4">
           <Text className="text-3xl font-bold text-slate-950">Nutrition</Text>
-          <Text className="mt-1 text-base text-slate-500">Today&apos;s intake & daily goals</Text>
+          <Text className="mt-1 text-base text-slate-500">Today&apos;s intake against your targets</Text>
         </View>
 
         <ScrollView
@@ -144,72 +119,6 @@ function PhoneNutritionScreen() {
               sodium: settings.dailySodiumLimit,
             }}
           />
-
-          {/* ── Daily nutrition goals ── */}
-          <SettingsSectionHeader title="Daily Nutrition Goals" />
-          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <SettingsRow label="Calories">
-              <SettingsNumericInput
-                value={settings.dailyCalorieLimit}
-                onChange={v => patch({ dailyCalorieLimit: v })}
-                placeholder="2000"
-                unit="kcal"
-              />
-            </SettingsRow>
-            <SettingsRow label="Protein">
-              <SettingsNumericInput
-                value={settings.dailyProteinLimit}
-                onChange={v => patch({ dailyProteinLimit: v })}
-                placeholder="—"
-                unit="g"
-              />
-            </SettingsRow>
-            <SettingsRow label="Carbohydrates">
-              <SettingsNumericInput
-                value={settings.dailyCarbsLimit}
-                onChange={v => patch({ dailyCarbsLimit: v })}
-                placeholder="—"
-                unit="g"
-              />
-            </SettingsRow>
-            <SettingsRow label="Fats">
-              <SettingsNumericInput
-                value={settings.dailyFatsLimit}
-                onChange={v => patch({ dailyFatsLimit: v })}
-                placeholder="—"
-                unit="g"
-              />
-            </SettingsRow>
-            <SettingsRow label="Fiber">
-              <SettingsNumericInput
-                value={settings.dailyFiberLimit}
-                onChange={v => patch({ dailyFiberLimit: v })}
-                placeholder="—"
-                unit="g"
-              />
-            </SettingsRow>
-            <SettingsRow label="Sodium">
-              <SettingsNumericInput
-                value={settings.dailySodiumLimit}
-                onChange={v => patch({ dailySodiumLimit: v })}
-                placeholder="—"
-                unit="mg"
-              />
-            </SettingsRow>
-          </View>
-
-          {/* Save button */}
-          <Pressable
-            onPress={() => void handleSave()}
-            disabled={isSaving}
-            className={`mt-8 items-center rounded-3xl py-4 ${
-              isSaving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
-            }`}
-          >
-            <Text className="text-base font-bold text-white">
-              {isSaving ? "Saving…" : "Save goals"}
-            </Text>
-          </Pressable>
 
           {/* ── More ── */}
           <SettingsSectionHeader title="More" />
