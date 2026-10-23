@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { WorkoutActivityType } from "@kingstinct/react-native-healthkit";
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -10,9 +9,10 @@ import { durationLabel } from "@/src/components/gym/schedule";
 import { formatValue, hasMeasures, SECTIONS, shownValue, STORED_UNIT, unitLabel, type MetricDef } from "@/src/components/health/healthSections";
 import { toShown, toStored, UnitsToggle, useUnits, type UnitPage } from "@/src/components/health/units";
 import { MetricChart } from "@/src/components/health/MetricChart";
+import { mergeWorkouts } from "@/src/components/health/workouts";
 import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
-import { getSessions, sessionTotals, type GymSessionRecord } from "@/src/services/gymApi";
+import { getSessions, type GymSessionRecord } from "@/src/services/gymApi";
 import { addHealthReading, getHealthMetrics, type HealthMetric } from "@/src/services/healthSync";
 import { OrbitPage, OrbitSection, SECTION_PALETTE, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { todayDateInputString } from "@/src/utils/date";
@@ -351,38 +351,10 @@ function Sleep({ metrics, from, to, colors: c }: { metrics: HealthMetric[]; from
 // --- Workouts: the Watch's and Gym's, by day ---
 
 // Strength workouts (traditional and functional): the kind a Gym session is.
-const STRENGTH = new Set([Number(WorkoutActivityType.traditionalStrengthTraining), Number(WorkoutActivityType.functionalStrengthTraining)]);
-
-// "traditionalStrengthTraining" → "Traditional strength training".
-function activityName(n: number) {
-  const name = (WorkoutActivityType as unknown as Record<number, string>)[n] ?? "workout";
-  const words = name.replace(/([A-Z])/g, " $1").toLowerCase().trim();
-  return words[0].toUpperCase() + words.slice(1);
-}
-
 function Workouts({ metrics, sessions, from, colors: c }: { metrics: HealthMetric[]; sessions: GymSessionRecord[]; from: string; colors: OrbitColors }) {
   const router = useRouter();
   const [units] = useUnits("workouts");
-  type Item = { key: string; date: string; name: string; minutes: number; kcal?: number; km?: number; gym?: string; time: string };
-  // A Gym session and the strength workout another app (Hevy, the Watch)
-  // saved to Apple Health for it are the same workout: one, Gym's, with
-  // the Watch's calories.
-  const apple = metrics.filter((m) => m.type === "workout");
-  const used = new Set<string>();
-  const gymItems: Item[] = sessions.map((s) => {
-    const start = new Date(s.startedAt).getTime();
-    const twin = apple.find((m) => !used.has(m._id) && STRENGTH.has(m.detail?.activity ?? -1) && m.start && Math.abs(new Date(m.start).getTime() - start) <= 45 * 60_000);
-    if (twin) used.add(twin._id);
-    return { key: s._id, date: dayOf(new Date(s.startedAt)), name: s.name, minutes: sessionTotals(s).seconds / 60, kcal: twin?.detail?.kcal || undefined, gym: s._id, time: s.startedAt };
-  });
-  const items: Item[] = [
-    ...apple
-      .filter((m) => !used.has(m._id))
-      .map((m) => ({ key: m._id, date: m.date, name: activityName(m.detail?.activity ?? 0), minutes: m.value, kcal: m.detail?.kcal || undefined, km: m.detail?.km || undefined, time: m.start ?? `${m.date}T00:00:00` })),
-    ...gymItems,
-  ]
-    .filter((w) => w.date >= from)
-    .sort((a, b) => b.time.localeCompare(a.time));
+  const items = mergeWorkouts(metrics, sessions, from);
   const minutes = items.reduce((s, w) => s + w.minutes, 0);
   const kcal = items.reduce((s, w) => s + (w.kcal ?? 0), 0);
 

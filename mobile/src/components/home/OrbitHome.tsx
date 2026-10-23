@@ -19,9 +19,9 @@ import { showMeasure, useUnits } from "@/src/components/health/units";
 import type { Units } from "@/src/services/settingsService";
 import { sessionTotals } from "@/src/services/gymApi";
 import { updateTodoTask } from "@/src/services/todoApi";
-import { nutrientColor } from "@/src/theme/nutrients";
 import { sectionColor, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
+import { HealthPages } from "./HealthPages";
 import { useToday, type Today } from "./useToday";
 
 // The phone's home screen: the assistant — the orb — at the centre, and
@@ -270,8 +270,6 @@ function Action({ label, icon, onPress, primary, colors }: { label: string; icon
 }
 
 function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today; go: (route: Href) => void; onDone: () => void; colors: OrbitColors }) {
-  const { dark } = useOrbitTheme();
-  const [units] = useUnits("weight");
   const open = section.route ? <Action label={`Open ${section.label}`} icon="arrow-forward" primary onPress={() => go(section.route!)} colors={colors} /> : null;
   const quiet = (text: string) => <Text style={{ paddingVertical: 8, fontSize: 14, color: colors.muted }}>{text}</Text>;
   let body: React.ReactNode = null;
@@ -317,47 +315,8 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
     );
     actions = <Action label="Grocery list" icon="cart-outline" onPress={() => go("/grocery-list")} colors={colors} />;
   } else if (section.id === "health") {
-    // (What you've eaten against your goals, then your weight.)
-    const bar = (label: string, value: number | null | undefined, limit: number | null, color: string) => {
-      const share = limit ? Math.min(1, (value ?? 0) / limit) : 0;
-      return (
-        <View key={label} style={{ marginTop: 10 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Text style={{ fontSize: 12, fontWeight: "600", color: colors.onPill }}>{label}</Text>
-            <Text style={{ fontSize: 12, color: colors.muted }}>
-              {Math.round(value ?? 0)}
-              {limit ? ` / ${limit}` : ""} g
-            </Text>
-          </View>
-          <View style={{ marginTop: 4, height: 6, borderRadius: 3, overflow: "hidden", backgroundColor: colors.track }}>
-            <View style={{ width: `${share * 100}%`, height: "100%", borderRadius: 3, backgroundColor: color }} />
-          </View>
-        </View>
-      );
-    };
-    const left = t.goal - Math.round(t.eaten.calories ?? 0);
-    body = (
-      <>
-        <Text style={{ fontSize: 24, fontWeight: "700", color: colors.text }}>
-          {Math.max(0, left).toLocaleString()} <Text style={{ fontSize: 14, fontWeight: "400", color: colors.muted }}>kcal {left >= 0 ? "left" : "over"}</Text>
-        </Text>
-        {bar("Protein", t.eaten.protein, t.settings.dailyProteinLimit, nutrientColor("protein", dark))}
-        {bar("Carbs", t.eaten.carbs, t.settings.dailyCarbsLimit, nutrientColor("carbs", dark))}
-        {bar("Fat", t.eaten.fats, t.settings.dailyFatsLimit, nutrientColor("fats", dark))}
-        <View style={{ marginTop: 10 }}>
-          {t.latestWeight ? (
-            <Row
-              icon="scale-outline"
-              title={showMeasure("weight", t.latestWeight.weight, units)}
-              detail={`${t.weightChange == null ? "Weighed" : `${t.weightChange > 0 ? "+" : ""}${showMeasure("weight", t.weightChange, units)} this week · weighed`} ${t.latestWeight.date === t.today ? "today" : t.latestWeight.date}${t.settings.goalWeight ? ` · goal ${showMeasure("weight", t.settings.goalWeight, units)}` : ""}`}
-              colors={colors}
-            />
-          ) : (
-            quiet("No weigh-ins yet.")
-          )}
-        </View>
-      </>
-    );
+    // (A page at a time: overview, nutrition, workouts, sleep.)
+    body = <HealthPages t={t} go={go} colors={colors} />;
     actions = <Action label="Log weight" icon="add" onPress={() => go("/health/weight")} colors={colors} />;
   } else if (section.id === "tasks") {
     body = t.tasks.length

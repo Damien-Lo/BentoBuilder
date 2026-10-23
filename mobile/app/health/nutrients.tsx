@@ -1,12 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   Text,
   View,
@@ -15,7 +14,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SettingsNumericInput } from "@/src/components/forms";
 import { useWideForm } from "@/src/components/forms/wideForm";
-import { deskCard, DeskHeader, NutritionDesk, useNutritionDesk } from "@/src/components/health/web/NutritionDesk";
+import { deskCard, DeskHeader, NutritionDesk, useNutritionColors, useNutritionDesk } from "@/src/components/health/web/NutritionDesk";
+import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
+import { Tap } from "@/src/components/ui/Tap";
 import { Button } from "@/src/components/web/ui";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { getMealPlanForDate, type MealPlanEntry } from "@/src/services/mealPlanApi";
@@ -41,6 +42,8 @@ import type { OrbitColors } from "@/src/theme/orbit";
 // (In a desktop browser, a main nutrient's bar is in its own colour; the
 // rest in Nutrition's.)
 const MAIN_NUTRIENTS: readonly string[] = ["calories", "protein", "carbs", "fats", "fiber", "sodium"] satisfies MainNutrient[];
+// The goals set in Your Targets — shown in the edit mode, changed there.
+const TARGETS_FIELDS: readonly NutritionField[] = ["calories", "protein", "carbs", "fats", "fiber", "sodium"];
 
 type Row = { field: NutritionField; indent?: boolean };
 
@@ -110,7 +113,8 @@ function displayUnit(field: NutritionField): string {
   return meta.dailyValue ? "% DV" : meta.unit;
 }
 
-// (In a desktop browser, in Orbit's look and Nutrition's green.)
+// In Orbit's look — Health's colour on a phone, Nutrition's green in a
+// desktop browser.
 export default function NutrientsScreen() {
   return (
     <NutritionDesk>
@@ -121,8 +125,10 @@ export default function NutrientsScreen() {
 
 function NutrientsPage() {
   const router = useRouter();
-  // The page's colours in a desktop browser; null on a phone.
-  const o = useNutritionDesk();
+  // The page's colours; the desktop's, when it's in a desktop browser.
+  const o = useNutritionColors();
+  const desk = useNutritionDesk();
+  const leave = useGoBack("/health-section");
   const [isLoading, setIsLoading] = useState(true);
   const [isDayLoading, setIsDayLoading] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -178,15 +184,8 @@ function NutrientsPage() {
     if (!draft) return;
     try {
       setIsSaving(true);
-      await saveSettings({
-        dailyCalorieLimit: draft.dailyCalorieLimit,
-        dailyProteinLimit: draft.dailyProteinLimit,
-        dailyCarbsLimit: draft.dailyCarbsLimit,
-        dailyFatsLimit: draft.dailyFatsLimit,
-        dailyFiberLimit: draft.dailyFiberLimit,
-        dailySodiumLimit: draft.dailySodiumLimit,
-        extendedNutrientGoals: draft.extendedNutrientGoals,
-      });
+      // (The main six are Your Targets'; only the rest are saved here.)
+      await saveSettings({ extendedNutrientGoals: draft.extendedNutrientGoals });
       setSettings(draft);
       setDraft(null);
     } catch {
@@ -198,32 +197,39 @@ function NutrientsPage() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
-        <ActivityIndicator size="large" color={o?.ink ?? "#2563EB"} />
+      <SafeAreaView style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: o.canvas }}>
+        <ActivityIndicator color={o.muted} />
       </SafeAreaView>
     );
   }
 
   const isEditing = draft != null;
+  const card = { ...deskCard(o), overflow: "hidden" as const };
+  const note = (children: React.ReactNode) => <Text style={{ marginTop: 12, paddingHorizontal: 4, fontSize: 12.5, lineHeight: 18, color: o.faint }}>{children}</Text>;
 
   // A card of goals to edit, and a card of the day's totals, for some of
   // the sections (all of them on a phone).
   const editCard = (sections: typeof SECTIONS) => (
-    <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o && deskCard(o)}>
+    <View style={card}>
       {sections.map(section => (
         <View key={section.title ?? "label"}>
           {section.title && <SectionHeading title={section.title} o={o} />}
-          {section.rows.map(({ field, indent }) => (
-            <GoalEditRow
-              key={field}
-              field={field}
-              indent={indent}
-              goal={draft ? getSetNutrientGoal(draft, field) : null}
-              onChange={goal => setDraft(prev => prev && withNutrientGoal(prev, field, goal))}
-              scrollRef={scrollRef}
-              anchorRef={scrollAnchorRef}
-            />
-          ))}
+          {section.rows.map(({ field, indent }) =>
+            TARGETS_FIELDS.includes(field) ? (
+              <TargetsRow key={field} field={field} indent={indent} goal={getEffectiveNutrientGoal(settings, field)} onPress={() => router.push("/health/targets" as Href)} o={o} />
+            ) : (
+              <GoalEditRow
+                key={field}
+                field={field}
+                indent={indent}
+                goal={draft ? getSetNutrientGoal(draft, field) : null}
+                onChange={goal => setDraft(prev => prev && withNutrientGoal(prev, field, goal))}
+                scrollRef={scrollRef}
+                anchorRef={scrollAnchorRef}
+                o={o}
+              />
+            ),
+          )}
         </View>
       ))}
     </View>
@@ -232,14 +238,15 @@ function NutrientsPage() {
   const totalsCard = (sections: typeof SECTIONS) => {
     const lastRows = sections[sections.length - 1].rows;
     const lastField = lastRows[lastRows.length - 1].field;
+    const column = (label: string) => <Text style={{ width: 64, textAlign: "right", fontSize: 11, fontWeight: "700", letterSpacing: 0.8, color: o.faint }}>{label}</Text>;
     return (
-      <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o && deskCard(o)}>
+      <View style={card}>
         {/* Column headers */}
-        <View className="flex-row items-center border-b border-slate-100 px-4 py-2.5">
-          <View className="flex-1" />
-          <Text className="w-16 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Total</Text>
-          <Text className="w-16 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Goal</Text>
-          <Text className="w-16 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Left</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: o.border }}>
+          <View style={{ flex: 1 }} />
+          {column("TOTAL")}
+          {column("GOAL")}
+          {column("LEFT")}
         </View>
 
         {sections.map(section => (
@@ -264,15 +271,20 @@ function NutrientsPage() {
     );
   };
 
+  const editButton = (
+    <Tap onPress={() => !isSaving && setDraft(isEditing ? null : settings)} accessibilityRole="button" style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, backgroundColor: o.pill }} pressedStyle={{ opacity: 0.7 }}>
+      <Text style={{ fontSize: 13.5, fontWeight: "700", color: o.onPill }}>{isEditing ? "Cancel" : "Edit goals"}</Text>
+    </Tap>
+  );
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o && { backgroundColor: o.canvas }}>
+    <SafeAreaView edges={["top", "left", "right"]} style={{ flex: 1, backgroundColor: o.canvas }}>
       <KeyboardAvoidingView
-        className="flex-1"
-        style={layout.wide ? { width: "100%", maxWidth: 1280, alignSelf: "center" } : undefined}
+        style={[{ flex: 1 }, layout.wide ? { width: "100%", maxWidth: 1280, alignSelf: "center" } : null]}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header (in a desktop browser, the title large on the page) */}
-        {o ? (
+        {desk ? (
           <DeskHeader
             o={o}
             title="All Nutrients"
@@ -281,34 +293,14 @@ function NutrientsPage() {
             right={<Button label={isEditing ? "Cancel" : "Edit goals"} icon={isEditing ? undefined : "create-outline"} onPress={() => !isSaving && setDraft(isEditing ? null : settings)} />}
           />
         ) : (
-        <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-3">
-          <Pressable
-            className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-back" size={26} color="#0F172A" />
-          </Pressable>
-          <View className="ml-1 flex-1">
-            <Text className="text-2xl font-bold text-slate-950">All Nutrients</Text>
-            <Text className="mt-0.5 text-sm text-slate-500">
-              {isEditing ? "Editing daily goals" : friendlyDayLabel(date)}
-            </Text>
+          <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+            <PageHeader title="All nutrients" subtitle={isEditing ? "Editing vitamin and mineral goals" : friendlyDayLabel(date)} onBack={leave} action={editButton} />
           </View>
-          <Pressable
-            className="rounded-full px-3 py-2 active:bg-slate-100"
-            onPress={() => setDraft(isEditing ? null : settings)}
-            disabled={isSaving}
-          >
-            <Text className="text-base font-semibold text-blue-600">
-              {isEditing ? "Cancel" : "Edit goals"}
-            </Text>
-          </Pressable>
-        </View>
         )}
 
         <ScrollView
           ref={scrollRef}
-          className="flex-1"
+          style={{ flex: 1 }}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 60 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -326,53 +318,31 @@ function NutrientsPage() {
               ) : (
                 editCard(SECTIONS)
               )}
-              <Text className="mt-3 px-1 text-xs leading-5 text-slate-400">
-                Vitamins and minerals are set as a percentage of the standard Daily Value — leave
-                one blank to use 100%. Leave any other goal blank to not track against one.
-              </Text>
-              {o ? (
+              {note("Calories, protein, carbs, fat, fibre and sodium are set in Your Targets. Vitamins and minerals are set as a percentage of the standard Daily Value — leave one blank to use 100%. Leave any other goal blank to not track against one.")}
+              {desk ? (
                 <View style={{ marginTop: 18, flexDirection: "row", justifyContent: "flex-end" }}>
                   <Button label={isSaving ? "Saving…" : "Save goals"} kind="primary" onPress={() => !isSaving && void handleSave()} />
                 </View>
               ) : (
-              <View style={layout.actions}>
-              <Pressable
-                onPress={() => void handleSave()}
-                disabled={isSaving}
-                className={`mt-6 items-center rounded-3xl py-4 ${
-                  isSaving ? "bg-blue-300" : "bg-blue-600 active:bg-blue-700"
-                }`}
-              >
-                <Text className="text-base font-bold text-white">
-                  {isSaving ? "Saving…" : "Save goals"}
-                </Text>
-              </Pressable>
-              </View>
+                <Tap onPress={() => void handleSave()} disabled={isSaving} accessibilityRole="button" style={{ marginTop: 20, alignItems: "center", paddingVertical: 14, borderRadius: 16, backgroundColor: o.ink, opacity: isSaving ? 0.6 : 1 }} pressedStyle={{ opacity: 0.85 }}>
+                  <Text style={{ fontSize: 15.5, fontWeight: "700", color: o.onInk }}>{isSaving ? "Saving…" : "Save goals"}</Text>
+                </Tap>
               )}
             </>
           ) : (
             <>
               {/* Day picker */}
-              <View
-                className="mb-3 flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-2 py-1.5"
-                style={o ? { ...deskCard(o), width: 360 } : layout.wide ? { width: 360 } : undefined}
-              >
-                <Pressable
-                  className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
-                  onPress={() => setDate(d => shiftDate(d, -1))}
-                >
-                  <Ionicons name="chevron-back" size={22} color={o?.icon ?? "#334155"} />
-                </Pressable>
-                <Pressable onPress={() => setDate(todayStr())} className="flex-row items-center">
-                  <Text className="text-base font-semibold text-slate-900" style={o && { color: o.text }}>{friendlyDayLabel(date)}</Text>
-                  {isDayLoading && <ActivityIndicator size="small" color={o?.faint ?? "#94A3B8"} style={{ marginLeft: 8 }} />}
-                </Pressable>
-                <Pressable
-                  className="h-10 w-10 items-center justify-center rounded-full active:bg-slate-100"
-                  onPress={() => setDate(d => shiftDate(d, 1))}
-                >
-                  <Ionicons name="chevron-forward" size={22} color={o?.icon ?? "#334155"} />
-                </Pressable>
+              <View style={{ ...deskCard(o), marginBottom: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 8, paddingVertical: 6, ...(layout.wide ? { width: 360 } : null) }}>
+                <Tap onPress={() => setDate(d => shiftDate(d, -1))} accessibilityLabel="The day before" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" }} pressedStyle={{ backgroundColor: o.pill }}>
+                  <Ionicons name="chevron-back" size={22} color={o.icon} />
+                </Tap>
+                <Tap onPress={() => setDate(todayStr())} accessibilityLabel="Today" style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Text style={{ fontSize: 16, fontWeight: "600", color: o.text }}>{friendlyDayLabel(date)}</Text>
+                  {isDayLoading && <ActivityIndicator size="small" color={o.faint} style={{ marginLeft: 8 }} />}
+                </Tap>
+                <Tap onPress={() => setDate(d => shiftDate(d, 1))} accessibilityLabel="The day after" style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" }} pressedStyle={{ backgroundColor: o.pill }}>
+                  <Ionicons name="chevron-forward" size={22} color={o.icon} />
+                </Tap>
               </View>
 
               {layout.wide ? (
@@ -385,13 +355,12 @@ function NutrientsPage() {
                 totalsCard(SECTIONS)
               )}
 
-              <Text className="mt-3 px-1 text-xs leading-5 text-slate-400">
-                Totals count only meals you&apos;ve logged as eaten
-                {plannedCount > 0
-                  ? ` — ${plannedCount} planned item${plannedCount === 1 ? "" : "s"} for this day ${plannedCount === 1 ? "isn't" : "aren't"} included`
-                  : ""}
-                . Nutrients beyond the main six only add up from foods that have that data on file.
-              </Text>
+              {note(
+                <>
+                  Totals count only meals you&apos;ve logged as eaten
+                  {plannedCount > 0 ? ` — ${plannedCount} planned item${plannedCount === 1 ? "" : "s"} for this day ${plannedCount === 1 ? "isn't" : "aren't"} included` : ""}. Nutrients beyond the main six only add up from foods that have that data on file.
+                </>,
+              )}
             </>
           )}
         </ScrollView>
@@ -400,10 +369,10 @@ function NutrientsPage() {
   );
 }
 
-function SectionHeading({ title, o }: { title: string; o: OrbitColors | null }) {
+function SectionHeading({ title, o }: { title: string; o: OrbitColors }) {
   return (
-    <View className="border-b border-slate-100 bg-slate-50 px-4 py-2" style={o && { backgroundColor: o.canvas }}>
-      <Text className="text-xs font-bold uppercase tracking-wider text-slate-500">{title}</Text>
+    <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: o.canvas, borderBottomWidth: 1, borderBottomColor: o.border }}>
+      <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.8, color: o.muted }}>{title.toUpperCase()}</Text>
     </View>
   );
 }
@@ -418,7 +387,7 @@ function NutrientRow({
   entryCount,
   isLast,
 }: {
-  o: OrbitColors | null;
+  o: OrbitColors;
   field: NutritionField;
   indent?: boolean;
   total: number | null;
@@ -433,48 +402,45 @@ function NutrientRow({
   // Only the extended nutrients can be missing from some items — the core
   // six are always computed (unknown counted as 0), matching everywhere
   // else in the app.
-  const showCoverage = !(CORE_NUTRITION_FIELDS as readonly string[]).includes(field)
-    && entryCount > 0
-    && covered < entryCount;
+  const showCoverage = !(CORE_NUTRITION_FIELDS as readonly string[]).includes(field) && entryCount > 0 && covered < entryCount;
+  const figure = (text: string, color: string, weight: "400" | "600" = "600") => <Text style={{ width: 64, textAlign: "right", fontSize: 15, fontWeight: weight, color, fontVariant: ["tabular-nums"] }}>{text}</Text>;
 
   return (
-    <View className={`px-4 py-3 ${isLast ? "" : "border-b border-slate-100"}`}>
-      <View className="flex-row items-center">
-        <View className={`flex-1 pr-2 ${indent ? "pl-4" : ""}`}>
-          <Text className={indent ? "text-sm text-slate-600" : "text-base font-medium text-slate-800"}>
+    <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: isLast ? 0 : 1, borderBottomColor: o.border }}>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View style={{ flex: 1, paddingRight: 8, paddingLeft: indent ? 16 : 0 }}>
+          <Text style={{ fontSize: indent ? 14 : 15.5, fontWeight: indent ? "400" : "500", color: indent ? o.icon : o.text }}>
             {meta.label}
-            <Text className="text-xs font-normal text-slate-400">{`  ${displayUnit(field)}`}</Text>
+            <Text style={{ fontSize: 12, fontWeight: "400", color: o.faint }}>{`  ${displayUnit(field)}`}</Text>
           </Text>
-          {showCoverage && (
-            <Text className="mt-0.5 text-xs text-slate-400">
-              {covered === 0 ? "No data from logged items" : `From ${covered} of ${entryCount} logged items`}
-            </Text>
-          )}
+          {showCoverage && <Text style={{ marginTop: 2, fontSize: 12, color: o.faint }}>{covered === 0 ? "No data from logged items" : `From ${covered} of ${entryCount} logged items`}</Text>}
         </View>
-        <Text className="w-16 text-right text-base font-semibold text-slate-900">
-          {total != null ? formatValue(field, total) : "–"}
-        </Text>
-        <Text className="w-16 text-right text-base text-slate-500">
-          {goal != null ? formatValue(field, goal) : "–"}
-        </Text>
-        <Text className={`w-16 text-right text-base font-semibold ${isOver ? "text-red-500" : "text-slate-700"}`}>
-          {left != null ? formatValue(field, left) : "–"}
-        </Text>
+        {figure(total != null ? formatValue(field, total) : "–", o.text)}
+        {figure(goal != null ? formatValue(field, goal) : "–", o.muted, "400")}
+        {figure(left != null ? formatValue(field, left) : "–", isOver ? o.danger : o.icon)}
       </View>
       {goal != null && total != null && (
-        <View className={`mt-2 h-1 overflow-hidden rounded-full bg-slate-100 ${indent ? "ml-4" : ""}`} style={o && { backgroundColor: o.track }}>
-          {/* (In a desktop browser, the bar in the nutrient's own colour,
-              over its goal or not: the number left turns red instead.) */}
-          <View
-            className={isOver ? "h-1 bg-red-400" : "h-1 bg-blue-500"}
-            style={{
-              width: `${pct(total, goal) * 100}%`,
-              ...(o && { backgroundColor: MAIN_NUTRIENTS.includes(field) ? nutrientColor(field as MainNutrient) : o.fill }),
-            }}
-          />
+        <View style={{ marginTop: 8, marginLeft: indent ? 16 : 0, height: 4, borderRadius: 2, overflow: "hidden", backgroundColor: o.track }}>
+          {/* (The bar in the nutrient's own colour, over its goal or not:
+              the number left turns red instead.) */}
+          <View style={{ height: 4, width: `${pct(total, goal) * 100}%`, backgroundColor: MAIN_NUTRIENTS.includes(field) ? nutrientColor(field as MainNutrient) : o.fill }} />
         </View>
       )}
     </View>
+  );
+}
+
+// A goal set in Your Targets (calories, the macros, fibre, sodium): shown,
+// and changed there.
+function TargetsRow({ field, indent, goal, onPress, o }: { field: NutritionField; indent?: boolean; goal: number | null; onPress: () => void; o: OrbitColors }) {
+  const meta = NUTRITION_FIELD_META[field];
+  return (
+    <Tap onPress={onPress} accessibilityRole="link" accessibilityLabel={`${meta.label}: set in Your Targets`} style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: o.border }} pressedStyle={{ backgroundColor: o.pill }}>
+      <Text style={{ flex: 1, paddingRight: 12, paddingLeft: indent ? 16 : 0, fontSize: indent ? 14 : 15.5, color: indent ? o.icon : o.text }}>{meta.label}</Text>
+      <Text style={{ fontSize: 15, fontWeight: "600", color: o.text, fontVariant: ["tabular-nums"] }}>{goal != null ? `${formatValue(field, goal)} ${meta.unit}` : "—"}</Text>
+      <Text style={{ marginLeft: 10, fontSize: 12.5, fontWeight: "600", color: o.ink }}>Your Targets</Text>
+      <Ionicons name="chevron-forward" size={14} color={o.ink} />
+    </Tap>
   );
 }
 
@@ -485,6 +451,7 @@ function GoalEditRow({
   onChange,
   scrollRef,
   anchorRef,
+  o,
 }: {
   field: NutritionField;
   indent?: boolean;
@@ -492,6 +459,7 @@ function GoalEditRow({
   onChange: (goal: number | null) => void;
   scrollRef: RefObject<ScrollView | null>;
   anchorRef: RefObject<View | null>;
+  o: OrbitColors;
 }) {
   const section = useScrollFocusSection(scrollRef, anchorRef);
   const meta = NUTRITION_FIELD_META[field];
@@ -499,10 +467,8 @@ function GoalEditRow({
 
   return (
     <View {...section.wrapperProps}>
-      <View className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3">
-        <Text className={`flex-1 pr-3 ${indent ? "pl-4 text-sm text-slate-600" : "text-base text-slate-700"}`}>
-          {meta.label}
-        </Text>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: o.border }}>
+        <Text style={{ flex: 1, paddingRight: 12, paddingLeft: indent ? 16 : 0, fontSize: indent ? 14 : 15.5, color: indent ? o.icon : o.text }}>{meta.label}</Text>
         <SettingsNumericInput
           value={shown}
           onChange={v => onChange(v != null ? fromDisplay(field, v) : null)}

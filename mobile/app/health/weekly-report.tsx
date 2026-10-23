@@ -1,13 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useWideForm } from "@/src/components/forms/wideForm";
 import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
 import { toShown, useUnits } from "@/src/components/health/units";
-import { deskCard, DeskHeader, NutritionDesk, useNutritionDesk } from "@/src/components/health/web/NutritionDesk";
+import { deskCard, DeskHeader, NutritionDesk, useNutritionColors, useNutritionDesk } from "@/src/components/health/web/NutritionDesk";
+import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { nutrientColor } from "@/src/theme/nutrients";
 import { getMealPlanForDate, type MealPlanEntry } from "@/src/services/mealPlanApi";
 import { loadSettings, type AppSettings } from "@/src/services/settingsService";
@@ -28,7 +29,8 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
-// (In a desktop browser, in Orbit's look and Nutrition's green.)
+// In Orbit's look — Health's colour on a phone, Nutrition's green in a
+// desktop browser.
 export default function WeeklyReportScreen() {
   return (
     <NutritionDesk>
@@ -39,8 +41,10 @@ export default function WeeklyReportScreen() {
 
 function WeeklyReportPage() {
   const router = useRouter();
-  // The page's colours in a desktop browser; null on a phone.
-  const o = useNutritionDesk();
+  // The page's colours; the desktop's, when it's in a desktop browser.
+  const o = useNutritionColors();
+  const desk = useNutritionDesk();
+  const leave = useGoBack("/health-section");
   const [weightUnits] = useUnits("weight");
   const [isLoading, setIsLoading] = useState(true);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -101,37 +105,26 @@ function WeeklyReportPage() {
 
   if (isLoading || !settings) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
-        <ActivityIndicator size="large" color={o?.ink ?? "#2563EB"} />
+      <SafeAreaView style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: o.canvas }}>
+        <ActivityIndicator color={o.muted} />
       </SafeAreaView>
     );
   }
 
+  const heading = (text: string) => <Text style={{ marginTop: 24, marginBottom: 8, marginLeft: 4, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, color: o.faint }}>{text.toUpperCase()}</Text>;
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "left", "right"]} style={o ? [layout.page, { backgroundColor: o.canvas }] : layout.page}>
+    <SafeAreaView edges={["top", "left", "right"]} style={[layout.page, { flex: 1, backgroundColor: o.canvas }]}>
       {/* Header (in a desktop browser, the title large on the page) */}
-      {o ? (
+      {desk ? (
         <DeskHeader o={o} title="My Weekly Report" subtitle={weekRangeLabel(weekDates)} onBack={() => router.back()} />
       ) : (
-      <View className="flex-row items-center border-b border-slate-200 bg-white px-3 py-3">
-        <Pressable
-          className="h-11 w-11 items-center justify-center rounded-full active:bg-slate-100"
-          onPress={() => router.back()}
-        >
-          <Ionicons name="chevron-back" size={26} color="#0F172A" />
-        </Pressable>
-        <View className="ml-1">
-          <Text className="text-2xl font-bold text-slate-950">My Weekly Report</Text>
-          <Text className="mt-0.5 text-sm text-slate-500">{weekRangeLabel(weekDates)}</Text>
+        <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+          <PageHeader title="Weekly report" subtitle={weekRangeLabel(weekDates)} onBack={leave} />
         </View>
-      </View>
       )}
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 60 }}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
         <NutritionSummaryCard
           title="This week"
           subtitle={weekRangeLabel(weekDates)}
@@ -150,84 +143,61 @@ function WeeklyReportPage() {
 
         {/* In a desktop browser, the chart and the weight sit side by side. */}
         <View style={layout.columns}>
-        <View style={layout.wide ? { flex: 1.6, minWidth: 0 } : undefined}>
-        {/* ── Daily calories bar chart ── */}
-        <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">
-          Calories by day
-        </Text>
-        <View className="rounded-2xl border border-slate-200 bg-white px-4 pb-4 pt-6" style={o && deskCard(o)}>
-          <View className="flex-row items-end justify-between" style={{ height: o ? BAR_MAX_HEIGHT + 18 : BAR_MAX_HEIGHT }}>
-            {weekDates.map((date, i) => {
-              const cal = dailyCalories[i] ?? 0;
-              const height = Math.max((cal / maxCalories) * BAR_MAX_HEIGHT, cal > 0 ? 4 : 0);
-              const over = settings.dailyCalorieLimit != null && cal > settings.dailyCalorieLimit;
-              const isToday = date === today;
-              // (In a desktop browser, the bars in the calories' own colour,
-              // today's the strongest, with the day's number over each —
-              // red, rather than the bar, when it's over the goal.)
-              const kcal = nutrientColor("calories");
-              return (
-                <View key={date} className="flex-1 items-center justify-end">
-                  {o && cal > 0 && (
-                    <Text style={{ marginBottom: 3, fontSize: 10, fontWeight: over ? "700" : "600", color: over ? o.danger : o.muted }}>{Math.round(cal)}</Text>
-                  )}
-                  <View
-                    style={{
-                      width: 18,
-                      height,
-                      borderRadius: 6,
-                      backgroundColor: o ? (isToday ? kcal : hexToRgba(kcal, 0.55)) : over ? "#F87171" : isToday ? "#2563EB" : "#93C5FD",
-                    }}
-                  />
-                </View>
-              );
-            })}
-          </View>
-          <View className="mt-2 flex-row justify-between">
-            {weekDates.map(date => (
-              <View key={date} className="flex-1 items-center">
-                <Text className={`text-xs font-semibold ${date === today ? "text-blue-600" : "text-slate-400"}`} style={o && date === today ? { color: o.ink } : undefined}>
-                  {DAY_ABBREVS[parseLocalDate(date).getDay()]}
+          <View style={layout.wide ? { flex: 1.6, minWidth: 0 } : undefined}>
+            {/* Calories a day: the bars in the calories' own colour, today's
+                the strongest, with the day's number over each — red, rather
+                than the bar, when it's over the goal. */}
+            {heading("Calories by day")}
+            <View style={{ ...deskCard(o), paddingHorizontal: 16, paddingBottom: 16, paddingTop: 20 }}>
+              <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", height: BAR_MAX_HEIGHT + 18 }}>
+                {weekDates.map((date, i) => {
+                  const cal = dailyCalories[i] ?? 0;
+                  const height = Math.max((cal / maxCalories) * BAR_MAX_HEIGHT, cal > 0 ? 4 : 0);
+                  const over = settings.dailyCalorieLimit != null && cal > settings.dailyCalorieLimit;
+                  const kcal = nutrientColor("calories");
+                  return (
+                    <View key={date} style={{ flex: 1, alignItems: "center", justifyContent: "flex-end" }}>
+                      {cal > 0 && <Text style={{ marginBottom: 3, fontSize: 10, fontWeight: over ? "700" : "600", color: over ? o.danger : o.muted }}>{Math.round(cal)}</Text>}
+                      <View style={{ width: 18, height, borderRadius: 6, backgroundColor: date === today ? kcal : hexToRgba(kcal, 0.55) }} />
+                    </View>
+                  );
+                })}
+              </View>
+              <View style={{ marginTop: 8, flexDirection: "row", justifyContent: "space-between" }}>
+                {weekDates.map((date) => (
+                  <View key={date} style={{ flex: 1, alignItems: "center" }}>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: date === today ? o.ink : o.faint }}>{DAY_ABBREVS[parseLocalDate(date).getDay()]}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: o.border, alignItems: "center" }}>
+                <Text style={{ fontSize: 14, color: o.muted }}>
+                  Average <Text style={{ fontWeight: "700", color: o.text }}>{avgCalories} kcal</Text> a logged day
                 </Text>
               </View>
-            ))}
+            </View>
           </View>
-          <View className="mt-4 flex-row items-center justify-center border-t border-slate-100 pt-3">
-            <Text className="text-sm text-slate-500">
-              Average <Text className="font-bold text-slate-800">{avgCalories} kcal</Text> / logged day
-            </Text>
+
+          <View style={layout.column}>
+            {heading("Weight")}
+            <View style={{ ...deskCard(o), flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 16 }}>
+              <Ionicons name={weightChange != null && weightChange <= 0 ? "trending-down-outline" : "trending-up-outline"} size={20} color={o.ink} />
+              <Text style={{ marginLeft: 12, flex: 1, fontSize: 14, color: o.icon }}>
+                {weightInWeek.length >= 2 ? (
+                  <>
+                    <Text style={{ fontWeight: "700", color: o.text }}>
+                      {weightChange! > 0 ? `+${weightChange}` : weightChange} {weightUnit}
+                    </Text>{" "}
+                    this week
+                  </>
+                ) : weightInWeek.length === 1 ? (
+                  <>Logged once this week — {shownWeight(weightInWeek[0].weight)} {weightUnit}</>
+                ) : (
+                  "No weigh-ins logged this week"
+                )}
+              </Text>
+            </View>
           </View>
-        </View>
-
-        </View>
-
-        <View style={layout.column}>
-        {/* ── Weight this week ── */}
-        <Text className="mb-2 mt-6 text-xs font-bold uppercase tracking-widest text-slate-400">
-          Weight
-        </Text>
-        <View className="flex-row items-center rounded-2xl border border-slate-200 bg-white px-4 py-4" style={o && deskCard(o)}>
-          <Ionicons
-            name={weightChange != null && weightChange <= 0 ? "trending-down-outline" : "trending-up-outline"}
-            size={20}
-            color={o?.ink ?? "#2563EB"}
-          />
-          <Text className="ml-3 text-sm text-slate-600">
-            {weightInWeek.length >= 2 ? (
-              <>
-                <Text className="font-bold text-slate-900">
-                  {weightChange! > 0 ? `+${weightChange}` : weightChange} {weightUnit}
-                </Text>{" "}
-                this week
-              </>
-            ) : weightInWeek.length === 1 ? (
-              <>Logged once this week — {shownWeight(weightInWeek[0].weight)} {weightUnit}</>
-            ) : (
-              "No weigh-ins logged this week"
-            )}
-          </Text>
-        </View>
-        </View>
         </View>
       </ScrollView>
     </SafeAreaView>

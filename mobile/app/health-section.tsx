@@ -70,7 +70,7 @@ const GROUPS: { title: string; entries: Entry[] }[] = [
   {
     title: "Nutrition",
     entries: [
-      { label: "Today", icon: "leaf", path: "/health" },
+      { label: "Today", icon: "leaf", path: "/health/today" },
       { label: "All nutrients", icon: "list", path: "/health/nutrients" },
       { label: "Water & caffeine", icon: "water", path: "/health/section/drinks" },
       { label: "Weekly report", icon: "bar-chart", path: "/health/weekly-report" },

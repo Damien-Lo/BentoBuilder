@@ -52,30 +52,30 @@ export function NutritionSummaryCard({
   return (
     <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o ? { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 } : undefined}>
       {/* Calories row */}
-      <View className="border-b border-slate-100 px-5 pb-4 pt-4">
+      <View className="border-b border-slate-100 px-5 pb-4 pt-4" style={o && { borderBottomColor: o.border }}>
         <View className="flex-row items-center justify-between">
-          <Text className="text-xs font-bold uppercase tracking-widest text-slate-400">
+          <Text className="text-xs font-bold uppercase tracking-widest text-slate-400" style={o && { color: o.ink }}>
             {title}
           </Text>
           {subtitle && (
-            <Text className="text-xs font-semibold text-slate-400">{subtitle}</Text>
+            <Text className="text-xs font-semibold text-slate-400" style={o && { color: o.faint }}>{subtitle}</Text>
           )}
         </View>
         <View className="mt-2 flex-row items-end justify-between">
           <View className="flex-row items-end">
             <Text className="text-4xl font-bold text-slate-900" style={o ? { color: calOverLimit ? o.danger : o.text, fontWeight: "800", letterSpacing: -0.5 } : undefined}>
-              {confirmed.calories}
+              {Math.round(confirmed.calories).toLocaleString()}
             </Text>
             {planned.calories > 0 && (
-              <Text className="mb-1 ml-1 text-lg font-semibold text-slate-300">
-                +{planned.calories}
+              <Text className="mb-1 ml-1 text-lg font-semibold text-slate-300" style={o && { color: o.faint }}>
+                +{Math.round(planned.calories).toLocaleString()}
               </Text>
             )}
-            <Text className="mb-1 ml-1.5 text-base text-slate-400">kcal</Text>
+            <Text className="mb-1 ml-1.5 text-base text-slate-400" style={o && { color: o.muted }}>kcal</Text>
           </View>
           {limits.calories != null && (
-            <Text className="mb-1 text-sm text-slate-400">
-              / {limits.calories} kcal
+            <Text className="mb-1 text-sm text-slate-400" style={o && { color: o.muted }}>
+              / {limits.calories.toLocaleString()} kcal
             </Text>
           )}
         </View>
@@ -88,7 +88,7 @@ export function NutritionSummaryCard({
       </View>
 
       {/* Macro columns */}
-      <View className={`flex-row px-4 pt-4 ${hasSodiumData ? "border-b border-slate-100 pb-4" : "pb-4"}`}>
+      <View className={`flex-row px-4 pt-4 ${hasSodiumData ? "border-b border-slate-100 pb-4" : "pb-4"}`} style={o && { borderBottomColor: o.border }}>
         {macros.map(({ label, confirmedValue, plannedValue, unit, limit, bar }) => {
           const confirmedF = pct(confirmedValue, limit);
           const totalF = pct(confirmedValue + plannedValue, limit);
@@ -97,13 +97,13 @@ export function NutritionSummaryCard({
           return (
             <View key={label} className="flex-1 items-center px-1">
               {/* (Over its goal: the number in red; the bar keeps its colour.) */}
-              <Text className="text-sm font-bold text-slate-800" style={over ? { color: "#DC2626" } : undefined}>
-                {confirmedValue}{unit}
+              <Text className="text-sm font-bold text-slate-800" style={over ? { color: o?.danger ?? "#DC2626" } : o && { color: o.text }}>
+                {Math.round(confirmedValue).toLocaleString()}{unit}
                 {plannedValue > 0 && (
-                  <Text className="text-slate-300"> +{plannedValue}{unit}</Text>
+                  <Text className="text-slate-300" style={o && { color: o.faint }}> +{Math.round(plannedValue).toLocaleString()}{unit}</Text>
                 )}
               </Text>
-              <Text className="mt-0.5 text-xs text-slate-400">{label}</Text>
+              <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.muted }}>{label}</Text>
               {limit != null && (
                 <View className="mt-2 h-1.5 w-full flex-row overflow-hidden rounded-full bg-slate-100" style={track}>
                   <View style={{ height: 6, width: `${confirmedF * 100}%`, backgroundColor: bar }} />
@@ -111,8 +111,8 @@ export function NutritionSummaryCard({
                 </View>
               )}
               {limit != null && (
-                <Text className="mt-0.5 text-[10px] text-slate-300">
-                  /{limit}{unit}
+                <Text className="mt-0.5 text-[10px] text-slate-300" style={o && { color: o.faint }}>
+                  /{limit.toLocaleString()}{unit}
                 </Text>
               )}
             </View>
@@ -131,11 +131,11 @@ export function NutritionSummaryCard({
             return (
               <>
                 <View className="flex-row items-center justify-between">
-                  <Text className="text-xs font-semibold text-slate-500">Sodium</Text>
-                  <Text className="text-xs text-slate-400" style={over ? { color: "#DC2626", fontWeight: "700" } : undefined}>
-                    {confirmed.sodium}
-                    {planned.sodium > 0 && ` +${planned.sodium}`} mg
-                    {limits.sodium != null && ` / ${limits.sodium} mg`}
+                  <Text className="text-xs font-semibold text-slate-500" style={o && { color: o.icon }}>Sodium</Text>
+                  <Text className="text-xs text-slate-400" style={over ? { color: o?.danger ?? "#DC2626", fontWeight: "700" } : o && { color: o.muted }}>
+                    {Math.round(confirmed.sodium).toLocaleString()}
+                    {planned.sodium > 0 && ` +${Math.round(planned.sodium).toLocaleString()}`} mg
+                    {limits.sodium != null && ` / ${limits.sodium.toLocaleString()} mg`}
                   </Text>
                 </View>
                 {limits.sodium != null && (

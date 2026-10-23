@@ -190,7 +190,7 @@ export function workOutTargets({ settings, weights, metrics, intake, workoutsPer
     value: kcal,
     unit: "kcal",
     per: "day",
-    group: "Nutrition", page: "/health",
+    group: "Nutrition", page: "/health/today",
     current: s.dailyCalorieLimit,
     basis: [...burnBasis, you.goal, ...(losing || gaining ? [pacePart] : [])],
     how: [
@@ -209,7 +209,7 @@ export function workOutTargets({ settings, weights, metrics, intake, workoutsPer
     value: protein,
     unit: "g",
     per: "day",
-    group: "Nutrition", page: "/health",
+    group: "Nutrition", page: "/health/today",
     current: s.dailyProteinLimit,
     basis: lean != null ? [{ label: "Lean mass", value: `${kg(lean)}, from your scale`, yours: true }] : [goal != null ? yoursOnly(you.goal) : you.weight, { label: "Lean mass", value: "Not measured", yours: false, add: { text: "A smart scale adds it via Apple Health", href: "/health/section/body" } }],
     how: lean != null ? [`2.3 g for each kilo of lean mass (${kg(lean)}) — enough to keep muscle while losing fat, and build it while training.`] : [`1.8 g for each kilo of ${goal != null ? "goal " : ""}weight (${kg(proteinBase)}). With lean mass from a scale it's worked out from your muscle instead.`],
@@ -220,13 +220,13 @@ export function workOutTargets({ settings, weights, metrics, intake, workoutsPer
   const aimKcal = s.dailyCalorieLimit ?? kcal;
   const calPart: Basis = { label: s.dailyCalorieLimit != null ? "Your calories" : "Suggested calories", value: `${n0(aimKcal)} kcal`, yours: fit(targets[0]) !== "standard" };
   const fat = to5(Math.max(0.7 * (goal ?? w), (aimKcal * 0.25) / 9));
-  targets.push({ key: "fats", label: "Fat", value: fat, unit: "g", per: "day", group: "Nutrition", page: "/health", current: s.dailyFatsLimit, basis: [calPart, goal != null ? yoursOnly(you.goal) : you.weight], how: ["At least 0.7 g a kilo, and a quarter of your calories — for hormones and to absorb vitamins."] });
+  targets.push({ key: "fats", label: "Fat", value: fat, unit: "g", per: "day", group: "Nutrition", page: "/health/today", current: s.dailyFatsLimit, basis: [calPart, goal != null ? yoursOnly(you.goal) : you.weight], how: ["At least 0.7 g a kilo, and a quarter of your calories — for hormones and to absorb vitamins."] });
   const carbs = Math.max(0, to5((aimKcal - protein * 4 - fat * 9) / 4));
-  targets.push({ key: "carbs", label: "Carbs", value: carbs, unit: "g", per: "day", group: "Nutrition", page: "/health", current: s.dailyCarbsLimit, basis: [calPart, { label: "Protein and fat", value: `${protein} g, ${fat} g`, yours: true }], how: [`What's left of ${n0(aimKcal)} kcal after protein (${protein} g × 4 kcal) and fat (${fat} g × 9 kcal) — fuel for training.`] });
-  targets.push({ key: "fiber", label: "Fibre", value: Math.round((aimKcal / 1000) * 14), unit: "g", per: "day", group: "Nutrition", page: "/health", current: s.dailyFiberLimit, basis: [calPart], how: ["14 g for every 1,000 kcal — the usual guideline."] });
+  targets.push({ key: "carbs", label: "Carbs", value: carbs, unit: "g", per: "day", group: "Nutrition", page: "/health/today", current: s.dailyCarbsLimit, basis: [calPart, { label: "Protein and fat", value: `${protein} g, ${fat} g`, yours: true }], how: [`What's left of ${n0(aimKcal)} kcal after protein (${protein} g × 4 kcal) and fat (${fat} g × 9 kcal) — fuel for training.`] });
+  targets.push({ key: "fiber", label: "Fibre", value: Math.round((aimKcal / 1000) * 14), unit: "g", per: "day", group: "Nutrition", page: "/health/today", current: s.dailyFiberLimit, basis: [calPart], how: ["14 g for every 1,000 kcal — the usual guideline."] });
 
   // Sodium: under the guideline's 2,300 mg.
-  targets.push({ key: "sodium", label: "Sodium", value: 2300, unit: "mg", per: "day", group: "Nutrition", page: "/health", current: s.dailySodiumLimit, guideline: true, basis: [], how: ["Under 2,300 mg a day — the limit for adults in the dietary guidelines, the same for everyone (about a teaspoon of salt). Less is better for blood pressure."] });
+  targets.push({ key: "sodium", label: "Sodium", value: 2300, unit: "mg", per: "day", group: "Nutrition", page: "/health/today", current: s.dailySodiumLimit, guideline: true, basis: [], how: ["Under 2,300 mg a day — the limit for adults in the dietary guidelines, the same for everyone (about a teaspoon of salt). Less is better for blood pressure."] });
 
   // Water: 35 ml a kilo, + 500 ml when you're active.
   const activeAvg = mean(active.map((m) => m.value));

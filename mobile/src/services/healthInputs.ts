@@ -10,7 +10,7 @@ import { computeDayNutrition, type DayNutrition } from "@/src/utils/mealPlan";
 // (confirmed in Kitchen) — the last 12 weeks, enough for the burn's eight
 // weeks of four-week windows.
 
-const READINGS = ["steps", "exerciseMinutes", "activeEnergy", "restingEnergy", "sleep", "leanMass", "water", "foodComplete"];
+const READINGS = ["steps", "exerciseMinutes", "activeEnergy", "restingEnergy", "sleep", "leanMass", "water", "foodComplete", "workout"];
 const pad = (n: number) => String(n).padStart(2, "0");
 const dayOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 

@@ -6,20 +6,25 @@ import { hoverable } from "@/src/components/web/ui";
 import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 
-// Nutrition's own pages (All nutrients, Weight, Weekly report, Goals) in a
-// desktop browser: in Orbit's look, in the section's green. On a phone, or
-// in a narrow window, nothing here applies and the pages are as they were
-// (their redesign there is still to come).
+// Nutrition's own pages (All nutrients, Weekly report, Today) in Orbit's
+// look: in a desktop browser in the section's green, on a phone in
+// Health's (Nutrition is part of Health there).
 export function NutritionDesk({ children }: { children: ReactNode }) {
   const wide = useWideWeb();
-  if (!wide) return <>{children}</>;
   return (
-    <OrbitSection section="nutrition">
+    <OrbitSection section={wide ? "nutrition" : "health"}>
       <OrbitPage>
         <Canvas>{children}</Canvas>
       </OrbitPage>
     </OrbitSection>
   );
+}
+
+// The page's colours, desktop or phone.
+export function useNutritionColors(): OrbitColors {
+  const page = useOrbitPage();
+  const { colors } = useOrbitTheme();
+  return page ?? colors;
 }
 
 // (Orbit's canvas edge to edge, round a page held to a width.)
