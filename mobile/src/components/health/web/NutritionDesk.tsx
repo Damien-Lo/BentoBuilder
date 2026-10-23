@@ -7,12 +7,12 @@ import { OrbitPage, OrbitSection, useOrbitPage, useOrbitTheme, type OrbitColors 
 import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Nutrition's own pages (All nutrients, Weekly report, Today) in Orbit's
-// look: in a desktop browser in the section's green, on a phone in
-// Health's (Nutrition is part of Health there).
+// look, in Health's colour (Nutrition is part of Health, on a phone and in
+// a desktop browser).
 export function NutritionDesk({ children }: { children: ReactNode }) {
   const wide = useWideWeb();
   return (
-    <OrbitSection section={wide ? "nutrition" : "health"}>
+    <OrbitSection section="health">
       <OrbitPage>
         <Canvas>{children}</Canvas>
       </OrbitPage>

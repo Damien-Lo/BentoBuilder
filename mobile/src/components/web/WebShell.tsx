@@ -37,7 +37,7 @@ const GUTTER = themeColor("234,232,227", "8,9,12");
 // In Orbit's look (its light colours: the web's own dark mode turns them
 // dark — see theme/engine.ts). A section's own colour marks where you are:
 // its rail button and its open tab (SECTION_PALETTE; neutral for the rest).
-const RAIL_HUE: Record<string, SectionId> = { calendar: "calendar", kitchen: "kitchen", nutrition: "nutrition", lists: "tasks" };
+const RAIL_HUE: Record<string, SectionId> = { calendar: "calendar", kitchen: "kitchen", gym: "gym", health: "health", lists: "tasks" };
 function hueOf(id: string | undefined): { tint: string; strong: string } | null {
   const shades = id && RAIL_HUE[id] ? SECTION_PALETTE[RAIL_HUE[id]] : null;
   return shades ? { tint: shades.tint, strong: shades.dark } : null;

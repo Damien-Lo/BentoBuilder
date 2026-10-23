@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Redirect, useFocusEffect, useRouter, type Href } from "expo-router";
+import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { Fragment, useCallback, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,7 +12,6 @@ import { Hairline, IconTile, ListCard, ListRow, neutralTile, PageHeader, useGoBa
 import { Tap } from "@/src/components/ui/Tap";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { getHealthMetrics } from "@/src/services/healthSync";
-import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Health on the phone: your body, what you eat, and how you're doing — one
 // list, like Settings, each row opening its own page — About you (what the
@@ -25,8 +24,7 @@ import { useWideWeb } from "@/src/utils/useWideWeb";
 // numbers at the top, then Apple Health's (connected and synced here). In
 // Health's own colour.
 //
-// (A desktop browser still has Nutrition as a section of its own, for
-// now: there this goes straight to it.)
+// (In a desktop browser too, as a column — Health's Overview there.)
 
 type Entry = { label: string; icon: keyof typeof Ionicons.glyphMap; path?: string; soon?: boolean };
 
@@ -86,8 +84,6 @@ const GROUPS: { title: string; entries: Entry[] }[] = [
 ];
 
 export default function HealthSection() {
-  const wide = useWideWeb();
-  if (wide) return <Redirect href="/health" />;
   return (
     <OrbitSection section="health">
       <HealthList />
