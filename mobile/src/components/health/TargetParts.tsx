@@ -185,8 +185,10 @@ export function TargetEditor({ target: t, units, onSave, onClose, onAdd, colors:
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <Pressable onPress={onClose} accessibilityLabel="Close" style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.5)" }}>
-          <Pressable onPress={() => {}} style={{ width: "100%", maxWidth: 440, maxHeight: "88%", borderRadius: 22, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, overflow: "hidden" }}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.5)" }}>
+          {/* The backdrop: tapped, it closes (behind the card, so the card scrolls) */}
+          <Pressable onPress={onClose} accessibilityLabel="Close" style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} />
+          <View style={{ width: "100%", maxWidth: 440, maxHeight: "88%", borderRadius: 22, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, overflow: "hidden" }}>
             <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
               <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <Text style={{ flex: 1, fontSize: 13, fontWeight: "700", letterSpacing: 0.8, color: c.ink }}>{t.label.toUpperCase()}</Text>
@@ -264,8 +266,8 @@ export function TargetEditor({ target: t, units, onSave, onClose, onAdd, colors:
                 ))}
               </View>
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -324,8 +326,10 @@ export function WeightGoalEditor({ open, value, heightCm, units, onSave, onClose
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <Pressable onPress={onClose} accessibilityLabel="Close" style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.5)" }}>
-          <Pressable onPress={() => {}} style={{ width: "100%", maxWidth: 440, maxHeight: "88%", borderRadius: 22, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, overflow: "hidden" }}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.5)" }}>
+          {/* The backdrop: tapped, it closes (behind the card, so the card scrolls) */}
+          <Pressable onPress={onClose} accessibilityLabel="Close" style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} />
+          <View style={{ width: "100%", maxWidth: 440, maxHeight: "88%", borderRadius: 22, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, overflow: "hidden" }}>
             <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
               <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <Text style={{ flex: 1, fontSize: 13, fontWeight: "700", letterSpacing: 0.8, color: c.ink }}>GOAL WEIGHT</Text>
@@ -342,8 +346,8 @@ export function WeightGoalEditor({ open, value, heightCm, units, onSave, onClose
               </Tap>
               <Text style={{ marginTop: 8, fontSize: 12, textAlign: "center", color: c.faint }}>Your calories follow the goal, at the pace you choose.</Text>
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );

@@ -186,9 +186,9 @@ function AboutYou() {
       value: target ? `${n(target.kcal)} kcal a day` : "—",
       what:
         target?.aim === "lose"
-          ? `A day's calories to lose ${paceText} a week, toward your goal weight (your pace, set in Targets). A kilo is about 7,700 kcal, so it's ${n(shift)} a day under what you burn.`
+          ? `A day's calories to lose ${paceText} a week, toward your goal weight (your pace, set in Your Targets). A kilo is about 7,700 kcal, so it's ${n(shift)} a day under what you burn.`
           : target?.aim === "gain"
-            ? `A day's calories to gain ${paceText} a week, toward your goal weight (your pace, set in Targets): ${n(shift)} a day over what you burn.`
+            ? `A day's calories to gain ${paceText} a week, toward your goal weight (your pace, set in Your Targets): ${n(shift)} a day over what you burn.`
             : "A day's calories to stay where you are: what you burn in a day.",
       how:
         target && burn && floor != null

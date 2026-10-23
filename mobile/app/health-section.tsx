@@ -1,20 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Redirect, useRouter, type Href } from "expo-router";
-import { Fragment } from "react";
+import { Redirect, useFocusEffect, useRouter, type Href } from "expo-router";
+import { Fragment, useCallback, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppleHealthCard } from "@/src/components/health/AppleHealthCard";
+import { EnergyCard } from "@/src/components/health/EnergyCard";
 import { toShown, useUnits } from "@/src/components/health/units";
 import { useToday } from "@/src/components/home/useToday";
 import { Hairline, IconTile, ListCard, ListRow, neutralTile, PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { getHealthMetrics } from "@/src/services/healthSync";
 import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Health on the phone: your body, what you eat, and how you're doing — one
 // list, like Settings, each row opening its own page — About you (what the
-// health numbers are worked out from) first. Nutrition is part of
+// health numbers are worked out from) first. Today's energy at the top
+// (budget, eaten, burned — Your burn, tapped), then weight and steps.
+// Nutrition is part of
 // it (its pages are the ones that were the Nutrition section's), with
 // You, Activity & fitness, Body, Heart & vitals, Sleep & mind (most from
 // Apple Health) and what's still to come. Today's two
@@ -31,7 +35,7 @@ const GROUPS: { title: string; entries: Entry[] }[] = [
     title: "You",
     entries: [
       { label: "About you", icon: "person", path: "/health/about" },
-      { label: "Targets", icon: "locate", path: "/health/targets" },
+      { label: "Your Targets", icon: "locate", path: "/health/targets" },
       { label: "Your burn", icon: "flame", path: "/health/burn" },
     ],
   },
@@ -100,26 +104,27 @@ function HealthList() {
   const kg = units === "metric";
   const open = (path: string) => router.push(path as Href);
 
-  const kcal = Math.round(t.eaten.calories ?? 0);
-  const left = t.goal - kcal;
   const weight = t.latestWeight;
+  // Today's steps (as of the last Apple Health sync).
+  const [steps, setSteps] = useState<number | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      getHealthMetrics(["steps"], t.today, t.today)
+        .then((m) => setSteps(m[0]?.value ?? null))
+        .catch(() => {});
+    }, [t.today]),
+  );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
         <PageHeader title="Health" subtitle="Your body, what you eat, and how you're doing" onBack={leave} />
 
-        {/* Today, at a glance */}
-        <View style={{ marginTop: 18, flexDirection: "row", gap: 10 }}>
-          <Glance
-            icon="flame-outline"
-            value={`${Math.abs(left).toLocaleString()}`}
-            unit={left >= 0 ? "kcal left" : "kcal over"}
-            detail={`${kcal.toLocaleString()} of ${t.goal.toLocaleString()} today`}
-            tone={left < 0 ? c.danger : undefined}
-            onPress={() => open("/health")}
-            colors={c}
-          />
+        {/* Today's energy: budget, eaten, burned */}
+        <EnergyCard />
+
+        {/* Weight and steps, at a glance */}
+        <View style={{ marginTop: 10, flexDirection: "row", gap: 10 }}>
           <Glance
             icon="scale-outline"
             value={weight ? `${Math.round(toShown("weight", weight.weight, units) * 10) / 10}` : "—"}
@@ -128,6 +133,7 @@ function HealthList() {
             onPress={() => open("/health/weight")}
             colors={c}
           />
+          <Glance icon="footsteps-outline" value={steps != null ? Math.round(steps).toLocaleString() : "—"} unit={steps != null ? "steps" : ""} detail={steps != null ? "Today, as of the last sync" : "None synced today"} onPress={() => open("/health/section/activity")} colors={c} />
         </View>
 
         {/* Apple Health: connected, synced, today's numbers */}

@@ -127,7 +127,7 @@ export function WebNutritionScreen() {
           </View>
         </Card>
 
-        <Card title="Daily averages" subtitle="Against your goals" action={<CardLink label="Edit in Targets" onPress={() => router.push("/health/targets")} />} style={{ flex: 1, minWidth: 320 }}>
+        <Card title="Daily averages" subtitle="Against your goals" action={<CardLink label="Edit in Your Targets" onPress={() => router.push("/health/targets")} />} style={{ flex: 1, minWidth: 320 }}>
           <GoalBar label="Calories" value={avg(total.calories)} goal={settings.dailyCalorieLimit} unit="kcal" color={nutrientColor("calories")} />
           <GoalBar label="Protein" value={avg(total.protein)} goal={settings.dailyProteinLimit} unit="g" color={nutrientColor("protein")} />
           <GoalBar label="Carbs" value={avg(total.carbs)} goal={settings.dailyCarbsLimit} unit="g" color={nutrientColor("carbs")} />

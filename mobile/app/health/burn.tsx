@@ -4,9 +4,10 @@ import { Fragment, useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { KCAL_PER_KG, type Energy, type EnergyDay } from "@/src/components/health/energy";
+import { KCAL_PER_KG, todayBalance, type Balance, type Energy, type EnergyDay } from "@/src/components/health/energy";
 import { MetricChart } from "@/src/components/health/MetricChart";
-import { workOutTargets, type Burn } from "@/src/components/health/targets";
+import { DayPlan } from "@/src/components/health/EnergyCard";
+import { workOutTargets, type Aim, type Burn } from "@/src/components/health/targets";
 import { showMeasure, UnitsToggle, useUnits } from "@/src/components/health/units";
 import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
@@ -40,13 +41,14 @@ function YourBurn() {
   const leave = useGoBack("/health-section");
   const { colors: c } = useOrbitTheme();
   const [units] = useUnits("weight");
-  const [data, setData] = useState<{ energy: Energy; burn: Burn } | null>(null);
+  const [data, setData] = useState<{ energy: Energy; burn: Burn; balance: Balance; suggested: number; aim: Aim } | null>(null);
   const [info, setInfo] = useState(false);
 
   const load = useCallback(() => {
     loadHealthInputs().then((inputs) => {
-      const { energy, burn } = workOutTargets({ ...inputs, workoutsPerWeek: [], units });
-      setData({ energy, burn });
+      const { energy, burn, targets, aim } = workOutTargets({ ...inputs, workoutsPerWeek: [], units });
+      const cal = targets.find((t) => t.key === "calories")!;
+      setData({ energy, burn, balance: todayBalance(energy, cal.current ?? cal.value, burn.value), suggested: cal.value, aim });
     });
   }, [units]);
   useFocusEffect(load);
@@ -78,7 +80,7 @@ function YourBurn() {
     );
   }
 
-  const { energy: e, burn } = data;
+  const { energy: e, burn, balance, suggested, aim } = data;
   const W = (kg: number, places = 1) => showMeasure("weight", kg, units, places);
   const today = e.days[0];
   const ratio = e.ratio;
@@ -112,6 +114,8 @@ function YourBurn() {
           <Text style={{ marginTop: 6, fontSize: 13.5, lineHeight: 19, color: c.muted }}>
             {burn.how === "measured"
               ? `Measured from the last 4 weeks: ${e.completeDays} fully logged days and ${e.weighIns} weigh-ins.`
+              : burn.how === "blending"
+                ? `Calibrating: ${Math.round((burn.share ?? 0) * 100)}% measured so far (${e.partial?.days ?? 0} of 10 complete days, ${e.partial?.weighIns ?? 0} of 8 weigh-ins), the rest from ${burn.from === "apple" ? "your Watch" : "About you"}. Fully measured once both are there.`
               : burn.how === "apple"
                 ? `From your Watch for now — measured once there are 10 fully logged days and 8 weigh-ins in 4 weeks (${e.completeDays} and ${e.weighIns} so far).`
                 : "Estimated from About you for now — your Watch or 4 weeks of food logs and weigh-ins will replace it."}
@@ -122,11 +126,12 @@ function YourBurn() {
         <Card colors={c} style={{ marginTop: 14 }}>
           <Label colors={c}>TODAY</Label>
           <View style={{ marginTop: 8, flexDirection: "row" }}>
+            <Figure label={balance.extra ? `Budget (+${n0(balance.extra)} active)` : "Budget"} value={n0(balance.allowed)} colors={c} />
             <Figure label="Eaten" value={n0(e.today.eaten)} colors={c} />
-            <Figure label={ratio ? `Burned so far (×${ratio.toFixed(2)})` : "Burned so far"} value={e.today.out != null ? n0(e.today.out) : "—"} colors={c} />
-            <Figure label="A usual day by now" value={e.today.usualByNow != null ? n0(e.today.usualByNow) : "—"} colors={c} />
+            <Figure label={e.today.out == null ? "Burned · no data today" : ratio ? `Burned so far (×${ratio.toFixed(2)})` : "Burned so far"} value={e.today.out != null ? n0(e.today.out) : "—"} colors={c} />
           </View>
-          <Text style={{ marginTop: 8, fontSize: 12, color: c.faint }}>{e.today.synced ? "Burned: your Watch as of the last Apple Health sync, corrected." : "No Watch reading for today yet."}</Text>
+          <DayPlan balance={balance} suggested={suggested} aim={aim} units={units} colors={c} />
+          <Text style={{ marginTop: 8, fontSize: 12, color: c.faint }}>{e.today.synced ? "Burned: your Watch as of the last Apple Health sync, corrected." : "No data today yet — your budget still stands, from your measured burn."}</Text>
           <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", gap: 8 }}>
             <Text style={{ flex: 1, fontSize: 14.5, fontWeight: "600", color: c.text }}>Logged everything today?</Text>
             {([true, false] as const).map((v) => {
@@ -297,7 +302,7 @@ function HowItWorks({ open, onClose, e, burn, units, colors: c }: { open: boolea
     },
     {
       title: "Before there's enough",
-      text: ["Without 4 weeks of logs and weigh-ins, your Watch's figure is used as it reads; without the Watch, the formula from About you (your burn at rest × how active you are). Each is replaced as soon as there's better."],
+      text: ["To start, your Watch's figure is used as it reads (Apple Health usually has months of it); without the Watch, the formula from About you (your burn at rest × how active you are). From about 4 logged days and weigh-ins, what they say is blended in — a share as large as the share of the 10 days and 8 weigh-ins there are — so it moves toward measured gradually instead of jumping on day 10."],
     },
     {
       title: "What it assumes",
@@ -309,8 +314,10 @@ function HowItWorks({ open, onClose, e, burn, units, colors: c }: { open: boolea
   ];
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable onPress={onClose} accessibilityLabel="Close" style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.5)" }}>
-        <Pressable onPress={() => {}} style={{ width: "100%", maxWidth: 460, maxHeight: "88%", borderRadius: 22, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, overflow: "hidden" }}>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.5)" }}>
+        {/* The backdrop: tapped, it closes (behind the card, so the card scrolls) */}
+        <Pressable onPress={onClose} accessibilityLabel="Close" style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} />
+        <View style={{ width: "100%", maxWidth: 460, maxHeight: "88%", borderRadius: 22, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, overflow: "hidden" }}>
           <ScrollView contentContainerStyle={{ padding: 20 }}>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <Text style={{ flex: 1, fontSize: 13, fontWeight: "700", letterSpacing: 0.8, color: c.ink }}>HOW YOUR BURN IS WORKED OUT</Text>
@@ -329,8 +336,8 @@ function HowItWorks({ open, onClose, e, burn, units, colors: c }: { open: boolea
               </View>
             ))}
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

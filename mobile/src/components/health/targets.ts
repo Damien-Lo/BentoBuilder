@@ -1,5 +1,5 @@
 import { ACTIVITY, ageOn, bmr, KG_PER_LB, tdee } from "@/src/components/health/bodyStats";
-import { workOutEnergy, type Energy } from "@/src/components/health/energy";
+import { NEED_DAYS, NEED_WEIGH_INS, workOutEnergy, type Energy } from "@/src/components/health/energy";
 import { showMeasure } from "@/src/components/health/units";
 import type { HealthMetric } from "@/src/services/healthSync";
 import type { ActivityLevel, AppSettings, Sex, Units } from "@/src/services/settingsService";
@@ -98,7 +98,10 @@ export interface Aim {
   weeks: number | null; // to the goal, at that pace
 }
 
-export type Burn = { value: number; how: "measured" | "apple" | "formula" };
+// Your burn, and where it's from: measured; on its way (blending what the
+// first days say into the Watch's or the formula's, by how much there is);
+// the Watch's; or the formula's.
+export type Burn = { value: number; how: "measured" | "blending" | "apple" | "formula"; share?: number; from?: "apple" | "formula" };
 
 export function workOutTargets({ settings, weights, metrics, intake, workoutsPerWeek, units }: Inputs): { targets: Target[]; burn: Burn; aim: Aim; energy: Energy } {
   const s = settings;
@@ -140,6 +143,16 @@ export function workOutTargets({ settings, weights, metrics, intake, workoutsPer
     burn = { value: energy.measured, how: "measured" };
     burnBasis.push({ label: "Food logged", value: `${energy.completeDays} complete days in 4 weeks`, yours: true }, { label: "Weigh-ins", value: `${energy.weighIns} in 4 weeks`, yours: true });
     burnHow.push(`You ate ${n0(recentWeek?.ate ?? 0)} kcal a day on average (on fully logged days) while your weight trend moved ${showMeasure("weight", recentWeek?.trendPerWeek ?? 0, units, 2)} a week — so you burn about ${n0(burn.value)} a day (a kilo ≈ 7,700 kcal). The details are in Your burn.`);
+  } else if (energy.partial) {
+    // On its way: the first days blended in, a fraction at a time (and
+    // never more than 500 from where it starts, while there's so little).
+    const p = energy.partial;
+    const from = energy.watchAverage != null ? "apple" : "formula";
+    const prior = energy.watchAverage ?? tdee(rest, level);
+    const raw = Math.max(prior - 500, Math.min(prior + 500, p.raw));
+    burn = { value: prior + (raw - prior) * p.share, how: "blending", share: p.share, from };
+    burnBasis.push({ label: "Food logged", value: `${p.days} of ${NEED_DAYS} complete days`, yours: p.days >= NEED_DAYS, add: { text: "Keep logging food in Kitchen", href: "/kitchen" } }, { label: "Weigh-ins", value: `${p.weighIns} of ${NEED_WEIGH_INS}`, yours: p.weighIns >= NEED_WEIGH_INS, add: { text: "Weigh in most mornings", href: "/health/weight" } });
+    burnHow.push(`Calibrating: ${Math.round(p.share * 100)}% from what your food logs and weigh-ins say (${n0(p.raw)}), the rest from ${from === "apple" ? "your Watch" : "About you"} (${n0(prior)}) — about ${n0(burn.value)} a day. It's all measured once there are ${NEED_DAYS} complete days and ${NEED_WEIGH_INS} weigh-ins in 4 weeks.`);
   } else if (energy.watchAverage != null) {
     burn = { value: energy.watchAverage, how: "apple" };
     burnBasis.push({ label: "Apple Watch burn", value: "the last 4 weeks", yours: true });

@@ -22,8 +22,9 @@ export const KCAL_PER_KG = 7700;
 export const WINDOW_DAYS = 28; // what each week's burn looks back over
 export const WEEKS = 8; // weeks shown
 const MAX_SHIFT = 100; // kcal a week
-const NEED_DAYS = 10; // complete days in the window
-const NEED_WEIGH_INS = 8; // weigh-ins in the window
+export const NEED_DAYS = 10; // complete days in the window
+export const NEED_WEIGH_INS = 8; // weigh-ins in the window
+const START_DAYS = 4; // complete days (and weigh-ins) before it starts to count
 // A day the Watch was worn: some activity, and its at-rest figure near your
 // usual (it only adds that up while it's on your wrist).
 const WATCH_DAY_MIN_ACTIVE = 100;
@@ -65,6 +66,7 @@ export interface EnergyDay {
   markId: string | null;
   weight: number | null; // the weigh-in (kg)
   watch: number | null; // resting + active, when worn
+  active: number | null; // of that, moving
 }
 
 // A week: the burn measured over the four weeks to its end, and the Watch's over the same days.
@@ -84,6 +86,12 @@ export interface Energy {
   days: EnergyDay[]; // newest first, today included
   weeks: EnergyWeek[]; // newest first
   measured: number | null; // your burn, when there's enough to measure it
+  // Before there is: what the days so far say, and how far to trust it
+  // (the share of the 10 days and 8 weigh-ins there are) — blended in.
+  partial: { raw: number; share: number; days: number; weighIns: number } | null;
+  // Today's moving (corrected), and a usual day's — for a more active day's extra.
+  activeToday: number | null;
+  usualActive: number | null;
   watchAverage: number | null; // the Watch's, uncorrected (the last four weeks)
   ratio: number | null; // its correction
   completeDays: number; // in the last four weeks
@@ -91,8 +99,8 @@ export interface Energy {
   usualIntake: number | null; // the median logged day — "near your usual" is 60% of it
   // The week just gone, tested: what your burn said your weight would do, and what it did.
   check: { burnBefore: number; ate: number; days: number; predicted: number; actual: number } | null;
-  // Today, live: eaten, the Watch so far (corrected), and a usual day by now.
-  today: { eaten: number; out: number | null; usualByNow: number | null; synced: boolean };
+  // Today, live: eaten, and the Watch so far (corrected).
+  today: { eaten: number; out: number | null; synced: boolean }; // synced: the Watch is reporting today
   // Why this week's numbers might not line up.
   reasons: string[];
 }
@@ -128,6 +136,7 @@ export function workOutEnergy({ weights, intake, metrics, today, showWeight = (k
       markId: mark?._id ?? null,
       weight: weighed.get(d) ?? null,
       watch: worn(r, a) && d < today ? r! + a! : null,
+      active: worn(r, a) && d < today ? a! : null,
     });
   }
   const byDate = new Map(days.map((d) => [d.date, d]));
@@ -178,9 +187,23 @@ export function workOutEnergy({ weights, intake, metrics, today, showWeight = (k
   const todayDay = byDate.get(today);
   const r = resting.get(today);
   const a = active.get(today);
-  const soFar = r != null || a != null ? (r ?? 0) + (a ?? 0) : null;
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  const usual = measured ?? watchAverage;
+  // As Apple Health has it — only while there's movement data today
+  // (otherwise there's nothing from today to go on).
+  const soFar = a != null && a > 0 ? (r ?? 0) + a : null;
+
+  // Not measured yet: the four weeks so far, to blend in.
+  let starting: Energy["partial"] = null;
+  if (measured == null && now0) {
+    const inWindow = days.filter((d) => d.date <= yesterday && d.date > addDays(yesterday, -WINDOW_DAYS));
+    const complete = inWindow.filter((d) => d.complete && d.eaten != null);
+    const weigh = inWindow.filter((d) => d.weight != null).map((d) => ({ date: d.date, weight: d.weight! }));
+    const perDay = slope(weigh);
+    if (complete.length >= START_DAYS && weigh.length >= START_DAYS && perDay != null) {
+      const raw = mean(complete.map((d) => d.eaten!))! - perDay * KCAL_PER_KG;
+      starting = { raw, share: Math.min(1, complete.length / NEED_DAYS, weigh.length / NEED_WEIGH_INS), days: complete.length, weighIns: weigh.length };
+    }
+  }
+  const usualActive = median(recent.filter((d) => d.active != null).map((d) => d.active!));
 
   // Why this week might not line up.
   const reasons: string[] = [];
@@ -200,13 +223,43 @@ export function workOutEnergy({ weights, intake, metrics, today, showWeight = (k
     days,
     weeks,
     measured,
+    partial: starting,
+    activeToday: a != null ? a * (ratio ?? 1) : null,
+    usualActive: usualActive != null ? usualActive * (ratio ?? 1) : null,
     watchAverage,
     ratio,
     completeDays: now0?.completeDays ?? 0,
     weighIns: now0?.weighIns ?? 0,
     usualIntake,
     check,
-    today: { eaten: todayDay?.eaten ?? 0, out: soFar != null ? soFar * (ratio ?? 1) : null, usualByNow: usual != null ? (usual * minutes) / 1440 : null, synced: soFar != null },
+    today: { eaten: todayDay?.eaten ?? 0, out: soFar != null ? soFar * (ratio ?? 1) : null, synced: soFar != null },
     reasons,
   };
+}
+
+// Today against your budget: what's left of it after what you've eaten;
+// what you've burned so far (the Watch, as Apple Health has it, corrected);
+// what you're expected to burn by the end of the day (your burn, and all of
+// any extra moving the Watch shows today); and so the day's deficit, eating
+// to budget. On a clearly more active day than usual (100 kcal more moving,
+// corrected), half the extra is added to the budget — half, as the Watch's
+// moving figure is its least sure, and your budget already allows for your
+// usual training.
+export interface Balance {
+  budget: number;
+  extra: number; // added to the budget for a more active day
+  allowed: number;
+  eaten: number;
+  left: number;
+  burned: number | null; // so far
+  expected: number; // by the end of the day
+  deficit: number; // expected − allowed
+}
+export function todayBalance(e: Energy, budget: number, burn: number): Balance {
+  const more = e.activeToday != null && e.usualActive != null ? e.activeToday - e.usualActive : 0;
+  const active = more >= 100;
+  const extra = active ? Math.round(more / 2 / 10) * 10 : 0;
+  const allowed = budget + extra;
+  const expected = burn + (active ? more : 0);
+  return { budget, extra, allowed, eaten: e.today.eaten, left: allowed - e.today.eaten, burned: e.today.out, expected, deficit: expected - allowed };
 }

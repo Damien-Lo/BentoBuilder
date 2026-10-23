@@ -33,7 +33,7 @@ interface MoreRow {
 // are a row away too. (Their routes are under /health/.)
 const MORE_ROWS: MoreRow[] = [
   { id: "nutrients", label: "All Nutrients", icon: "nutrition-outline", route: "/health/nutrients" },
-  { id: "targets", label: "Targets", icon: "locate-outline", route: "/health/targets" },
+  { id: "targets", label: "Your Targets", icon: "locate-outline", route: "/health/targets" },
   { id: "weight", label: "Weight & Measurements", icon: "bar-chart-outline", route: "/health/weight" },
   { id: "weekly-report", label: "My Weekly Report", icon: "stats-chart-outline", route: "/health/weekly-report" },
 ];

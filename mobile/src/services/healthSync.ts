@@ -3,6 +3,8 @@ import {
   CategoryValueSleepAnalysis,
   isHealthDataAvailable,
   queryCategorySamples,
+  queryQuantitySamples,
+  querySources,
   queryStatisticsCollectionForQuantity,
   queryWorkoutSamples,
   requestAuthorization,
@@ -78,6 +80,8 @@ export interface HealthMetricInput {
 }
 
 const LAST_SYNC = "health.lastSync";
+// Set once calories have been read again without apps' estimates.
+const ENERGY_SOURCES = "health.energyFromDevices";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const dayOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -156,14 +160,26 @@ async function runSync(): Promise<SyncResult> {
   const from = midnight(last ? new Date(last.getTime() - 2 * 86_400_000) : new Date(now.getTime() - 90 * 86_400_000));
   const metrics: HealthMetricInput[] = [];
 
+  // Calories burned come from your Watch and iPhone only — measured — not
+  // from apps that write an estimate (a smart scale's app writes its guess
+  // at your day's burn at rest each time you weigh in). Apple's own devices
+  // are its com.apple.health sources. (Read again from 90 days back once,
+  // when this began, so earlier days lose the apps' estimates too.)
+  const energyOnce = (await AsyncStorage.getItem(ENERGY_SOURCES).catch(() => null)) !== "1";
+  const energyRead = new Set<string>(); // the calorie types read in full this time
   for (const q of QUANTITIES) {
     try {
-      const days = await queryStatisticsCollectionForQuantity(q.id, [q.stat], from, { day: 1 }, { filter: { date: { startDate: from, endDate: now } }, unit: q.unit as never });
+      const energy = q.type === "activeEnergy" || q.type === "restingEnergy";
+      const start = energy && energyOnce ? midnight(new Date(now.getTime() - 90 * 86_400_000)) : from;
+      const devices = energy ? (await querySources(q.id)).filter((src) => src.bundleIdentifier.startsWith("com.apple.health")) : [];
+      const days = await queryStatisticsCollectionForQuantity(q.id, [q.stat], start, { day: 1 }, { filter: { date: { startDate: start, endDate: now }, ...(devices.length ? { sources: devices } : {}) }, unit: q.unit as never });
+      if (energy) energyRead.add(q.type);
       for (const d of days) {
         const quantity = q.stat === "cumulativeSum" ? d.sumQuantity : q.stat === "mostRecent" ? d.mostRecentQuantity : d.averageQuantity;
         if (!quantity || !d.startDate || !Number.isFinite(quantity.quantity)) continue;
         if (q.stat === "cumulativeSum" && quantity.quantity === 0) continue;
         const date = dayOf(new Date(d.startDate));
+        if (date < dayOf(start)) continue;
         const value = Math.round(quantity.quantity * (q.scale ?? 1) * 100) / 100;
         metrics.push({ type: q.type, key: `${q.type}:${date}`, date, value, unit: q.unit === "%" ? "%" : quantity.unit || q.unit, start: new Date(d.startDate).toISOString(), end: d.endDate ? new Date(d.endDate).toISOString() : null, source: "apple" });
       }
@@ -171,6 +187,36 @@ async function runSync(): Promise<SyncResult> {
       // (Not allowed, or nothing recorded: the rest still syncs.)
     }
   }
+  // Where yesterday's and today's calories came from: each app or device's
+  // share (detail "from:<name>"; an app's, left out of the figure, as
+  // "app:<name>"), and any entry covering more than 12 hours (detail
+  // "long:<name>": its hours). So it's known what the day's figure is made
+  // of, and what was left out.
+  const twoDays = midnight(new Date(now.getTime() - 86_400_000));
+  for (const q of QUANTITIES.filter((x) => x.type === "activeEnergy" || x.type === "restingEnergy")) {
+    try {
+      const samples = await queryQuantitySamples(q.id, { limit: 0, filter: { date: { startDate: twoDays, endDate: now } }, unit: q.unit as never });
+      const byDay = new Map<string, Record<string, number>>();
+      for (const sample of samples) {
+        const day = dayOf(new Date(sample.startDate));
+        const name = sample.sourceRevision?.source?.name || "Unknown";
+        const device = sample.sourceRevision?.source?.bundleIdentifier?.startsWith("com.apple.health") ?? false;
+        const detail = byDay.get(day) ?? {};
+        const k = `${device ? "from" : "app"}:${name}`;
+        detail[k] = Math.round(((detail[k] ?? 0) + sample.quantity) * 10) / 10;
+        const hours = (new Date(sample.endDate).getTime() - new Date(sample.startDate).getTime()) / 3_600_000;
+        if (hours > 12) detail[`long:${name}`] = Math.round(hours * 10) / 10;
+        byDay.set(day, detail);
+      }
+      for (const [day, detail] of byDay) {
+        const reading = metrics.find((m) => m.key === `${q.type}:${day}`);
+        if (reading) reading.detail = { ...(reading.detail ?? {}), ...detail };
+      }
+    } catch {
+      // (As above.)
+    }
+  }
+
   try {
     // (Sleep from the evening before.)
     const samples = await queryCategorySamples(SLEEP, { limit: 0, filter: { date: { startDate: new Date(from.getTime() - 12 * 3_600_000), endDate: now } } });
@@ -216,6 +262,18 @@ async function runSync(): Promise<SyncResult> {
     // (As above.)
   }
 
+  // A day the Watch and iPhone have no calories for is left without, not
+  // kept with an app's estimate from before: those stored readings go.
+  const energyFrom = dayOf(energyOnce ? midnight(new Date(now.getTime() - 90 * 86_400_000)) : from);
+  const stale: string[] = [];
+  try {
+    const stored = await getHealthMetrics(["activeEnergy", "restingEnergy"], energyFrom);
+    const fresh = new Set(metrics.map((m) => m.key));
+    for (const m of stored) if (m.source === "apple" && energyRead.has(m.type) && !fresh.has(`${m.type}:${m.date}`)) stale.push(m._id);
+  } catch {
+    // (Kept until the next sync.)
+  }
+
   // Weight goes to your weigh-ins (Health → Weight), not the readings.
   const weights = metrics.filter((m) => m.type === "weight").map((m) => ({ date: m.date, weight: m.value }));
   if (weights.length) await syncWeightEntries(weights);
@@ -230,7 +288,9 @@ async function runSync(): Promise<SyncResult> {
     added += body.data.added;
     updated += body.data.updated;
   }
+  for (const id of stale) await deleteHealthReading(id).catch(() => {});
   await AsyncStorage.setItem(LAST_SYNC, now.toISOString()).catch(() => {});
+  await AsyncStorage.setItem(ENERGY_SOURCES, "1").catch(() => {});
   return { sent: readings.length + weights.length, added, updated, from };
 }
 

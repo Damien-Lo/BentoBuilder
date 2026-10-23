@@ -143,7 +143,7 @@ function Targets() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
-        <PageHeader title="Targets" subtitle="What to aim for, from everything Health knows" onBack={leave} action={<UnitsToggle page="about" />} />
+        <PageHeader title="Your Targets" subtitle="What to aim for, from everything Health knows" onBack={leave} action={<UnitsToggle page="about" />} />
 
         {/* How personal they are, and what would make them more so */}
         <View style={{ marginTop: 14, padding: 16, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
@@ -208,7 +208,7 @@ function Targets() {
                       <Ionicons name="information-circle" size={18} color={c.ink} />
                       <Text style={{ flex: 1, fontSize: 13, lineHeight: 18, color: c.text }}>
                         <Text style={{ fontWeight: "700" }}>You burn about {Math.round(burn.value).toLocaleString()} kcal a day</Text>
-                        {burn.how === "measured" ? " — measured from your food logs and weigh-ins" : burn.how === "apple" ? " — from your Apple Watch" : " — estimated from About you"}
+                        {burn.how === "measured" ? " — measured from your food logs and weigh-ins" : burn.how === "blending" ? ` — calibrating, ${Math.round((burn.share ?? 0) * 100)}% measured so far` : burn.how === "apple" ? " — from your Apple Watch" : " — estimated from About you"}
                       </Text>
                       <Ionicons name="chevron-forward" size={16} color={c.faint} />
                     </Tap>
