@@ -56,8 +56,7 @@ router.post("/", async (req, res) => {
  */
 router.get("/me", deviceAuth, async (req, res) => {
   const others = await Device.find({ _id: { $ne: req.device._id } }).sort({ lastSeenAt: -1 }).lean();
-  // (`paired` too, the same list: what app builds from before accounts read.)
-  return res.json({ success: true, data: { ...shown(req.device), others: others.map(shown), paired: others.map(shown) } });
+  return res.json({ success: true, data: { ...shown(req.device), others: others.map(shown) } });
 });
 
 /**

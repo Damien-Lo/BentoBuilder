@@ -2,6 +2,34 @@
 
 Working notes on what's in progress and what's deferred. Update this as things get done or new things come up — it's meant to be read, not just written.
 
+## Where things stand (Oct 23, 2026)
+
+Everything is merged into `WorkingSave` and deployed (Render + bentobuilder.pages.dev); `main` matches it. Branches: just `main` and `WorkingSave`. The iPhone app ("Orbit", preview build Oct 23) has all of it, Apple Health included.
+
+**Built and live:** Calendar (with the Gym calendar), Kitchen, Gym, Health (Nutrition is part of it), Tasks — on the phone and as desktop layouts. **Not started:** Docs (still "soon" on the home orbit).
+
+**Gym + Health (Oct 22–23), in brief:**
+- Apple Health sync on app open (an hour apart): activity, heart, sleep, body, vitals, mind, drinks, workouts, weight. Calories burned from the Watch and iPhone only (`com.apple.health` sources) — apps' estimates (a scale's at-rest guess) left out, each day's sources recorded. Health's measurements kept in metric, shown per page in imperial or metric.
+- Your burn (`mobile/src/components/health/energy.ts`): measured from 4 weeks of complete food days + a straight line through weigh-ins (7,700 kcal/kg), ±100 kcal/week; the Watch corrected to it by your own ratio; a new user's figure blends in from the Watch / About-you formula.
+- Your Targets: every target suggested from your data, standard values where it's missing; pace toward the goal weight sets calories; each editable beside its suggestion. The Goals page and the Nutrition goal editors folded into it.
+- Gym sessions get the Watch's heart rate and calories in their own time window — measured only when a Watch workout ran; otherwise estimated (never counted toward the day's burn). Sets are timed.
+- The Gym calendar: training times (several a day) with workouts planned like meals — same each time / by weekday / in turn, any day changed alone; done by finishing the Gym session, or (cardio, sport) by the Watch workout of that kind; missed / skipped. Weekly plan page (phone: week by week; desktop: day columns).
+- Home cards a page at a time (Health, Gym, Kitchen).
+
+**Next major step — ready for other people (decided Oct 23):**
+1. **Real email, invite-only with verification.** Today nothing sends email: reset codes are made by hand in the admin page, and the admin account has a placeholder email. Wanted: verify on sign-up (a 6-digit code, emailed), forgot-password by email (replacing hand-made codes), verify a changed email before it switches, the admin on a real address; optionally invites sent by email. Sign-up stays invite-only. Needs a way to send: no domain yet — choose between a domain + an email service (e.g. Resend) and a dedicated Gmail sending account.
+2. **Other people's iPhones: TestFlight.** Preview builds only install on registered devices (just Damien's); others need a production build in App Store Connect and TestFlight invites (up to 100 internal testers, no review).
+3. **Calorie sources list:** which sources count for burned calories, per reading type — Apple devices + known wearables (Garmin, Fitbit, Oura, Whoop, Polar) on, scale and food apps off — shown on Your burn with switches. Today it's Apple devices only.
+4. **First run for someone new** (polish #7): About you, connect Apple Health, what each section is for.
+
+**Open, after that:**
+1. Docs section (files, notes, documents, plans).
+2. Per-set heart rate on a session (sets are timed since Oct 23).
+3. Medications and Records in Health (shown as "coming").
+4. Optional: write Gym sessions and Kitchen nutrition back to Apple Health; hourly heart rate; workout heart-rate zones over time.
+5. Polish leftovers below (Settings tab bar, devices list, web manifest, first run, phone greeting).
+6. Receipt-scan units still not fully reliable (Known issues).
+
 ## Done: MyFitnessPal diary import (Aug 10–30)
 
 Went through the two-week diary item/cluster at a time, adding whatever was missing as ingredients, recipes, or restaurant-meal entries, on branch `ShoppingMode`. All items resolved (added or explicitly skipped) as of Sept 2.
@@ -57,7 +85,7 @@ A new home-page section ("Lists" card), with the layout and behaviour rebuilt fr
 - **Not yet built:** Remind Me (needs `expo-notifications`, a native rebuild) and Add File (needs file storage); both are shown as "Coming soon". Also not built: search, swipe actions on task rows, reordering *tasks* (lists can be dragged), and sharing / "Assigned to me" / "Flagged email" (skipped on purpose). **Grocery list:** the lists home has a "Grocery List" shortcut row (under Tasks, with a count of items still to buy) that opens the existing `/grocery-list` screen, added Sept 27. Actually merging groceries into the to-do list model/UI is still deferred at the user's request.
 - **Gotcha found while building:** NativeWind drops `Pressable`'s function-form `style={({ pressed }) => ...}` (the rows rendered stacked vertically). Use a static `style` plus `className="active:opacity-60"` for pressed feedback, as the rest of the app does.
 
-## In progress: Lists split into checklists and rich tasks (branch `Tasks`, off `Calendar`, started Oct 5)
+## Done: Lists split into checklists and rich tasks (branch `Tasks`, off `Calendar`, started Oct 5)
 
 - **Two list types** (`TodoList.type`): **checklist** = plain tickable lines (a note in list form, to move to the Notes section when it exists); **tasks** = full tasks. Checklists are left out of the smart lists, the dashboard and the calendar. **The Lists section has four tabs** (`app/lists/(tabs)/`, the same bottom bar and centre home button as Kitchen): **Overview** (the dashboard), **Tasks** (smart lists, task lists and groups), **Checklists**, and **Shopping** (the Kitchen's grocery list as a pinned row, then shopping lists, which are checklists with `TodoList.shopping`). The last two share `src/components/todo/ChecklistsTab.tsx`. A list's options menu moves it between tabs. A separate Notes section was tried and dropped (Oct 5): checklists stay in Lists until real notes exist.
 - **Rich task** (`TodoTask`): status (not started / in progress / on hold / completed), priority (low / medium / high / urgent), description, due date, tags, relevant parties (free text), notes, a short number, and progress (share of subtasks done, or a hand-set 0/25/50/75 when there are none). Ticking sets status to completed and unticking restores the previous status. Repeat and the old "steps" were removed (nothing used them).
@@ -68,7 +96,7 @@ A new home-page section ("Lists" card), with the layout and behaviour rebuilt fr
 - **Tasks calendar:** each task and subtask has a "Show in calendar" toggle (needs a due date). The calendar has a built-in **Tasks** calendar (`EventCalendar.isTasks`, can be hidden, not deleted, not selectable for events) filled from `GET /api/todo/calendar`, not stored as events. Drawn by shape, not colour (`TaskChip.tsx`): a task's deadline is a solid chip with a flag, a subtask is a dashed outlined chip with a diamond labelled "Parent › Subtask", both prefixed with the top-level task's number; done = struck through and faded, overdue = red. Tapping opens the task.
 - **Not yet built:** scheduling a task into a time block (they're all-day deadline markers), reordering items by drag, a tag/party picker (they're comma-separated text), filtering the dashboard, deeper nesting.
 
-## In progress: Calendar section — modelled on Outlook for iPhone (branch `Calendar`, started Oct 3)
+## Done: Calendar section — modelled on Outlook for iPhone (branch `Calendar`, started Oct 3)
 
 Replaces the home page's "Scheduling — coming soon" card.
 
@@ -82,7 +110,7 @@ Replaces the home page's "Scheduling — coming soon" card.
 - **Recently deleted.** Deleting a task no longer removes it: `DELETE /api/todo/tasks/:id` stamps `deletedAt` / `deletedRoot` on the task and its subtasks, and a query hook on the `TodoTask` model hides deleted tasks from every ordinary read (pass the `withDeleted` option to see them). `GET /api/todo/deleted`, `POST /tasks/:id/restore`, `DELETE /deleted/:id` and `DELETE /deleted` back `app/lists/deleted.tsx`, reached from a row at the bottom of the Tasks tab. Kept 30 days, purged lazily when the bin is read or something is deleted. A subtask can't be restored while the task it was inside is still deleted. Deleting a whole *list* is still permanent, including anything of its in the bin. Checklists items go through the same route, so they land in the bin too.
 - **Home card order.** A Reorder button beside "Sections" puts the cards in a mode with earlier / later arrows; the order is saved on the device (`home.sectionOrder` in AsyncStorage), with Reset to go back to the default.
 
-## In progress: meals in the calendar (branch `MealsInCalendar`, started Oct 6)
+## Done: meals in the calendar (branch `MealsInCalendar`, started Oct 6)
 
 Step 1 of connecting the Kitchen to the Calendar. The planner stays the only place food is stored; the calendar reads from it.
 
@@ -95,7 +123,7 @@ Step 1 of connecting the Kitchen to the Calendar. The planner stays the only pla
 - **Fixed (Oct 7): confirming before the kitchen data had loaded.** The planner fetched recipes, ingredients and pantry with `.catch(() => {})` and let an entry be confirmed against whatever had arrived. Confirmed too early (most likely while the Render server was still waking), a meal's recipe course was skipped and nothing was deducted from the pantry, with no error: "Light Morning Meal" was stored as 175 kcal with 0 deductions on Oct 7 and 0 kcal with 0 deductions on Oct 3, against 240 kcal and 4 deductions on a normal day. `useEntryConfirm` now takes `ready` and holds a confirm until it is (giving up with a message after 20 s); the planner retries the three loads every 3 s until they all succeed. The calories shown for a meal come from its courses, not the stored figure, so the display was never wrong — the damage is the missed pantry deductions on those days. Not repaired: Oct 3 and Oct 7 breakfasts would need marking not eaten then eaten again.
 - **Not built yet:** food on the Month view's tiny chips; an automatic block for food planned in a slot with no event that day; meal times shown in the planner. Next after this: meal-prep sessions and shopping trips as their own event types.
 
-## In progress: usual meals (branch `UsualMeals`, off `MealsInCalendar`, Oct 7)
+## Done: usual meals (branch `UsualMeals`, off `MealsInCalendar`, Oct 7)
 
 A food you usually have for a meal on certain weekdays (e.g. the same breakfast every weekday), so the planner fills itself and the day only needs confirming.
 
@@ -107,7 +135,7 @@ A food you usually have for a meal on certain weekdays (e.g. the same breakfast 
 - **Adding from the calendar returns there** — at once for a planned add, after the confirm steps for an eaten one — and the meal page then asks whether the new food is just for that day, every that-weekday, or chosen days. The question was felt to be clunky; proposed replacement is a "Repeat weekly" button on the just-added row with no pop-up (not done).
 - **Not built:** making a usual straight from the planner's add sheet or from a planner row (it's only offered on the calendar's meal page); changing a usual's food or amount in place (stop it and make a new one); a usual in a slot with no meal event that day shows in the planner but has no calendar block.
 
-## In progress: web app (branch `WebApp`, started Oct 9)
+## Done: web app (branch `WebApp`, started Oct 9)
 
 The same codebase running in a browser, with a desktop layout for wide windows. **What it's for:** the phone is what's always to hand, so it is built around logging and adding things quickly; the web app is the stationary big screen, used less often, for seeing a lot at once — planning the week, reviewing summary statistics, laying out whole projects later, and any logging that's more comfortable with room. New sections are built once and show on both; the phone app's layout is not to change for the web's sake.
 
@@ -139,7 +167,7 @@ The same codebase running in a browser, with a desktop layout for wide windows. 
 - **Date picker in the browser (Oct 10):** `DatePickerModal` — the due date in the task panel, expiry dates and the rest, seven screens in all — opened the phone's native picker, which doesn't exist on web, so nothing happened. `src/components/forms/DatePickerModal.web.tsx` is its browser version: a month to click a day in. The phone's file is untouched. Time pickers on the phone-shaped pages are still the phone's.
 - **Next:** a desktop page for a meal event's food, which still opens the phone page in a column; desktop layouts for Grocery list and the remaining Lists tabs; mouse equivalents for drag gestures; the receipts plan above; sign-in before it is ever served anywhere but this machine.
 
-## In progress: project planning (branch `Projects`, off `WebApp`, started Oct 9)
+## Done: project planning (branch `Projects`, off `WebApp`, started Oct 9)
 
 Planning a whole project — phases, deliverables, a timeline — without a new section: a project is a **list** of a third kind, so everything a task already does (subtasks, due dates, progress, booked time in the calendar, My Day, Recently deleted) works inside one unchanged. The shape is **group → project → phase → task → subtask** (a group is an area such as AIMS; a project is one piece of work in it).
 
@@ -161,7 +189,7 @@ Planning a whole project — phases, deliverables, a timeline — without a new 
 - **Not checked:** renaming and deleting a phase and reordering phases through the menu (the routes are tested, the clicks aren't), "Turn into a plain list" and a list's "Turn into a project", the goal box saving, completing a task that has open subtasks from the plan, and the phone with a project in its lists (nothing there was changed beyond the menu wording).
 - **Next:** start date, milestone and phase in the task detail panel (they can only be set from the Plan rows); phase headings on the phone's list page; dragging phases to reorder them (their menu does it now), dragging rows on a touch screen, and dragging bars on the timeline; a Board view (columns by status or phase); a Projects card on Home; dependencies between tasks (deferred); scheduling a project's tasks from the desktop calendar.
 
-## In progress: meal prep and shopping from the plan (branch `MealPrep`, off `PhoneProjects`, started Oct 11)
+## Done: meal prep and shopping from the plan (branch `MealPrep`, off `PhoneProjects`, started Oct 11)
 
 **The idea that keeps it flexible:** the meal plan is the only thing anyone commits to. What needs prepping and what needs buying are *worked out* from the plan and the pantry every time either changes, never stored — so a change of mind, an unplanned purchase, or (later) a recommender rewriting the plan can't leave anything downstream wrong. The only other stored things will be *times*: prep sessions and shopping trips as calendar blocks.
 
@@ -223,12 +251,12 @@ Planning a whole project — phases, deliverables, a timeline — without a new 
 - **Checked:** with a temporary trip and session (deleted after): the week plan grouping, the booking dialog creating a session, the desktop preview and the phone event page each listing the sea bass prep; rice no longer listed as prep. **Not checked:** repeating sessions, a session edited through the event card, several sessions splitting the needs between them, the Made ahead switch by tap.
 - **Known rough edges:** a generic ingredient and its branded variants are claimed from separate pools; the buy list is read-only (the grocery list's own "add missing" is still per meal); sessions can only be booked from the desktop week plan (the phone shows them but has no button to make one, and the event forms have no kind picker); ticking a prep off isn't on the list itself — you open the recipe and cook from there; confirming a prep recipe in the planner still counts it as a meal.
 
-## Polish round (branch `Polish`, started Oct 19) — preliminary list
+## Polish round (started Oct 19; merged) — what's left is marked below
 
 From Damien:
 1. ~~**Loading.**~~ Done Oct 19: the server compresses answers (ingredients 760 KB → 53 KB); the app shares identical requests and keeps lists ~20 s, forgetting them on any change (`mobile/src/services/apiCache.ts`); and after signing in it fetches what this device usually needs up front — learned per device, dates relative to today — behind a "Getting your day ready…" cover (at most 6 s). Start-up went from ~30 requests with duplicates to 18 different ones. The ingredient list itself still takes ~0.7 s to build on the server (lean() would be ~0.6 s but drops defaults the app reads — left as is). Originally: after signing in, or opening the app already signed in, screens show nothing for a while. Want: a loading screen that fetches what matters — last, this and next week (meal plan, calendar, tasks), the pantry, the profile — and then shows the app with it already there. (Part of the wait is the free Render server waking up; that part only goes with the paid plan.)
 2. **Settings tab bar on the phone.** Six tabs plus the middle button: the labels run into each other (Home Planning / Devices / Documents / Account).
-3. **Health section on the phone** shows the Kitchen's tab bar (Overview, Planner, Recipes, Pantry) instead of its own.
+3. ~~**Health section on the phone** shows the Kitchen's tab bar.~~ Done Oct 23: Health is a list of its own pages; Nutrition today is a Health page (back goes to Health).
 4. **Redesign the section home page** — phone home built Oct 19 (`mobile/src/components/home/OrbitHome.tsx`, data in `useToday.ts`) from the Claude Design "Orbit" concept: the orb (assistant/mascot) at the centre, six sections on an orbit with today's number each, the selected one at the top (Calendar by default) — tapping another turns the orbit to it, tapping it again opens it; the panel below shows what matters in it now with quick actions; the ring round the orb is the selected section's progress; the orb opens quick actions (later: voice). The orb is drawn without a gradient library (would need a new build): many shaded circles on the phone, a real gradient on the web. Web keeps its dashboard. Dark mode (Oct 19): Settings → Account → Appearance (Automatic / Light / Dark, phone only — the desktop keeps its sidebar switch); palettes in `mobile/src/theme/orbit.tsx` (`useOrbitTheme()`), home is the reference for both. Use `components/ui/Tap` for anything tappable: Pressable's `style={({ pressed }) => …}` is dropped by NativeWind on the phone. Next: refine with real data; motion polish; the orb's states (listening, goals met).
 
 **Renamed Oct 21:** the app is called **Orbit** — app name ("Orbit Beta" for the dev build), the tilted-orbit icon (light and dark for iOS; a BETA-marked one for the dev build; `mobile/assets/images/orbit-*`), launch screen, web favicon and title, sign-in page, privacy policy, invite and reset messages, and every other place the name shows (phone, web and the server's messages). Unchanged on purpose: bundle IDs `com.damienlo.bentobuilder(.dev)`, the EAS project and slug, storage keys (`bentobuilder.*`), database names and the `bentobuilder.pages.dev` address — changing those would make it a different app or sign everyone out. The new name and icon reach the iPhone with the next EAS build. Still to do: a dark-mode tinted icon (iOS makes one if not given), and the Android icon (still the old one; unused). The icon's glow is cut off in a faint square — ask Claude Design for a re-export some time. Originally decided (Oct 19): the app becomes **Orbit** ("everything in its orbit": a centre — the assistant — with your day's things on their paths around it; inner ring today, outer later). Home-screen concepts are being drawn with Claude Design from a brief; then rename everywhere (app name, icon, sign-in page, privacy policy, invite message, web title) in one go, before the next iPhone build. Also: develop the Health section into its own (Today, Body/weight, Nutrients, Goals, Weekly report; activity later). For loading (1), recipes and the grocery list feel slow too.
@@ -244,10 +272,10 @@ Suggested:
 8. **Phone home greeting** says "BentoBuilder"; the web greets by name.
 9. ~~**Sign-in page** uses a generic grid icon — use the app's own icon.~~ Done Oct 21 (sign-in and the server-waking screen show the Orbit icon).
 10. **Settings → Account "Signed in on" and Settings → Devices** overlap — one list of your devices.
-11. Small: remove the two unused profile records; drop the server's old `paired` device list after the next iPhone build.
+11. ~~Small: remove the two unused profile records; drop the server's old `paired` device list after the next iPhone build.~~ Done Oct 23 (the two empty profiles backed up to `backup_20261023_unused_userprofiles`, then deleted).
 12. **Idea (Damien, Oct 21) — the icon comes alive while loading.** On launch / "Getting your day ready…", show the tilted orbit from the icon with its satellites actually going round the orb. After signing in, that loading orbit fades and turns into the home screen's flat orbit (the satellites settling into the section nodes round the main orb) — so the icon, the loading screen and home read as one object. Just an idea for now.
 
-## Accounts (branch `Accounts`, started Oct 18)
+## Done: Accounts (started Oct 18; live Oct 19)
 
 Built: sign-in (own email + password), invite-only accounts, per-person data, a shared food catalog with private additions and per-person settings, Settings → Account (incl. deleting your account), Developer → People (invites with a ready message, reset codes, turn off / remove), privacy policy, and the security fixes from the pre-deploy review. Real data migrated Oct 18 (backup in `server/tmp/backup-real-…`). How to invite people: `INVITING.local.md` (local only, not in git).
 
@@ -330,6 +358,7 @@ Reported by the user while using the app.
 
 ## Branch / deploy housekeeping
 
+- **Oct 23:** `Gym` (Gym, Health, Targets, Your burn, the Gym calendar, desktop layouts) and `Sections` merged into `WorkingSave` and deployed; both deleted locally and on GitHub; `main` fast-forwarded to `WorkingSave`; the rejected "Kitchen pilot stage 1" stash dropped; the exercise icons' original SVGs live outside the repo (`~/Downloads/exercise-icons.zip`; the app ships `mobile/assets/exercise-icons/*.webp`). Back to `main` + `WorkingSave`.
 - `TodoLists` (Lists section) and `ReceiptReviewUI` (built on top of it: receipt-review, add/edit-ingredient and all form-page redesigns in the card style, meal courses that can be ingredients, the all-nutrients panels and planner nutrition overlay, the smarter rating prompt with its settings) merged into `WorkingSave` and pushed (Sept 29); both branches deleted. The repo is back to `main` + `WorkingSave`.
 - `ShoppingMode` and `NutritionTracker` are merged into `WorkingSave` and pushed (Sept 3) — the `planner.tsx`/`mealPlan.ts` conflict (NutritionTracker's extracted `computeDayNutrition` vs ShoppingMode's local extension with restaurant-dish filtering + confirmed-entry exact nutrition) was resolved by porting ShoppingMode's logic into the shared `mealPlan.ts`. Verified: `tsc --noEmit` clean (one pre-existing, unrelated `SwipeableMethods` ref error on both source branches), server boot + route checks passed on both branches' endpoints. A new EAS `preview` build was cut from `WorkingSave` and installed over the real "BentoBuilder" app.
 - Shopping Mode (grocery list from meal-plan shortfalls, store grouping, receipt-scan reconciliation) has now been live-device-tested (Sept 6) — functioning, not perfect (see units issue above).
