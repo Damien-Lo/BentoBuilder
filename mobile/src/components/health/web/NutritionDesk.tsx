@@ -10,7 +10,6 @@ import { useWideWeb } from "@/src/utils/useWideWeb";
 // look, in Health's colour (Nutrition is part of Health, on a phone and in
 // a desktop browser).
 export function NutritionDesk({ children }: { children: ReactNode }) {
-  const wide = useWideWeb();
   return (
     <OrbitSection section="health">
       <OrbitPage>

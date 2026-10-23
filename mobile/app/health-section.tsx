@@ -6,11 +6,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppleHealthCard } from "@/src/components/health/AppleHealthCard";
 import { EnergyCard } from "@/src/components/health/EnergyCard";
+import { WebHealthDashboard } from "@/src/components/health/web/WebHealthDashboard";
 import { toShown, useUnits } from "@/src/components/health/units";
 import { useToday } from "@/src/components/home/useToday";
 import { Hairline, IconTile, ListCard, ListRow, neutralTile, PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
-import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { OrbitPage, OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import { getHealthMetrics } from "@/src/services/healthSync";
 
 // Health on the phone: your body, what you eat, and how you're doing — one
@@ -24,7 +26,8 @@ import { getHealthMetrics } from "@/src/services/healthSync";
 // numbers at the top, then Apple Health's (connected and synced here). In
 // Health's own colour.
 //
-// (In a desktop browser too, as a column — Health's Overview there.)
+// (In a desktop browser, Health's Overview is a dashboard of the same:
+// WebHealthDashboard.)
 
 type Entry = { label: string; icon: keyof typeof Ionicons.glyphMap; path?: string; soon?: boolean };
 
@@ -84,6 +87,16 @@ const GROUPS: { title: string; entries: Entry[] }[] = [
 ];
 
 export default function HealthSection() {
+  // (A desktop browser: everything at a glance — WebHealthDashboard.)
+  const wide = useWideWeb();
+  if (wide)
+    return (
+      <OrbitSection section="health">
+        <OrbitPage>
+          <WebHealthDashboard />
+        </OrbitPage>
+      </OrbitSection>
+    );
   return (
     <OrbitSection section="health">
       <HealthList />
