@@ -1,22 +1,27 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter, type Href } from "expo-router";
-import { useCallback, useState } from "react";
+import { useRouter, type Href } from "expo-router";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { clock } from "@/src/components/gym/activeSession";
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
+import { useFinishedSessions } from "@/src/components/gym/useFinishedSessions";
+import { WebSessionHistory } from "@/src/components/gym/web/WebSessionHistory";
 import { Tap } from "@/src/components/ui/Tap";
-import { getSessions, sessionTotals, type GymSessionRecord } from "@/src/services/gymApi";
+import { sessionTotals, type GymSessionRecord } from "@/src/services/gymApi";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Gym → Progress → History: every workout you've finished, the latest
 // first, under its month — each with how long it took, the sets and the
-// weight moved, and its exercises. Tap one for all its sets.
+// weight moved, and its exercises. Tap one for all its sets. (A desktop
+// browser: a table, a card a month — WebSessionHistory.)
 export default function HistoryScreen() {
+  const router = useRouter();
+  const wide = useWideWeb();
   return (
     <OrbitSection section="gym">
-      <History />
+      {wide ? <WebSessionHistory onBack={() => (router.canGoBack() ? router.back() : router.replace("/gym/progress" as Href))} /> : <History />}
     </OrbitSection>
   );
 }
@@ -29,13 +34,7 @@ const when = (iso: string) => {
 function History() {
   const router = useRouter();
   const { colors: c } = useOrbitTheme();
-  const [sessions, setSessions] = useState<GymSessionRecord[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  useFocusEffect(
-    useCallback(() => {
-      getSessions().then(setSessions, () => setFailed(true));
-    }, []),
-  );
+  const { sessions, failed } = useFinishedSessions();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/gym/progress" as Href));
 
   // By month, the latest first.

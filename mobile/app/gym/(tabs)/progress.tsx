@@ -4,19 +4,32 @@ import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { recordTimeline } from "@/src/components/gym/progressStats";
+import { WebGymProgress } from "@/src/components/gym/web/WebGymProgress";
 import { Hairline, IconTile, ListCard, ListRow, neutralTile } from "@/src/components/settings/AccountParts";
 import { getSessions, sessionTotals, type GymSessionRecord } from "@/src/services/gymApi";
-import { sectionColor, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { OrbitPage, sectionColor, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 import type { Ionicons } from "@expo/vector-icons";
 
 // Gym → Progress: this week at a glance, then a list — like Settings — of
 // the ways to look back: History (every workout you've finished), your
 // records, the muscles you've trained, and your volume over time — each
-// its own page.
+// its own page. (A desktop browser: each as a card — WebGymProgress.)
 
 type Entry = { label: string; icon: keyof typeof Ionicons.glyphMap; path?: string; soon?: boolean; value?: string };
 
 export default function ProgressTab() {
+  const wide = useWideWeb();
+  return wide ? (
+    <OrbitPage>
+      <WebGymProgress />
+    </OrbitPage>
+  ) : (
+    <Progress />
+  );
+}
+
+function Progress() {
   const router = useRouter();
   const { colors: c, dark } = useOrbitTheme();
   const [sessions, setSessions] = useState<GymSessionRecord[] | null>(null);

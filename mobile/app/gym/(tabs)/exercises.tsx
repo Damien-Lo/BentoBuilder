@@ -7,15 +7,29 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { AddToMyList } from "@/src/components/gym/AddToMyList";
 import { ExerciseBrowser } from "@/src/components/gym/ExerciseBrowser";
+import { WebGymExercises } from "@/src/components/gym/web/WebGymExercises";
 import { Tap } from "@/src/components/ui/Tap";
 import { getExercises, inMyList, type Exercise } from "@/src/services/exerciseApi";
-import { useOrbitTheme } from "@/src/theme/orbit";
+import { OrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Gym → Exercises: your list — the core (~140), what you've added from the
 // library, and your own — by muscle group, each folded until opened as the
 // Kitchen's ingredients are, and a search that reaches all of it. New
-// exercise: the whole library to add from, or one of your own.
+// exercise: the whole library to add from, or one of your own. (A desktop
+// browser: each group's exercises as a grid of cards — WebGymExercises.)
 export default function ExercisesTab() {
+  const wide = useWideWeb();
+  return wide ? (
+    <OrbitPage>
+      <WebGymExercises />
+    </OrbitPage>
+  ) : (
+    <Exercises />
+  );
+}
+
+function Exercises() {
   const router = useRouter();
   const { colors: c } = useOrbitTheme();
   const [all, setAll] = useState<Exercise[] | null>(null);

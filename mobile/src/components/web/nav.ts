@@ -174,7 +174,7 @@ export function resolveWebRoute(pathname: string): { section: WebSection | null;
 
 // Pages laid out for the desktop, given the whole pane. Everything else is
 // a phone-shaped page, shown as a column in the middle.
-const DESKTOP_PAGES = ["/", "/calendar", "/calendar/meal-times", "/calendar/sessions", "/kitchen", "/kitchen/needs", "/plan", "/menu", "/grocery-list", "/planner", "/RecipesMainPage", "/PantryMainPage", "/health", "/lists", "/lists/tasks", "/lists/checklists", "/lists/shopping", "/receipts", "/gym/plan", "/health-section"];
+const DESKTOP_PAGES = ["/", "/calendar", "/calendar/meal-times", "/calendar/sessions", "/kitchen", "/kitchen/needs", "/plan", "/menu", "/grocery-list", "/planner", "/RecipesMainPage", "/PantryMainPage", "/health", "/lists", "/lists/tasks", "/lists/checklists", "/lists/shopping", "/receipts", "/gym", "/gym/workouts", "/gym/exercises", "/gym/progress", "/gym/plan", "/gym/history", "/gym/records", "/gym/muscles", "/gym/volume", "/health-section", "/health/burn", "/health/targets", "/health/about"];
 
 // Pages for one thing (its id in the path) that have a desktop layout.
 const DESKTOP_PAGES_UNDER = [
@@ -192,13 +192,21 @@ const DESKTOP_PAGES_UNDER = [
   "/health/nutrients",
   "/health/weight",
   "/health/weekly-report",
+  "/health/section/",
   "/settings-section/",
   "/developer/",
   "/lists/deleted",
   "/lists/task/",
   "/calendar/event/",
+  // (A session — not the live one at /gym/session — a routine, an exercise.)
+  "/gym/sessions/",
+  "/gym/workout/",
+  "/gym/exercise/",
 ];
+// …except these, which stay phone-shaped (a form to fill in).
+const PHONE_PAGES = ["/gym/exercise/new"];
 
 export function isDesktopPage(pathname: string, params: Record<string, unknown>): boolean {
+  if (PHONE_PAGES.includes(pathname)) return false;
   return DESKTOP_PAGES.includes(pathname) || DESKTOP_PAGES_UNDER.some((path) => pathname.startsWith(path));
 }

@@ -1,18 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter, type Href } from "expo-router";
-import { Fragment, useCallback, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
+import { useRouter, type Href } from "expo-router";
+import { Fragment, useState } from "react";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { amount, differs, GoalCard, SETTING, TargetEditor, TargetRow, WeightGoalEditor } from "@/src/components/health/TargetParts";
-import { dayOf, daysAgo, fit, workOutTargets, type Inputs, type Target } from "@/src/components/health/targets";
+import { amount, GoalCard, TargetEditor, TargetRow, WeightGoalEditor } from "@/src/components/health/TargetParts";
+import { fit } from "@/src/components/health/targets";
+import { burnFrom, TARGET_GROUPS, useTargetsPage } from "@/src/components/health/targetsPage";
 import { UnitsToggle, useUnits } from "@/src/components/health/units";
+import { WebTargets } from "@/src/components/health/web/WebTargets";
 import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
-import { getSessions } from "@/src/services/gymApi";
-import { loadHealthInputs } from "@/src/services/healthInputs";
-import { saveSettings, type AppSettings, type TargetPrefs } from "@/src/services/settingsService";
 import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Health → Targets: everything to aim for, in the Health list's groups —
 // Activity & fitness (steps, exercise, workouts), Body (your goal weight and
@@ -24,68 +24,29 @@ import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 // it, see the suggestion, and what it's based on (TargetParts). Suggestions
 // are worked out from what Health knows, with standard values for what it
 // doesn't yet (targets.ts). Calories and macros are Kitchen's daily goals;
-// the rest are kept with the pace in the profile's `targets`.
-
-// In the Health list's order; Body is the goal weight and its pace.
-const GROUPS: (Target["group"] | "Body")[] = ["Activity & fitness", "Body", "Sleep & mind", "Nutrition"];
+// the rest are kept with the pace in the profile's `targets`. (A desktop
+// browser: in columns — WebTargets.)
 
 export default function TargetsScreen() {
+  const wide = useWideWeb();
   return (
     <OrbitSection section="health">
-      <OrbitPage>
-        <Targets />
-      </OrbitPage>
+      <OrbitPage>{wide ? <WebTargets /> : <Targets />}</OrbitPage>
     </OrbitSection>
   );
 }
-
-type Loaded = Omit<Inputs, "units"> & { progress: Record<string, number | null> };
 
 function Targets() {
   const router = useRouter();
   const leave = useGoBack("/health-section");
   const { colors: c } = useOrbitTheme();
   const [units] = useUnits("about");
-  const [data, setData] = useState<Loaded | null>(null);
+  // (What they're worked out from, what's suggested, and saving: targetsPage.)
+  const page = useTargetsPage(units);
   const [editing, setEditing] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
 
-  const load = useCallback(() => {
-    Promise.all([loadHealthInputs(), getSessions().catch(() => [])]).then(([{ today, settings, weights, metrics, intake, eaten }, sessions]) => {
-      // Workouts in each of the last four weeks (seven days at a time), oldest first.
-      const now = Date.now();
-      const workoutsPerWeek = [3, 2, 1, 0].map(
-        (i) =>
-          sessions.filter((s) => {
-            const at = new Date(s.startedAt).getTime();
-            return at >= now - (i + 1) * 7 * 86_400_000 && at < now - i * 7 * 86_400_000;
-          }).length,
-      );
-
-      // How far along each is: today (this week for weekly ones, last night for sleep).
-      const food = eaten.get(today);
-      const on = (type: string, date: string) => metrics.find((m) => m.type === type && m.date === date)?.value ?? null;
-      const weekStart = daysAgo((new Date().getDay() + 6) % 7);
-      const progress: Record<string, number | null> = {
-        calories: food?.calories ?? 0,
-        protein: food?.protein ?? 0,
-        carbs: food?.carbs ?? 0,
-        fats: food?.fats ?? 0,
-        fiber: food?.fiber ?? 0,
-        sodium: food?.sodium ?? 0,
-        water: on("water", today),
-        steps: on("steps", today),
-        exercise: metrics.filter((m) => m.type === "exerciseMinutes" && m.date >= weekStart).reduce((s, m) => s + m.value, 0),
-        workouts: sessions.filter((s) => dayOf(new Date(s.startedAt)) >= weekStart).length,
-        sleep: on("sleep", today),
-      };
-      setData({ settings, weights, metrics, intake, workoutsPerWeek, progress });
-    });
-  }, []);
-  useFocusEffect(load);
-
-  if (!data) {
+  if (!page) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator color={c.muted} />
@@ -93,51 +54,7 @@ function Targets() {
     );
   }
 
-  const { settings, progress } = data;
-  const { targets, burn, aim } = workOutTargets({ ...data, units });
-  // How personal: the targets worked out from data (not the guidelines).
-  const personal = targets.filter((t) => fit(t) !== "guideline");
-  const yours = personal.filter((t) => fit(t) === "yours").length;
-  // What would make them yours: each missing thing once, with how many it'd help.
-  const adds = new Map<string, { href: string; label: string; count: number }>();
-  for (const t of targets)
-    for (const b of t.basis)
-      if (!b.yours && b.add) adds.set(b.add.text, { href: b.add.href, label: b.label, count: (adds.get(b.add.text)?.count ?? 0) + 1 });
-  // The changes to suggest, taken together: with the calories changed too,
-  // the macros are worked out from the new calories.
-  const cal = targets[0];
-  const plan = cal && differs(cal) ? workOutTargets({ ...data, units, settings: { ...settings, dailyCalorieLimit: cal.value } }).targets.map((t) => (t.key === "calories" ? cal : t)) : targets;
-  const changes = plan.filter((t) => (SETTING[t.key] || t.current != null) && differs(t));
-
-  // A change: shown at once, then saved (put back if it isn't).
-  async function save(fields: Partial<AppSettings>) {
-    const before = settings;
-    setData((d) => d && { ...d, settings: { ...d.settings, ...fields } });
-    try {
-      await saveSettings(fields);
-    } catch (error) {
-      setData((d) => d && { ...d, settings: before });
-      Alert.alert("Couldn't save that", error instanceof Error ? error.message : "Something went wrong.");
-    }
-  }
-  // Fields for targets set to these values: Kitchen's goals, or `targets`.
-  function fieldsFor(list: { key: string; value: number }[]) {
-    const fields: Partial<AppSettings> = {};
-    const own: TargetPrefs = { ...settings.targets };
-    for (const { key, value } of list) {
-      const field = SETTING[key];
-      if (field) (fields as Record<string, number>)[field] = value;
-      else own[key as keyof TargetPrefs] = value;
-    }
-    if (list.some((t) => !SETTING[t.key])) fields.targets = own;
-    return fields;
-  }
-  async function takeAll() {
-    setSaving(true);
-    await save(fieldsFor(changes));
-    setSaving(false);
-  }
-
+  const { settings, progress, targets, burn, aim, personal, yours, adds, changes, saving, save, setTarget, takeAll, setPace } = page;
   const open = editing ? (targets.find((t) => t.key === editing) ?? null) : null;
 
   return (
@@ -157,22 +74,20 @@ function Targets() {
             ))}
           </View>
           <Text style={{ marginTop: 10, fontSize: 13.5, lineHeight: 19, color: c.muted }}>
-            {adds.size ? "Where something's missing, a standard value is used for now. Add these to make the suggestions your own:" : "Every suggestion's worked out from your own data."}
+            {adds.length ? "Where something's missing, a standard value is used for now. Add these to make the suggestions your own:" : "Every suggestion's worked out from your own data."}
           </Text>
-          {[...adds.entries()]
-            .sort((a, b) => b[1].count - a[1].count)
-            .map(([text, { href, label, count }]) => (
-              <Tap key={text} onPress={() => router.push(href as Href)} accessibilityRole="link" style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: c.canvas }} pressedStyle={{ opacity: 0.7 }}>
-                <Ionicons name="add-circle" size={18} color={c.ink} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14.5, fontWeight: "600", color: c.text }}>{text}</Text>
-                  <Text style={{ fontSize: 12.5, color: c.muted }}>
-                    {label} · improves {count} target{count === 1 ? "" : "s"}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={c.faint} />
-              </Tap>
-            ))}
+          {adds.map(({ text, href, label, count }) => (
+            <Tap key={text} onPress={() => router.push(href as Href)} accessibilityRole="link" style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: c.canvas }} pressedStyle={{ opacity: 0.7 }}>
+              <Ionicons name="add-circle" size={18} color={c.ink} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14.5, fontWeight: "600", color: c.text }}>{text}</Text>
+                <Text style={{ fontSize: 12.5, color: c.muted }}>
+                  {label} · improves {count} target{count === 1 ? "" : "s"}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={c.faint} />
+            </Tap>
+          ))}
         </View>
 
         {/* The changes suggested to what's set */}
@@ -193,13 +108,13 @@ function Targets() {
           </View>
         )}
 
-        {GROUPS.map((group) => {
+        {TARGET_GROUPS.map((group) => {
           const rows = targets.filter((t) => t.group === group);
           return (
             <Fragment key={group}>
               <Text style={{ marginTop: 24, marginBottom: 8, marginLeft: 4, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, color: c.faint }}>{group.toUpperCase()}</Text>
               {group === "Body" ? (
-                <GoalCard aim={aim} start={settings.startingWeight != null ? { kg: settings.startingWeight, date: settings.startingWeightDate } : null} burn={burn.value} units={units} onPace={(dir, kg) => save({ targets: { ...settings.targets, [dir === "lose" ? "losePace" : "gainPace"]: kg } })} onGoal={() => setGoalOpen(true)} colors={c} />
+                <GoalCard aim={aim} start={settings.startingWeight != null ? { kg: settings.startingWeight, date: settings.startingWeightDate } : null} burn={burn.value} units={units} onPace={setPace} onGoal={() => setGoalOpen(true)} colors={c} />
               ) : (
                 <View style={{ borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, overflow: "hidden" }}>
                   {/* Your burn, which the calories come from */}
@@ -208,7 +123,7 @@ function Targets() {
                       <Ionicons name="information-circle" size={18} color={c.ink} />
                       <Text style={{ flex: 1, fontSize: 13, lineHeight: 18, color: c.text }}>
                         <Text style={{ fontWeight: "700" }}>You burn about {Math.round(burn.value).toLocaleString()} kcal a day</Text>
-                        {burn.how === "measured" ? " — measured from your food logs and weigh-ins" : burn.how === "blending" ? ` — calibrating, ${Math.round((burn.share ?? 0) * 100)}% measured so far` : burn.how === "apple" ? " — from your Apple Watch" : " — estimated from About you"}
+                        {burnFrom(burn)}
                       </Text>
                       <Ionicons name="chevron-forward" size={16} color={c.faint} />
                     </Tap>
@@ -230,7 +145,7 @@ function Targets() {
       <TargetEditor
         target={open}
         units={units}
-        onSave={(value) => save(fieldsFor([{ key: open!.key, value }]))}
+        onSave={(value) => setTarget(open!.key, value)}
         onClose={() => setEditing(null)}
         onAdd={(href) => {
           setEditing(null);

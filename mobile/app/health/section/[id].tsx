@@ -1,67 +1,39 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
+import { useState } from "react";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { DatePickerField } from "@/src/components/forms/DatePickerField";
 import { durationLabel } from "@/src/components/gym/schedule";
-import { formatValue, hasMeasures, SECTIONS, shownValue, STORED_UNIT, unitLabel, type MetricDef } from "@/src/components/health/healthSections";
-import { toShown, toStored, UnitsToggle, useUnits, type UnitPage } from "@/src/components/health/units";
+import { hasMeasures, type MetricDef } from "@/src/components/health/healthSections";
+import { toShown, UnitsToggle, useUnits, type UnitPage } from "@/src/components/health/units";
 import { MetricChart } from "@/src/components/health/MetricChart";
+import { AddReading, clock, dayOf, hm, metricSummary, RANGE_DAYS, sleepSummary, STAGES, useHealthSection, whenLabel, type Range } from "@/src/components/health/SectionParts";
 import { useWatchRatio } from "@/src/components/health/watchCorrection";
+import { WebHealthSection } from "@/src/components/health/web/WebHealthSection";
 import { kcalLabel, mergeWorkouts } from "@/src/components/health/workouts";
 import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
-import { getSessions, type GymSessionRecord } from "@/src/services/gymApi";
-import { getWeightEntries, type WeightEntry } from "@/src/services/weightEntryApi";
-import { addHealthReading, getHealthMetrics, type HealthMetric } from "@/src/services/healthSync";
+import type { GymSessionRecord } from "@/src/services/gymApi";
+import type { WeightEntry } from "@/src/services/weightEntryApi";
+import type { HealthMetric } from "@/src/services/healthSync";
 import { OrbitPage, OrbitSection, SECTION_PALETTE, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
-import { todayDateInputString } from "@/src/utils/date";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // One of Health's sections (healthSections.ts): each of its readings — the
 // latest, the average, and a chart over a week, a month, three or a year —
 // from Apple Health, or typed in (Add). Sleep (each night, its stages) and
 // Workouts (the Watch's and Gym's together) have their own. In Health's
 // colour, in imperial or metric (the page's own switch, beside the title,
-// where it matters).
+// where it matters). (A desktop browser: the readings in a grid, the
+// charts wider — WebHealthSection.)
 // (`id`: activity, body, heart, vitals, mind, drinks, sleep, workouts.)
 
-type Range = "1W" | "1M" | "3M" | "1Y";
-const RANGE_DAYS: Record<Range, number> = { "1W": 7, "1M": 30, "3M": 91, "1Y": 365 };
-
-const pad = (n: number) => String(n).padStart(2, "0");
-const dayOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const daysAgo = (n: number) => dayOf(new Date(Date.now() - n * 86_400_000));
-function whenLabel(date: string) {
-  if (date === dayOf(new Date())) return "Today";
-  if (date === daysAgo(1)) return "Yesterday";
-  return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-}
-const hm = (minutes: number) => `${Math.floor(minutes / 60)}h ${pad(Math.round(minutes % 60))}m`;
-
-// A day's reading of a type: one typed in wins over Apple Health's.
-function byDay(metrics: HealthMetric[], type: string) {
-  const days = new Map<string, HealthMetric>();
-  for (const m of metrics) {
-    if (m.type !== type) continue;
-    const had = days.get(m.date);
-    if (!had || (m.source === "manual" && had.source !== "manual")) days.set(m.date, m);
-  }
-  return days;
-}
-
-const TITLES: Record<string, { title: string; subtitle: string }> = {
-  sleep: { title: "Sleep", subtitle: "Each night, and how it's been going" },
-  workouts: { title: "Workouts", subtitle: "Your Watch's and Gym's, together" },
-};
-
 export default function HealthSectionScreen() {
+  const wide = useWideWeb();
   return (
     <OrbitSection section="health">
-      <OrbitPage>
-        <SectionPage />
-      </OrbitPage>
+      <OrbitPage>{wide ? <WebHealthSection /> : <SectionPage />}</OrbitPage>
     </OrbitSection>
   );
 }
@@ -70,24 +42,9 @@ function SectionPage() {
   const { id = "" } = useLocalSearchParams<{ id: string }>();
   const leave = useGoBack("/health-section");
   const { colors: c } = useOrbitTheme();
-  const section = SECTIONS[id];
-  const head = section ?? TITLES[id];
-  // (A week to start with.)
-  const [range, setRange] = useState<Range>("1W");
-  const [metrics, setMetrics] = useState<HealthMetric[] | null>(null);
-  const [sessions, setSessions] = useState<GymSessionRecord[]>([]);
-  const [weights, setWeights] = useState<WeightEntry[]>([]);
+  // (Its readings over the time chosen: SectionParts.)
+  const { section, head, range, setRange, metrics, sessions, weights, load, from, to } = useHealthSection(id);
   const [adding, setAdding] = useState<MetricDef | null>(null);
-
-  const types = useMemo(() => (id === "sleep" ? ["sleep"] : id === "workouts" ? ["workout"] : (section?.metrics ?? []).flatMap((m) => [m.type, ...(m.pairWith ? [m.pairWith] : [])])), [id, section]);
-  const load = useCallback(() => {
-    getHealthMetrics(types, daysAgo(366)).then(setMetrics, () => setMetrics([]));
-    if (id === "workouts") {
-      getSessions().then(setSessions, () => {});
-      getWeightEntries().then(setWeights, () => {});
-    }
-  }, [types, id]);
-  useFocusEffect(load);
 
   if (!head) {
     return (
@@ -97,9 +54,6 @@ function SectionPage() {
       </SafeAreaView>
     );
   }
-  const from = daysAgo(RANGE_DAYS[range] - 1);
-  const to = dayOf(new Date());
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
@@ -144,15 +98,7 @@ function SectionPage() {
 
 function MetricCard({ def, page, metrics, from, to, onAdd, colors: c }: { def: MetricDef; page: UnitPage; metrics: HealthMetric[]; from: string; to: string; onAdd: () => void; colors: OrbitColors }) {
   const [units] = useUnits(page);
-  const unit = unitLabel(def, units);
-  const days = byDay(metrics, def.type);
-  const pair = def.pairWith ? byDay(metrics, def.pairWith) : null;
-  const all = [...days.values()].sort((a, b) => b.date.localeCompare(a.date));
-  const latest = all[0] ?? null;
-  const inRange = all.filter((m) => m.date >= from && m.date <= to);
-  const average = inRange.length ? shownValue(def, inRange.reduce((s, m) => s + m.value, 0) / inRange.length, units) : null;
-  const show = (v: number, v2?: number) => (pair && v2 != null ? `${Math.round(v)}/${Math.round(v2)}` : formatValue(def, shownValue(def, v, units)));
-  const points = inRange.map((m) => ({ date: m.date, value: shownValue(def, m.value, units), value2: pair?.get(m.date)?.value }));
+  const { unit, pair, latest, averageText, show, points } = metricSummary(def, metrics, from, to, units);
 
   return (
     <View style={{ marginTop: 12, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
@@ -175,13 +121,7 @@ function MetricCard({ def, page, metrics, from, to, onAdd, colors: c }: { def: M
             {!!unit && <Text style={{ fontSize: 13, fontWeight: "600", color: c.muted }}>{unit}</Text>}
             <Text style={{ marginLeft: "auto", fontSize: 12.5, color: c.muted }}>{whenLabel(latest.date)}</Text>
           </View>
-          {average != null && !def.choices && (
-            <Text style={{ marginTop: 1, fontSize: 12.5, color: c.muted }}>
-              Average {formatValue({ ...def, places: def.places ?? (def.total ? 0 : 1) }, average)}
-              {unit ? ` ${unit}` : ""}
-              {def.total ? " a day" : ""}
-            </Text>
-          )}
+          {averageText != null && <Text style={{ marginTop: 1, fontSize: 12.5, color: c.muted }}>{averageText}</Text>}
           {points.length > 0 ? (
             <View style={{ marginTop: 10 }}>
               <MetricChart points={points} from={from} to={to} bars={def.total} />
@@ -197,117 +137,12 @@ function MetricCard({ def, page, metrics, from, to, onAdd, colors: c }: { def: M
   );
 }
 
-// --- Typing one in ---
-
-function AddReading({ def, page, onClose, onSaved, colors: c }: { def: MetricDef | null; page: UnitPage; onClose: () => void; onSaved: () => void; colors: OrbitColors }) {
-  const [units] = useUnits(page);
-  const [value, setValue] = useState("");
-  const [value2, setValue2] = useState("");
-  const [choice, setChoice] = useState<number | null>(null);
-  const [date, setDate] = useState(todayDateInputString());
-  const [saving, setSaving] = useState(false);
-  const reset = () => {
-    setValue("");
-    setValue2("");
-    setChoice(null);
-    setDate(todayDateInputString());
-  };
-  async function save() {
-    if (!def || saving) return;
-    const n = def.choices ? choice : Number(value.replace(",", "."));
-    const n2 = Number(value2);
-    if (n == null || !Number.isFinite(n) || n <= 0 || (def.pairWith && (!Number.isFinite(n2) || n2 <= 0))) return Alert.alert("Put in a reading", def.pairWith ? "Both numbers — e.g. 120 over 80." : "A number above zero.");
-    setSaving(true);
-    try {
-      // (Typed in the units shown: kept in metric.)
-      await addHealthReading(def.type, def.measure ? toStored(def.measure, n, units) : n, STORED_UNIT[def.type] ?? def.unit, date);
-      if (def.pairWith) await addHealthReading(def.pairWith, n2, STORED_UNIT[def.pairWith] ?? def.unit, date);
-      reset();
-      onSaved();
-    } catch (error) {
-      Alert.alert("Couldn't save it", error instanceof Error ? error.message : "Something went wrong.");
-    } finally {
-      setSaving(false);
-    }
-  }
-  const box = (v: string, set: (v: string) => void, label: string) => (
-    <TextInput
-      value={v}
-      onChangeText={(t) => set(t.replace(/[^0-9.,]/g, ""))}
-      keyboardType="decimal-pad"
-      placeholder="—"
-      placeholderTextColor={c.faint}
-      accessibilityLabel={label}
-      autoFocus={label !== "Lower"}
-      style={[{ flex: 1, height: 52, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: c.border, backgroundColor: c.canvas, fontSize: 20, fontWeight: "700", color: c.text, textAlign: "center" }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
-    />
-  );
-  return (
-    <Modal visible={!!def} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <Pressable onPress={onClose} style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.5)" }}>
-          {def && (
-            <Pressable style={{ width: "100%", maxWidth: 420, padding: 18, borderRadius: 22, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
-              <Text style={{ fontSize: 18, fontWeight: "800", color: c.text }}>{def.label}</Text>
-              <View style={{ marginTop: 14 }}>
-                {def.choices ? (
-                  <View style={{ flexDirection: "row", gap: 6 }}>
-                    {def.choices.map((label, i) => {
-                      const on = choice === i + 1;
-                      return (
-                        <Tap key={label} onPress={() => setChoice(i + 1)} accessibilityRole="radio" accessibilityState={{ selected: on }} style={{ flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 12, backgroundColor: on ? c.ink : c.pill }} pressedStyle={{ opacity: 0.75 }}>
-                          <Text style={{ fontSize: 12.5, fontWeight: "700", color: on ? c.onInk : c.onPill }}>{label}</Text>
-                        </Tap>
-                      );
-                    })}
-                  </View>
-                ) : (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    {box(value, setValue, def.pairWith ? "Upper" : def.label)}
-                    {def.pairWith && <Text style={{ fontSize: 20, color: c.muted }}>/</Text>}
-                    {def.pairWith && box(value2, setValue2, "Lower")}
-                    <Text style={{ fontSize: 14, color: c.muted }}>{unitLabel(def, units)}</Text>
-                  </View>
-                )}
-              </View>
-              <View style={{ marginTop: 12 }}>
-                <DatePickerField value={date} onChange={(d) => setDate(d || todayDateInputString())} title="When" />
-              </View>
-              <View style={{ marginTop: 14, flexDirection: "row", gap: 8 }}>
-                <Tap onPress={onClose} accessibilityRole="button" style={{ flex: 1, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: c.pill }} pressedStyle={{ opacity: 0.7 }}>
-                  <Text style={{ fontSize: 15, fontWeight: "600", color: c.onPill }}>Cancel</Text>
-                </Tap>
-                <Tap onPress={() => void save()} disabled={saving} accessibilityRole="button" style={{ flex: 1, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: c.ink, opacity: saving ? 0.6 : 1 }} pressedStyle={{ opacity: 0.85 }}>
-                  <Text style={{ fontSize: 15, fontWeight: "700", color: c.onInk }}>{saving ? "Saving…" : "Save"}</Text>
-                </Tap>
-              </View>
-            </Pressable>
-          )}
-        </Pressable>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
 // --- Sleep: last night, its stages, the nights over time ---
 
-const STAGES: { key: string; label: string; opacity: number }[] = [
-  { key: "deep", label: "Deep", opacity: 1 },
-  { key: "core", label: "Core", opacity: 0.7 },
-  { key: "rem", label: "REM", opacity: 0.45 },
-  { key: "awake", label: "Awake", opacity: 0.18 },
-];
-
 function Sleep({ metrics, from, to, colors: c }: { metrics: HealthMetric[]; from: string; to: string; colors: OrbitColors }) {
-  const nights = [...byDay(metrics, "sleep").values()].sort((a, b) => b.date.localeCompare(a.date));
-  const last = nights[0] ?? null;
-  const inRange = nights.filter((n) => n.date >= from && n.date <= to);
-  const avg = inRange.length ? inRange.reduce((s, n) => s + n.value, 0) / inRange.length : null;
-  const avgStage = (k: string) => (inRange.length ? inRange.reduce((s, n) => s + (n.detail?.[k] ?? 0), 0) / inRange.length : 0);
-  const time = (iso?: string | null) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "");
+  const { last, inRange, avg, avgStage, stagesTotal } = sleepSummary(metrics, from, to);
 
   if (!last) return <Text style={{ marginTop: 20, fontSize: 14, lineHeight: 20, color: c.muted }}>Your nights come from Apple Health once it&apos;s connected — sleep with your Watch on, or set up Sleep on your iPhone.</Text>;
-  const stagesTotal = STAGES.reduce((s, st) => s + (last.detail?.[st.key] ?? 0), 0);
 
   return (
     <>
@@ -315,7 +150,7 @@ function Sleep({ metrics, from, to, colors: c }: { metrics: HealthMetric[]; from
         <Text style={{ fontSize: 12.5, fontWeight: "600", color: c.muted }}>{last.date === dayOf(new Date()) ? "Last night" : whenLabel(last.date)}</Text>
         <Text style={{ marginTop: 2, fontSize: 30, fontWeight: "800", color: c.text }}>{hm(last.value)}</Text>
         <Text style={{ fontSize: 13, color: c.muted }}>
-          asleep · {time(last.start)} – {time(last.end)}
+          asleep · {clock(last.start)} – {clock(last.end)}
         </Text>
         {stagesTotal > 0 && (
           <>

@@ -1,16 +1,20 @@
-import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useRouter, type Href } from "expo-router";
+import { useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
 import { Chips, GroupHeading, GymPage } from "@/src/components/gym/GymTabPage";
 import { weeklyTotals, type WeekTotals } from "@/src/components/gym/progressStats";
+import { useFinishedSessions } from "@/src/components/gym/useFinishedSessions";
+import { WebVolume } from "@/src/components/gym/web/WebVolume";
 import { Tap } from "@/src/components/ui/Tap";
-import { getSessions, type GymSessionRecord } from "@/src/services/gymApi";
-import { useOrbitTheme } from "@/src/theme/orbit";
+import { OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Gym → Progress → Volume over time: week by week, over 12 weeks or 6
 // months, the weight you moved — or the sets, or the workouts — as bars.
 // Tap a week for its numbers; the week's against your average beside it.
+// (A desktop browser: the bars across the page, every week as a table
+// under them — WebVolume.)
 
 type Metric = "volume" | "sets" | "workouts";
 const METRICS: { id: Metric; label: string }[] = [
@@ -28,6 +32,14 @@ const amount = (n: number, metric: Metric) => (metric === "volume" ? `${Math.rou
 const weekOf = (d: Date) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 export default function VolumeScreen() {
+  const router = useRouter();
+  const wide = useWideWeb();
+  if (wide)
+    return (
+      <OrbitSection section="gym">
+        <WebVolume onBack={() => (router.canGoBack() ? router.back() : router.replace("/gym/progress" as Href))} />
+      </OrbitSection>
+    );
   return (
     <GymPage title="Volume over time" subtitle="How much you've done, week by week" parent="/gym/progress">
       <Volume />
@@ -37,16 +49,10 @@ export default function VolumeScreen() {
 
 function Volume() {
   const { colors: c } = useOrbitTheme();
-  const [sessions, setSessions] = useState<GymSessionRecord[] | null>(null);
-  const [failed, setFailed] = useState(false);
+  const { sessions, failed } = useFinishedSessions();
   const [metric, setMetric] = useState<Metric>("volume");
   const [span, setSpan] = useState<Span>("12");
   const [picked, setPicked] = useState<number | null>(null);
-  useFocusEffect(
-    useCallback(() => {
-      getSessions().then(setSessions, () => setFailed(true));
-    }, []),
-  );
   if (!sessions) return failed ? <Text style={{ marginTop: 24, textAlign: "center", fontSize: 14, color: c.muted }}>Couldn&apos;t load your workouts.</Text> : <ActivityIndicator style={{ marginTop: 24 }} color={c.muted} />;
 
   const weeks = weeklyTotals(sessions, Number(span));

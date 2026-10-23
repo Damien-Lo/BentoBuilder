@@ -17,20 +17,8 @@ export function ExerciseBrowser({ all, picked, onPick, onOpen }: { all: Exercise
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
 
-  const core = useMemo(() => all.filter(inMyList), [all]);
-  const groups = useMemo(
-    () => EXERCISE_GROUPS.map((group) => ({ group, exercises: core.filter((e) => e.group === group).sort((a, b) => a.name.localeCompare(b.name)) })).filter((g) => g.exercises.length > 0),
-    [core],
-  );
-  // Every word, anywhere in the name.
-  const key = query.trim().toLowerCase();
-  const found = useMemo(() => {
-    const words = key.split(/\s+/).filter(Boolean);
-    if (!words.length) return null;
-    const hits = all.filter((e) => words.every((w) => e.name.toLowerCase().includes(w)));
-    const more = hits.filter((e) => !inMyList(e));
-    return { core: hits.filter(inMyList), more: more.slice(0, 60), moreCount: more.length };
-  }, [all, key]);
+  const groups = useMemo(() => myListByGroup(all), [all]);
+  const found = useMemo(() => searchExercises(all, query), [all, query]);
 
   const toggle = (group: string) =>
     setOpen((prev) => {
@@ -106,6 +94,24 @@ export function ExerciseBrowser({ all, picked, onPick, onOpen }: { all: Exercise
       </View>
     </View>
   );
+}
+
+// Your list (the core, what you've added, your own) by muscle group, each
+// A to Z. (Also Gym's desktop Exercises.)
+export function myListByGroup(all: Exercise[]) {
+  const core = all.filter(inMyList);
+  return EXERCISE_GROUPS.map((group) => ({ group, exercises: core.filter((e) => e.group === group).sort((a, b) => a.name.localeCompare(b.name)) })).filter((g) => g.exercises.length > 0);
+}
+
+// A search: every word, anywhere in the name — what's in your list, then
+// the first 60 of the rest of the library (and how many there are). Null
+// when nothing's typed.
+export function searchExercises(all: Exercise[], query: string) {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  const hits = all.filter((e) => words.every((w) => e.name.toLowerCase().includes(w)));
+  const more = hits.filter((e) => !inMyList(e));
+  return { core: hits.filter(inMyList), more: more.slice(0, 60), moreCount: more.length };
 }
 
 function Label({ text, top, colors: c }: { text: string; top: number; colors: OrbitColors }) {

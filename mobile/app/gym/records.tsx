@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter, type Href } from "expo-router";
-import { useCallback, useState } from "react";
+import { useRouter, type Href } from "expo-router";
+import { useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
@@ -8,16 +8,27 @@ import { GroupHeading, GymPage } from "@/src/components/gym/GymTabPage";
 import { exerciseBests, recordTimeline } from "@/src/components/gym/progressStats";
 import { dayLabel } from "@/src/components/gym/schedule";
 import { trackOf, type Track } from "@/src/components/gym/tracking";
+import { useFinishedSessions } from "@/src/components/gym/useFinishedSessions";
+import { WebRecords } from "@/src/components/gym/web/WebRecords";
 import { Tap } from "@/src/components/ui/Tap";
-import { getSessions, type GymSessionRecord } from "@/src/services/gymApi";
-import { useOrbitTheme } from "@/src/theme/orbit";
+import { OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Gym → Progress → Personal records: the records you've set lately (each
 // beating your best before — heavier, more reps, less help, longer — and
 // by how much), then every exercise you've done with its best (and, for a
 // lift, its best estimated one-rep max: 1RM) —
-// tap one for all of it, on its own page.
+// tap one for all of it, on its own page. (A desktop browser: the bests as
+// a table, the recent records beside them — WebRecords.)
 export default function RecordsScreen() {
+  const router = useRouter();
+  const wide = useWideWeb();
+  if (wide)
+    return (
+      <OrbitSection section="gym">
+        <WebRecords onBack={() => (router.canGoBack() ? router.back() : router.replace("/gym/progress" as Href))} />
+      </OrbitSection>
+    );
   return (
     <GymPage title="Personal records" subtitle="Your best lifts, and when you set them" parent="/gym/progress">
       <Records />
@@ -37,14 +48,8 @@ const lastLabel = (iso: string) => {
 function Records() {
   const router = useRouter();
   const { colors: c } = useOrbitTheme();
-  const [sessions, setSessions] = useState<GymSessionRecord[] | null>(null);
-  const [failed, setFailed] = useState(false);
+  const { sessions, failed } = useFinishedSessions();
   const [showAll, setShowAll] = useState(false);
-  useFocusEffect(
-    useCallback(() => {
-      getSessions().then(setSessions, () => setFailed(true));
-    }, []),
-  );
   if (!sessions) return failed ? <Text style={{ marginTop: 24, textAlign: "center", fontSize: 14, color: c.muted }}>Couldn&apos;t load your records.</Text> : <ActivityIndicator style={{ marginTop: 24 }} color={c.muted} />;
 
   const timeline = recordTimeline(sessions);

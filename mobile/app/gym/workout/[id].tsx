@@ -8,13 +8,16 @@ import { clearActiveSession, loadActiveSession } from "@/src/components/gym/acti
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
 import { MuscleMap } from "@/src/components/gym/MuscleMap";
 import { draftOf, FIELDS, trackOf } from "@/src/components/gym/tracking";
+import { WebWorkoutDetail } from "@/src/components/gym/web/WebWorkoutDetail";
 import { Tap } from "@/src/components/ui/Tap";
 import { getWorkout, restLabel, type GymWorkout } from "@/src/services/gymApi";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // One workout you've built (Gym → Workouts → a card): what it is — its
 // exercises and sets, the muscles it works — with Start and Edit. Each
-// exercise opens its own page.
+// exercise opens its own page. (A desktop browser: the exercises down the
+// left, the rest beside them — WebWorkoutDetail.)
 export default function WorkoutScreen() {
   return (
     <OrbitSection section="gym">
@@ -27,6 +30,7 @@ function WorkoutPage() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors: c } = useOrbitTheme();
+  const wide = useWideWeb();
   const [workout, setWorkout] = useState<GymWorkout | null>(null);
   const [failed, setFailed] = useState(false);
   // (Again on coming back from Edit.)
@@ -50,6 +54,11 @@ function WorkoutPage() {
       { text: "Discard it", style: "destructive", onPress: () => void clearActiveSession().then(go) },
     ]);
   }
+
+  const edit = () => workout && router.push(`/gym/build?id=${workout._id}` as Href);
+
+  // (A desktop browser: its own layout.)
+  if (wide) return <WebWorkoutDetail workout={workout} failed={failed} onBack={back} onStart={() => void start()} onEdit={edit} />;
 
   const exercises = workout?.exercises.filter((e) => e.exercise) ?? [];
   const sets = exercises.reduce((n, e) => n + e.sets.length, 0);
@@ -78,7 +87,7 @@ function WorkoutPage() {
               <Ionicons name="play" size={18} color={c.onInk} />
               <Text style={{ fontSize: 16, fontWeight: "700", color: c.onInk }}>Start workout</Text>
             </Tap>
-            <Tap onPress={() => router.push(`/gym/build?id=${workout._id}` as Href)} accessibilityRole="button" style={{ flex: 1, height: 50, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: c.pill }} pressedStyle={{ opacity: 0.7 }}>
+            <Tap onPress={edit} accessibilityRole="button" style={{ flex: 1, height: 50, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: c.pill }} pressedStyle={{ opacity: 0.7 }}>
               <Ionicons name="create-outline" size={18} color={c.onPill} />
               <Text style={{ fontSize: 16, fontWeight: "600", color: c.onPill }}>Edit</Text>
             </Tap>

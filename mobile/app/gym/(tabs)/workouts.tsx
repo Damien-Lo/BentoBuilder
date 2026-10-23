@@ -6,14 +6,28 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { clock, loadActiveSession, type ActiveSession } from "@/src/components/gym/activeSession";
 import { useStartWorkout } from "@/src/components/gym/useStartWorkout";
+import { WebGymWorkouts } from "@/src/components/gym/web/WebGymWorkouts";
 import { Tap } from "@/src/components/ui/Tap";
 import { getWorkouts, type GymWorkout } from "@/src/services/gymApi";
-import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { OrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Gym → Workouts: the workouts you've built — each a card, with Edit (to
 // change it) and Start (to do it: gym/session) under it — and a button to
-// build a new one. One under way shows at the top, to go back to.
+// build a new one. One under way shows at the top, to go back to. (A
+// desktop browser: the workouts as a grid of cards — WebGymWorkouts.)
 export default function WorkoutsTab() {
+  const wide = useWideWeb();
+  return wide ? (
+    <OrbitPage>
+      <WebGymWorkouts />
+    </OrbitPage>
+  ) : (
+    <Workouts />
+  );
+}
+
+function Workouts() {
   const router = useRouter();
   const { colors: c } = useOrbitTheme();
   const [workouts, setWorkouts] = useState<GymWorkout[] | null>(null);

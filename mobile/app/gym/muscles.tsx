@@ -1,18 +1,22 @@
-import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useRouter, type Href } from "expo-router";
+import { useState } from "react";
 import { ActivityIndicator, Platform, Text, View } from "react-native";
 
 import { Chips, GroupHeading, GymPage } from "@/src/components/gym/GymTabPage";
 import { heatColor, MuscleHeatMap, useDark } from "@/src/components/gym/MuscleMap";
 import { MUSCLES, muscleLabel, muscleSets } from "@/src/components/gym/progressStats";
 import { startOfWeek } from "@/src/components/gym/schedule";
+import { useFinishedSessions } from "@/src/components/gym/useFinishedSessions";
+import { WebMusclesTrained } from "@/src/components/gym/web/WebMusclesTrained";
 import { themeColor } from "@/src/components/web/theme";
-import { getSessions, type GymSessionRecord } from "@/src/services/gymApi";
-import { useOrbitTheme } from "@/src/theme/orbit";
+import { OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Gym → Progress → Muscles trained: over this week, 30 days or 3 months,
 // how many sets each muscle got — on the body (the more, the stronger the
 // colour) and as a list, the most first — and the ones that got none.
+// (A desktop browser: the body large, the list beside it —
+// WebMusclesTrained.)
 
 type Range = "week" | "month" | "quarter";
 const RANGES: { id: Range; label: string }[] = [
@@ -32,6 +36,14 @@ const setsLabel = (n: number) => String(Math.round(n * 2) / 2);
 const hexRgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(",");
 
 export default function MusclesScreen() {
+  const router = useRouter();
+  const wide = useWideWeb();
+  if (wide)
+    return (
+      <OrbitSection section="gym">
+        <WebMusclesTrained onBack={() => (router.canGoBack() ? router.back() : router.replace("/gym/progress" as Href))} />
+      </OrbitSection>
+    );
   return (
     <GymPage title="Muscles trained" subtitle="The sets each muscle got" parent="/gym/progress">
       <Muscles />
@@ -42,14 +54,8 @@ export default function MusclesScreen() {
 function Muscles() {
   const { colors: c } = useOrbitTheme();
   const dark = useDark();
-  const [sessions, setSessions] = useState<GymSessionRecord[] | null>(null);
-  const [failed, setFailed] = useState(false);
+  const { sessions, failed } = useFinishedSessions();
   const [range, setRange] = useState<Range>("week");
-  useFocusEffect(
-    useCallback(() => {
-      getSessions().then(setSessions, () => setFailed(true));
-    }, []),
-  );
   if (!sessions) return failed ? <Text style={{ marginTop: 24, textAlign: "center", fontSize: 14, color: c.muted }}>Couldn&apos;t load your workouts.</Text> : <ActivityIndicator style={{ marginTop: 24 }} color={c.muted} />;
 
   const from = since(range);

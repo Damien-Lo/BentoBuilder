@@ -9,17 +9,21 @@ import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
 import { SessionBody } from "@/src/components/gym/SessionBody";
 import { sessionAchievements, type Achievement } from "@/src/components/gym/progressStats";
 import { cleanField, draftOf, FIELDS, fromDraft, setComplete, setText, TIME_HINT, trackOf, type DraftField, type SetDraft } from "@/src/components/gym/tracking";
+import { WebSessionDetail } from "@/src/components/gym/web/WebSessionDetail";
 import { showActions } from "@/src/components/todo/theme";
 import { Tap } from "@/src/components/ui/Tap";
 import { deleteSession, getSession, getSessions, SET_TYPES, setLabels, setTypeOf, sessionTotals, updateSession, type GymSessionRecord, type SetType } from "@/src/services/gymApi";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // One finished workout: when, how long, what it came to, and every set of
 // every exercise (each exercise opens its own page), and the records it set
 // (each exercise's best, or its total weight, beaten). Just finished
 // (`finished`), it opens with how it went — and any records it set. It can
 // be corrected (Edit: its name, each set's weight, reps and type, sets and
-// exercises taken out or added) or deleted.
+// exercises taken out or added) or deleted. (A desktop browser: the
+// exercises down the left, the rest beside them — WebSessionDetail; being
+// edited, this page in a column.)
 export default function SessionDetailScreen() {
   return (
     <OrbitSection section="gym">
@@ -43,6 +47,7 @@ function SessionDetail() {
   const router = useRouter();
   const { id, finished } = useLocalSearchParams<{ id: string; finished?: string }>();
   const { colors: c } = useOrbitTheme();
+  const wide = useWideWeb();
   const [session, setSession] = useState<GymSessionRecord | null>(null);
   const [failed, setFailed] = useState(false);
   // What it achieved: records beaten (null while loading).
@@ -109,13 +114,22 @@ function SessionDetail() {
     ]);
   }
 
+  const done = () => (router.canGoBack() ? router.back() : router.replace("/gym" as Href));
+
+  // (A desktop browser, not editing: its own layout.)
+  if (wide && !draft) {
+    return <WebSessionDetail session={session} failed={failed} records={records} all={all} finished={!!finished} onBack={back} onDone={done} onEdit={() => session && setDraft(sessionDraft(session))} onDelete={remove} />;
+  }
+  // (Editing there: this page, in a column.)
+  const column = wide ? ({ width: "100%", maxWidth: 720, alignSelf: "center" } as const) : null;
+
   const t = session ? sessionTotals(session) : null;
   const d = session ? new Date(session.finishedAt) : null;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>
       {/* Back · Edit — or, editing, Cancel · Save */}
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingTop: 4 }}>
+      <View style={[{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingTop: 4 }, column]}>
         {draft ? (
           <Tap onPress={cancel} accessibilityRole="button" style={{ borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: c.pill }} pressedStyle={{ opacity: 0.7 }}>
             <Text style={{ fontSize: 15, fontWeight: "600", color: c.onPill }}>Cancel</Text>
@@ -141,9 +155,9 @@ function SessionDetail() {
         failed ? <Text style={{ textAlign: "center", marginTop: 40, fontSize: 14, color: c.muted }}>Couldn&apos;t load this workout.</Text> : <ActivityIndicator style={{ marginTop: 40 }} color={c.muted} />
       ) : (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 60 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={[{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 60 }, column]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {/* Just finished: how it went */}
-            {finished && !draft && <Finished records={records ?? []} onDone={() => (router.canGoBack() ? router.back() : router.replace("/gym" as Href))} colors={c} />}
+            {finished && !draft && <Finished records={records ?? []} onDone={done} colors={c} />}
 
             {draft ? (
               <TextInput

@@ -10,11 +10,13 @@ import { lbs, METRICS_FOR, personalRecords, sessionValue, type ExerciseSession, 
 import { MuscleDot, MuscleMap, PRIMARY_COLOR, SECONDARY_COLOR } from "@/src/components/gym/MuscleMap";
 import { ProgressChart } from "@/src/components/gym/ProgressChart";
 import { setText, timeText, trackOf, type Track } from "@/src/components/gym/tracking";
+import { WebExerciseDetail } from "@/src/components/gym/web/WebExerciseDetail";
 import { showActions } from "@/src/components/todo/theme";
 import { Tap } from "@/src/components/ui/Tap";
 import { exerciseImage, getExercise, groupLabel, type Exercise } from "@/src/services/exerciseApi";
 import { getExerciseSessions, setLabels, setTypeOf, type ExerciseSessionRecord } from "@/src/services/gymApi";
 import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // One exercise: the muscles it works (on the body, front and back), then
 // three tabs, as Hevy has them —
@@ -23,6 +25,8 @@ import { OrbitSection, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit
 //   History   every session you've done it in;
 //   How to    the steps.
 // (Your progress and history come from the workouts you've finished.)
+// (A desktop browser: all three on one page, side by side —
+// WebExerciseDetail.)
 
 type Tab = "summary" | "history" | "howto";
 const TABS: { id: Tab; label: string }[] = [
@@ -56,6 +60,7 @@ function ExercisePage() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors: c } = useOrbitTheme();
+  const wide = useWideWeb();
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<Tab>("summary");
@@ -69,6 +74,9 @@ function ExercisePage() {
     if (id) getExerciseSessions(id).then(setRecords, () => {});
   }, [id]);
   const sessions: ExerciseSession[] = useMemo(() => records.map((r) => ({ date: localDate(r.finishedAt), sets: r.sets })), [records]);
+
+  // (A desktop browser: its own layout.)
+  if (wide) return <WebExerciseDetail exercise={exercise} failed={failed} sessions={sessions} history={records} onBack={back} />;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>

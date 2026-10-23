@@ -1,22 +1,22 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter, type Href } from "expo-router";
-import { useCallback, useState } from "react";
+import { useRouter, type Href } from "expo-router";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { clock, loadActiveSession, type ActiveSession } from "@/src/components/gym/activeSession";
+import { Ionicons } from "@expo/vector-icons";
+
+import { clock } from "@/src/components/gym/activeSession";
 import { lbs } from "@/src/components/gym/exerciseStats";
+import { caloriesOf, plannedDays, startPlannedPath, todayPlanned, useGymOverview } from "@/src/components/gym/overview";
 import { sessionRecords } from "@/src/components/gym/progressStats";
-import { sessionCalories, weightOn } from "@/src/components/gym/sessionEnergy";
 import { dayLabel, durationLabel, thisWeek, weekStreak, type WeekDay } from "@/src/components/gym/schedule";
-import { addDays, minutesLabel } from "@/src/components/calendar/calendarUtils";
-import { useGymPlan, type PlannedDay } from "@/src/components/gym/plan";
-import { useWatchRatio } from "@/src/components/health/watchCorrection";
-import { parseLocalDate, todayStr } from "@/src/utils/mealPlan";
+import { minutesLabel } from "@/src/components/calendar/calendarUtils";
+import type { PlannedDay } from "@/src/components/gym/plan";
+import { WebGymOverview } from "@/src/components/gym/web/WebGymOverview";
+import { toDateStr } from "@/src/utils/mealPlan";
 import { Tap } from "@/src/components/ui/Tap";
-import { getSessions, sessionTotals, type GymSessionRecord } from "@/src/services/gymApi";
-import { getWeightEntries, type WeightEntry } from "@/src/services/weightEntryApi";
-import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { sessionTotals, type GymSessionRecord } from "@/src/services/gymApi";
+import { OrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
+import { useWideWeb } from "@/src/utils/useWideWeb";
 
 // Gym → Overview: how training's going at a glance — what's planned today
 // (the Gym calendar's workouts, to start from here) or the workout under
@@ -24,31 +24,22 @@ import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 // the weekly plan a tap away, this week day by day, the weeks in a
 // row you've trained, the time trained and calories burned (each session's,
 // measured or estimated: sessionEnergy.ts), and how the last workout went.
+// (A desktop browser: all of it as a dashboard — WebGymOverview.)
 export default function GymOverviewTab() {
+  const wide = useWideWeb();
+  return wide ? (
+    <OrbitPage>
+      <WebGymOverview />
+    </OrbitPage>
+  ) : (
+    <GymOverview />
+  );
+}
+
+function GymOverview() {
   const router = useRouter();
   const { colors: c } = useOrbitTheme();
-  const [sessions, setSessions] = useState<GymSessionRecord[] | null>(null);
-  const [active, setActive] = useState<ActiveSession | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [weights, setWeights] = useState<WeightEntry[]>([]);
-  const ratio = useWatchRatio();
-  const [plan, loadPlan] = useGymPlan();
-  const today = todayStr();
-  useFocusEffect(
-    useCallback(() => {
-      const monday = addDays(today, -((parseLocalDate(today).getDay() + 6) % 7));
-      void loadPlan(monday, addDays(monday, 6), today);
-      getWeightEntries().then(setWeights, () => {});
-      getSessions().then(
-        (s) => {
-          setSessions(s);
-          setFailed(false);
-        },
-        () => setFailed(true),
-      );
-      loadActiveSession().then(setActive);
-    }, [loadPlan, today]),
-  );
+  const { sessions, active, failed, weights, ratio, plan, today } = useGymOverview();
   const resume = () => router.push("/gym/session" as Href);
 
   const loaded = !!sessions;
@@ -56,9 +47,9 @@ export default function GymOverviewTab() {
   const streak = sessions ? weekStreak(sessions) : 0;
   const last = sessions?.[0] ?? null;
   const weekday = new Date().toLocaleDateString(undefined, { weekday: "long" });
-  const todayPlan = (plan ?? []).filter((p) => p.date === today).sort((a, b) => a.event.startMinutes - b.event.startMinutes);
-  const planned = new Set((plan ?? []).filter((p) => p.status !== "skipped").map((p) => p.date));
-  const start = (p: PlannedDay) => (p.routine ? router.push(`/gym/session?workout=${p.routine._id}&plan=${p.event._id}&planDate=${p.date}` as Href) : router.push("/gym/workouts" as Href));
+  const todayPlan = todayPlanned(plan, today);
+  const planned = plannedDays(plan);
+  const start = (p: PlannedDay) => router.push(startPlannedPath(p) as Href);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>
@@ -120,7 +111,7 @@ export default function GymOverviewTab() {
                 <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                     {week.days.map((day) => (
-                      <Day key={day.date.toISOString()} day={day} planned={planned.has(dayKey(day.date))} isPast={dayKey(day.date) < today} colors={c} />
+                      <Day key={day.date.toISOString()} day={day} planned={planned.has(toDateStr(day.date))} isPast={toDateStr(day.date) < today} colors={c} />
                     ))}
                   </View>
                   {week.sessions.length > 0 && (
@@ -129,13 +120,12 @@ export default function GymOverviewTab() {
                       <Text style={{ flex: 1, fontSize: 14, color: c.muted }}>
                         <Text style={{ fontWeight: "700", color: c.text }}>{durationLabel(week.sessions.reduce((n, s) => n + sessionTotals(s).seconds, 0))}</Text> trained
                         {(() => {
-                          const cals = week.sessions.map((s) => sessionCalories(s, sessions!, weightOn(weights, s.startedAt), ratio));
-                          const kcal = cals.reduce((n, x) => n + (x?.kcal ?? 0), 0);
+                          const { kcal, estimated } = caloriesOf(week.sessions, sessions!, weights, ratio);
                           return kcal ? (
                             <>
                               {" · "}
                               <Text style={{ fontWeight: "700", color: c.text }}>
-                                {cals.some((x) => x && !x.measured) ? "~" : ""}
+                                {estimated ? "~" : ""}
                                 {kcal.toLocaleString()} kcal
                               </Text>{" "}
                               burned
@@ -243,8 +233,6 @@ function Figure({ label, value, colors: c }: { label: string; value: string; col
     </View>
   );
 }
-
-const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 // A workout planned today: its routine and time, and Start — or, done, the
 // session; skipped, said so. Tapped: its calendar event.
