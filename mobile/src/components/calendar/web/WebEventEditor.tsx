@@ -6,6 +6,7 @@ import { TimeField } from "@/src/components/web/fields";
 import { Button, hoverable } from "@/src/components/web/ui";
 import { SECTION_PALETTE, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 import { MEAL_TYPES, SESSION_TYPES, type EventCalendar, type EventOccurrence } from "@/src/services/calendarApi";
+import { GymPlanEditor } from "@/src/components/calendar/GymPlanEditor";
 import { hexToRgba, parseLocalDate } from "@/src/utils/mealPlan";
 
 import {
@@ -309,6 +310,15 @@ function EditorCard({
                   })}
                 </View>
                 <Text style={{ marginLeft: 10, alignSelf: "center", fontSize: 12, color: c.faint }}>shows this meal from your planner</Text>
+              </FormRow>
+            )}
+
+            {/* What's planned — only in the Gym calendar */}
+            {form.isGym && (
+              <FormRow icon="barbell-outline" z={1} grow>
+                <View style={{ flex: 1 }}>
+                  <GymPlanEditor plan={form.gymPlan} onChange={form.setGymPlan} routines={form.routines} days={form.planDays} repeats={!!form.repeatFrequency} colors={c} />
+                </View>
               </FormRow>
             )}
 

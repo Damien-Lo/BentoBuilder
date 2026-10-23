@@ -5,7 +5,6 @@ import { Alert, Text, View } from "react-native";
 
 import { durationLabel } from "@/src/components/gym/schedule";
 import { Tap } from "@/src/components/ui/Tap";
-import { showActions } from "@/src/components/todo/theme";
 import { gymStatusOn, setGymDay, setGymStatus, type CalendarEvent } from "@/src/services/calendarApi";
 import { getSession, getSessions, getWorkout, getWorkouts, sessionTotals, type GymSessionRecord, type GymWorkout } from "@/src/services/gymApi";
 import { SECTION_PALETTE, type OrbitColors } from "@/src/theme/orbit";
@@ -57,20 +56,20 @@ export function PlannedWorkout({ event, date, onChange, colors: c }: { event: Ca
   }
   const start = () => (planned ? router.push(`/gym/session?workout=${planned}&plan=${event._id}&planDate=${date}` as Href) : router.push("/gym/workouts" as Href));
   // This day's workout, changed (the series stays as it is).
+  // This day's workout, changed (the series stays as it is): the routines
+  // as chips, opened here.
+  const [changing, setChanging] = useState<GymWorkout[] | null>(null);
   async function changeDay() {
-    const routines = await getWorkouts().catch(() => [] as GymWorkout[]);
-    const set = async (workout: string | null | "series") => {
-      try {
-        onChange(await setGymDay(event._id, date, workout));
-      } catch (error) {
-        Alert.alert("Couldn't change it", error instanceof Error ? error.message : "Something went wrong.");
-      }
-    };
-    showActions("This day's workout", [
-      ...routines.filter((w) => w._id !== planned).map((w) => ({ label: w.name, onPress: () => void set(w._id) })),
-      { label: "Any workout", onPress: () => void set(null) },
-      ...(ownDay ? [{ label: "Back to the series' plan", onPress: () => void set("series") }] : []),
-    ]);
+    if (changing) return setChanging(null);
+    setChanging(await getWorkouts().catch(() => [] as GymWorkout[]));
+  }
+  async function setDay(workout: string | null | "series") {
+    try {
+      onChange(await setGymDay(event._id, date, workout));
+      setChanging(null);
+    } catch (error) {
+      Alert.alert("Couldn't change it", error instanceof Error ? error.message : "Something went wrong.");
+    }
   }
 
   const STATUS = {
@@ -118,9 +117,30 @@ export function PlannedWorkout({ event, date, onChange, colors: c }: { event: Ca
         )}
         {(status === "open" || status === "missed") && <Action label="Mark done" icon="checkmark" onPress={() => void markDone()} colors={c} />}
         {(status === "open" || status === "missed") && <Action label="Skip" icon="play-skip-forward" onPress={() => void mark("skipped")} colors={c} />}
-        {status !== "done" && <Action label="Change for this day" icon="swap-horizontal" onPress={() => void changeDay()} colors={c} />}
+        {status !== "done" && <Action label={changing ? "Keep as it is" : "Change for this day"} icon="swap-horizontal" onPress={() => void changeDay()} colors={c} />}
         {(status === "done" || status === "skipped") && <Action label="Not done after all" icon="arrow-undo" onPress={() => void mark("open")} colors={c} />}
       </View>
+      {/* This day's workout, picked */}
+      {changing && (
+        <View style={{ marginTop: 12, padding: 12, borderRadius: 14, backgroundColor: c.canvas }}>
+          <Text style={{ fontSize: 11.5, fontWeight: "700", letterSpacing: 0.8, color: c.faint }}>THIS DAY ONLY</Text>
+          <View style={{ marginTop: 8, flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {[{ _id: null as string | null, name: "Any workout" }, ...changing].map((w) => {
+              const on = (planned ?? null) === w._id;
+              return (
+                <Tap key={w._id ?? "any"} onPress={() => !on && void setDay(w._id)} accessibilityRole="button" accessibilityState={{ selected: on }} style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10, backgroundColor: on ? SECTION_PALETTE.gym.base : c.pill }} pressedStyle={{ opacity: 0.75 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: on ? "#FFFFFF" : c.onPill }}>{w.name}</Text>
+                </Tap>
+              );
+            })}
+          </View>
+          {ownDay && (
+            <Tap onPress={() => void setDay("series")} style={{ marginTop: 10 }}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: c.ink }}>Back to the series&apos; plan</Text>
+            </Tap>
+          )}
+        </View>
+      )}
       {status === "open" && date === today && <Text style={{ marginTop: 8, fontSize: 12, lineHeight: 17, color: c.faint }}>Finishing it in Gym marks this done.</Text>}
     </View>
   );

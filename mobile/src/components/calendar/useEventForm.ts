@@ -12,14 +12,17 @@ import {
   updateCalendarEvent,
   type EventCalendar,
   type EventInput,
+  type GymPlan,
   type KitchenKind,
   type MealType,
   type RepeatFrequency,
   type SeriesScope,
 } from "@/src/services/calendarApi";
+import { getWorkouts, type GymWorkout } from "@/src/services/gymApi";
 import { parseLocalDate } from "@/src/utils/mealPlan";
 
 import { addDays, daysBetween, untilAfter, weeklyDays } from "./calendarUtils";
+import { planDays, planToSave } from "./GymPlanEditor";
 
 // What the event form is for: a new event starting from a day and time, or
 // an existing one. For a repeating event, `occurrence` is the day that was
@@ -66,6 +69,12 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
   const [mealSlot, setMealSlot] = useState<MealType | null>(null);
   // Kitchen calendar, instead of a meal: a prep session or a shopping trip.
   const [kitchenKind, setKitchenKind] = useState<KitchenKind | null>(null);
+  // Gym calendar: the workouts planned across the series, and the routines.
+  const [gymPlan, setGymPlan] = useState<GymPlan>({ mode: "same", workouts: [], byWeekday: {} });
+  const [routines, setRoutines] = useState<GymWorkout[]>([]);
+  useEffect(() => {
+    getWorkouts().then(setRoutines).catch(() => {});
+  }, []);
 
   // A new event goes in a calendar that's on show — the default one if it
   // is, else the first that is — so it doesn't vanish into a hidden calendar
@@ -113,6 +122,8 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
         setRemindMinutes(event.remindMinutes);
         setMealSlot(event.mealSlot ?? null);
         setKitchenKind(event.kitchenKind ?? null);
+        // (One routine, from before series had plans: the same each time.)
+        setGymPlan(event.gymPlan ?? { mode: "same", workouts: event.gymWorkout ? [event.gymWorkout] : [], byWeekday: {} });
         setLoading(false);
       })
       .catch((error) => {
@@ -127,6 +138,7 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
 
   const calendar = calendars.find((c) => c._id === calendarId);
   const isMeal = !!calendar?.isMeals;
+  const isGym = !!calendar?.isGym;
   // A timed event ending at or before its start runs into the next day.
   const overnight = !allDay && endDate > date;
   const duration = useMemo(
@@ -256,6 +268,8 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
       remindMinutes,
       mealSlot: isMeal && !kitchenKind ? mealSlot : null,
       kitchenKind: isMeal ? kitchenKind : null,
+      gymWorkout: null,
+      gymPlan: isGym ? planToSave(gymPlan) : null,
     };
     try {
       setSaving(true);
@@ -303,6 +317,11 @@ export function useEventForm(draft: EventDraft, calendars: EventCalendar[], onDo
     saving,
     calendar,
     isMeal,
+    isGym,
+    gymPlan,
+    setGymPlan,
+    routines,
+    planDays: planDays(repeatFrequency, weeklyDays({ weekdays: repeatDays }, date || "2000-01-01"), parseLocalDate(date || "2000-01-01").getDay()),
     overnight,
     duration,
     title,

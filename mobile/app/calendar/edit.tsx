@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OptionSheet, TimePickerModal } from "@/src/components/calendar/CalendarSheets";
+import { GymPlanEditor, planDays, planToSave } from "@/src/components/calendar/GymPlanEditor";
 import {
   addDays,
   calendarColor,
@@ -29,7 +30,6 @@ import {
   untilAfter,
   weeklyDays,
 } from "@/src/components/calendar/calendarUtils";
-import { showActions } from "@/src/components/todo/theme";
 import { getWorkouts, type GymWorkout } from "@/src/services/gymApi";
 import { loadSettings } from "@/src/services/settingsService";
 import { DatePickerModal } from "@/src/components/forms";
@@ -222,22 +222,6 @@ function EditCalendarEventPage() {
   const isMeal = !!calendar?.isMeals;
   const isGym = !!calendar?.isGym;
 
-  // The weekdays the series falls on (Monday first), for planning by weekday.
-  const planDays = (
-    repeatFrequency === "daily"
-      ? [0, 1, 2, 3, 4, 5, 6]
-      : repeatFrequency === "weekdays"
-        ? [1, 2, 3, 4, 5]
-        : repeatFrequency === "weekly"
-          ? weeklyDays({ weekdays: repeatDays }, date)
-          : [parseLocalDate(date).getDay()]
-  ).sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
-  const routineName = (id: string | null | undefined) => (id ? routines.find((w) => w._id === id)?.name ?? "A workout" : "Any workout");
-  // Picking a routine (for the series, a weekday, or the next in turn).
-  function pickRoutine(title: string, onPick: (id: string | null) => void, any = true) {
-    showActions(title, [...routines.map((w) => ({ label: w.name, onPress: () => onPick(w._id) })), ...(any ? [{ label: "Any workout", onPress: () => onPick(null) }] : [])]);
-  }
-
   function pickMeal(slot: MealType) {
     // An untouched or default title follows the meal.
     const labels = [...MEAL_TYPES.map((m) => m.label), ...SESSION_TYPES.map((x) => x.title)];
@@ -334,7 +318,7 @@ function EditCalendarEventPage() {
       mealSlot: isMeal && !kitchenKind ? mealSlot : null,
       kitchenKind: isMeal ? kitchenKind : null,
       gymWorkout: null,
-      gymPlan: isGym ? { ...gymPlan, workouts: gymPlan.mode === "weekday" ? [] : gymPlan.workouts, byWeekday: gymPlan.mode === "weekday" ? gymPlan.byWeekday : {} } : null,
+      gymPlan: isGym ? planToSave(gymPlan) : null,
     };
     try {
       setSaving(true);
@@ -514,74 +498,7 @@ function EditCalendarEventPage() {
           )}
 
           {/* What's planned — only in the Gym calendar */}
-          {isGym && (
-            <View className="mb-3 rounded-3xl border border-slate-200 bg-white p-4" style={o && { backgroundColor: o.surface, borderColor: o.border, borderRadius: 18 }}>
-              <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>Workouts</Text>
-              <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>What&apos;s planned each time, like a meal&apos;s usual food — change a single day from the event itself. Start it on the day, and it&apos;s marked done when you finish.</Text>
-              <View style={{ marginTop: 12, flexDirection: "row", gap: 8 }}>
-                {(
-                  [
-                    ["same", "Same each time"],
-                    ["weekday", "By weekday"],
-                    ["rotation", "In turn"],
-                  ] as const
-                ).map(([mode, label]) => {
-                  const on = gymPlan.mode === mode;
-                  return (
-                    <Tap key={mode} onPress={() => setGymPlan((p) => ({ ...p, mode }))} className={`flex-1 items-center rounded-xl py-2.5 ${on ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"}`} style={choice(on)} pressedStyle={o ? { opacity: 0.75 } : {}}>
-                      <Text className={`text-[13px] font-semibold ${on ? "text-white" : "text-slate-700"}`} style={choiceText(on)}>{label}</Text>
-                    </Tap>
-                  );
-                })}
-              </View>
-
-              {gymPlan.mode === "same" && (
-                <View style={{ marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                  {[{ _id: null as string | null, name: "Any workout" }, ...routines].map((w) => {
-                    const on = (gymPlan.workouts[0] ?? null) === w._id;
-                    return (
-                      <Tap key={w._id ?? "any"} onPress={() => setGymPlan((p) => ({ ...p, workouts: w._id ? [w._id] : [] }))} className={`items-center rounded-xl px-3 py-2.5 ${on ? "bg-blue-600" : "bg-slate-100 active:bg-slate-200"}`} style={choice(on)} pressedStyle={o ? { opacity: 0.75 } : {}}>
-                        <Text className={`text-[13px] font-semibold ${on ? "text-white" : "text-slate-700"}`} style={choiceText(on)}>{w.name}</Text>
-                      </Tap>
-                    );
-                  })}
-                </View>
-              )}
-
-              {gymPlan.mode === "weekday" && (
-                <View style={{ marginTop: 10 }}>
-                  {planDays.map((day) => (
-                    <Tap key={day} onPress={() => pickRoutine(WEEKDAYS_FULL[day], (id) => setGymPlan((p) => ({ ...p, byWeekday: { ...p.byWeekday, [String(day)]: id } })))} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 10, borderTopWidth: 1, borderTopColor: o.border }} pressedStyle={{ opacity: 0.7 }}>
-                      <Text style={{ width: 100, fontSize: 14, fontWeight: "600", color: o.muted }}>{WEEKDAYS_FULL[day]}</Text>
-                      <Text style={{ flex: 1, fontSize: 14.5, fontWeight: "600", color: gymPlan.byWeekday[String(day)] ? o.text : o.faint }}>{routineName(gymPlan.byWeekday[String(day)])}</Text>
-                      <Ionicons name="chevron-forward" size={15} color={o.faint} />
-                    </Tap>
-                  ))}
-                  {!repeatFrequency && <Text style={{ marginTop: 4, fontSize: 12, color: o.faint }}>Set it to repeat to plan more than one day.</Text>}
-                </View>
-              )}
-
-              {gymPlan.mode === "rotation" && (
-                <View style={{ marginTop: 10 }}>
-                  {gymPlan.workouts.map((id, i) => (
-                    <View key={`${id}-${i}`} style={{ flexDirection: "row", alignItems: "center", paddingVertical: 10, borderTopWidth: 1, borderTopColor: o.border }}>
-                      <Text style={{ width: 28, fontSize: 14, fontWeight: "700", color: o.muted }}>{i + 1}</Text>
-                      <Text style={{ flex: 1, fontSize: 14.5, fontWeight: "600", color: o.text }}>{routineName(id)}</Text>
-                      <Tap onPress={() => setGymPlan((p) => ({ ...p, workouts: p.workouts.filter((_, j) => j !== i) }))} accessibilityLabel={`Remove ${routineName(id)}`} hitSlop={8}>
-                        <Ionicons name="close-circle" size={20} color={o.faint} />
-                      </Tap>
-                    </View>
-                  ))}
-                  <Tap onPress={() => pickRoutine("Add to the turn", (id) => id && setGymPlan((p) => ({ ...p, workouts: [...p.workouts, id] })), false)} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 10, borderTopWidth: 1, borderTopColor: o.border }} pressedStyle={{ opacity: 0.7 }}>
-                    <Ionicons name="add-circle" size={18} color={o.ink} />
-                    <Text style={{ fontSize: 14.5, fontWeight: "600", color: o.ink }}>Add a workout</Text>
-                  </Tap>
-                  <Text style={{ marginTop: 2, fontSize: 12, color: o.faint }}>Each time it comes round, the next — in this order, then back to the first.</Text>
-                </View>
-              )}
-              {routines.length === 0 && <Text className="mt-2 text-xs text-slate-500" style={o && { color: o.faint }}>Build a routine in Gym → Workouts to plan it here.</Text>}
-            </View>
-          )}
+          {isGym && <GymPlanEditor plan={gymPlan} onChange={setGymPlan} routines={routines} days={planDays(repeatFrequency, weeklyDays({ weekdays: repeatDays }, date), parseLocalDate(date).getDay())} repeats={!!repeatFrequency} colors={o} />}
 
           {/* When */}
           <Card>
