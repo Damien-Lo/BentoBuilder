@@ -2,7 +2,9 @@ import { useFocusEffect, type Href } from "expo-router";
 import { useCallback, useState } from "react";
 import { Text, View } from "react-native";
 
+import { minutesLabel } from "@/src/components/calendar/calendarUtils";
 import { clock } from "@/src/components/gym/activeSession";
+import { useGymPlan } from "@/src/components/gym/plan";
 import { recordTimeline } from "@/src/components/gym/progressStats";
 import { dayLabel, durationLabel, weekStreak } from "@/src/components/gym/schedule";
 import { sessionCalories, weightOn } from "@/src/components/gym/sessionEnergy";
@@ -15,18 +17,21 @@ import { pageParts, PagedCard, type CardPage } from "./PagedCard";
 import type { Today } from "./useToday";
 
 // The home screen's Gym card, a page at a time: the workout under way (if
-// one is), this week (the days trained, time, calories, the streak), the
+// one is) or today's planned one (tapped, started — linked to the plan),
+// this week (the days trained, time, calories, the streak), the
 // last workout (with its calories and heart rate), and the latest records.
 // Each opens its page in Gym.
 
 export function GymPages({ t, go, colors: c }: { t: Today; go: (route: Href) => void; colors: OrbitColors }) {
   const [all, setAll] = useState<GymSessionRecord[] | null>(null);
   const [weights, setWeights] = useState<WeightEntry[]>([]);
+  const [plan, loadPlan] = useGymPlan();
   useFocusEffect(
     useCallback(() => {
+      void loadPlan(t.today, t.today, t.today);
       getSessions().then(setAll, () => setAll([]));
       getWeightEntries().then(setWeights, () => {});
-    }, []),
+    }, [loadPlan, t.today]),
   );
   const ratio = useWatchRatio();
   const { big, line, row } = pageParts(c);
@@ -41,7 +46,31 @@ export function GymPages({ t, go, colors: c }: { t: Today; go: (route: Href) => 
   const lastCal = last ? cal(last) : null;
   const lastTotals = last ? sessionTotals(last) : null;
 
+  const todayPlan = (plan ?? []).sort((a, b) => a.event.startMinutes - b.event.startMinutes);
   const pages: CardPage[] = [
+    // (A workout planned today, unless one's under way: Start, tapped.)
+    ...(!active && todayPlan.length
+      ? todayPlan.map((p, i) => ({
+          title: todayPlan.length > 1 ? `Today · ${i + 1}` : "Today",
+          route: (p.status === "done" && p.session
+            ? `/gym/sessions/${p.session}`
+            : p.status === "open" && p.routine
+              ? `/gym/session?workout=${p.routine._id}&plan=${p.event._id}&planDate=${p.date}`
+              : `/calendar/event/${p.event._id}?date=${p.date}`) as Href,
+          body: (
+            <>
+              {big(p.routine?.name ?? "Any workout", "")}
+              {line(
+                p.status === "done"
+                  ? "Done ✓ — tap for how it went"
+                  : p.status === "skipped"
+                    ? "Skipped today"
+                    : `${minutesLabel(p.event.startMinutes)}–${minutesLabel(p.event.endMinutes)}${p.routine ? ` · ${p.routine.exercises.filter((e) => e.exercise).length} exercises` : ""} — tap to start`,
+              )}
+            </>
+          ),
+        }))
+      : []),
     ...(active
       ? [
           {

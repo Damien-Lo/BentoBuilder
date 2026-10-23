@@ -45,7 +45,7 @@ export function useCalendarData(focusDate: string) {
   const kitchenPlan = usePlanNeeds();
   const mealFood = useMemo<Map<string, MealFood>>(() => buildMealFood(kitchenPlan.sized(mealPlan.entries), mealPlan.conversions), [mealPlan, kitchenPlan]);
   const [usualMeals, setUsualMeals] = useState<UsualMeal[]>([]);
-  const [withWorkout, loadWorkouts] = useGymLines();
+  const [withWorkout, loadWorkouts, unplannedSessions] = useGymLines();
   const [weekStartDay, setWeekStartDay] = useState(1);
   const [loaded, setLoaded] = useState(false);
   const windowRef = useRef<{ from: string; to: string } | null>(null);
@@ -123,8 +123,10 @@ export function useCalendarData(focusDate: string) {
           : "";
       return { ...e, meal: { food, usually: usually || undefined } };
     });
-    return [...taskOccurrences, ...withFood].filter((e) => eventShown(e, calendarsById.get(e.calendar)));
-  }, [events, tasks, mealFood, usualMeals, calendars, calendarsById, today, withWorkout]);
+    // (Gym sessions done without one planned: in the Gym calendar too.)
+    const sessionOccurrences = unplannedSessions(events, calendars.find((c) => c.isGym));
+    return [...taskOccurrences, ...withFood, ...sessionOccurrences].filter((e) => eventShown(e, calendarsById.get(e.calendar)));
+  }, [events, tasks, mealFood, usualMeals, calendars, calendarsById, today, withWorkout, unplannedSessions]);
 
   async function toggleCalendar(calendar: EventCalendar) {
     const visible = !calendar.visible;

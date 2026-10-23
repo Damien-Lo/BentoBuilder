@@ -7,9 +7,21 @@ import { getSessions, getWorkouts, sessionTotals, type GymSessionRecord, type Gy
 // A planned workout's line in the calendar, like a meal's food: the routine
 // planned ("Upper B (Friday) · 7 exercises"), the session that did it once
 // done ("Upper B (Friday) · 1h 6m · 23 sets", ticked), or skipped or missed.
-// (The phone's calendar and the desktop's both use it.)
+// Sessions done without one planned are shown in the Gym calendar too, the
+// same way, ticked. (The phone's calendar and the desktop's both use it.)
 
-export function useGymLines(): [(e: EventOccurrence, calendar: EventCalendar | undefined, today: string) => EventOccurrence, () => void] {
+type Lines = [
+  (e: EventOccurrence, calendar: EventCalendar | undefined, today: string) => EventOccurrence,
+  () => void,
+  // The sessions done that no planned workout was done with, as entries in
+  // the Gym calendar (given the events, to know which were).
+  (events: EventOccurrence[], gym: EventCalendar | undefined) => EventOccurrence[],
+];
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const dayOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+export function useGymLines(): Lines {
   const [routines, setRoutines] = useState<Map<string, GymWorkout>>(new Map());
   const [sessions, setSessions] = useState<Map<string, GymSessionRecord>>(new Map());
   const load = useCallback(() => {
@@ -44,5 +56,41 @@ export function useGymLines(): [(e: EventOccurrence, calendar: EventCalendar | u
     },
     [routines, sessions],
   );
-  return [withWorkout, load];
+  const unplanned = useCallback(
+    (events: EventOccurrence[], gym: EventCalendar | undefined): EventOccurrence[] => {
+      if (!gym) return [];
+      const linked = new Set(events.flatMap((e) => (e.gymDone ?? []).map((d) => d.session).filter(Boolean)));
+      return [...sessions.values()]
+        .filter((s) => !linked.has(s._id))
+        .map((s) => {
+          const start = new Date(s.startedAt);
+          const end = new Date(s.finishedAt);
+          const date = dayOf(start);
+          const startMinutes = start.getHours() * 60 + start.getMinutes();
+          const endMinutes = dayOf(end) === date ? Math.max(startMinutes + 15, end.getHours() * 60 + end.getMinutes()) : 1440;
+          const totals = sessionTotals(s);
+          return {
+            _id: `session-${s._id}`,
+            title: "Gym",
+            calendar: gym._id,
+            allDay: false,
+            date,
+            endDate: date,
+            startMinutes,
+            endMinutes: Math.min(1440, endMinutes),
+            repeat: null,
+            excludedDates: [],
+            location: "",
+            description: "",
+            remindMinutes: null,
+            occurrenceDate: date,
+            occurrenceEndDate: date,
+            gymSession: s._id,
+            workout: { status: "done" as const, line: `${s.name} · ${durationLabel(totals.seconds)} · ${totals.sets} sets` },
+          };
+        });
+    },
+    [sessions],
+  );
+  return [withWorkout, load, unplanned];
 }

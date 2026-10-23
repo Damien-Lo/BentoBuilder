@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -165,7 +165,7 @@ function PhoneCalendarScreen() {
 
   // Refetch on every return to this screen (an event may have been added
   // or edited).
-  const [withWorkout, loadWorkouts] = useGymLines();
+  const [withWorkout, loadWorkouts, unplannedSessions] = useGymLines();
   useFocusEffect(
     useCallback(() => {
       void loadCalendars();
@@ -210,8 +210,10 @@ function PhoneCalendarScreen() {
           : "";
       return { ...e, meal: { food, usually: usually || undefined } };
     });
-    return [...taskOccurrences, ...withFood].filter((e) => eventShown(e, calendarsById.get(e.calendar)));
-  }, [events, tasks, mealFood, usualMeals, calendars, calendarsById, today, withWorkout]);
+    // (Gym sessions done without one planned: in the Gym calendar too.)
+    const sessionOccurrences = unplannedSessions(events, calendars.find((c) => c.isGym));
+    return [...taskOccurrences, ...withFood, ...sessionOccurrences].filter((e) => eventShown(e, calendarsById.get(e.calendar)));
+  }, [events, tasks, mealFood, usualMeals, calendars, calendarsById, today, withWorkout, unplannedSessions]);
   const eventDays = useMemo(() => {
     const days = new Set<string>();
     for (const e of visibleEvents) {
@@ -233,6 +235,11 @@ function PhoneCalendarScreen() {
   }
 
   function openEvent(event: EventOccurrence) {
+    // (A Gym session done without one planned: the session.)
+    if (event.gymSession) {
+      router.push(`/gym/sessions/${event.gymSession}` as Href);
+      return;
+    }
     const task = event.task;
     if (task && event._id.startsWith("block-")) {
       // Booked time gets its own card: removing it there frees the time

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, Text, View } from "react-native";
 
@@ -214,7 +214,8 @@ export function WebCalendarScreen() {
   }
 
   function pressEvent(event: EventOccurrence) {
-    if (event.task && event._id.startsWith("block-")) setOpenBlock(event);
+    if (event.gymSession) router.push(`/gym/sessions/${event.gymSession}` as Href);
+    else if (event.task && event._id.startsWith("block-")) setOpenBlock(event);
     else if (event.task) openTask(event.task);
     else setPeek(event);
   }

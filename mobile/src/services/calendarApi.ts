@@ -133,6 +133,9 @@ export interface EventOccurrence extends CalendarEvent {
   // Set by the calendar screen on a Gym event: how its workout stands that
   // day, and its line (the routine, or the session that did it).
   workout?: { status: GymStatus; line: string };
+  // Set when this isn't an event but a Gym session done without one planned,
+  // shown in the Gym calendar (tapped: the session).
+  gymSession?: string;
 }
 
 export type EventInput = Omit<CalendarEvent, "_id" | "excludedDates" | "gymDone" | "gymSkipped">;
