@@ -90,6 +90,14 @@ export default function RootLayout() {
           }}
         />
 
+        {/* Your burn — measured from food and weight, the Watch corrected to it */}
+        <Stack.Screen
+          name="health/burn"
+          options={{
+            headerShown: false,
+          }}
+        />
+
         {/* Targets — what to aim for, worked out from everything Health knows */}
         <Stack.Screen
           name="health/targets"

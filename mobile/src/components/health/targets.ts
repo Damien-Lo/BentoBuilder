@@ -1,4 +1,5 @@
 import { ACTIVITY, ageOn, bmr, KG_PER_LB, tdee } from "@/src/components/health/bodyStats";
+import { workOutEnergy, type Energy } from "@/src/components/health/energy";
 import { showMeasure } from "@/src/components/health/units";
 import type { HealthMetric } from "@/src/services/healthSync";
 import type { ActivityLevel, AppSettings, Sex, Units } from "@/src/services/settingsService";
@@ -97,22 +98,9 @@ export interface Aim {
   weeks: number | null; // to the goal, at that pace
 }
 
-// The weight trend (kg a day): least squares over the last three weeks.
-function trend(weights: WeightEntry[]) {
-  const since = daysAgo(21);
-  const recent = weights.filter((w) => w.date >= since);
-  if (recent.length < 4) return null;
-  const xs = recent.map((w) => new Date(`${w.date}T00:00:00`).getTime() / DAY);
-  const ys = recent.map((w) => w.weight);
-  const mx = mean(xs)!;
-  const my = mean(ys)!;
-  const slope = xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0) / xs.reduce((s, x) => s + (x - mx) ** 2, 0);
-  return { perDay: slope, count: recent.length };
-}
-
 export type Burn = { value: number; how: "measured" | "apple" | "formula" };
 
-export function workOutTargets({ settings, weights, metrics, intake, workoutsPerWeek, units }: Inputs): { targets: Target[]; burn: Burn; aim: Aim } {
+export function workOutTargets({ settings, weights, metrics, intake, workoutsPerWeek, units }: Inputs): { targets: Target[]; burn: Burn; aim: Aim; energy: Energy } {
   const s = settings;
   const kg = (v: number) => showMeasure("weight", v, units);
   const sk = sexKey(s.sex);
@@ -139,28 +127,24 @@ export function workOutTargets({ settings, weights, metrics, intake, workoutsPer
   const yoursOnly = (b: Basis): Basis => (b.yours ? { ...b, add: undefined } : b);
 
   // Your daily burn, the best way there's data for: measured (what you ate,
-  // less what the scale says it did), Apple Watch's (at rest + moving), or
-  // the formula (Mifflin–St Jeor × how active).
-  const t = trend(weights);
-  const logged = intake.filter((d) => d.date >= daysAgo(21) && d.calories >= 800);
-  const ate = mean(logged.map((d) => d.calories));
-  const resting = ofType("restingEnergy", 14);
+  // less what the scale says it did — energy.ts), Apple Watch's (at rest +
+  // moving), or the formula (Mifflin–St Jeor × how active).
+  const energy = workOutEnergy({ weights, intake, metrics, today: dayOf(new Date()), showWeight: kg });
   const active = ofType("activeEnergy", 14);
-  const appleDays = resting.filter((r) => active.some((x) => x.date === r.date && x.date !== dayOf(new Date())));
   const rest = bmr(w, h, a, s.sex);
   let burn: Burn;
   const burnBasis: Basis[] = [];
   const burnHow: string[] = [];
-  if (t && ate != null && logged.length >= 10 && t.count >= 8) {
-    burn = { value: ate - t.perDay * 7700, how: "measured" };
-    burnBasis.push({ label: "Food logged", value: `${logged.length} days in 3 weeks`, yours: true }, { label: "Weigh-ins", value: `${t.count} in 3 weeks`, yours: true });
-    burnHow.push(`You ate ${n0(ate)} kcal a day on average while your weight moved ${showMeasure("weight", t.perDay * 7, units, 2)} a week — so you burn about ${n0(burn.value)} a day (a kilo ≈ 7,700 kcal).`);
-  } else if (appleDays.length >= 7) {
-    const daily = appleDays.map((r) => r.value + active.find((x) => x.date === r.date)!.value);
-    burn = { value: mean(daily)!, how: "apple" };
-    burnBasis.push({ label: "Apple Watch burn", value: `${appleDays.length} days`, yours: true });
-    burnBasis.push({ label: "Food logged + weigh-ins", value: `${logged.length} of 10 days, ${t?.count ?? 0} of 8 weigh-ins`, yours: false, add: { text: "Log food in Kitchen for 3 weeks", href: "/kitchen" } });
-    burnHow.push(`Your Watch says you burn ${n0(burn.value)} kcal a day (at rest + moving, ${appleDays.length} days). Once there are 3 weeks of food logs and weigh-ins, it's measured from those instead — more accurate.`);
+  const recentWeek = energy.weeks[0];
+  if (energy.measured != null) {
+    burn = { value: energy.measured, how: "measured" };
+    burnBasis.push({ label: "Food logged", value: `${energy.completeDays} complete days in 4 weeks`, yours: true }, { label: "Weigh-ins", value: `${energy.weighIns} in 4 weeks`, yours: true });
+    burnHow.push(`You ate ${n0(recentWeek?.ate ?? 0)} kcal a day on average (on fully logged days) while your weight trend moved ${showMeasure("weight", recentWeek?.trendPerWeek ?? 0, units, 2)} a week — so you burn about ${n0(burn.value)} a day (a kilo ≈ 7,700 kcal). The details are in Your burn.`);
+  } else if (energy.watchAverage != null) {
+    burn = { value: energy.watchAverage, how: "apple" };
+    burnBasis.push({ label: "Apple Watch burn", value: "the last 4 weeks", yours: true });
+    burnBasis.push({ label: "Food logged + weigh-ins", value: `${energy.completeDays} of 10 complete days, ${energy.weighIns} of 8 weigh-ins`, yours: false, add: { text: "Log food in Kitchen for 4 weeks", href: "/kitchen" } });
+    burnHow.push(`Your Watch says you burn ${n0(burn.value)} kcal a day (at rest + moving). Once there are 4 weeks of food logs and weigh-ins, it's measured from those instead — and the Watch corrected to match.`);
   } else {
     burn = { value: tdee(rest, level), how: "formula" };
     burnBasis.push(you.sex, you.age, you.height, you.weight, you.activity);
@@ -312,5 +296,5 @@ export function workOutTargets({ settings, weights, metrics, intake, workoutsPer
   // In the usual order (fat's worked out before carbs, which are the rest).
   const ORDER = ["calories", "protein", "carbs", "fats", "fiber", "sodium", "water", "steps", "exercise", "workouts", "sleep"];
   targets.sort((x, y) => ORDER.indexOf(x.key) - ORDER.indexOf(y.key));
-  return { targets, burn, aim };
+  return { targets, burn, aim, energy };
 }

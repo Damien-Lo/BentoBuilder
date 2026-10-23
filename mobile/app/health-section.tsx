@@ -32,6 +32,7 @@ const GROUPS: { title: string; entries: Entry[] }[] = [
     entries: [
       { label: "About you", icon: "person", path: "/health/about" },
       { label: "Targets", icon: "locate", path: "/health/targets" },
+      { label: "Your burn", icon: "flame", path: "/health/burn" },
     ],
   },
   {

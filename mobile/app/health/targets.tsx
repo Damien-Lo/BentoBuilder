@@ -10,12 +10,9 @@ import { UnitsToggle, useUnits } from "@/src/components/health/units";
 import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
 import { getSessions } from "@/src/services/gymApi";
-import { getHealthMetrics, type HealthMetric } from "@/src/services/healthSync";
-import { getMealPlanRange } from "@/src/services/mealPlanApi";
-import { loadSettings, saveSettings, type AppSettings, type TargetPrefs } from "@/src/services/settingsService";
-import { getWeightEntries } from "@/src/services/weightEntryApi";
+import { loadHealthInputs } from "@/src/services/healthInputs";
+import { saveSettings, type AppSettings, type TargetPrefs } from "@/src/services/settingsService";
 import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
-import { computeDayNutrition } from "@/src/utils/mealPlan";
 
 // Health → Targets: everything to aim for, in the Health list's groups —
 // Activity & fitness (steps, exercise, workouts), Body (your goal weight and
@@ -31,7 +28,6 @@ import { computeDayNutrition } from "@/src/utils/mealPlan";
 
 // In the Health list's order; Body is the goal weight and its pace.
 const GROUPS: (Target["group"] | "Body")[] = ["Activity & fitness", "Body", "Sleep & mind", "Nutrition"];
-const TYPES = ["steps", "exerciseMinutes", "activeEnergy", "restingEnergy", "sleep", "leanMass", "water"];
 
 export default function TargetsScreen() {
   return (
@@ -56,19 +52,7 @@ function Targets() {
   const [goalOpen, setGoalOpen] = useState(false);
 
   const load = useCallback(() => {
-    const today = dayOf(new Date());
-    Promise.all([
-      loadSettings(),
-      getWeightEntries().catch(() => []),
-      getHealthMetrics(TYPES, daysAgo(60)).catch(() => [] as HealthMetric[]),
-      getSessions().catch(() => []),
-      getMealPlanRange(daysAgo(21), today).catch(() => []),
-    ]).then(([settings, weights, metrics, sessions, meals]) => {
-      // Each day's food, as eaten (confirmed).
-      const byDay = new Map<string, typeof meals>();
-      for (const e of meals) if (e.status === "confirmed") byDay.set(e.date, [...(byDay.get(e.date) ?? []), e]);
-      const eaten = new Map([...byDay].map(([date, entries]) => [date, computeDayNutrition(entries, settings.unitConversions)]));
-      const intake = [...eaten].filter(([date]) => date !== today).map(([date, n]) => ({ date, calories: n.calories ?? 0 }));
+    Promise.all([loadHealthInputs(), getSessions().catch(() => [])]).then(([{ today, settings, weights, metrics, intake, eaten }, sessions]) => {
       // Workouts in each of the last four weeks (seven days at a time), oldest first.
       const now = Date.now();
       const workoutsPerWeek = [3, 2, 1, 0].map(
@@ -220,13 +204,14 @@ function Targets() {
                 <View style={{ borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, overflow: "hidden" }}>
                   {/* Your burn, which the calories come from */}
                   {group === "Nutrition" && (
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: `${c.fill}14`, borderBottomWidth: 1, borderBottomColor: c.border }}>
+                    <Tap onPress={() => router.push("/health/burn" as Href)} accessibilityRole="link" style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: `${c.fill}14`, borderBottomWidth: 1, borderBottomColor: c.border }} pressedStyle={{ opacity: 0.7 }}>
                       <Ionicons name="information-circle" size={18} color={c.ink} />
                       <Text style={{ flex: 1, fontSize: 13, lineHeight: 18, color: c.text }}>
                         <Text style={{ fontWeight: "700" }}>You burn about {Math.round(burn.value).toLocaleString()} kcal a day</Text>
                         {burn.how === "measured" ? " — measured from your food logs and weigh-ins" : burn.how === "apple" ? " — from your Apple Watch" : " — estimated from About you"}
                       </Text>
-                    </View>
+                      <Ionicons name="chevron-forward" size={16} color={c.faint} />
+                    </Tap>
                   )}
                   {rows.map((t, i) => (
                     <Fragment key={t.key}>
