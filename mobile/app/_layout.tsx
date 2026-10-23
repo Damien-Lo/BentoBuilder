@@ -52,6 +52,7 @@ export default function RootLayout() {
         <Stack.Screen name="gym/(tabs)" options={{ headerShown: false }} />
         {/* Building a workout (no swipe away: it asks before losing changes) */}
         <Stack.Screen name="gym/build" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="gym/exercise/new" options={{ headerShown: false }} />
         <Stack.Screen name="gym/exercise/[id]" options={{ headerShown: false }} />
         {/* Doing a workout (no swipe away: Finish or Discard) */}
         <Stack.Screen name="gym/session" options={{ headerShown: false, gestureEnabled: false }} />
@@ -73,6 +74,14 @@ export default function RootLayout() {
         {/* Settings — a list (like the iPhone's), each row its own page */}
         <Stack.Screen
           name="settings-section"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        {/* About you — sex, birthday, height, activity, and the numbers from them */}
+        <Stack.Screen
+          name="health/about"
           options={{
             headerShown: false,
           }}

@@ -18,13 +18,16 @@ export interface Exercise {
   mechanic: string | null;
   // How it's logged (see src/components/gym/tracking.ts).
   track?: Track;
+  // In your list beyond the core: added from the library, or your own.
+  added?: boolean;
+  custom?: boolean;
   // Photos (the start and end of the movement): paths in free-exercise-db.
   images: string[];
   instructions?: string[];
 }
 
-async function call<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}/api/exercises${path}`, { headers: { "Content-Type": "application/json" } });
+async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/api/exercises${path}`, { headers: { "Content-Type": "application/json" }, ...init });
   const result = await response.json();
   if (!response.ok || !result.success) throw new Error(result.message ?? "Couldn't load the exercises.");
   return result.data as T;
@@ -32,6 +35,20 @@ async function call<T>(path: string): Promise<T> {
 
 export const getExercises = () => call<Exercise[]>("");
 export const getExercise = (id: string) => call<Exercise>(`/${id}`);
+
+// Your list: the core, what you've added from the library, and your own.
+export const inMyList = (e: Pick<Exercise, "core" | "added" | "custom">) => e.core || !!e.added || !!e.custom;
+export const addToMyList = (id: string) => call<void>("/added", { method: "POST", body: JSON.stringify({ exercise: id }) });
+export const removeFromMyList = (id: string) => call<void>(`/added/${id}`, { method: "DELETE" });
+// Your own exercise.
+export interface CustomExerciseInput {
+  name: string;
+  track: Track;
+  equipment: string | null;
+  primaryMuscles: string[];
+  secondaryMuscles: string[];
+}
+export const createExercise = (input: CustomExerciseInput) => call<Exercise>("", { method: "POST", body: JSON.stringify(input) });
 
 // The sections, in the order a body is read — top to bottom, front then
 // back — and cardio last.

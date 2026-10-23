@@ -3,6 +3,7 @@ import express from "express";
 import Exercise from "../models/Exercise.js";
 import GymSession from "../models/GymSession.js";
 import GymWorkout from "../models/GymWorkout.js";
+import { visibleExercises } from "./ExerciseRoutes.js";
 
 const router = express.Router();
 
@@ -12,13 +13,13 @@ const withExercises = (query) => query.populate("exercises.exercise", "name imag
 const sendError = (res, error, status = 400) => res.status(status).json({ success: false, message: error.message || String(error) });
 
 // What a workout is, from what the app sends: only what's known about it,
-// and only exercises that exist.
+// and only exercises that exist (and are the library's, or yours).
 async function workoutFrom(body) {
   const name = String(body.name ?? "").trim();
   if (!name) throw new Error("A workout needs a name.");
   const items = Array.isArray(body.exercises) ? body.exercises : [];
   const ids = items.map((item) => item?.exercise).filter(Boolean);
-  const known = new Set((await Exercise.find({ _id: { $in: ids } }).select("_id").lean()).map((e) => String(e._id)));
+  const known = new Set((await Exercise.find({ _id: { $in: ids }, ...visibleExercises() }).select("_id").lean()).map((e) => String(e._id)));
   const number = (value) => (value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) || Number(value) < 0 ? null : Number(value));
   return {
     name,
@@ -101,7 +102,7 @@ const SET_TYPES = new Set(["normal", "warmup", "drop", "failure"]);
 // left.
 async function sessionExercisesFrom(body) {
   const items = Array.isArray(body.exercises) ? body.exercises : [];
-  const known = new Set((await Exercise.find({ _id: { $in: items.map((i) => i?.exercise).filter(Boolean) } }).select("_id").lean()).map((e) => String(e._id)));
+  const known = new Set((await Exercise.find({ _id: { $in: items.map((i) => i?.exercise).filter(Boolean) }, ...visibleExercises() }).select("_id").lean()).map((e) => String(e._id)));
   return items
     .filter((item) => known.has(String(item?.exercise)))
     .map((item) => ({

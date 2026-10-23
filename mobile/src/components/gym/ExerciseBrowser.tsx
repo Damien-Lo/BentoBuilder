@@ -4,12 +4,12 @@ import { Platform, Text, TextInput, View } from "react-native";
 
 import { ExerciseIcon } from "@/src/components/gym/ExerciseIcon";
 import { Tap } from "@/src/components/ui/Tap";
-import { EXERCISE_GROUPS, groupLabel, type Exercise } from "@/src/services/exerciseApi";
+import { EXERCISE_GROUPS, groupLabel, inMyList, type Exercise } from "@/src/services/exerciseApi";
 import { useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
-// The exercise library as a list: a search over all of it (the core first,
-// then the rest), or — not searching — the core in a folded section for
-// each muscle group. Used by Gym → Exercises (`onPick` absent: just
+// The exercise library as a list: a search over all of it (your list
+// first, then the rest), or — not searching — your list (the core, what
+// you've added, your own) in a folded section for each muscle group. Used by Gym → Exercises (`onPick` absent: just
 // browsing) and by the workout builder's "Add exercise" (each card picks or
 // unpicks; `picked` are ticked).
 export function ExerciseBrowser({ all, picked, onPick, onOpen }: { all: Exercise[]; picked?: Set<string>; onPick?: (exercise: Exercise) => void; onOpen?: (exercise: Exercise) => void }) {
@@ -17,7 +17,7 @@ export function ExerciseBrowser({ all, picked, onPick, onOpen }: { all: Exercise
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
 
-  const core = useMemo(() => all.filter((e) => e.core), [all]);
+  const core = useMemo(() => all.filter(inMyList), [all]);
   const groups = useMemo(
     () => EXERCISE_GROUPS.map((group) => ({ group, exercises: core.filter((e) => e.group === group).sort((a, b) => a.name.localeCompare(b.name)) })).filter((g) => g.exercises.length > 0),
     [core],
@@ -28,8 +28,8 @@ export function ExerciseBrowser({ all, picked, onPick, onOpen }: { all: Exercise
     const words = key.split(/\s+/).filter(Boolean);
     if (!words.length) return null;
     const hits = all.filter((e) => words.every((w) => e.name.toLowerCase().includes(w)));
-    const more = hits.filter((e) => !e.core);
-    return { core: hits.filter((e) => e.core), more: more.slice(0, 60), moreCount: more.length };
+    const more = hits.filter((e) => !inMyList(e));
+    return { core: hits.filter(inMyList), more: more.slice(0, 60), moreCount: more.length };
   }, [all, key]);
 
   const toggle = (group: string) =>
