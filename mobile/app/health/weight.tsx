@@ -23,6 +23,7 @@ import { deleteWeightEntry, getWeightEntries, logWeightEntry, type WeightEntry }
 import { formatDateDisplay, todayDateInputString } from "@/src/utils/date";
 import { SECTION_PALETTE } from "@/src/theme/orbit";
 
+import { toShown, toStored, useUnits } from "@/src/components/health/units";
 import { WeightPhone } from "@/src/components/health/WeightPhone";
 
 function round1(n: number): number {
@@ -47,6 +48,11 @@ function WeightDesk() {
   const router = useRouter();
   // The page's colours in a desktop browser; null on a phone.
   const o = useNutritionDesk();
+  // Kept in kilograms; shown and typed in the page's units (the phone's
+  // switch — the same choice).
+  const [units] = useUnits("weight");
+  const W = (kg: number) => round1(toShown("weight", kg, units));
+  const U = units === "metric" ? "kg" : "lbs";
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [entries, setEntries] = useState<WeightEntry[]>([]);
@@ -105,7 +111,7 @@ function WeightDesk() {
 
     try {
       setIsSubmitting(true);
-      await logWeightEntry(weight, dateText);
+      await logWeightEntry(toStored("weight", weight, units), dateText);
       setWeightText("");
       setDateText(todayDateInputString());
       await refresh();
@@ -170,15 +176,15 @@ function WeightDesk() {
           <View className="flex-row overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o && deskCard(o)}>
             <View className="flex-1 items-center border-r border-slate-100 py-4">
               <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Starting</Text>
-              <Text className="mt-1 text-lg font-bold text-slate-900">{starting != null ? starting : "—"}</Text>
+              <Text className="mt-1 text-lg font-bold text-slate-900">{starting != null ? W(starting) : "—"}</Text>
             </View>
             <View className="flex-1 items-center border-r border-slate-100 py-4">
               <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Current</Text>
-              <Text className="mt-1 text-lg font-bold text-blue-600" style={o && { color: o.ink }}>{current != null ? current : "—"}</Text>
+              <Text className="mt-1 text-lg font-bold text-blue-600" style={o && { color: o.ink }}>{current != null ? W(current) : "—"}</Text>
             </View>
             <View className="flex-1 items-center py-4">
               <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Goal</Text>
-              <Text className="mt-1 text-lg font-bold text-slate-900">{goal != null ? goal : "—"}</Text>
+              <Text className="mt-1 text-lg font-bold text-slate-900">{goal != null ? W(goal) : "—"}</Text>
             </View>
           </View>
 
@@ -192,13 +198,13 @@ function WeightDesk() {
               <Text className="ml-2 text-sm text-blue-700" style={o && { color: o.ink }}>
                 {changeFromStart != null && (
                   <Text className="font-bold">
-                    {changeFromStart > 0 ? `+${changeFromStart}` : changeFromStart} lbs since start
+                    {changeFromStart > 0 ? `+${W(changeFromStart)}` : W(changeFromStart)} {U} since start
                   </Text>
                 )}
                 {changeFromStart != null && toGoal != null ? "  ·  " : ""}
                 {toGoal != null && (
                   <Text>
-                    {Math.abs(toGoal)} lbs {toGoal >= 0 ? "to go" : "past goal"}
+                    {W(Math.abs(toGoal))} {U} {toGoal >= 0 ? "to go" : "past goal"}
                   </Text>
                 )}
               </Text>
@@ -218,7 +224,7 @@ function WeightDesk() {
             style={o ? [logSection.wrapperProps.style, deskCard(o)] : logSection.wrapperProps.style}
           >
             <View className="flex-1">
-              <Text className="mb-1 text-xs font-semibold text-slate-400">Weight (lbs)</Text>
+              <Text className="mb-1 text-xs font-semibold text-slate-400">Weight ({U})</Text>
               <TextInput
                 value={weightText}
                 onChangeText={setWeightText}
@@ -275,13 +281,13 @@ function WeightDesk() {
                   }`}
                 >
                   <View>
-                    <Text className="text-base font-semibold text-slate-900">{entry.weight} lbs</Text>
+                    <Text className="text-base font-semibold text-slate-900">{W(entry.weight)} {U}</Text>
                     <Text className="mt-0.5 text-xs text-slate-400">{formatDateDisplay(entry.date)}</Text>
                   </View>
                   <View className="flex-row items-center gap-3">
                     {delta != null && (
                       <Text className={`text-xs font-semibold ${delta > 0 ? "text-rose-500" : delta < 0 ? "text-emerald-500" : "text-slate-400"}`}>
-                        {delta > 0 ? `+${delta}` : delta}
+                        {delta > 0 ? `+${W(delta)}` : W(delta)}
                       </Text>
                     )}
                     <Pressable

@@ -12,10 +12,12 @@ import {
 import { Platform } from "react-native";
 
 import { API_BASE_URL } from "@/src/config/api";
+import { syncWeightEntries } from "@/src/services/weightEntryApi";
 
 // Apple Health → Orbit. On an iPhone, with your say-so, your health data
 // — the Watch's and the phone's — is read from Apple Health a day at a
-// time and kept on the server as readings (server/models/HealthMetric.js),
+// time and kept on the server as readings (server/models/HealthMetric.js)
+// — in metric, as Apple Health keeps them —
 // for Health to show and the rest of the app to use. Synced when asked
 // (Sync now), when Health opens, and whenever the app comes to the front
 // (HealthAutoSync) — each an hour or more after the last: from a couple of
@@ -28,28 +30,40 @@ const QUANTITIES: { type: string; id: QuantityTypeIdentifier; stat: StatisticsOp
   { type: "activeEnergy", id: "HKQuantityTypeIdentifierActiveEnergyBurned", stat: "cumulativeSum", unit: "kcal" },
   { type: "restingEnergy", id: "HKQuantityTypeIdentifierBasalEnergyBurned", stat: "cumulativeSum", unit: "kcal" },
   { type: "exerciseMinutes", id: "HKQuantityTypeIdentifierAppleExerciseTime", stat: "cumulativeSum", unit: "min" },
-  { type: "distance", id: "HKQuantityTypeIdentifierDistanceWalkingRunning", stat: "cumulativeSum", unit: "mi" },
+  { type: "distance", id: "HKQuantityTypeIdentifierDistanceWalkingRunning", stat: "cumulativeSum", unit: "km" },
   { type: "restingHeartRate", id: "HKQuantityTypeIdentifierRestingHeartRate", stat: "discreteAverage", unit: "count/min" },
   { type: "walkingHeartRate", id: "HKQuantityTypeIdentifierWalkingHeartRateAverage", stat: "discreteAverage", unit: "count/min" },
   { type: "hrv", id: "HKQuantityTypeIdentifierHeartRateVariabilitySDNN", stat: "discreteAverage", unit: "ms" },
   { type: "vo2max", id: "HKQuantityTypeIdentifierVO2Max", stat: "discreteAverage", unit: "ml/(kg*min)" },
   { type: "oxygen", id: "HKQuantityTypeIdentifierOxygenSaturation", stat: "discreteAverage", unit: "%", scale: 100 },
   { type: "respiratoryRate", id: "HKQuantityTypeIdentifierRespiratoryRate", stat: "discreteAverage", unit: "count/min" },
-  { type: "weight", id: "HKQuantityTypeIdentifierBodyMass", stat: "mostRecent", unit: "lb" },
+  { type: "weight", id: "HKQuantityTypeIdentifierBodyMass", stat: "mostRecent", unit: "kg" },
   { type: "flights", id: "HKQuantityTypeIdentifierFlightsClimbed", stat: "cumulativeSum", unit: "count" },
   { type: "standMinutes", id: "HKQuantityTypeIdentifierAppleStandTime", stat: "cumulativeSum", unit: "min" },
   { type: "bodyFat", id: "HKQuantityTypeIdentifierBodyFatPercentage", stat: "mostRecent", unit: "%", scale: 100 },
-  { type: "leanMass", id: "HKQuantityTypeIdentifierLeanBodyMass", stat: "mostRecent", unit: "lb" },
-  { type: "waist", id: "HKQuantityTypeIdentifierWaistCircumference", stat: "mostRecent", unit: "in" },
+  { type: "leanMass", id: "HKQuantityTypeIdentifierLeanBodyMass", stat: "mostRecent", unit: "kg" },
+  { type: "waist", id: "HKQuantityTypeIdentifierWaistCircumference", stat: "mostRecent", unit: "cm" },
   { type: "systolic", id: "HKQuantityTypeIdentifierBloodPressureSystolic", stat: "discreteAverage", unit: "mmHg" },
   { type: "diastolic", id: "HKQuantityTypeIdentifierBloodPressureDiastolic", stat: "discreteAverage", unit: "mmHg" },
-  { type: "wristTemp", id: "HKQuantityTypeIdentifierAppleSleepingWristTemperature", stat: "discreteAverage", unit: "degF" },
-  { type: "water", id: "HKQuantityTypeIdentifierDietaryWater", stat: "cumulativeSum", unit: "fl_oz_us" },
+  { type: "wristTemp", id: "HKQuantityTypeIdentifierAppleSleepingWristTemperature", stat: "discreteAverage", unit: "degC" },
+  { type: "water", id: "HKQuantityTypeIdentifierDietaryWater", stat: "cumulativeSum", unit: "mL" },
   { type: "caffeine", id: "HKQuantityTypeIdentifierDietaryCaffeine", stat: "cumulativeSum", unit: "mg" },
 ];
 const SLEEP = "HKCategoryTypeIdentifierSleepAnalysis" as const;
 const MINDFUL = "HKCategoryTypeIdentifierMindfulSession" as const;
 const WORKOUTS = "HKWorkoutTypeIdentifier" as const;
+
+// A distance in km, from whatever unit it came in (a workout's comes in
+// metres — under a name that isn't always "m" — so anything unknown is
+// taken as metres).
+function toKm(q: { unit: string; quantity: number }) {
+  const unit = q.unit.toLowerCase();
+  if (unit === "km") return q.quantity;
+  if (unit === "mi") return q.quantity * 1.609344;
+  if (unit === "ft") return q.quantity * 0.0003048;
+  if (unit === "yd") return q.quantity * 0.0009144;
+  return q.quantity / 1000;
+}
 
 export interface HealthMetricInput {
   type: string;
@@ -185,7 +199,7 @@ async function runSync(): Promise<SyncResult> {
       const start = new Date(w.startDate);
       const minutes = w.duration.unit === "min" ? w.duration.quantity : w.duration.quantity / 60;
       const kcal = w.totalEnergyBurned ? (w.totalEnergyBurned.unit === "kJ" ? w.totalEnergyBurned.quantity / 4.184 : w.totalEnergyBurned.quantity) : 0;
-      const miles = w.totalDistance ? (w.totalDistance.unit === "m" ? w.totalDistance.quantity / 1609.344 : w.totalDistance.unit === "km" ? w.totalDistance.quantity / 1.609344 : w.totalDistance.quantity) : 0;
+      const km = w.totalDistance ? toKm(w.totalDistance) : 0;
       metrics.push({
         type: "workout",
         key: `workout:${w.uuid}`,
@@ -195,24 +209,29 @@ async function runSync(): Promise<SyncResult> {
         start: start.toISOString(),
         end: new Date(w.endDate).toISOString(),
         source: "apple",
-        detail: { activity: Number(w.workoutActivityType), kcal: Math.round(kcal), miles: Math.round(miles * 100) / 100 },
+        detail: { activity: Number(w.workoutActivityType), kcal: Math.round(kcal), km: Math.round(km * 100) / 100 },
       });
     }
   } catch {
     // (As above.)
   }
 
+  // Weight goes to your weigh-ins (Health → Weight), not the readings.
+  const weights = metrics.filter((m) => m.type === "weight").map((m) => ({ date: m.date, weight: m.value }));
+  if (weights.length) await syncWeightEntries(weights);
+  const readings = metrics.filter((m) => m.type !== "weight");
+
   let added = 0;
   let updated = 0;
-  for (let i = 0; i < metrics.length; i += 1000) {
-    const res = await fetch(`${API_BASE_URL}/api/health-data/metrics`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ metrics: metrics.slice(i, i + 1000) }) });
+  for (let i = 0; i < readings.length; i += 1000) {
+    const res = await fetch(`${API_BASE_URL}/api/health-data/metrics`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ metrics: readings.slice(i, i + 1000) }) });
     const body = await res.json();
     if (!res.ok || !body.success) throw new Error(body.message ?? "Couldn't save your health data.");
     added += body.data.added;
     updated += body.data.updated;
   }
   await AsyncStorage.setItem(LAST_SYNC, now.toISOString()).catch(() => {});
-  return { sent: metrics.length, added, updated, from };
+  return { sent: readings.length + weights.length, added, updated, from };
 }
 
 // --- Reading it back (any device) ---

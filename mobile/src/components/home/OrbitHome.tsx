@@ -15,6 +15,8 @@ import { Tap } from "@/src/components/ui/Tap";
 import { minutesLabel } from "@/src/components/calendar/calendarUtils";
 import { mealLine } from "@/src/components/calendar/mealFood";
 import { dayLabel, durationLabel } from "@/src/components/gym/schedule";
+import { showMeasure, useUnits } from "@/src/components/health/units";
+import type { Units } from "@/src/services/settingsService";
 import { sessionTotals } from "@/src/services/gymApi";
 import { updateTodoTask } from "@/src/services/todoApi";
 import { nutrientColor } from "@/src/theme/nutrients";
@@ -78,7 +80,7 @@ function headline(t: Today, name: string) {
 }
 
 // Each section's number on the orbit, and its ring round the orb.
-function glance(id: SectionId, t: Today): { value: string; ring: number; caption: string } {
+function glance(id: SectionId, t: Today, units: Units): { value: string; ring: number; caption: string } {
   const kcal = Math.round(t.eaten.calories ?? 0);
   switch (id) {
     case "calendar": {
@@ -94,7 +96,7 @@ function glance(id: SectionId, t: Today): { value: string; ring: number; caption
       };
     case "health":
       return {
-        value: t.latestWeight ? `${t.latestWeight.weight} lbs` : "—",
+        value: t.latestWeight ? showMeasure("weight", t.latestWeight.weight, units) : "—",
         ring: t.weightProgress,
         caption: t.latestWeight ? `${Math.round(t.weightProgress * 100)}% of the way to your goal` : "No weigh-ins yet",
       };
@@ -269,6 +271,7 @@ function Action({ label, icon, onPress, primary, colors }: { label: string; icon
 
 function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today; go: (route: Href) => void; onDone: () => void; colors: OrbitColors }) {
   const { dark } = useOrbitTheme();
+  const [units] = useUnits("weight");
   const open = section.route ? <Action label={`Open ${section.label}`} icon="arrow-forward" primary onPress={() => go(section.route!)} colors={colors} /> : null;
   const quiet = (text: string) => <Text style={{ paddingVertical: 8, fontSize: 14, color: colors.muted }}>{text}</Text>;
   let body: React.ReactNode = null;
@@ -345,8 +348,8 @@ function Panel({ section, t, go, onDone, colors }: { section: Section; t: Today;
           {t.latestWeight ? (
             <Row
               icon="scale-outline"
-              title={`${t.latestWeight.weight} lbs`}
-              detail={`${t.weightChange == null ? "Weighed" : `${t.weightChange > 0 ? "+" : ""}${t.weightChange} lbs this week · weighed`} ${t.latestWeight.date === t.today ? "today" : t.latestWeight.date}${t.settings.goalWeight ? ` · goal ${t.settings.goalWeight} lbs` : ""}`}
+              title={showMeasure("weight", t.latestWeight.weight, units)}
+              detail={`${t.weightChange == null ? "Weighed" : `${t.weightChange > 0 ? "+" : ""}${showMeasure("weight", t.weightChange, units)} this week · weighed`} ${t.latestWeight.date === t.today ? "today" : t.latestWeight.date}${t.settings.goalWeight ? ` · goal ${showMeasure("weight", t.settings.goalWeight, units)}` : ""}`}
               colors={colors}
             />
           ) : (
@@ -429,6 +432,7 @@ export function OrbitHome() {
   const { account } = useAccount();
   const { colors, dark } = useOrbitTheme();
   const t = useToday();
+  const [units] = useUnits("weight");
   const { width } = useWindowDimensions();
   const [selected, setSelected] = useState<SectionId>("calendar");
   const [asking, setAsking] = useState(false);
@@ -545,7 +549,7 @@ export function OrbitHome() {
       if (index !== showing.value) runOnJS(tick)();
       runOnJS(landing)(at);
     });
-  const focus = glance(selected, t);
+  const focus = glance(selected, t, units);
   const name = account?.name.split(" ")[0] ?? "";
   const date = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }).toUpperCase();
   const isAdmin = account?.role === "admin";
@@ -592,7 +596,7 @@ export function OrbitHome() {
               centre={centre}
               radius={radius}
               selected={section.id === selected}
-              value={glance(section.id, t).value}
+              value={glance(section.id, t, units).value}
               onPress={() => select(section)}
               colors={colors}
             />

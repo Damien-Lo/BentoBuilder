@@ -5,6 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppleHealthCard } from "@/src/components/health/AppleHealthCard";
+import { toShown, useUnits } from "@/src/components/health/units";
 import { useToday } from "@/src/components/home/useToday";
 import { Hairline, IconTile, ListCard, ListRow, neutralTile, PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
@@ -92,6 +93,8 @@ function HealthList() {
   const leave = useGoBack("/");
   const { colors: c, dark } = useOrbitTheme();
   const t = useToday();
+  const [units] = useUnits("weight");
+  const kg = units === "metric";
   const open = (path: string) => router.push(path as Href);
 
   const kcal = Math.round(t.eaten.calories ?? 0);
@@ -116,9 +119,9 @@ function HealthList() {
           />
           <Glance
             icon="scale-outline"
-            value={weight ? `${weight.weight}` : "—"}
-            unit={weight ? "lbs" : ""}
-            detail={weight ? (t.weightChange == null ? `Weighed ${weight.date === t.today ? "today" : weight.date}` : `${t.weightChange > 0 ? "+" : ""}${t.weightChange} lbs this week`) : "No weigh-ins yet"}
+            value={weight ? `${Math.round(toShown("weight", weight.weight, units) * 10) / 10}` : "—"}
+            unit={weight ? (kg ? "kg" : "lbs") : ""}
+            detail={weight ? (t.weightChange == null ? `Weighed ${weight.date === t.today ? "today" : weight.date}` : `${t.weightChange > 0 ? "+" : ""}${Math.round(toShown("weight", t.weightChange, units) * 10) / 10} ${kg ? "kg" : "lbs"} this week`) : "No weigh-ins yet"}
             onPress={() => open("/health/weight")}
             colors={c}
           />

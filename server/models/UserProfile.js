@@ -41,6 +41,11 @@ const userProfileSchema = new mongoose.Schema(
     birthDate:     { type: String, default: null, match: /^\d{4}-\d{2}-\d{2}$/ },
     heightCm:      { type: Number, min: 50, max: 272, default: null },
     activityLevel: { type: String, enum: ["sedentary", "light", "moderate", "active", "very", null], default: null },
+    // How each Health page shows its measurements — { weight: "metric",
+    // activity: "imperial", … }: pounds, inches, miles, fl oz, °F (imperial,
+    // the default) or kilograms, cm, km, mL, °C. Stored the same either way:
+    // the app converts.
+    unitPrefs: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
 
     // User-defined unit conversions on top of the app's built-in mass/volume
     // table, e.g. { unit: "packet", baseUnit: "g", factor: 340 } means

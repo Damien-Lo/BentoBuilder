@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useWideForm } from "@/src/components/forms/wideForm";
 import { NutritionSummaryCard } from "@/src/components/health/NutritionSummaryCard";
+import { toShown, useUnits } from "@/src/components/health/units";
 import { deskCard, DeskHeader, NutritionDesk, useNutritionDesk } from "@/src/components/health/web/NutritionDesk";
 import { nutrientColor } from "@/src/theme/nutrients";
 import { getMealPlanForDate, type MealPlanEntry } from "@/src/services/mealPlanApi";
@@ -40,6 +41,7 @@ function WeeklyReportPage() {
   const router = useRouter();
   // The page's colours in a desktop browser; null on a phone.
   const o = useNutritionDesk();
+  const [weightUnits] = useUnits("weight");
   const [isLoading, setIsLoading] = useState(true);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [weekEntries, setWeekEntries] = useState<MealPlanEntry[][]>([]);
@@ -87,9 +89,12 @@ function WeeklyReportPage() {
   const weightInWeek = weightEntries
     .filter(e => e.date >= weekDates[0] && e.date <= weekDates[weekDates.length - 1])
     .sort((a, b) => a.date.localeCompare(b.date));
+  // (Kept in kilograms; shown in the Weight page's units.)
+  const shownWeight = (kg: number) => round1(toShown("weight", kg, weightUnits));
+  const weightUnit = weightUnits === "metric" ? "kg" : "lbs";
   const weightChange =
     weightInWeek.length >= 2
-      ? round1(weightInWeek[weightInWeek.length - 1].weight - weightInWeek[0].weight)
+      ? shownWeight(weightInWeek[weightInWeek.length - 1].weight - weightInWeek[0].weight)
       : null;
 
   const today = todayStr();
@@ -211,12 +216,12 @@ function WeeklyReportPage() {
             {weightInWeek.length >= 2 ? (
               <>
                 <Text className="font-bold text-slate-900">
-                  {weightChange! > 0 ? `+${weightChange}` : weightChange} lbs
+                  {weightChange! > 0 ? `+${weightChange}` : weightChange} {weightUnit}
                 </Text>{" "}
                 this week
               </>
             ) : weightInWeek.length === 1 ? (
-              <>Logged once this week — {weightInWeek[0].weight} lbs</>
+              <>Logged once this week — {shownWeight(weightInWeek[0].weight)} {weightUnit}</>
             ) : (
               "No weigh-ins logged this week"
             )}

@@ -36,7 +36,11 @@ export interface AppSettings {
   birthDate: string | null;
   heightCm: number | null;
   activityLevel: ActivityLevel | null;
+  // How each Health page shows its measurements (stored the same either
+  // way): { weight: "metric", … } — imperial unless said.
+  unitPrefs: Partial<Record<string, Units>>;
 }
+export type Units = "imperial" | "metric";
 export type Sex = "male" | "female";
 export type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very";
 
@@ -63,6 +67,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   birthDate: null,
   heightCm: null,
   activityLevel: null,
+  unitPrefs: {},
 };
 const DEFAULTS = DEFAULT_SETTINGS;
 
@@ -109,6 +114,10 @@ export async function loadSettings(): Promise<AppSettings> {
       sex:           d.sex === "male" || d.sex === "female" ? d.sex : null,
       birthDate:     typeof d.birthDate === "string" ? d.birthDate : null,
       heightCm:      typeof d.heightCm === "number" ? d.heightCm : null,
+      unitPrefs:
+        d.unitPrefs && typeof d.unitPrefs === "object"
+          ? Object.fromEntries(Object.entries(d.unitPrefs as Record<string, unknown>).filter(([, v]) => v === "metric" || v === "imperial")) as Partial<Record<string, Units>>
+          : {},
       activityLevel: typeof d.activityLevel === "string" && ["sedentary", "light", "moderate", "active", "very"].includes(d.activityLevel) ? (d.activityLevel as ActivityLevel) : null,
     };
   } catch {

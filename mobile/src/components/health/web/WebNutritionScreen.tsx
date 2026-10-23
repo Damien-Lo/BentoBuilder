@@ -12,6 +12,7 @@ import { getWeightEntries, type WeightEntry } from "@/src/services/weightEntryAp
 import { computeDayNutrition, parseLocalDate, SLOTS, todayStr } from "@/src/utils/mealPlan";
 import { nutrientColor } from "@/src/theme/nutrients";
 import { OrbitPage, useOrbitTheme } from "@/src/theme/orbit";
+import { toShown, useUnits } from "@/src/components/health/units";
 
 // Nutrition in a desktop browser: the review page. What was eaten over the
 // last week, fortnight or month — a day at a time against the goal, the
@@ -32,6 +33,7 @@ const shortDay = (date: string) => {
 };
 
 export function WebNutritionScreen() {
+  const [weightUnits] = useUnits("weight");
   const router = useRouter();
   const { colors: c } = useOrbitTheme();
   const today = todayStr();
@@ -101,6 +103,8 @@ export function WebNutritionScreen() {
   const first = weightPoints[0];
   const start = settings.startingWeight ?? first?.weight ?? null;
   const change = latest && start != null ? latest.weight - start : null;
+  // (Kept in kilograms; shown in the Weight page's units.)
+  const shownWeight = (kg: number) => Math.round(toShown("weight", kg, weightUnits) * 10) / 10;
 
   return (
     <OrbitPage>
@@ -190,15 +194,15 @@ export function WebNutritionScreen() {
           ) : (
             <>
               <View style={{ flexDirection: "row", alignItems: "baseline", marginBottom: 14 }}>
-                <Text style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>{latest.weight}</Text>
+                <Text style={{ fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>{shownWeight(latest.weight)}</Text>
                 {change != null && (
                   <Text style={{ marginLeft: 8, fontSize: 13, fontWeight: "600", color: change <= 0 ? c.success : c.warning }}>
                     {change > 0 ? "+" : ""}
-                    {change.toFixed(1)} since start
+                    {shownWeight(change).toFixed(1)} {weightUnits === "metric" ? "kg" : "lbs"} since start
                   </Text>
                 )}
               </View>
-              <LineChart points={weightPoints.map((w) => ({ key: w._id, label: shortDay(w.date), value: w.weight }))} target={settings.goalWeight} height={130} color={c.ink} />
+              <LineChart points={weightPoints.map((w) => ({ key: w._id, label: shortDay(w.date), value: shownWeight(w.weight) }))} target={settings.goalWeight != null ? shownWeight(settings.goalWeight) : null} height={130} color={c.ink} />
             </>
           )}
         </Card>

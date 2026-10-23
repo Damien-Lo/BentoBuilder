@@ -3,8 +3,8 @@ import type { ActivityLevel, Sex } from "@/src/services/settingsService";
 // Your health numbers, from who you are (Health → About you) and your
 // weight: your age, BMI and the healthy weights for your height, the
 // calories you burn at rest (BMR, by Mifflin–St Jeor) and in a day (TDEE),
-// a calorie target toward your goal weight, and protein to aim for. Weights
-// in pounds, height in cm.
+// a calorie target toward your goal weight, and protein to aim for. In
+// kilograms and cm, as they're kept.
 
 export const KG_PER_LB = 0.45359237;
 
@@ -33,9 +33,9 @@ export function feetInches(cm: number) {
 }
 export const cmFrom = (feet: number, inches: number) => Math.round((feet * 12 + inches) * 2.54 * 10) / 10;
 
-export function bmi(weightLbs: number, heightCm: number) {
+export function bmi(weightKg: number, heightCm: number) {
   const m = heightCm / 100;
-  return (weightLbs * KG_PER_LB) / (m * m);
+  return weightKg / (m * m);
 }
 export function bmiCategory(value: number) {
   if (value < 18.5) return "Underweight";
@@ -43,33 +43,35 @@ export function bmiCategory(value: number) {
   if (value < 30) return "Overweight";
   return "Obese";
 }
-// The weights a BMI of 18.5–24.9 is for this height (lbs).
+// The weights a BMI of 18.5–24.9 is for this height (kg).
 export function healthyRange(heightCm: number) {
   const m2 = (heightCm / 100) ** 2;
-  return { low: (18.5 * m2) / KG_PER_LB, high: (24.9 * m2) / KG_PER_LB };
+  return { low: 18.5 * m2, high: 24.9 * m2 };
 }
 
 // Calories a day at rest (Mifflin–St Jeor). Sex unknown: halfway between.
-export function bmr(weightLbs: number, heightCm: number, age: number, sex: Sex | null) {
-  const base = 10 * weightLbs * KG_PER_LB + 6.25 * heightCm - 5 * age;
+export function bmr(weightKg: number, heightCm: number, age: number, sex: Sex | null) {
+  const base = 10 * weightKg + 6.25 * heightCm - 5 * age;
   return base + (sex === "male" ? 5 : sex === "female" ? -161 : -78);
 }
 export const tdee = (rest: number, level: ActivityLevel) => rest * (ACTIVITY.find((a) => a.id === level)?.factor ?? 1.2);
 
 // A day's calories toward the goal weight: about a pound a week (500 a day)
-// under, to lose; 250 over, to gain; the same, within 2 lbs. Never under a
-// floor (1,500 for men, 1,200 for women) or your BMR.
-export function calorieTarget(burn: number, rest: number, weightLbs: number, goalLbs: number | null, sex: Sex | null) {
-  const diff = goalLbs == null ? 0 : goalLbs - weightLbs;
-  const aim = Math.abs(diff) < 2 ? "maintain" : diff < 0 ? "lose" : "gain";
+// under, to lose; 250 over, to gain; the same, within a kilo (about 2 lbs).
+// Never under a floor (1,500 for men, 1,200 for women) or your BMR.
+export function calorieTarget(burn: number, rest: number, weightKg: number, goalKg: number | null, sex: Sex | null) {
+  const diff = goalKg == null ? 0 : goalKg - weightKg;
+  const aim = Math.abs(diff) < 0.9 ? "maintain" : diff < 0 ? "lose" : "gain";
   const floor = Math.max(rest, sex === "female" ? 1200 : 1500);
   const kcal = aim === "lose" ? Math.max(floor, burn - 500) : aim === "gain" ? burn + 250 : burn;
   return { kcal: Math.round(kcal / 10) * 10, aim } as const;
 }
 
-// Protein a day: 0.7–1 g for each pound of your goal weight (or your
-// weight, without one) — the range strength training is usually given.
-export function proteinRange(weightLbs: number, goalLbs: number | null) {
-  const base = goalLbs ?? weightLbs;
-  return { low: Math.round((base * 0.7) / 5) * 5, high: Math.round(base / 5) * 5 };
+// Protein a day: 1.54–2.2 g for each kilo of your goal weight (or your
+// weight, without one) — 0.7–1 g a pound, the range strength training is
+// usually given.
+export const PROTEIN_PER_KG = { low: 1.5432, high: 2.2046 };
+export function proteinRange(weightKg: number, goalKg: number | null) {
+  const base = goalKg ?? weightKg;
+  return { low: Math.round((base * PROTEIN_PER_KG.low) / 5) * 5, high: Math.round((base * PROTEIN_PER_KG.high) / 5) * 5 };
 }

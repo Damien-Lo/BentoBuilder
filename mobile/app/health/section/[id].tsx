@@ -7,7 +7,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DatePickerField } from "@/src/components/forms/DatePickerField";
 import { durationLabel } from "@/src/components/gym/schedule";
-import { formatValue, SECTIONS, STORED_UNIT, type MetricDef } from "@/src/components/health/healthSections";
+import { formatValue, hasMeasures, SECTIONS, shownValue, STORED_UNIT, unitLabel, type MetricDef } from "@/src/components/health/healthSections";
+import { toShown, toStored, UnitsToggle, useUnits, type UnitPage } from "@/src/components/health/units";
 import { MetricChart } from "@/src/components/health/MetricChart";
 import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
@@ -20,8 +21,9 @@ import { todayDateInputString } from "@/src/utils/date";
 // latest, the average, and a chart over a week, a month, three or a year —
 // from Apple Health, or typed in (Add). Sleep (each night, its stages) and
 // Workouts (the Watch's and Gym's together) have their own. In Health's
-// colour. (`id`: activity, body, heart, vitals, mind, drinks, sleep,
-// workouts.)
+// colour, in imperial or metric (the page's own switch, beside the title,
+// where it matters).
+// (`id`: activity, body, heart, vitals, mind, drinks, sleep, workouts.)
 
 type Range = "1W" | "1M" | "3M" | "1Y";
 const RANGE_DAYS: Record<Range, number> = { "1W": 7, "1M": 30, "3M": 91, "1Y": 365 };
@@ -68,7 +70,8 @@ function SectionPage() {
   const { colors: c } = useOrbitTheme();
   const section = SECTIONS[id];
   const head = section ?? TITLES[id];
-  const [range, setRange] = useState<Range>("1M");
+  // (A week to start with.)
+  const [range, setRange] = useState<Range>("1W");
   const [metrics, setMetrics] = useState<HealthMetric[] | null>(null);
   const [sessions, setSessions] = useState<GymSessionRecord[]>([]);
   const [adding, setAdding] = useState<MetricDef | null>(null);
@@ -94,7 +97,7 @@ function SectionPage() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.canvas }} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
-        <PageHeader title={head.title} subtitle={head.subtitle} onBack={leave} />
+        <PageHeader title={head.title} subtitle={head.subtitle} onBack={leave} action={(section && hasMeasures(section)) || id === "workouts" ? <UnitsToggle page={id as UnitPage} /> : undefined} />
 
         <View style={{ marginTop: 16, flexDirection: "row", gap: 6 }}>
           {(Object.keys(RANGE_DAYS) as Range[]).map((r) => {
@@ -114,11 +117,12 @@ function SectionPage() {
         ) : id === "workouts" ? (
           <Workouts metrics={metrics} sessions={sessions} from={from} colors={c} />
         ) : (
-          section!.metrics.map((def) => <MetricCard key={def.type} def={def} metrics={metrics} from={from} to={to} onAdd={() => setAdding(def)} colors={c} />)
+          section!.metrics.map((def) => <MetricCard key={def.type} def={def} page={id as UnitPage} metrics={metrics} from={from} to={to} onAdd={() => setAdding(def)} colors={c} />)
         )}
       </ScrollView>
       <AddReading
         def={adding}
+        page={id as UnitPage}
         onClose={() => setAdding(null)}
         onSaved={() => {
           setAdding(null);
@@ -132,15 +136,17 @@ function SectionPage() {
 
 // --- A reading: the latest, the average, the chart ---
 
-function MetricCard({ def, metrics, from, to, onAdd, colors: c }: { def: MetricDef; metrics: HealthMetric[]; from: string; to: string; onAdd: () => void; colors: OrbitColors }) {
+function MetricCard({ def, page, metrics, from, to, onAdd, colors: c }: { def: MetricDef; page: UnitPage; metrics: HealthMetric[]; from: string; to: string; onAdd: () => void; colors: OrbitColors }) {
+  const [units] = useUnits(page);
+  const unit = unitLabel(def, units);
   const days = byDay(metrics, def.type);
   const pair = def.pairWith ? byDay(metrics, def.pairWith) : null;
   const all = [...days.values()].sort((a, b) => b.date.localeCompare(a.date));
   const latest = all[0] ?? null;
   const inRange = all.filter((m) => m.date >= from && m.date <= to);
-  const average = inRange.length ? inRange.reduce((s, m) => s + m.value, 0) / inRange.length : null;
-  const show = (v: number, v2?: number) => (pair && v2 != null ? `${Math.round(v)}/${Math.round(v2)}` : formatValue(def, v));
-  const points = inRange.map((m) => ({ date: m.date, value: m.value, value2: pair?.get(m.date)?.value }));
+  const average = inRange.length ? shownValue(def, inRange.reduce((s, m) => s + m.value, 0) / inRange.length, units) : null;
+  const show = (v: number, v2?: number) => (pair && v2 != null ? `${Math.round(v)}/${Math.round(v2)}` : formatValue(def, shownValue(def, v, units)));
+  const points = inRange.map((m) => ({ date: m.date, value: shownValue(def, m.value, units), value2: pair?.get(m.date)?.value }));
 
   return (
     <View style={{ marginTop: 12, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
@@ -160,13 +166,13 @@ function MetricCard({ def, metrics, from, to, onAdd, colors: c }: { def: MetricD
         <>
           <View style={{ marginTop: 8, flexDirection: "row", alignItems: "baseline", gap: 6 }}>
             <Text style={{ fontSize: 26, fontWeight: "800", color: c.text }}>{show(latest.value, pair?.get(latest.date)?.value)}</Text>
-            {!!def.unit && <Text style={{ fontSize: 13, fontWeight: "600", color: c.muted }}>{def.unit}</Text>}
+            {!!unit && <Text style={{ fontSize: 13, fontWeight: "600", color: c.muted }}>{unit}</Text>}
             <Text style={{ marginLeft: "auto", fontSize: 12.5, color: c.muted }}>{whenLabel(latest.date)}</Text>
           </View>
           {average != null && !def.choices && (
             <Text style={{ marginTop: 1, fontSize: 12.5, color: c.muted }}>
               Average {formatValue({ ...def, places: def.places ?? (def.total ? 0 : 1) }, average)}
-              {def.unit ? ` ${def.unit}` : ""}
+              {unit ? ` ${unit}` : ""}
               {def.total ? " a day" : ""}
             </Text>
           )}
@@ -187,7 +193,8 @@ function MetricCard({ def, metrics, from, to, onAdd, colors: c }: { def: MetricD
 
 // --- Typing one in ---
 
-function AddReading({ def, onClose, onSaved, colors: c }: { def: MetricDef | null; onClose: () => void; onSaved: () => void; colors: OrbitColors }) {
+function AddReading({ def, page, onClose, onSaved, colors: c }: { def: MetricDef | null; page: UnitPage; onClose: () => void; onSaved: () => void; colors: OrbitColors }) {
+  const [units] = useUnits(page);
   const [value, setValue] = useState("");
   const [value2, setValue2] = useState("");
   const [choice, setChoice] = useState<number | null>(null);
@@ -206,7 +213,8 @@ function AddReading({ def, onClose, onSaved, colors: c }: { def: MetricDef | nul
     if (n == null || !Number.isFinite(n) || n <= 0 || (def.pairWith && (!Number.isFinite(n2) || n2 <= 0))) return Alert.alert("Put in a reading", def.pairWith ? "Both numbers — e.g. 120 over 80." : "A number above zero.");
     setSaving(true);
     try {
-      await addHealthReading(def.type, n, STORED_UNIT[def.type] ?? def.unit, date);
+      // (Typed in the units shown: kept in metric.)
+      await addHealthReading(def.type, def.measure ? toStored(def.measure, n, units) : n, STORED_UNIT[def.type] ?? def.unit, date);
       if (def.pairWith) await addHealthReading(def.pairWith, n2, STORED_UNIT[def.pairWith] ?? def.unit, date);
       reset();
       onSaved();
@@ -252,7 +260,7 @@ function AddReading({ def, onClose, onSaved, colors: c }: { def: MetricDef | nul
                     {box(value, setValue, def.pairWith ? "Upper" : def.label)}
                     {def.pairWith && <Text style={{ fontSize: 20, color: c.muted }}>/</Text>}
                     {def.pairWith && box(value2, setValue2, "Lower")}
-                    <Text style={{ fontSize: 14, color: c.muted }}>{def.unit}</Text>
+                    <Text style={{ fontSize: 14, color: c.muted }}>{unitLabel(def, units)}</Text>
                   </View>
                 )}
               </View>
@@ -342,6 +350,9 @@ function Sleep({ metrics, from, to, colors: c }: { metrics: HealthMetric[]; from
 
 // --- Workouts: the Watch's and Gym's, by day ---
 
+// Strength workouts (traditional and functional): the kind a Gym session is.
+const STRENGTH = new Set([Number(WorkoutActivityType.traditionalStrengthTraining), Number(WorkoutActivityType.functionalStrengthTraining)]);
+
 // "traditionalStrengthTraining" → "Traditional strength training".
 function activityName(n: number) {
   const name = (WorkoutActivityType as unknown as Record<number, string>)[n] ?? "workout";
@@ -351,12 +362,24 @@ function activityName(n: number) {
 
 function Workouts({ metrics, sessions, from, colors: c }: { metrics: HealthMetric[]; sessions: GymSessionRecord[]; from: string; colors: OrbitColors }) {
   const router = useRouter();
-  type Item = { key: string; date: string; name: string; minutes: number; kcal?: number; miles?: number; gym?: string; time: string };
+  const [units] = useUnits("workouts");
+  type Item = { key: string; date: string; name: string; minutes: number; kcal?: number; km?: number; gym?: string; time: string };
+  // A Gym session and the strength workout another app (Hevy, the Watch)
+  // saved to Apple Health for it are the same workout: one, Gym's, with
+  // the Watch's calories.
+  const apple = metrics.filter((m) => m.type === "workout");
+  const used = new Set<string>();
+  const gymItems: Item[] = sessions.map((s) => {
+    const start = new Date(s.startedAt).getTime();
+    const twin = apple.find((m) => !used.has(m._id) && STRENGTH.has(m.detail?.activity ?? -1) && m.start && Math.abs(new Date(m.start).getTime() - start) <= 45 * 60_000);
+    if (twin) used.add(twin._id);
+    return { key: s._id, date: dayOf(new Date(s.startedAt)), name: s.name, minutes: sessionTotals(s).seconds / 60, kcal: twin?.detail?.kcal || undefined, gym: s._id, time: s.startedAt };
+  });
   const items: Item[] = [
-    ...metrics
-      .filter((m) => m.type === "workout")
-      .map((m) => ({ key: m._id, date: m.date, name: activityName(m.detail?.activity ?? 0), minutes: m.value, kcal: m.detail?.kcal || undefined, miles: m.detail?.miles || undefined, time: m.start ?? `${m.date}T00:00:00` })),
-    ...sessions.map((s) => ({ key: s._id, date: dayOf(new Date(s.startedAt)), name: s.name, minutes: sessionTotals(s).seconds / 60, gym: s._id, time: s.startedAt })),
+    ...apple
+      .filter((m) => !used.has(m._id))
+      .map((m) => ({ key: m._id, date: m.date, name: activityName(m.detail?.activity ?? 0), minutes: m.value, kcal: m.detail?.kcal || undefined, km: m.detail?.km || undefined, time: m.start ?? `${m.date}T00:00:00` })),
+    ...gymItems,
   ]
     .filter((w) => w.date >= from)
     .sort((a, b) => b.time.localeCompare(a.time));
@@ -395,7 +418,7 @@ function Workouts({ metrics, sessions, from, colors: c }: { metrics: HealthMetri
                 <Text style={{ marginTop: 1, fontSize: 12.5, color: c.muted }}>
                   {whenLabel(w.date)} · {durationLabel(w.minutes * 60)}
                   {w.kcal ? ` · ${w.kcal} kcal` : ""}
-                  {w.miles ? ` · ${w.miles} mi` : ""}
+                  {w.km ? ` · ${Math.round(toShown("distance", w.km, units) * 100) / 100} ${units === "metric" ? "km" : "mi"}` : ""}
                   {w.gym ? " · Gym" : ""}
                 </Text>
               </View>

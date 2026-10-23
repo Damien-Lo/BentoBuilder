@@ -20,6 +20,7 @@ import { Button } from "@/src/components/web/ui";
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type AppSettings } from "@/src/services/settingsService";
 import { SECTION_PALETTE } from "@/src/theme/orbit";
+import { toShown, toStored, useUnits } from "@/src/components/health/units";
 
 // (In a desktop browser, in Orbit's look and Nutrition's green.)
 export default function GoalsScreen() {
@@ -38,6 +39,11 @@ function GoalsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const layout = useWideForm();
+  // Weights kept in kilograms, shown and typed in the Weight page's units.
+  const [units] = useUnits("weight");
+  const shownWeight = (kg: number | null) => (kg == null ? null : Math.round(toShown("weight", kg, units) * 10) / 10);
+  const keptWeight = (v: number | null) => (v == null ? null : toStored("weight", v, units));
+  const weightUnit = units === "metric" ? "kg" : "lbs";
 
   // Scrolls whichever field was just focused into view — see
   // useScrollFocusSection. No dropdown-capable fields on this page, so
@@ -87,10 +93,10 @@ function GoalsPage() {
         <View {...startingWeightSection.wrapperProps}>
           <SettingsRow label="Starting weight">
             <SettingsNumericInput
-              value={settings.startingWeight}
-              onChange={v => patch({ startingWeight: v })}
+              value={shownWeight(settings.startingWeight)}
+              onChange={v => patch({ startingWeight: keptWeight(v) })}
               placeholder="—"
-              unit="lbs"
+              unit={weightUnit}
               onFocus={startingWeightSection.trigger}
             />
           </SettingsRow>
@@ -111,10 +117,10 @@ function GoalsPage() {
         <View {...goalWeightSection.wrapperProps}>
           <SettingsRow label="Goal weight">
             <SettingsNumericInput
-              value={settings.goalWeight}
-              onChange={v => patch({ goalWeight: v })}
+              value={shownWeight(settings.goalWeight)}
+              onChange={v => patch({ goalWeight: keptWeight(v) })}
               placeholder="—"
-              unit="lbs"
+              unit={weightUnit}
               onFocus={goalWeightSection.trigger}
             />
           </SettingsRow>

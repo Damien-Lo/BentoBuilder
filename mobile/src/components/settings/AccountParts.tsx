@@ -147,7 +147,8 @@ export function useGoBack(fallback: string) {
 // A page's header: the round way back, and a large title on the page itself.
 // (No `onBack`: just the title — a desktop browser's Settings, where the
 // list beside the page is the way to the others.)
-export function PageHeader({ title, subtitle, onBack, style }: { title: string; subtitle?: ReactNode; onBack?: () => void; style?: StyleProp<ViewStyle> }) {
+// (`action`: something on the title's line, at its right — a page's units.)
+export function PageHeader({ title, subtitle, onBack, action, style }: { title: string; subtitle?: ReactNode; onBack?: () => void; action?: ReactNode; style?: StyleProp<ViewStyle> }) {
   const { colors: c } = useOrbitTheme();
   return (
     <View style={style}>
@@ -158,7 +159,10 @@ export function PageHeader({ title, subtitle, onBack, style }: { title: string; 
           </Tap>
         </View>
       )}
-      <Text style={{ marginTop: onBack ? 12 : 0, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>{title}</Text>
+      <View style={{ marginTop: onBack ? 12 : 0, flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <Text style={{ flex: 1, fontSize: 28, fontWeight: "800", letterSpacing: -0.5, color: c.text }}>{title}</Text>
+        {action}
+      </View>
       {!!subtitle && <Text style={{ marginTop: 2, fontSize: 14, lineHeight: 20, color: c.muted }}>{subtitle}</Text>}
     </View>
   );
