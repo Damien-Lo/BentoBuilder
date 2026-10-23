@@ -38,7 +38,8 @@ export function useGymLines(): Lines {
     (e: EventOccurrence, calendar: EventCalendar | undefined, today: string): EventOccurrence => {
       if (!calendar?.isGym) return e;
       const { status, session: sessionId } = gymStatusOn(e, e.occurrenceDate, today);
-      const routine = e.gymWorkout ? routines.get(e.gymWorkout) : null;
+      const planned = e.plannedWorkout !== undefined ? e.plannedWorkout : e.gymWorkout;
+      const routine = planned ? routines.get(planned) : null;
       const name = routine?.name ?? "Any workout";
       const session = sessionId ? sessions.get(sessionId) : null;
       const exercises = routine?.exercises.filter((x) => x.exercise).length ?? 0;

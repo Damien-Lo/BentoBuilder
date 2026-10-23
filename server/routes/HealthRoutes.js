@@ -1,6 +1,7 @@
 import express from "express";
 
 import HealthMetric from "../models/HealthMetric.js";
+import { matchWatchWorkouts } from "../services/gymWatchMatch.js";
 
 const router = express.Router();
 
@@ -42,6 +43,8 @@ router.post("/metrics", async (req, res) => {
     }
     const fresh = [...byKey.values()].filter((m) => !had.has(m.key));
     if (fresh.length) await HealthMetric.create(fresh);
+    // (A run or a game of badminton on the Watch ticks off its training time.)
+    await matchWatchWorkouts([...byKey.values()]).catch((error) => console.error("Watch workouts:", error.message));
     return res.json({ success: true, data: { added: fresh.length, updated, unchanged: existing.length - updated } });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });

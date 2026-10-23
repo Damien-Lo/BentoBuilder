@@ -142,7 +142,7 @@ function CalendarEventPage() {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      Promise.all([getCalendarEvent(id), getCalendars()])
+      Promise.all([getCalendarEvent(id, date ?? undefined), getCalendars()])
         .then(([loaded, calendars]) => {
           if (cancelled) return;
           setEvent(loaded);

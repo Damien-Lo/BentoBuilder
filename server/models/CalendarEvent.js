@@ -60,6 +60,36 @@ const calendarEventSchema = new mongoose.Schema(
     // has many), whether it was done (and the session that did it, if
     // there's one) or skipped. A date in neither: not yet, or missed.
     gymWorkout: { type: mongoose.Schema.Types.ObjectId, ref: "GymWorkout", default: null },
+    // What's planned across the series (in place of one `gymWorkout`), like
+    // a meal time's usual food: the same each time ("same": workouts[0]),
+    // one for each weekday ("weekday": byWeekday["0"…"6"], 0 = Sunday), or
+    // in turn ("rotation": workouts in order, an occurrence each). A day's
+    // own (gymPlanned) comes first.
+    gymPlan: {
+      type: new mongoose.Schema(
+        {
+          mode: { type: String, enum: ["same", "weekday", "rotation"], default: "same" },
+          workouts: [{ type: mongoose.Schema.Types.ObjectId, ref: "GymWorkout" }],
+          byWeekday: { type: mongoose.Schema.Types.Mixed, default: {} },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
+    // A day planned differently from the series (its workout, or none: a
+    // day off from it).
+    gymPlanned: {
+      type: [
+        new mongoose.Schema(
+          {
+            date: { type: String, required: true, match: DATE_RE },
+            workout: { type: mongoose.Schema.Types.ObjectId, ref: "GymWorkout", default: null },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     gymDone: {
       type: [
         new mongoose.Schema(

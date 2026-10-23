@@ -19,7 +19,10 @@ export function useGymPlan(): [PlannedDay[] | null, (from: string, to: string, t
       setPlan(
         events
           .filter((e) => gym && e.calendar === gym._id)
-          .map((e) => ({ event: e, date: e.occurrenceDate, routine: e.gymWorkout ? byId.get(e.gymWorkout) ?? null : null, ...gymStatusOn(e, e.occurrenceDate, today) })),
+          .map((e) => {
+            const planned = e.plannedWorkout !== undefined ? e.plannedWorkout : e.gymWorkout;
+            return { event: e, date: e.occurrenceDate, routine: planned ? byId.get(planned) ?? null : null, ...gymStatusOn(e, e.occurrenceDate, today) };
+          }),
       );
     } catch {
       setPlan((p) => p ?? []);

@@ -5,16 +5,18 @@ import { Alert, Text, View } from "react-native";
 
 import { durationLabel } from "@/src/components/gym/schedule";
 import { Tap } from "@/src/components/ui/Tap";
-import { gymStatusOn, setGymStatus, type CalendarEvent } from "@/src/services/calendarApi";
-import { getSession, getSessions, getWorkout, sessionTotals, type GymSessionRecord, type GymWorkout } from "@/src/services/gymApi";
+import { showActions } from "@/src/components/todo/theme";
+import { gymStatusOn, setGymDay, setGymStatus, type CalendarEvent } from "@/src/services/calendarApi";
+import { getSession, getSessions, getWorkout, getWorkouts, sessionTotals, type GymSessionRecord, type GymWorkout } from "@/src/services/gymApi";
 import { SECTION_PALETTE, type OrbitColors } from "@/src/theme/orbit";
 import { todayStr } from "@/src/utils/mealPlan";
 
-// A planned workout (a Gym calendar event), on one of its days: the routine
-// to do, and whether it was done (the session that did it, opened when
-// tapped), skipped, missed, or not yet — with, as it stands, Start (the
-// routine, on the day: finishing it marks this done), Mark done (with that
-// day's session, or none), Skip, or back to not yet.
+// A training time (a Gym calendar event), on one of its days: the workout
+// planned for it (the series', or this day's own — changed here, like a
+// meal's food for a day), and whether it was done (the session that did
+// it, opened when tapped), skipped, missed, or not yet — with, as it
+// stands, Start (finishing it marks this done), Mark done (with that day's
+// session, or none), Skip, or back to not yet.
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const dayOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -25,11 +27,13 @@ export function PlannedWorkout({ event, date, onChange, colors: c }: { event: Ca
   const [session, setSession] = useState<GymSessionRecord | null>(null);
   const today = todayStr();
   const { status, session: sessionId } = gymStatusOn(event, date, today);
+  const planned = event.plannedWorkout !== undefined ? event.plannedWorkout : (event.gymWorkout ?? null);
+  const ownDay = (event.gymPlanned ?? []).some((p) => p.date === date);
 
   useEffect(() => {
-    if (event.gymWorkout) getWorkout(event.gymWorkout).then(setRoutine, () => setRoutine(null));
+    if (planned) getWorkout(planned).then(setRoutine, () => setRoutine(null));
     else setRoutine(null);
-  }, [event.gymWorkout]);
+  }, [planned]);
   useEffect(() => {
     if (sessionId) getSession(sessionId).then(setSession, () => setSession(null));
     else setSession(null);
@@ -51,8 +55,23 @@ export function PlannedWorkout({ event, date, onChange, colors: c }: { event: Ca
       { text: "Cancel", style: "cancel" as const },
     ]);
   }
-  const start = () =>
-    event.gymWorkout ? router.push(`/gym/session?workout=${event.gymWorkout}&plan=${event._id}&planDate=${date}` as Href) : router.push("/gym/workouts" as Href);
+  const start = () => (planned ? router.push(`/gym/session?workout=${planned}&plan=${event._id}&planDate=${date}` as Href) : router.push("/gym/workouts" as Href));
+  // This day's workout, changed (the series stays as it is).
+  async function changeDay() {
+    const routines = await getWorkouts().catch(() => [] as GymWorkout[]);
+    const set = async (workout: string | null | "series") => {
+      try {
+        onChange(await setGymDay(event._id, date, workout));
+      } catch (error) {
+        Alert.alert("Couldn't change it", error instanceof Error ? error.message : "Something went wrong.");
+      }
+    };
+    showActions("This day's workout", [
+      ...routines.filter((w) => w._id !== planned).map((w) => ({ label: w.name, onPress: () => void set(w._id) })),
+      { label: "Any workout", onPress: () => void set(null) },
+      ...(ownDay ? [{ label: "Back to the series' plan", onPress: () => void set("series") }] : []),
+    ]);
+  }
 
   const STATUS = {
     done: { label: "Done", icon: "checkmark-circle" as const, color: c.success },
@@ -71,7 +90,8 @@ export function PlannedWorkout({ event, date, onChange, colors: c }: { event: Ca
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 16, fontWeight: "700", color: c.text }}>{routine?.name ?? "Any workout"}</Text>
           <Text style={{ marginTop: 1, fontSize: 12.5, color: c.muted }} numberOfLines={1}>
-            {routine ? `${exercises.length} exercise${exercises.length === 1 ? "" : "s"} · ${exercises.slice(0, 3).map((e) => e.exercise!.name).join(", ")}${exercises.length > 3 ? "…" : ""}` : "Whatever you train that day"}
+            {ownDay ? "This day only · " : ""}
+            {routine ? `${exercises.length} exercise${exercises.length === 1 ? "" : "s"} · ${exercises.slice(0, 3).map((e) => e.exercise!.name).join(", ")}${exercises.length > 3 ? "…" : ""}` : "Whatever you train then"}
           </Text>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: c.pill }}>
@@ -98,6 +118,7 @@ export function PlannedWorkout({ event, date, onChange, colors: c }: { event: Ca
         )}
         {(status === "open" || status === "missed") && <Action label="Mark done" icon="checkmark" onPress={() => void markDone()} colors={c} />}
         {(status === "open" || status === "missed") && <Action label="Skip" icon="play-skip-forward" onPress={() => void mark("skipped")} colors={c} />}
+        {status !== "done" && <Action label="Change for this day" icon="swap-horizontal" onPress={() => void changeDay()} colors={c} />}
         {(status === "done" || status === "skipped") && <Action label="Not done after all" icon="arrow-undo" onPress={() => void mark("open")} colors={c} />}
       </View>
       {status === "open" && date === today && <Text style={{ marginTop: 8, fontSize: 12, lineHeight: 17, color: c.faint }}>Finishing it in Gym marks this done.</Text>}

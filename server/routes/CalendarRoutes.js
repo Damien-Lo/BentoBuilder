@@ -134,13 +134,36 @@ async function getGymCalendar() {
   return EventCalendar.create({ name: "Gym", color: "orange", isGym: true, order: 998 });
 }
 
-// An event's workout follows its calendar: kept in the Gym calendar,
+// An event's workouts follow its calendar: kept in the Gym calendar,
 // never set anywhere else.
 async function withGymRules(fields) {
   if (fields.calendar === undefined) return fields;
   const calendar = await EventCalendar.findById(fields.calendar).select("isGym");
   if (calendar?.isGym) return fields;
-  return { ...fields, gymWorkout: null };
+  return { ...fields, gymWorkout: null, gymPlan: null };
+}
+
+// The workout planned for a training time on one of its days: the day's
+// own, else the series' — the same each time, that weekday's, or the next
+// in turn (by how many times it's come round since it began) — else the
+// one routine it had. Null: nothing planned (any workout).
+export function plannedWorkoutOn(event, date) {
+  const own = (event.gymPlanned ?? []).find((p) => p.date === date);
+  if (own) return own.workout ? String(own.workout) : null;
+  const plan = event.gymPlan;
+  if (!plan) return event.gymWorkout ? String(event.gymWorkout) : null;
+  if (plan.mode === "weekday") {
+    const id = plan.byWeekday?.[String(toDate(date).getUTCDay())];
+    return id ? String(id) : null;
+  }
+  const list = plan.workouts ?? [];
+  if (!list.length) return null;
+  if (plan.mode === "rotation") {
+    const plain = typeof event.toObject === "function" ? event.toObject() : event;
+    const turn = Math.max(0, occurrenceDates(plain, plain.date, date).length - 1);
+    return String(list[turn % list.length]);
+  }
+  return String(list[0]);
 }
 
 const MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"];
@@ -392,8 +415,9 @@ router.get("/events", async (req, res) => {
     const occurrences = [];
     for (const event of events) {
       const span = daysBetween(event.date, event.endDate);
+      const planned = event.gymWorkout || event.gymPlan || event.gymPlanned?.length;
       for (const date of occurrenceDates(event, from, to)) {
-        occurrences.push({ ...event, occurrenceDate: date, occurrenceEndDate: addDays(date, span) });
+        occurrences.push({ ...event, occurrenceDate: date, occurrenceEndDate: addDays(date, span), ...(planned ? { plannedWorkout: plannedWorkoutOn(event, date) } : {}) });
       }
     }
     occurrences.sort(
@@ -412,6 +436,8 @@ router.get("/events/:id", async (req, res) => {
   try {
     const event = await CalendarEvent.findById(req.params.id);
     if (!event) return fail(res, "Event not found", 404);
+    // (?date=: with the workout planned that day.)
+    if (DATE_RE.test(req.query.date ?? "")) return res.json({ success: true, data: { ...event.toObject(), plannedWorkout: plannedWorkoutOn(event, req.query.date) } });
     return res.json({ success: true, data: event });
   } catch (error) {
     return fail(res, error);
@@ -459,7 +485,7 @@ router.patch("/events/:id", async (req, res) => {
 
 // Fields a client may set on an event (never ids or bookkeeping).
 function eventFields(body) {
-  const { _id, createdAt, updatedAt, __v, seriesId, originalDate, excludedDates, mealAuto, gymDone, gymSkipped, ...fields } = body ?? {};
+  const { _id, createdAt, updatedAt, __v, seriesId, originalDate, excludedDates, mealAuto, gymDone, gymSkipped, gymPlanned, plannedWorkout, ...fields } = body ?? {};
   return fields;
 }
 
@@ -486,6 +512,24 @@ router.post("/events/:id/gym-status", async (req, res) => {
   }
 });
 
+// POST /events/:id/gym-day  { date, workout }
+// One day of a training time planned differently from its series: a
+// workout, null for none that day, or "series" for back to the series'.
+router.post("/events/:id/gym-day", async (req, res) => {
+  try {
+    const { date, workout } = req.body ?? {};
+    if (!DATE_RE.test(date ?? "")) return fail(res, "date must be a YYYY-MM-DD date");
+    const event = await CalendarEvent.findById(req.params.id);
+    if (!event) return fail(res, "Event not found", 404);
+    event.gymPlanned = event.gymPlanned.filter((p) => p.date !== date);
+    if (workout !== "series") event.gymPlanned.push({ date, workout: workout || null });
+    await event.save();
+    return res.json({ success: true, data: { ...event.toObject(), plannedWorkout: plannedWorkoutOn(event, date) } });
+  } catch (error) {
+    return fail(res, error);
+  }
+});
+
 // POST /gym/link  { date, session, workout?, event? }
 // A finished Gym session, on its day: marks that day's planned workout done
 // with it — the event it was started from, if given; else the one for the
@@ -499,7 +543,7 @@ router.post("/gym/link", async (req, res) => {
     const open = events.filter((e) => !e.gymDone.some((d) => d.date === date) && !e.gymSkipped.includes(date));
     const target =
       (eventId && events.find((e) => String(e._id) === String(eventId))) ||
-      (workout && open.find((e) => String(e.gymWorkout) === String(workout))) ||
+      (workout && open.find((e) => plannedWorkoutOn(e, date) === String(workout))) ||
       open[0];
     if (!target) return res.json({ success: true, data: null });
     target.gymDone = target.gymDone.filter((d) => d.date !== date);

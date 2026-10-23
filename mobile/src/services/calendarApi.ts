@@ -101,8 +101,15 @@ export interface CalendarEvent {
   // Gym calendar: a planned workout — the routine (a Gym workout, or none
   // for "a workout"), and day by day, done (with the session) or skipped.
   gymWorkout?: string | null;
+  // What's planned across the series, like a meal time's usual food: the
+  // same each time, one for each weekday ("0"–"6", 0 = Sunday), or in turn.
+  gymPlan?: GymPlan | null;
+  // Days planned differently (a workout, or null for none that day).
+  gymPlanned?: { date: string; workout: string | null }[];
   gymDone?: { date: string; session: string | null }[];
   gymSkipped?: string[];
+  // (From the server, for a day: the workout planned on it.)
+  plannedWorkout?: string | null;
   // Set when this was one occurrence of a repeating event, edited on its
   // own and split off ("only this event").
   seriesId?: string | null;
@@ -138,7 +145,13 @@ export interface EventOccurrence extends CalendarEvent {
   gymSession?: string;
 }
 
-export type EventInput = Omit<CalendarEvent, "_id" | "excludedDates" | "gymDone" | "gymSkipped">;
+export interface GymPlan {
+  mode: "same" | "weekday" | "rotation";
+  workouts: string[];
+  byWeekday: Record<string, string | null>;
+}
+
+export type EventInput = Omit<CalendarEvent, "_id" | "excludedDates" | "gymDone" | "gymSkipped" | "gymPlanned" | "plannedWorkout">;
 
 // A planned workout, on one of its days: done (with the session that did
 // it, if there's one), skipped, missed (a day gone by with neither), or
@@ -185,7 +198,8 @@ export const getMealTimesUntil = () => request<string | null>("/meal-times/until
 
 export const getEventOccurrences = (from: string, to: string) =>
   request<EventOccurrence[]>(`/events?from=${from}&to=${to}`);
-export const getCalendarEvent = (id: string) => request<CalendarEvent>(`/events/${id}`);
+// (`date`: with the workout planned that day, for a Gym calendar event.)
+export const getCalendarEvent = (id: string, date?: string) => request<CalendarEvent>(`/events/${id}${date ? `?date=${date}` : ""}`);
 export const createCalendarEvent = (input: EventInput) =>
   request<CalendarEvent>("/events", { method: "POST", body: body(input) });
 export const updateCalendarEvent = (id: string, input: Partial<EventInput>) =>
@@ -205,6 +219,10 @@ export const deleteCalendarEvent = (id: string, scope: SeriesScope = "all", occu
 // to not yet.
 export const setGymStatus = (id: string, date: string, status: "done" | "skipped" | "open", session?: string | null) =>
   request<CalendarEvent>(`/events/${id}/gym-status`, { method: "POST", body: body({ date, status, session }) });
+// One day of a training time planned differently: a workout, null for none
+// that day, or "series" for the series' plan again.
+export const setGymDay = (id: string, date: string, workout: string | null | "series") =>
+  request<CalendarEvent>(`/events/${id}/gym-day`, { method: "POST", body: body({ date, workout }) });
 // A finished session, on its day: marks that day's planned workout done with
 // it (the event it was started from, else the same routine's, else the first
 // not yet done). Null when nothing was planned.
