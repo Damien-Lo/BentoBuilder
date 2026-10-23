@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAccount } from "@/src/components/auth/AuthGate";
@@ -40,6 +40,8 @@ export default function AccountSettingsScreen() {
 
   // You
   const [name, setName] = useState(account?.name ?? "");
+  const [changingName, setChangingName] = useState(false);
+  const [nameState, setNameState] = useState<{ busy?: boolean; error?: string } | null>(null);
   const [changingEmail, setChangingEmail] = useState(false);
   const [email, setEmail] = useState(account?.email ?? "");
   const [emailPassword, setEmailPassword] = useState("");
@@ -67,13 +69,18 @@ export default function AccountSettingsScreen() {
 
   if (!account) return null;
 
+  // Your name, as others in your Orbit and its messages show it.
   async function saveName() {
     const trimmed = name.trim();
-    if (trimmed === account!.name) return;
+    if (!trimmed) return setNameState({ error: "Put in your name." });
+    if (trimmed === account!.name) return setChangingName(false);
+    setNameState({ busy: true });
     try {
       setAccount(await updateMe({ name: trimmed }));
+      setChangingName(false);
+      setNameState(null);
     } catch (err) {
-      setError(errorText(err));
+      setNameState({ error: errorText(err) });
     }
   }
 
@@ -137,20 +144,31 @@ export default function AccountSettingsScreen() {
         {/* You */}
         <Heading>You</Heading>
         <Card>
-          <View className="flex-row items-center px-4 py-3">
-            <Ionicons name="person-outline" size={18} color={o.icon} />
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              onBlur={() => void saveName()}
-              onSubmitEditing={() => void saveName()}
-              placeholder="Your name"
-              placeholderTextColor={o.faint}
-              className="ml-3 flex-1 text-base text-slate-900"
-              style={[Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : undefined, { color: o.text }]}
-              accessibilityLabel="Your name"
-            />
-            <Text className="text-xs text-slate-400" style={{ color: o.faint }}>Name</Text>
+          <View className="px-4 py-3">
+            <View className="flex-row items-center">
+              <Ionicons name="person-outline" size={18} color={o.icon} />
+              <Text className="ml-3 flex-1 text-base text-slate-900" style={{ color: account.name ? o.text : o.faint }}>{account.name || "No name yet"}</Text>
+              {!changingName && change(() => setChangingName(true))}
+            </View>
+            {changingName && (
+              <View className="mt-2">
+                <Input value={name} onChangeText={setName} placeholder="Your name" textContentType="name" autoComplete="name" autoCapitalize="words" autoCorrect={false} onSubmitEditing={() => void saveName()} />
+                {!!nameState?.error && <Text className="mt-2 text-sm text-red-600" style={errorStyle}>{nameState.error}</Text>}
+                <View className="mt-3 flex-row gap-2">
+                  <Button label="Save name" fill busy={nameState?.busy} onPress={() => void saveName()} />
+                  <Button
+                    label="Cancel"
+                    tone="plain"
+                    fill
+                    onPress={() => {
+                      setChangingName(false);
+                      setName(account.name);
+                      setNameState(null);
+                    }}
+                  />
+                </View>
+              </View>
+            )}
           </View>
           <View className="border-t border-slate-100 px-4 py-3" style={line}>
             <View className="flex-row items-center">
