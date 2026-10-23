@@ -6,7 +6,7 @@ import type { ActivityLevel, Sex } from "@/src/services/settingsService";
 // a calorie target toward your goal weight, and protein to aim for. Weights
 // in pounds, height in cm.
 
-const KG_PER_LB = 0.45359237;
+export const KG_PER_LB = 0.45359237;
 
 export const ACTIVITY: { id: ActivityLevel; label: string; hint: string; factor: number }[] = [
   { id: "sedentary", label: "Mostly sitting", hint: "A desk job, little exercise", factor: 1.2 },
@@ -16,7 +16,7 @@ export const ACTIVITY: { id: ActivityLevel; label: string; hint: string; factor:
   { id: "very", label: "Athlete", hint: "Training twice a day, or a physical job", factor: 1.9 },
 ];
 
-// Whole years since a "YYYY-MM-DD" birthday.
+// Whole years since a "YYYY-MM-DD" date of birth.
 export function ageOn(birthDate: string | null, today = new Date()): number | null {
   if (!birthDate) return null;
   const [y, m, d] = birthDate.split("-").map(Number);

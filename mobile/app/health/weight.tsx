@@ -23,11 +23,14 @@ import { deleteWeightEntry, getWeightEntries, logWeightEntry, type WeightEntry }
 import { formatDateDisplay, todayDateInputString } from "@/src/utils/date";
 import { SECTION_PALETTE } from "@/src/theme/orbit";
 
+import { WeightPhone } from "@/src/components/health/WeightPhone";
+
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
-// (In a desktop browser, in Orbit's look and Nutrition's green.)
+// Weight: on the phone, Health's page (WeightPhone, below); in a desktop
+// browser, in Orbit's look and Nutrition's green, as it was.
 export default function WeightScreen() {
   return (
     <NutritionDesk>
@@ -37,6 +40,10 @@ export default function WeightScreen() {
 }
 
 function WeightPage() {
+  return useNutritionDesk() ? <WeightDesk /> : <WeightPhone />;
+}
+
+function WeightDesk() {
   const router = useRouter();
   // The page's colours in a desktop browser; null on a phone.
   const o = useNutritionDesk();
