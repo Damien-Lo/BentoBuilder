@@ -4,6 +4,7 @@ import { Fragment } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AppleHealthCard } from "@/src/components/health/AppleHealthCard";
 import { useToday } from "@/src/components/home/useToday";
 import { Hairline, IconTile, ListCard, ListRow, neutralTile, PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
@@ -14,8 +15,10 @@ import { useWideWeb } from "@/src/utils/useWideWeb";
 // list, like Settings, each row opening its own page — About you (what the
 // health numbers are worked out from) first. Nutrition is part of
 // it (its pages are the ones that were the Nutrition section's), with
-// weight beside it and what's still to come under them. Today's two
-// numbers at the top. In Health's own colour.
+// You, Activity & fitness, Body, Heart & vitals, Sleep & mind (most from
+// Apple Health) and what's still to come. Today's two
+// numbers at the top, then Apple Health's (connected and synced here). In
+// Health's own colour.
 //
 // (A desktop browser still has Nutrition as a section of its own, for
 // now: there this goes straight to it.)
@@ -28,24 +31,48 @@ const GROUPS: { title: string; entries: Entry[] }[] = [
     entries: [{ label: "About you", icon: "person", path: "/health/about" }],
   },
   {
+    title: "Activity & fitness",
+    entries: [
+      { label: "Activity", icon: "walk", path: "/health/section/activity" },
+      { label: "Workouts", icon: "fitness", path: "/health/section/workouts" },
+    ],
+  },
+  {
+    title: "Body",
+    entries: [
+      { label: "Weight", icon: "scale", path: "/health/weight" },
+      { label: "Body measurements", icon: "body", path: "/health/section/body" },
+    ],
+  },
+  {
+    title: "Heart & vitals",
+    entries: [
+      { label: "Heart", icon: "heart", path: "/health/section/heart" },
+      { label: "Vitals", icon: "pulse", path: "/health/section/vitals" },
+    ],
+  },
+  {
+    title: "Sleep & mind",
+    entries: [
+      { label: "Sleep", icon: "moon", path: "/health/section/sleep" },
+      { label: "Mind", icon: "happy", path: "/health/section/mind" },
+    ],
+  },
+  {
     title: "Nutrition",
     entries: [
       { label: "Today", icon: "leaf", path: "/health" },
       { label: "All nutrients", icon: "list", path: "/health/nutrients" },
+      { label: "Water & caffeine", icon: "water", path: "/health/section/drinks" },
       { label: "Weekly report", icon: "bar-chart", path: "/health/weekly-report" },
       { label: "Goals", icon: "flag", path: "/health/goals" },
     ],
   },
   {
-    title: "Body",
-    entries: [{ label: "Weight", icon: "scale", path: "/health/weight" }],
-  },
-  {
     title: "Still to come",
     entries: [
-      { label: "Sleep", icon: "moon", soon: true },
-      { label: "Activity & steps", icon: "walk", soon: true },
       { label: "Medications", icon: "medkit", soon: true },
+      { label: "Records", icon: "document-text", soon: true },
     ],
   },
 ];
@@ -96,6 +123,9 @@ function HealthList() {
             colors={c}
           />
         </View>
+
+        {/* Apple Health: connected, synced, today's numbers */}
+        <AppleHealthCard />
 
         {GROUPS.map((group) => (
           <View key={group.title}>

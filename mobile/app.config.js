@@ -68,6 +68,17 @@ module.exports = {
       ],
       "@react-native-community/datetimepicker",
       [
+        // Apple Health (HealthKit): reading the Watch's and phone's health
+        // data into Health, and writing weigh-ins, workouts and food back.
+        // (Background delivery off for now: synced when the app opens.)
+        "@kingstinct/react-native-healthkit",
+        {
+          NSHealthShareUsageDescription: "Orbit reads your health data — activity, heart, sleep, weight and workouts — to show it in Health and shape your calorie and nutrition goals.",
+          NSHealthUpdateUsageDescription: "Orbit saves your weigh-ins, workouts and the food you log to Apple Health.",
+          background: false,
+        },
+      ],
+      [
         "expo-image-picker",
         {
           photosPermission: "Orbit uses your photos to add pictures to your recipes.",

@@ -87,6 +87,14 @@ export default function RootLayout() {
           }}
         />
 
+        {/* A Health section — Activity, Heart, Sleep, Workouts… */}
+        <Stack.Screen
+          name="health/section/[id]"
+          options={{
+            headerShown: false,
+          }}
+        />
+
         {/* Goals — starting/goal weight targets */}
         <Stack.Screen
           name="health/goals"
