@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { useOrbitPage } from "@/src/theme/orbit";
 
 import { keepFocus } from "./keepFocus";
+import { useDebouncedSearch } from "./useDebouncedSearch";
 
 // Inline mode lists at most this many matches; the rest are reached by
 // typing (the page itself does the scrolling, so an unbounded list of a
@@ -59,6 +60,22 @@ interface SearchableObjectDropdownProps<T extends BaseDropdownOption> {
   // Optional second line under an option's name — e.g. flagging it as
   // generic — so options that share a name are still distinguishable.
   renderSubtitle?: (option: T) => ReactNode;
+
+  // Matches from beyond `options` (the food library, say — see
+  // useFoodLibrary): asked for a moment after typing stops, once two
+  // letters are typed, and listed below the options' own under `moreLabel`,
+  // leaving out any already among the options.
+  searchMore?: (query: string) => Promise<T[]>;
+  moreLabel?: string;
+  // A searchMore match is handed here before it's selected (to save it into
+  // one's own list and add it to the caller's options, say); onSelect then
+  // gets what this returns. Null: the caller has dealt with it itself, so
+  // onSelect isn't called (the name stays in the field); thrown: nothing is
+  // selected and the typed text comes back.
+  onPickMore?: (option: T) => Promise<T | null>;
+  // A further line under a searchMore match, after renderSubtitle's (e.g.
+  // the library food's own description).
+  renderMoreSubtitle?: (option: T) => ReactNode;
 }
 
 export function SearchableObjectDropdown<T extends BaseDropdownOption>({
@@ -77,6 +94,10 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
   onOpen,
   onCreateNew,
   renderSubtitle,
+  searchMore,
+  moreLabel = "From the food library",
+  onPickMore,
+  renderMoreSubtitle,
 }: SearchableObjectDropdownProps<T>) {
   const safeOptions = useMemo<T[]>(
     () => (Array.isArray(options) ? options : []),
@@ -112,6 +133,14 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
     );
   }, [normalizedQuery, safeOptions, showAllWhenEmpty]);
 
+  // searchMore's matches for the text typed, while the list is open.
+  const { found: moreFound, searching: searchingMore } = useDebouncedSearch(searchMore, normalizedQuery, open && !disabled);
+
+  const moreOptions = useMemo(() => {
+    const known = new Set(safeOptions.map((option) => option._id));
+    return moreFound.filter((option) => !known.has(option._id));
+  }, [moreFound, safeOptions]);
+
   function openDropdown() {
     if (!disabled) {
       setOpen(true);
@@ -138,6 +167,20 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
     onSelect(option);
   }
 
+  // A searchMore match: shown as chosen straight away, handed to onPickMore,
+  // then selected — or the text put back as it was if that fails.
+  async function handleSelectMore(option: T) {
+    const typed = query;
+    setQuery(option.name);
+    setOpen(false);
+    try {
+      const picked = onPickMore ? await onPickMore(option) : option;
+      if (picked) onSelect(picked);
+    } catch {
+      setQuery(typed);
+    }
+  }
+
   function handleClear() {
     setQuery("");
     onTextChange?.("");
@@ -153,32 +196,56 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
   const o = useOrbitPage();
   const menu = o ? { backgroundColor: o.surface, borderColor: o.border } : null;
 
+  function renderRow(option: T, onPress: () => void, more = false) {
+    const isSelected = option._id === selectedId;
+
+    return (
+      <Pressable
+        key={option._id}
+        className="flex-row items-center border-b border-slate-100 px-4 py-4 active:bg-slate-50"
+        style={o ? { borderBottomColor: o.border } : undefined}
+        onPress={onPress}
+      >
+        <View className="flex-1">
+          <Text className="text-base text-slate-900" style={o ? { color: o.text } : undefined}>
+            {option.name}
+          </Text>
+          {renderSubtitle?.(option)}
+          {more && renderMoreSubtitle?.(option)}
+        </View>
+
+        {isSelected && (
+          <Ionicons name="checkmark" size={20} color={o?.accent ?? "#2563EB"} />
+        )}
+      </Pressable>
+    );
+  }
+
   function renderOptions(visible: T[]) {
     return (
       <>
-        {visible.map((option) => {
-          const isSelected = option._id === selectedId;
+        {visible.map((option) => renderRow(option, () => handleSelect(option)))}
 
-          return (
-            <Pressable
-              key={option._id}
-              className="flex-row items-center border-b border-slate-100 px-4 py-4 active:bg-slate-50"
-              style={o ? { borderBottomColor: o.border } : undefined}
-              onPress={() => handleSelect(option)}
+        {moreOptions.length > 0 && (
+          <>
+            <Text
+              className="border-b border-slate-100 bg-slate-50 px-4 pb-1.5 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-500"
+              style={o ? { color: o.muted, backgroundColor: o.canvas, borderBottomColor: o.border } : undefined}
             >
-              <View className="flex-1">
-                <Text className="text-base text-slate-900" style={o ? { color: o.text } : undefined}>
-                  {option.name}
-                </Text>
-                {renderSubtitle?.(option)}
-              </View>
+              {moreLabel}
+            </Text>
+            {moreOptions.map((option) => renderRow(option, () => void handleSelectMore(option), true))}
+          </>
+        )}
 
-              {isSelected && (
-                <Ionicons name="checkmark" size={20} color={o?.accent ?? "#2563EB"} />
-              )}
-            </Pressable>
-          );
-        })}
+        {visible.length === 0 && moreOptions.length === 0 && searchingMore && !onCreateNew && (
+          <View className="flex-row items-center justify-center px-4 py-5">
+            <ActivityIndicator size="small" color={o?.muted ?? "#64748B"} />
+            <Text className="ml-2 text-sm text-slate-500" style={o ? { color: o.muted } : undefined}>
+              Searching…
+            </Text>
+          </View>
+        )}
 
         {visible.length === 0 &&
           (onCreateNew && normalizedQuery ? (
@@ -194,13 +261,13 @@ export function SearchableObjectDropdown<T extends BaseDropdownOption>({
                 Create &quot;{query.trim()}&quot;
               </Text>
             </Pressable>
-          ) : (
+          ) : moreOptions.length === 0 && !searchingMore ? (
             <View className="px-4 py-5">
               <Text className="text-center text-sm text-slate-500" style={o ? { color: o.muted } : undefined}>
                 No matching options
               </Text>
             </View>
-          ))}
+          ) : null)}
       </>
     );
   }

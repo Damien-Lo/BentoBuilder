@@ -21,3 +21,11 @@ export { SettingsSectionHeader } from "./SettingsSectionHeader";
 export { ToggleRow } from "./ToggleRow";
 export { UnitConversionsEditor } from "./UnitConversionsEditor";
 export { UnitFamilyDropdown } from "./UnitFamilyDropdown";
+export {
+  addIngredientTo,
+  addLibraryFood,
+  FoodLibraryHeading,
+  libraryFoodDetail,
+  useFoodLibrary,
+  useLibraryMatches,
+} from "./useFoodLibrary";

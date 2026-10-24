@@ -31,6 +31,8 @@ import {
   SegmentedToggle,
   ToggleRow,
   UnitFamilyDropdown,
+  addIngredientTo,
+  useFoodLibrary,
 } from "@/src/components/forms";
 
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
@@ -268,6 +270,9 @@ function AddRecipe() {
   const [recipeCategories, setRecipeCategories] = useState<RecipeCategory[]>([]);
   const [units, setUnits] = useState<string[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
+  // The line picker also finds the food library; a food picked from it is
+  // saved and joins ingredientOptions.
+  const foodLibrary = useFoodLibrary(ingredientToOption, (option) => setIngredientOptions(addIngredientTo(option)));
 
   const [saving, setSaving] = useState(false);
 
@@ -1090,6 +1095,7 @@ function AddRecipe() {
                   setPickerUnit(option.unit);
                 }}
                 onCreateNew={() => setShowCreateIngredient(true)}
+                {...foodLibrary}
                 renderSubtitle={(option) =>
                   option.isGeneric ? (
                     <Text className="mt-0.5 text-xs font-medium text-violet-600" style={generic}>Generic</Text>

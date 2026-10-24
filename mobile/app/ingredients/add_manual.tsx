@@ -38,9 +38,12 @@ import {
   SegmentedToggle,
   ToggleRow,
   UnitConversionsEditor,
+  addIngredientTo,
+  addLibraryFood,
+  useFoodLibrary,
 } from "@/src/components/forms";
 
-import { getIngredients, parseNutritionLabel, type Ingredient } from "@/src/services/ingredientApi";
+import { getIngredientByBarcode, getIngredients, parseNutritionLabel, saveIngredient, updateIngredient, type Ingredient } from "@/src/services/ingredientApi";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { countReadNutrients, labelNutrition, labelServing } from "@/src/utils/nutritionLabel";
 import type { DurationUnit } from "@/src/utils/date";
@@ -196,6 +199,30 @@ function optionalNumber(value: string): number | undefined {
   return Number.isFinite(parsedValue) ? parsedValue : undefined;
 }
 
+// What an ingredient *is* on this form — not one's own settings for it (low
+// stock, where it's kept, expiry) — to tell a library food saved as it was
+// filled in from one changed into one's own (pickByName).
+function factsOf(form: FormState, categoryDraft: string, brandDraft: string, genericParentDraft: string, tags: SelectOption[]): string {
+  return JSON.stringify([
+    form.ingredientName.trim(),
+    form.description.trim(),
+    form.barcode.trim(),
+    form.isGeneric,
+    form.brandId,
+    brandDraft.trim(),
+    form.genericParentId,
+    genericParentDraft.trim(),
+    form.categoryId,
+    categoryDraft.trim(),
+    form.quantityUnit.trim(),
+    form.defaultPortionAmount.trim(),
+    form.pieceLabel.trim(),
+    form.nutrition,
+    form.unitConversions,
+    tags.map((tag) => tag.name),
+  ]);
+}
+
 function numberToFormValue(value: number | undefined): string {
   return value != null ? String(value) : "";
 }
@@ -265,6 +292,8 @@ function ingredientToOption(ingredient: Ingredient): IngredientOption {
 
     unit: ingredient.defaultPortionUnit ?? "",
     defaultPortionAmount: ingredient.defaultPortionAmount,
+    pieceLabel: ingredient.pieceLabel ?? null,
+    saved: ingredient.saved !== false,
 
     lowStockThreshold: ingredient.lowStockThreshold,
     isAlwaysAvailable: ingredient.isAlwaysAvailable ?? false,
@@ -407,6 +436,9 @@ function AddManualPantryItem() {
   );
 
   const [categoryDraft, setCategoryDraft] = useState("");
+  // The suggestion the form was filled from (pickByName), whether it's in
+  // one's ingredients already, and its facts as filled in.
+  const [pickedFood, setPickedFood] = useState<{ id: string; name: string; saved: boolean; facts: string } | null>(null);
 
   const [storageLocationDraft, setStorageLocationDraft] = useState("");
 
@@ -458,6 +490,12 @@ function AddManualPantryItem() {
     (option) => option.isGeneric,
   );
 
+  // The food library, in the Name field (see chooseLibraryFood) and as
+  // generic parents (so a branded product can be linked to a library food);
+  // one saved from either joins `ingredients`.
+  const nameLibrary = useFoodLibrary(ingredientToOption, (option) => setIngredients(addIngredientTo(option)));
+  const genericLibrary = useFoodLibrary(ingredientToOption, (option) => setIngredients(addIngredientTo(option)));
+
   // This ingredient's own conversions, then its selected generic parent's (if
   // any), then the app-wide list as a last-resort fallback — mirrors the
   // ingredient/genericParent/global resolution order used everywhere else.
@@ -481,9 +519,17 @@ function AddManualPantryItem() {
   // specific/branded ingredient, so generics are excluded from the Name
   // search here — otherwise selecting one would silently flip
   // form.isGeneric back on despite the locked toggle.
+  // Logging a purchase here (or completing a grocery item): a suggestion
+  // picked is the ingredient bought, not a form to fill (see pickByName).
+  const choosingExisting = isResolvingGroceryItem || pantryInventoryExpanded;
   const nameSearchOptions = lockTypeToSpecific
     ? ingredients.filter((option) => !option.isGeneric)
     : ingredients;
+  // One of one's own already called what's typed (said under the field).
+  const typedName = form.ingredientName.trim().toLowerCase();
+  const alreadyHave = !choosingExisting && !form.ingredientId && !pickedFood && typedName
+    ? ingredients.find((option) => option.name.trim().toLowerCase() === typedName)
+    : undefined;
 
   useEffect(() => {
     let cancelled = false;
@@ -645,16 +691,32 @@ function AddManualPantryItem() {
     }
   }
 
-  function applyScannedProduct(product: ScannedProduct) {
+  async function applyScannedProduct(product: ScannedProduct) {
     // Scanning a barcode that's already in the catalog should log a pantry
-    // entry for that ingredient, not offer to create a duplicate.
-    const existingMatch = ingredients.find((option) =>
+    // entry for that ingredient, not offer to create a duplicate. The list
+    // doesn't hold every shared product, so the server is asked as well.
+    const localMatch = ingredients.find((option) =>
       barcodesMatch(option.barcode, product.barcode),
     );
+    const found = localMatch ? null : await getIngredientByBarcode(product.barcode).catch(() => null);
+    const existingMatch = localMatch ?? (found ? ingredientToOption(found) : null);
 
     if (existingMatch) {
-      if (isResolvingGroceryItem) {
+      // (A shared one not yet in one's own list is saved into it first.)
+      const takeExisting = async () => {
+        if (found) {
+          try {
+            if (!found.saved) await addLibraryFood(found);
+          } catch {
+            return;
+          }
+          setIngredients(addIngredientTo(existingMatch));
+        }
         goToExistingIngredient(existingMatch);
+      };
+
+      if (isResolvingGroceryItem) {
+        void takeExisting();
         Alert.alert(
           "Already in your catalog",
           `"${existingMatch.name}" is already an ingredient — add a pantry entry below to log this purchase.`,
@@ -666,7 +728,7 @@ function AddManualPantryItem() {
           [
             {
               text: "View ingredient",
-              onPress: () => goToExistingIngredient(existingMatch),
+              onPress: () => void takeExisting(),
             },
           ],
         );
@@ -740,6 +802,62 @@ function AddManualPantryItem() {
     setDefaultLocationDraft(option.defaultStorageLocationName ?? "");
     setWantsDefaultLocation(!!option.defaultStorageLocationId);
     setWantsDefaultExpiry(option.defaultExpiryDurationAmount != null);
+  }
+
+  // A suggestion picked in the Name field. Logging a purchase here (or
+  // completing a grocery item), it's the ingredient bought: chosen. Otherwise
+  // it fills the whole form — name, category, portion, nutrition, unit
+  // conversions — and Save, with those unchanged, adds it to one's
+  // ingredients as it is (a library or catalog food; one's own already is),
+  // with one's own settings for it (low stock, where it's kept…); with any of
+  // them changed, it makes a new ingredient of one's own. Adding a specific
+  // product, it's only a starting point.
+  function pickByName(option: IngredientOption): Promise<null> {
+    if (choosingExisting) {
+      applySelectedIngredient(option);
+      return Promise.resolve(null);
+    }
+    const next: FormState = {
+      ...form,
+
+      ingredientId: "",
+      ingredientName: option.name,
+      description: option.description ?? "",
+      barcode: lockTypeToSpecific ? form.barcode : option.barcode ?? "",
+
+      isGeneric: lockTypeToSpecific ? false : option.isGeneric ?? false,
+      brandId: lockTypeToSpecific ? form.brandId : option.brandId ?? "",
+      brandName: lockTypeToSpecific ? form.brandName : option.brandName ?? "",
+      genericParentId: lockTypeToSpecific ? form.genericParentId : option.genericParentId ?? "",
+      genericParentName: lockTypeToSpecific ? form.genericParentName : option.genericParentName ?? "",
+
+      categoryId: option.categoryId ?? option.category?._id ?? "",
+      categoryName: option.categoryName ?? option.category?.name ?? "",
+
+      quantityUnit: option.unit || form.quantityUnit,
+      defaultPortionAmount: numberToFormValue(option.defaultPortionAmount),
+      pieceLabel: option.pieceLabel ?? "",
+
+      nutrition: nutritionToForm(option.nutrition),
+      unitConversions: option.unitConversions ?? [],
+    };
+    const drafts = {
+      category: next.categoryName,
+      brand: lockTypeToSpecific ? brandDraft : next.brandName,
+      genericParent: lockTypeToSpecific ? genericParentDraft : next.genericParentName,
+    };
+    setForm(next);
+    setCategoryDraft(drafts.category);
+    setBrandDraft(drafts.brand);
+    setGenericParentDraft(drafts.genericParent);
+    setPickedFood(
+      lockTypeToSpecific
+        ? null
+        : { id: option._id, name: option.name, saved: option.saved !== false, facts: factsOf(next, drafts.category, drafts.brand, drafts.genericParent, selectedTags) },
+    );
+    setNutritionExpanded(true);
+    if (option.unitConversions?.length) setUnitConversionsExpanded(true);
+    return Promise.resolve(null);
   }
 
   // What "pick the existing ingredient instead" does when a duplicate is
@@ -938,6 +1056,9 @@ function AddManualPantryItem() {
    * handleSave
    * Save the current form data as a new pantry item, add new ingredient if ingreident does not exist.
    */
+  // Still the picked suggestion as filled in (see pickByName).
+  const pickedUnchanged = !!pickedFood && factsOf(form, categoryDraft, brandDraft, genericParentDraft, selectedTags) === pickedFood.facts;
+
   async function handleSave() {
     if (!form.ingredientName.trim()) {
       Alert.alert(
@@ -1083,6 +1204,21 @@ function AddManualPantryItem() {
       const normalizedName = form.ingredientName.trim().toLowerCase();
 
       let ingredientId = form.ingredientId;
+
+      // A suggestion saved as it was filled in: it's that ingredient — no
+      // new record — added to one's ingredients if it wasn't, with any of
+      // one's own settings for it given here.
+      if (!ingredientId && pickedUnchanged && pickedFood) {
+        if (!pickedFood.saved) await saveIngredient(pickedFood.id);
+        const own = {
+          ...(ingredientLowStockThreshold ? { lowStockThreshold: ingredientLowStockThreshold } : {}),
+          ...(form.alwaysAvailable ? { isAlwaysAvailable: true } : {}),
+          ...(defaultStorageLocation ? { defaultStorageLocation: defaultStorageLocation._id } : {}),
+          ...(defaultExpiryDurationAmount != null ? { defaultExpiryDurationAmount, defaultExpiryDurationUnit: form.defaultExpiryDurationUnit } : {}),
+        };
+        if (Object.keys(own).length) await updateIngredient(pickedFood.id, own);
+        ingredientId = pickedFood.id;
+      }
 
       if (!ingredientId && form.isGeneric) {
         // Generics are unique by name within a category (mirrors the same
@@ -1437,8 +1573,29 @@ function AddManualPantryItem() {
 
                   updateForm("ingredientName", value);
                 }}
-                onSelect={applySelectedIngredient}
+                onSelect={(option) => void pickByName(option)}
+                searchMore={nameLibrary.searchMore}
+                renderMoreSubtitle={nameLibrary.renderMoreSubtitle}
+                onPickMore={pickByName}
               />
+              {alreadyHave && (
+                <View style={{ marginTop: 6, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <Text style={{ fontSize: 12.5, lineHeight: 17, color: o.muted }}>You already have “{alreadyHave.name}”.</Text>
+                  <Tap onPress={() => router.replace({ pathname: "/ingredients/edit/[id]", params: { id: alreadyHave._id } })} accessibilityRole="link" hitSlop={8}>
+                    <Text style={{ fontSize: 12.5, lineHeight: 17, fontWeight: "700", color: o.text, textDecorationLine: "underline" }}>Open it</Text>
+                  </Tap>
+                </View>
+              )}
+              {/* Which Save will do: save the library food, or make one's own. */}
+              {pickedFood && (
+                <Text style={{ marginTop: 6, fontSize: 12.5, lineHeight: 17, color: o.muted }}>
+                  {!pickedUnchanged
+                    ? `Changed from “${pickedFood.name}”. Saving makes it a new ingredient of your own.`
+                    : pickedFood.saved
+                      ? "Already in your ingredients. Change anything to save a new one of your own."
+                      : "Saving adds it to your ingredients as it is."}
+                </Text>
+              )}
             </View>
 
             {!form.isGeneric && (
@@ -1453,6 +1610,7 @@ function AddManualPantryItem() {
                       selectedName={form.genericParentName}
                       placeholder="Search"
                       onOpen={genericBrandSection.trigger}
+                      {...genericLibrary}
                       onTextChange={(value: string) => {
                         if (value !== form.genericParentName) {
                           updateForm("genericParentId", "");

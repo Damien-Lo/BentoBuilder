@@ -48,6 +48,11 @@ import {
   SearchableObjectDropdown,
   SegmentedToggle,
   UnitFamilyDropdown,
+  addIngredientTo,
+  addLibraryFood,
+  FoodLibraryHeading,
+  libraryFoodDetail,
+  useLibraryMatches,
 } from "@/src/components/forms";
 import {
   clearCompletedGroceryItems,
@@ -284,6 +289,10 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
     if (!q) return [];
     return ingredients.filter((i) => i.name.toLowerCase().includes(q)).slice(0, 5);
   }, [ingredients, nameInput]);
+  // The food library's matches too (a few, under one's own); one picked is
+  // saved and joins `ingredients` before it's chosen.
+  const libraryForAdd = useLibraryMatches(nameInput, ingredients);
+  const librarySuggestions = libraryForAdd.matches.slice(0, 5);
 
   const selectedIngredient = useMemo(
     () => ingredients.find((i) => i._id === selectedIngredientId) ?? null,
@@ -318,6 +327,16 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
     setNameInput(ingredient.name);
     setSelectedIngredientId(ingredient._id);
     setUnit(ingredient.defaultPortionUnit || unit);
+  }
+
+  async function selectLibrarySuggestion(ingredient: Ingredient) {
+    try {
+      const added = await addLibraryFood(ingredient);
+      setIngredients(addIngredientTo(added));
+      selectSuggestion(added);
+    } catch {
+      // (addLibraryFood said so)
+    }
   }
 
   async function submitAddItem(ingredientId: string | null) {
@@ -604,6 +623,19 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
     if (!q) return ingredients.slice(0, 30);
     return ingredients.filter((i) => i.name.toLowerCase().includes(q)).slice(0, 30);
   }, [ingredients, linkQuery]);
+  // The food library's matches for the link search, under one's own; one
+  // picked is saved and joins `ingredients` before the item's linked to it.
+  const libraryForLink = useLibraryMatches(linkQuery, ingredients, !!linkingItem);
+
+  async function linkLibraryFood(ingredient: Ingredient) {
+    try {
+      const added = await addLibraryFood(ingredient);
+      setIngredients(addIngredientTo(added));
+      await handleLinkIngredient(added._id);
+    } catch {
+      // (addLibraryFood said so)
+    }
+  }
 
   // The grocery item's populated ingredient is a thin projection — look up
   // the full record (with defaultStorageLocation/defaultExpiryDuration...)
@@ -891,6 +923,60 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
     );
   }
 
+  // A suggestion under the add field: an ingredient, what it is in a line
+  // under it, ticked when it's the one chosen.
+  function renderSuggestion(ing: Ingredient, divided: boolean, onPress: () => void, detail: string) {
+    return (
+      <Pressable
+        key={ing._id}
+        onPress={onPress}
+        className={`flex-row items-center px-4 py-3 active:bg-slate-50 ${divided ? "border-t border-slate-100" : ""}`}
+        style={o && { borderTopColor: o.border }}
+      >
+        <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: well.backgroundColor }}>
+          <Ionicons name="nutrition-outline" size={16} color={o ? well.color : "#2563EB"} />
+        </View>
+        <View className="ml-3 flex-1">
+          <Text className="font-medium text-slate-900" style={fieldText}>{ing.name}</Text>
+          <Text className="text-xs text-slate-400" style={o && { color: o.faint }} numberOfLines={1}>
+            {detail}
+          </Text>
+        </View>
+        {selectedIngredientId === ing._id && (
+          <Ionicons name="checkmark-circle" size={20} color={o ? well.color : "#2563EB"} />
+        )}
+      </Pressable>
+    );
+  }
+
+  // An ingredient to link the item to, in the Link ingredient sheet (a food
+  // library match with USDA's description under it).
+  function renderLinkOption(ing: Ingredient, onPress: () => void, detail?: string | null) {
+    return (
+      <Pressable
+        key={ing._id}
+        onPress={onPress}
+        className="flex-row items-center border-b border-slate-100 px-1 py-3 active:bg-slate-50"
+        style={o && { borderBottomColor: o.border }}
+      >
+        <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: well.backgroundColor }}>
+          <Ionicons name="nutrition-outline" size={16} color={o ? well.color : "#2563EB"} />
+        </View>
+        <View className="ml-3 flex-1">
+          <Text className="font-medium text-slate-900" style={fieldText}>{ing.name}</Text>
+          {!!detail && (
+            <Text className="text-xs text-slate-400" style={o && { color: o.faint }} numberOfLines={1}>
+              {detail}
+            </Text>
+          )}
+        </View>
+        {linkingItemIngredientId === ing._id && (
+          <Ionicons name="checkmark-circle" size={18} color={o ? well.color : "#2563EB"} />
+        )}
+      </Pressable>
+    );
+  }
+
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
@@ -1014,38 +1100,30 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
           </Pressable>
         </View>
 
-        {/* Ingredient suggestions, right under what's being typed */}
-        {grocerySuggestions.length > 0 && (
+        {/* Ingredient suggestions, right under what's being typed (one's
+            own, then the food library's) */}
+        {(grocerySuggestions.length > 0 || librarySuggestions.length > 0) && (
           <View className="mx-5 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={[addWidth, card, o && { marginHorizontal: 16 }]}>
             {grocerySuggestions.map((ing, idx) => {
               const categoryName = getReferenceName(ing.category);
-              return (
-                <Pressable
-                  key={ing._id}
-                  onPress={() => selectSuggestion(ing)}
-                  className={`flex-row items-center px-4 py-3 active:bg-slate-50 ${
-                    idx > 0 ? "border-t border-slate-100" : ""
-                  }`}
-                  style={o && { borderTopColor: o.border }}
-                >
-                  <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: well.backgroundColor }}>
-                    <Ionicons name="nutrition-outline" size={16} color={o ? well.color : "#2563EB"} />
-                  </View>
-                  <View className="ml-3 flex-1">
-                    <Text className="font-medium text-slate-900" style={fieldText}>{ing.name}</Text>
-                    <Text className="text-xs text-slate-400" style={o && { color: o.faint }}>
-                      {[ing.isGeneric ? "Generic" : null, categoryName || null]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </Text>
-                  </View>
-                  {selectedIngredientId === ing._id && (
-                    <Ionicons name="checkmark-circle" size={20} color={o ? well.color : "#2563EB"} />
-                  )}
-                </Pressable>
+              return renderSuggestion(
+                ing,
+                idx > 0,
+                () => selectSuggestion(ing),
+                [ing.isGeneric ? "Generic" : null, categoryName || null].filter(Boolean).join(" · "),
               );
             })}
-            {!grocerySuggestions.some(
+            {librarySuggestions.length > 0 && (
+              <>
+                <FoodLibraryHeading
+                  className={`px-4 pb-1 pt-3 ${grocerySuggestions.length > 0 ? "border-t border-slate-100" : ""}`}
+                />
+                {librarySuggestions.map((ing) =>
+                  renderSuggestion(ing, true, () => void selectLibrarySuggestion(ing), libraryFoodDetail(ing) ?? ""),
+                )}
+              </>
+            )}
+            {![...grocerySuggestions, ...librarySuggestions].some(
               (i) => i.name.toLowerCase() === nameInput.trim().toLowerCase(),
             ) && (
               <Pressable
@@ -1458,23 +1536,14 @@ export function GroceryList({ inTabs = false }: { inTabs?: boolean }) {
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                {linkModalOptions.map((ing) => (
-                  <Pressable
-                    key={ing._id}
-                    onPress={() => void handleLinkIngredient(ing._id)}
-                    className="flex-row items-center border-b border-slate-100 px-1 py-3 active:bg-slate-50"
-                    style={o && { borderBottomColor: o.border }}
-                  >
-                    <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: well.backgroundColor }}>
-                      <Ionicons name="nutrition-outline" size={16} color={o ? well.color : "#2563EB"} />
-                    </View>
-                    <Text className="ml-3 flex-1 font-medium text-slate-900" style={fieldText}>{ing.name}</Text>
-                    {linkingItemIngredientId === ing._id && (
-                      <Ionicons name="checkmark-circle" size={18} color={o ? well.color : "#2563EB"} />
-                    )}
-                  </Pressable>
-                ))}
-                {linkModalOptions.length === 0 && (
+                {linkModalOptions.map((ing) => renderLinkOption(ing, () => void handleLinkIngredient(ing._id)))}
+                {(libraryForLink.matches.length > 0 || libraryForLink.searching) && (
+                  <>
+                    <FoodLibraryHeading searching={libraryForLink.searching} className="px-1 pb-1 pt-4" />
+                    {libraryForLink.matches.map((ing) => renderLinkOption(ing, () => void linkLibraryFood(ing), libraryFoodDetail(ing)))}
+                  </>
+                )}
+                {linkModalOptions.length === 0 && libraryForLink.matches.length === 0 && !libraryForLink.searching && (
                   <Text className="py-6 text-center text-sm text-slate-400" style={o && { color: o.faint }}>No matches</Text>
                 )}
               </ScrollView>

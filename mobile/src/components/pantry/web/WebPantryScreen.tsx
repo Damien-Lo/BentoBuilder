@@ -1,10 +1,21 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
+
+import { useAccount } from "@/src/components/auth/AuthGate";
 
 import { addDays } from "@/src/components/calendar/calendarUtils";
 import { friendlyDate } from "@/src/components/todo/theme";
+import {
+  alwaysInMyIngredients,
+  fromLibrary,
+  libraryTagColors,
+  inMyIngredients,
+  setIngredientSaved,
+  useIngredientLibrarySearch,
+  withSaved,
+} from "@/src/components/ingredients/foodLibrary";
 import { Button, Empty, hoverable, PageTitle, Row, Segmented, WebPage } from "@/src/components/web/ui";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
@@ -16,8 +27,10 @@ import { OrbitStat } from "./orbitWeb";
 
 // The pantry in a desktop browser: everything in stock as one sortable,
 // searchable table (the phone groups it by location and shows a shelf at a
-// time), with the ingredient catalogue as a second table. In Orbit's look,
-// in the Kitchen's orange.
+// time), with your ingredients as a second table — and, searching, what
+// else the food library has by that name, each with ✓ / + to put it in your
+// list or take it out (as the phone's Ingredients page; foodLibrary.ts). In
+// Orbit's look, in the Kitchen's colour.
 
 type View_ = "stock" | "ingredients";
 type Status = "all" | "soon" | "expired";
@@ -41,6 +54,13 @@ export function WebPantryScreen() {
   const [status, setStatus] = useState<Status>("all");
   const [location, setLocation] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "expires", dir: 1 });
+  const isAdmin = useAccount().account?.role === "admin";
+  // Library foods put in or taken out during this search: they keep their
+  // place in the library's table, with their new tick.
+  const [toggledIds, setToggledIds] = useState<Set<string>>(new Set());
+  const { results: libraryResults, setResults: setLibraryResults, loading: libraryLoading } = useIngredientLibrarySearch(
+    view === "ingredients" ? search : "",
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -83,9 +103,34 @@ export function WebPantryScreen() {
       return pick(a).localeCompare(pick(b)) * sort.dir || (a.ingredient?.name ?? "").localeCompare(b.ingredient?.name ?? "");
     });
 
-  const catalogue = ingredients
+  // Only your ingredients (the rest of `ingredients` is what the pantry
+  // points at).
+  const mine = ingredients.filter(inMyIngredients);
+  const catalogue = mine
+    .filter((i) => !toggledIds.has(i._id))
     .filter((i) => !q || `${i.name} ${nameOf(i.brand)} ${nameOf(i.category)}`.toLowerCase().includes(q))
     .sort((a, b) => a.name.localeCompare(b.name));
+  const shownIds = new Set(catalogue.map((i) => i._id));
+  const fromLibrary = q.length >= 2 ? (libraryResults ?? []).filter((food) => !shownIds.has(food._id)) : [];
+
+  // A library food into your ingredients or out, at once — put back if the
+  // server says no. (Your own, and the admin's catalog, stay.)
+  async function toggleSaved(food: Ingredient) {
+    if (alwaysInMyIngredients(food, isAdmin)) return;
+    const saved = !inMyIngredients(food);
+    const swap = (to: boolean) => {
+      setIngredients((prev) => (to || prev.some((i) => i._id === food._id) ? withSaved(prev, food, to) : prev));
+      setLibraryResults((prev) => prev && prev.map((i) => (i._id === food._id ? { ...i, saved: to } : i)));
+    };
+    setToggledIds((prev) => new Set(prev).add(food._id));
+    swap(saved);
+    try {
+      await setIngredientSaved(food, saved);
+    } catch (error) {
+      swap(!saved);
+      Alert.alert("Couldn't change your ingredients", error instanceof Error ? error.message : "Something went wrong.");
+    }
+  }
 
   const sortBy = (key: SortKey) => setSort((prev) => (prev.key === key ? { key, dir: prev.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
 
@@ -94,7 +139,7 @@ export function WebPantryScreen() {
     <WebPage>
       <PageTitle
         title="Pantry"
-        subtitle={view === "stock" ? "Everything in stock" : "Every ingredient the app knows, in stock or not"}
+        subtitle={view === "stock" ? "Everything in stock" : "Your ingredients, in stock or not — search to add more from the food library"}
         right={
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Button label="Receipts" icon="receipt-outline" onPress={() => router.push("/receipts")} />
@@ -125,8 +170,11 @@ export function WebPantryScreen() {
           <Ionicons name="search" size={15} color={c.faint} />
           <TextInput
             value={search}
-            onChangeText={setSearch}
-            placeholder={view === "stock" ? "Search the pantry" : "Search ingredients"}
+            onChangeText={(value) => {
+              setSearch(value);
+              if (value.trim().length < 2) setToggledIds(new Set());
+            }}
+            placeholder={view === "stock" ? "Search the pantry" : "Search ingredients and the food library"}
             placeholderTextColor={c.faint}
             style={{ flex: 1, marginLeft: 8, fontSize: 14, color: c.text, outlineStyle: "none" } as object}
           />
@@ -220,57 +268,125 @@ export function WebPantryScreen() {
           </>
         ) : (
           <>
-            <View style={{ flexDirection: "row", backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border }}>
-              <HeadCell label="Ingredient" flex={2.4} />
-              <HeadCell label="Category" flex={1.2} />
-              <HeadCell label="Portion" flex={0.9} />
-              <HeadCell label="Calories" flex={0.8} />
-              <HeadCell label="Protein" flex={0.7} />
-              <HeadCell label="Carbs" flex={0.7} />
-              <HeadCell label="Fats" flex={0.7} />
-              <HeadCell label="In stock" flex={0.7} />
-            </View>
-            {catalogue.length === 0 && <Empty icon="nutrition-outline" text="No ingredients match" />}
+            <IngredientHead last="In stock" />
+            {catalogue.length === 0 && <Empty icon="nutrition-outline" text={mine.length ? "None of your ingredients match" : "No ingredients yet: search the food library to add some"} />}
             {catalogue.map((ingredient) => {
               const stocked = inStock.filter((p) => p.ingredient?._id === ingredient._id).length;
-              const n = ingredient.nutrition ?? {};
-              const g = (v: number | null | undefined) => (v != null ? `${Math.round(v * 10) / 10} g` : "—");
               return (
-                <Pressable
+                <IngredientRow
                   key={ingredient._id}
-                  onPress={() => router.push({ pathname: "/ingredients/edit/[id]", params: { id: ingredient._id } })}
-                  style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", minHeight: 46, borderBottomWidth: 1, borderBottomColor: c.track, backgroundColor: hovered ? c.pill : c.surface }))}
-                >
-                  <Cell flex={2.4}>
-                    <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "600", color: c.text }}>
-                      {ingredient.name}
-                    </Text>
-                    {!!nameOf(ingredient.brand) && (
-                      <Text numberOfLines={1} style={{ fontSize: 12, color: c.muted }}>
-                        {nameOf(ingredient.brand)}
-                      </Text>
-                    )}
-                  </Cell>
-                  <Cell flex={1.2} text={nameOf(ingredient.category) || "—"} />
-                  <Cell flex={0.9} text={`${ingredient.defaultPortionAmount ?? 1} ${ingredient.defaultPortionUnit ?? ""}`} />
-                  <Cell flex={0.8} text={n.calories != null ? `${Math.round(n.calories)} kcal` : "—"} strong />
-                  <Cell flex={0.7} text={g(n.protein)} />
-                  <Cell flex={0.7} text={g(n.carbs)} />
-                  <Cell flex={0.7} text={g(n.fats)} />
-                  <Cell flex={0.7}>
-                    {stocked > 0 ? <Ionicons name="checkmark-circle" size={16} color={c.success} /> : <Text style={{ fontSize: 13, color: c.faint }}>—</Text>}
-                  </Cell>
-                </Pressable>
+                  ingredient={ingredient}
+                  onOpen={() => router.push({ pathname: "/ingredients/edit/[id]", params: { id: ingredient._id } })}
+                  last={stocked > 0 ? <Ionicons name="checkmark-circle" size={16} color={c.success} /> : <Text style={{ fontSize: 13, color: c.faint }}>—</Text>}
+                />
               );
             })}
           </>
         )}
       </View>
       <Text style={{ marginTop: 10, fontSize: 12, color: c.faint }}>
-        {view === "stock" ? `${rows.length} of ${inStock.length} items` : `${catalogue.length} of ${ingredients.length} ingredients`} · click a row to open it
+        {view === "stock" ? `${rows.length} of ${inStock.length} items` : `${catalogue.length} of your ${mine.length} ingredients`} · click a row to open it
       </Text>
+
+      {/* Searching your ingredients: the rest of the food library's by that name */}
+      {view === "ingredients" && q.length >= 2 && (libraryLoading || fromLibrary.length > 0) && (
+        <>
+          <Text style={{ marginTop: 22, marginBottom: 10, marginLeft: 2, fontSize: 12, fontWeight: "700", letterSpacing: 1.4, color: c.faint }}>
+            {fromLibrary.length ? `MORE FROM THE FOOD LIBRARY · ${fromLibrary.length}` : "SEARCHING THE FOOD LIBRARY…"}
+          </Text>
+          {fromLibrary.length > 0 && (
+            <View style={{ backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 18, overflow: "hidden" }}>
+              <IngredientHead last="Your list" />
+              {fromLibrary.map((food) => {
+                const fixed = alwaysInMyIngredients(food, isAdmin);
+                const saved = fixed || inMyIngredients(food);
+                return (
+                  <IngredientRow
+                    key={food._id}
+                    ingredient={food}
+                    onOpen={() => router.push({ pathname: "/ingredients/edit/[id]", params: { id: food._id } })}
+                    last={
+                      <Pressable
+                        onPress={() => void toggleSaved(food)}
+                        disabled={fixed}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: saved, disabled: fixed }}
+                        accessibilityLabel={saved ? `Remove ${food.name} from your ingredients` : `Add ${food.name} to your ingredients`}
+                        style={hoverable(({ hovered }) => ({ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 5, height: 28, paddingHorizontal: 10, borderRadius: 14, backgroundColor: saved ? "transparent" : hovered ? c.track : c.pill }))}
+                      >
+                        <Ionicons name={saved ? "checkmark-circle" : "add"} size={16} color={saved ? c.ink : c.onPill} />
+                        <Text style={{ fontSize: 12.5, fontWeight: "600", color: saved ? c.ink : c.onPill }}>{saved ? "Added" : "Add"}</Text>
+                      </Pressable>
+                    }
+                  />
+                );
+              })}
+            </View>
+          )}
+          {(libraryResults?.length ?? 0) >= 40 && <Text style={{ textAlign: "center", marginTop: 10, fontSize: 13, color: c.faint }}>Keep typing to narrow it down</Text>}
+        </>
+      )}
     </WebPage>
     </OrbitPage>
+  );
+}
+
+// The ingredients tables' header: the same columns for your ingredients and
+// the library's, with the last one theirs (in stock, or in your list).
+function IngredientHead({ last }: { last: string }) {
+  const { colors: c } = useOrbitTheme();
+  return (
+    <View style={{ flexDirection: "row", backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border }}>
+      <HeadCell label="Ingredient" flex={2.4} />
+      <HeadCell label="Category" flex={1.2} />
+      <HeadCell label="Portion" flex={0.9} />
+      <HeadCell label="Calories" flex={0.8} />
+      <HeadCell label="Protein" flex={0.7} />
+      <HeadCell label="Carbs" flex={0.7} />
+      <HeadCell label="Fats" flex={0.7} />
+      <HeadCell label={last} flex={0.8} />
+    </View>
+  );
+}
+
+// An ingredient: its name and brand, category, serving and what's in it —
+// and `last`, the table's own last column. Clicked: its page.
+function IngredientRow({ ingredient, onOpen, last }: { ingredient: Ingredient; onOpen: () => void; last: React.ReactNode }) {
+  const { colors: c, dark } = useOrbitTheme();
+  const isAdmin = useAccount().account?.role === "admin";
+  const n = ingredient.nutrition ?? {};
+  const g = (v: number | null | undefined) => (v != null ? `${Math.round(v * 10) / 10} g` : "—");
+  return (
+    <Pressable
+      onPress={onOpen}
+      style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", minHeight: 46, borderBottomWidth: 1, borderBottomColor: c.track, backgroundColor: hovered ? c.pill : c.surface }))}
+    >
+      <Cell flex={2.4}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 14, fontWeight: "600", color: c.text }}>
+            {ingredient.name}
+          </Text>
+          {/* Saved from the library rather than made (an edit makes one's own copy, untagged). */}
+          {fromLibrary(ingredient, isAdmin) && (
+            <Text style={{ fontSize: 10, fontWeight: "700", letterSpacing: 0.5, ...libraryTagColors(dark), borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, overflow: "hidden" }}>
+              LIBRARY
+            </Text>
+          )}
+        </View>
+        {!!nameOf(ingredient.brand) && (
+          <Text numberOfLines={1} style={{ fontSize: 12, color: c.muted }}>
+            {nameOf(ingredient.brand)}
+          </Text>
+        )}
+      </Cell>
+      <Cell flex={1.2} text={nameOf(ingredient.category) || "—"} />
+      <Cell flex={0.9} text={`${ingredient.defaultPortionAmount ?? 1} ${ingredient.defaultPortionUnit ?? ""}`} />
+      <Cell flex={0.8} text={n.calories != null ? `${Math.round(n.calories)} kcal` : "—"} strong />
+      <Cell flex={0.7} text={g(n.protein)} />
+      <Cell flex={0.7} text={g(n.carbs)} />
+      <Cell flex={0.7} text={g(n.fats)} />
+      <Cell flex={0.8}>{last}</Cell>
+    </Pressable>
   );
 }
 

@@ -88,7 +88,9 @@ function normal(value) {
 function same(next, current) {
   const a = normal(next);
   const b = normal(current);
-  if (a === null || b === null) return a === b || (a === null && (b === false || b === 0 || (Array.isArray(b) && !b.length)));
+  // (Empty, either way round: nothing, false, 0 or an empty list.)
+  const blank = (v) => v === null || v === false || v === 0 || (Array.isArray(v) && !v.length);
+  if (a === null || b === null) return blank(a) && blank(b);
   if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => same(v, b[i]));
   if (typeof a === "object") return typeof b === "object" && Object.entries(a).every(([k, v]) => same(v, b[k]));
   if (typeof a === "number" && typeof b === "string") return a === Number(b);
@@ -266,4 +268,56 @@ export async function copyForMe(Model, id) {
   // shared, like the original.)
   if (!isMember(currentScope())) delete data.barcode;
   return Model.create(data);
+}
+
+// The facts (not one's own settings) an update would change on a record —
+// e.g. a name or nutrition, but not a low-stock level.
+export function factsChanged(update, record, kind) {
+  const [, rest] = split(update, PERSONAL_FIELDS[kind] ?? []);
+  return changes(rest, [record]);
+}
+
+// Editing an ingredient that isn't one's own to change (a food library food,
+// or a shared one for anyone but the admin): the edit becomes one's own copy
+// — the original's facts with the edit on top, and one's own settings for
+// the original — which takes its place: in one's ingredients (the original
+// leaves them, still in the library), and in one's own pantry, grocery list,
+// planned (not logged) meals, saved and usual meals, and recipes.
+export async function editAsMine(id, update) {
+  const { default: Ingredient } = await import("../models/Ingredient.js");
+  const uses = {
+    PantryItem: ["ingredient", "madeFrom.ingredient"],
+    GroceryItem: ["ingredient"],
+    MealPlanEntry: ["ingredient", "manualPieceEntries.ingredient", "pieceSizes.ingredient"],
+    Meal: ["courses.ingredient", "bentoLayout.sections.ingredient"],
+    UsualMeal: ["ingredient"],
+    Recipe: ["ingredientList.ingredient"],
+  };
+  const original = await Ingredient.findById(id);
+  if (!original) return null;
+  const data = original.toObject({ depopulate: true });
+  for (const key of META) delete data[key];
+  Object.assign(data, { source: null, fdcId: null, alsoFdcIds: undefined, sourceName: null });
+  // (One's own settings for the original — not the admin's on the record.)
+  const own = await FoodSettings.findOne({ kind: "ingredient", item: original._id }).lean();
+  for (const field of PERSONAL_FIELDS.ingredient) data[field] = own?.[field] ?? defaultsFor("ingredient")[field];
+  for (const [path, value] of Object.entries(asOperators(update).$set ?? {})) if (!META.includes(top(path))) data[path] = value;
+  const copy = await Ingredient.create(data);
+
+  await FoodSettings.updateOne({ kind: "ingredient", item: original._id }, { $set: { saved: false } }, { upsert: true });
+  const owner = currentScope()?.owner;
+  if (!owner) return copy;
+  for (const [name, paths] of Object.entries(uses)) {
+    const Model = mongoose.model(name);
+    const mine = name === "MealPlanEntry" ? { status: { $ne: "confirmed" } } : {};
+    // (Only one's own records: a shared recipe keeps the original.)
+    for (const path of paths) {
+      // (A list's items by an array filter — "bentoLayout.sections" — or a plain field.)
+      const cut = path.lastIndexOf(".");
+      const [list, field] = cut > 0 ? [path.slice(0, cut), path.slice(cut + 1)] : [null, path];
+      if (list) await Model.updateMany({ ...mine, owner, [path]: original._id }, { $set: { [`${list}.$[x].${field}`]: copy._id } }, { arrayFilters: [{ [`x.${field}`]: original._id }] });
+      else await Model.updateMany({ ...mine, owner, [path]: original._id }, { $set: { [path]: copy._id } });
+    }
+  }
+  return copy;
 }

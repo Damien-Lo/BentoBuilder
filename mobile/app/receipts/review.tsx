@@ -3,7 +3,7 @@ import { usePaneDimensions } from "@/src/utils/pane";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { photoUri as photoSource } from "@/src/utils/photos";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -45,6 +45,9 @@ import {
 } from "@/src/components/forms";
 import {
   getIngredients,
+  getIngredientById,
+  saveIngredient,
+  searchIngredients,
   createIngredient,
   parseNutritionLabel,
   parseNutritionLabelImage,
@@ -75,7 +78,7 @@ import {
 } from "@/src/services/receiptApi";
 import type { SelectOption } from "@/src/types/options";
 import type { PantryItem } from "@/src/types/pantry";
-import { barcodesMatch } from "@/src/utils/barcode";
+import { findIngredientByBarcode, inMyIngredients, useIngredientLibrarySearch } from "@/src/components/ingredients/foodLibrary";
 import {
   recentPantryEntries,
   referenceId,
@@ -250,6 +253,40 @@ function servingFromProduct(product: ScannedProduct, unitBought: string): Pick<R
   return inUnitBought != null
     ? { defaultPortionAmount: String(Math.round(inUnitBought * 1000) / 1000), portionUnit: undefined }
     : { defaultPortionAmount: String(amount), portionUnit: unit };
+}
+
+// The list with what the lines point at that it doesn't hold — a food
+// library one not in one's own list, or one added since the list was
+// cached — fetched by id, and a proposed generic parent looked up by name
+// in the library: so a line keeps its match (and its parent) rather than
+// becoming a proposal that confirming would make a duplicate of. Whatever
+// can't be found is left out.
+async function withMissingIngredients(
+  list: Ingredient[],
+  ids: (string | null | undefined)[],
+  genericNames: (string | null | undefined)[],
+): Promise<Ingredient[]> {
+  const known = new Set(list.map((ing) => ing._id));
+  const missingIds = [...new Set(ids.filter((id): id is string => !!id && !known.has(id)))];
+  const lower = (name: string) => name.trim().toLowerCase();
+  const missingNames = [...new Set(genericNames.map((name) => lower(name ?? "")))].filter(
+    (name) => name && !list.some((ing) => ing.isGeneric && lower(ing.name) === name),
+  );
+  if (!missingIds.length && !missingNames.length) return list;
+
+  const [byId, byName] = await Promise.all([
+    Promise.all(missingIds.map((id) => getIngredientById(id).catch(() => null))),
+    Promise.all(
+      missingNames.map((name) =>
+        searchIngredients(name)
+          .then((found) => found.find((ing) => ing.isGeneric && lower(ing.name) === name) ?? null)
+          .catch(() => null),
+      ),
+    ),
+  ]);
+  const added = new Map<string, Ingredient>();
+  for (const ing of [...byId, ...byName]) if (ing && !known.has(ing._id)) added.set(ing._id, ing);
+  return added.size ? [...list, ...added.values()] : list;
 }
 
 // A matched, not-yet-added line with its ingredient's serving and nutrition
@@ -724,6 +761,8 @@ interface RowCallbacks {
   purchaseDate: string;
   updateRow: (key: string, updates: Partial<ReviewRow>) => void;
   applyIngredientMatch: (rowKey: string, ingredient: Ingredient) => void;
+  // A food from the library (one the list doesn't hold), picked for a line.
+  pickLibraryFood: (rowKey: string, food: Ingredient) => void;
   handleNameChange: (rowKey: string, value: string) => void;
   onScanBarcode: (rowKey: string) => void;
   // Photograph this row's nutrition label to fill its nutrition + serving.
@@ -732,6 +771,52 @@ interface RowCallbacks {
   readingLabelRowKey: string | null;
   onDeleteRow: (rowKey: string, rowName: string) => void;
   onOpenGroceryLink: (rowKey: string) => void;
+}
+
+// Under a new line's name field, once something's typed: what the food
+// library (and the rest of the shared catalog) has by that name that this
+// page's list doesn't — the dropdown above knows only the list. Picking one
+// matches the line to it (see pickLibraryFood).
+function LibraryMatches({ query, known, onPick }: { query: string; known: Ingredient[]; onPick: (food: Ingredient) => void }) {
+  const o = useOrbitPage();
+  const { results } = useIngredientLibrarySearch(query);
+  const knownIds = useMemo(() => new Set(known.map((ing) => ing._id)), [known]);
+  const foods = (results ?? []).filter((food) => !knownIds.has(food._id)).slice(0, 4);
+  if (!foods.length) return null;
+
+  return (
+    <View
+      className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white"
+      style={o && { borderRadius: 14, backgroundColor: o.surface, borderColor: o.border }}
+    >
+      <Text
+        className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-slate-400"
+        style={o && { color: o.faint }}
+      >
+        From the food library
+      </Text>
+      {foods.map((food) => (
+        <Press
+          key={food._id}
+          onPress={() => onPick(food)}
+          className="flex-row items-center border-t border-slate-100 px-3 py-2 active:bg-slate-50"
+          orbit={o && { borderTopColor: o.border }}
+          held={o && { backgroundColor: o.pill }}
+        >
+          <View className="flex-1">
+            <Text className="text-sm font-medium text-slate-900" numberOfLines={1} style={o && { color: o.text }}>
+              {food.name}
+            </Text>
+            <Text className="mt-0.5 text-xs text-slate-500" numberOfLines={1} style={o && { color: o.muted }}>
+              {food.isGeneric ? "Generic" : referenceName(food.brand) || "Specific"}
+              {referenceName(food.category) ? ` · ${referenceName(food.category)}` : ""}
+            </Text>
+          </View>
+          <Ionicons name="add-circle-outline" size={20} color={o?.ink ?? "#2563EB"} />
+        </Press>
+      ))}
+    </View>
+  );
 }
 
 // The full editable detail view for one item — shown, always expanded, for
@@ -748,6 +833,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
     purchaseDate,
     updateRow,
     applyIngredientMatch,
+    pickLibraryFood,
     handleNameChange,
     onScanBarcode,
     onScanLabel,
@@ -755,6 +841,9 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
     onDeleteRow,
     onOpenGroceryLink,
   } = callbacks;
+  // What's been typed in the name field, for the food library's matches
+  // under it (cleared once something's picked).
+  const [libraryQuery, setLibraryQuery] = useState("");
 
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [showMoreNutrients, setShowMoreNutrients] = useState(false);
@@ -983,8 +1072,14 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
               inline
               inlineLimit={6}
               placeholder="Item name"
-              onTextChange={(value) => handleNameChange(row.key, value)}
-              onSelect={(option) => applyIngredientMatch(row.key, option)}
+              onTextChange={(value) => {
+                setLibraryQuery(value);
+                handleNameChange(row.key, value);
+              }}
+              onSelect={(option) => {
+                setLibraryQuery("");
+                applyIngredientMatch(row.key, option);
+              }}
               renderSubtitle={(option) => (
                 <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>
                   {option.isGeneric ? "Generic" : referenceName(option.brand) || "Specific"}
@@ -992,6 +1087,16 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                 </Text>
               )}
             />
+            {isNew && !row.submitted && (
+              <LibraryMatches
+                query={libraryQuery}
+                known={ingredients}
+                onPick={(food) => {
+                  setLibraryQuery("");
+                  pickLibraryFood(row.key, food);
+                }}
+              />
+            )}
           </View>
           <Press
             accessibilityLabel="Scan barcode"
@@ -1687,8 +1792,15 @@ function ReceiptReview() {
       try {
         const lists = await loadOptionLists();
         if (!lists) return;
-        const { ingredientList, locationList, storeList, brandList, categoryList, pantryList, groceryItemList } =
-          lists;
+        const { locationList, storeList, brandList, categoryList, pantryList, groceryItemList } = lists;
+        // (With what the parse matched that the list doesn't hold.)
+        const ingredientList = await withMissingIngredients(
+          lists.ingredientList,
+          pending.lineItems.map((lineItem) => lineItem.matchedIngredientId),
+          pending.lineItems.map((lineItem) => lineItem.proposedIngredient?.genericName),
+        );
+        if (cancelled) return;
+        if (ingredientList !== lists.ingredientList) setIngredients(ingredientList);
 
         const existingStore = pending.storeName
           ? storeList.find(
@@ -1898,7 +2010,17 @@ function ReceiptReview() {
           // ingredient may have been corrected since, or the review saved
           // by an older version of this page).
           const lists = await loadOptionLists();
-          if (lists && !cancelled) setRows((prev) => prev.map((row) => withCatalogServing(row, lists.ingredientList)));
+          if (lists && !cancelled) {
+            // (With what the lines point at that the list doesn't hold.)
+            const ingredientList = await withMissingIngredients(
+              lists.ingredientList,
+              draftRows.flatMap((row) => [row.matchedIngredientId, row.genericParentId]),
+              [],
+            );
+            if (cancelled) return;
+            if (ingredientList !== lists.ingredientList) setIngredients(ingredientList);
+            setRows((prev) => prev.map((row) => withCatalogServing(row, ingredientList)));
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : "Something went wrong.";
           setLoadError(message);
@@ -1981,7 +2103,7 @@ function ReceiptReview() {
   // line; says what happened.
   async function barcodeInto(rowKey: string, code: string): Promise<{ ok: boolean; message: string }> {
     const { product, problem } = await lookupBarcode(code);
-    handleBarcodeScanned(product, rowKey);
+    await handleBarcodeScanned(product, rowKey);
     if (!problem) return { ok: true, message: `Found ${product.name}${product.brand ? ` (${product.brand})` : ""}. Check the values.` };
     return {
       ok: false,
@@ -2126,6 +2248,21 @@ function ReceiptReview() {
     });
   }
 
+  // A food from the library picked for a line: into the list here and into
+  // one's own ingredients (saved), then matched like any other. Its full
+  // record (the search's has fewer details filled in) replaces it when it
+  // comes.
+  function pickLibraryFood(rowKey: string, food: Ingredient) {
+    setIngredients((prev) => (prev.some((ing) => ing._id === food._id) ? prev : [...prev, { ...food, saved: true }]));
+    applyIngredientMatch(rowKey, food);
+    if (!inMyIngredients(food)) {
+      saveIngredient(food._id).catch((error: unknown) => console.error("Couldn't save the library food:", error));
+    }
+    getIngredientById(food._id)
+      .then((full) => setIngredients((prev) => prev.map((ing) => (ing._id === full._id ? { ...full, saved: true } : ing))))
+      .catch(() => undefined);
+  }
+
   // The name field doubles as a manual matching control: typing something
   // that exactly matches an existing ingredient snaps this row onto it
   // (catches Gemini having missed a match); editing a currently-matched
@@ -2241,7 +2378,7 @@ function ReceiptReview() {
     }
   }
 
-  function handleBarcodeScanned(product: ScannedProduct, forRow?: string) {
+  async function handleBarcodeScanned(product: ScannedProduct, forRow?: string) {
     const rowKey = forRow ?? barcodeScanRowKey;
     setBarcodeScanRowKey(null);
     if (!rowKey) return;
@@ -2253,8 +2390,12 @@ function ReceiptReview() {
     // regardless of the row's current state. This is what lets a wrong
     // existing match get corrected, and lets a generic match upgrade
     // straight to an already-tracked specific variant instead of proposing
-    // a duplicate.
-    const existingMatch = ingredients.find((ing) => barcodesMatch(ing.barcode, product.barcode));
+    // a duplicate. (Asked of the server when the list doesn't have it: the
+    // list doesn't hold every shared product. One it brings joins the list.)
+    const existingMatch = await findIngredientByBarcode(ingredients, product.barcode);
+    if (existingMatch && !ingredients.some((ing) => ing._id === existingMatch._id)) {
+      setIngredients((prev) => (prev.some((ing) => ing._id === existingMatch._id) ? prev : [...prev, existingMatch]));
+    }
 
     if (existingMatch) {
       const history = recentPantryEntries(
@@ -2607,6 +2748,17 @@ function ReceiptReview() {
           });
 
           successCount += 1;
+          // A shared ingredient bought joins one's own ingredients (matched
+          // by the parse or a barcode, not picked from the library list,
+          // which saves at once). In the background: the pantry entry is
+          // made either way.
+          const boughtIngredient = row.matchedIngredientId ? ingredients.find((ing) => ing._id === ingredientId) : undefined;
+          if (boughtIngredient?.saved === false) {
+            const boughtId = boughtIngredient._id;
+            saveIngredient(boughtId)
+              .then(() => setIngredients((prev) => prev.map((ing) => (ing._id === boughtId ? { ...ing, saved: true } : ing))))
+              .catch((saveError: unknown) => console.error("Couldn't save the bought ingredient:", saveError));
+          }
           // Uncheck + mark done rather than removing the row, so the
           // summary line and a re-expand both still show what happened;
           // matchedIngredientId now points at the real (possibly
@@ -2700,6 +2852,7 @@ function ReceiptReview() {
     purchaseDate,
     updateRow,
     applyIngredientMatch,
+    pickLibraryFood,
     handleNameChange,
     // (On the phone: its own camera. In a browser: the paired phone, or
     // this computer's webcam.)
@@ -3134,7 +3287,7 @@ function ReceiptReview() {
       <BarcodeScannerModal
         visible={!!barcodeScanRowKey}
         onClose={() => setBarcodeScanRowKey(null)}
-        onProductFound={handleBarcodeScanned}
+        onProductFound={(product) => void handleBarcodeScanned(product)}
       />
 
       <PhotoCaptureModal

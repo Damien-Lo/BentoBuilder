@@ -1,6 +1,6 @@
 import express from "express";
 import { ratingPromptHandler } from "../services/ratingPrompt.js";
-import { copyForMe } from "../services/catalog.js";
+import { copyForMe, editAsMine, factsChanged } from "../services/catalog.js";
 import FoodSettings from "../models/FoodSettings.js";
 import Ingredient from "../models/Ingredient.js";
 import Recipe from "../models/Recipe.js";
@@ -137,6 +137,7 @@ router.get("/library", async (req, res) => {
       .limit(500)
       .lean();
 
+    const admin = !!currentScope()?.legacy;
     const shared = found.filter((ingredient) => ingredient.owner == null).map((ingredient) => ingredient._id);
     const saved = new Set((await FoodSettings.find({ kind: "ingredient", item: { $in: shared }, saved: true }, "item").lean()).map((s) => String(s.item)));
     // ("egg": "Egg, raw" before "Eggnog".)
@@ -152,11 +153,45 @@ router.get("/library", async (req, res) => {
     const data = found
       .sort(order)
       .slice(0, limit)
-      .map((ingredient) => ({ ...ingredient, saved: ingredient.owner != null || saved.has(String(ingredient._id)) }));
+      .map((ingredient) => ({ ...ingredient, saved: ingredient.owner != null || saved.has(String(ingredient._id)) || (admin && ingredient.source !== "usda") }));
     return res.status(200).json({ success: true, count: data.length, data });
   } catch (error) {
     console.error("Search ingredients error:", error);
     return res.status(500).json({ success: false, message: "Failed to search ingredients" });
+  }
+});
+
+// In one's own list: one's own always, a shared one once saved (and for the
+// admin, the shared catalog — theirs — apart from the food library).
+async function isSaved(ingredient) {
+  if (ingredient.owner != null) return true;
+  if (currentScope()?.legacy && ingredient.source !== "usda") return true;
+  return !!(await FoodSettings.exists({ kind: "ingredient", item: ingredient._id, saved: true }));
+}
+
+/**
+ * GET /api/ingredients/barcode/:code
+ * The ingredient with this barcode (as a 12-digit UPC or the same with a
+ * leading 0) — one's own first, else the shared catalog's — saved or not
+ * (with `saved`), or 404. A scan asks here: the
+ * list (GET /) doesn't hold every shared product.
+ */
+router.get("/barcode/:code", async (req, res) => {
+  try {
+    const code = String(req.params.code ?? "").trim();
+    // (The same product as a 12-digit UPC or a 13-digit EAN with a leading 0.)
+    const forms = [code, /^\d{12}$/.test(code) ? `0${code}` : null, /^0\d{12}$/.test(code) ? code.slice(1) : null].filter(Boolean);
+    const found = await Ingredient.find({ barcode: { $in: forms }, isArchived: false })
+      .populate("category")
+      .populate("brand")
+      .populate("genericParent").populate("defaultStorageLocation")
+      .populate("productionRecipe")
+      .populate("tags");
+    const ingredient = found.find((i) => i.owner != null) ?? found[0];
+    if (!code || !ingredient) return res.status(404).json({ success: false, message: "No ingredient has that barcode" });
+    return res.status(200).json({ success: true, data: { ...ingredient.toJSON(), saved: await isSaved(ingredient) } });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
   }
 });
 
@@ -182,7 +217,7 @@ router.get("/:id", async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: ingredient,
+      data: { ...ingredient.toJSON(), saved: await isSaved(ingredient) },
     });
   } catch (error) {
     return res.status(400).json({
@@ -360,6 +395,25 @@ router.patch("/:id", async (req, res) => {
       req.body.nutrition = producingRecipe.nutrition;
     }
 
+    // A library food (anyone's), or a shared one for someone other than the
+    // admin, isn't one's own to change: changing what it is (not one's own
+    // settings for it) saves one's own copy in its place — see
+    // services/catalog.js editAsMine. Answered with the copy and `copiedFrom`.
+    const current = await Ingredient.findById(req.params.id).lean();
+    // (The page clears a generic's stray barcode on every save: not an edit.)
+    const { barcode: _strayBarcode, ...changesToGeneric } = req.body;
+    const edit = current?.isGeneric ? changesToGeneric : req.body;
+    if (current && current.owner == null && (current.source === "usda" || !currentScope()?.legacy) && factsChanged(edit, current, "ingredient").length) {
+      const copy = await editAsMine(current._id, req.body);
+      const shown = await Ingredient.findById(copy._id)
+        .populate("category")
+        .populate("brand")
+        .populate("genericParent").populate("defaultStorageLocation")
+        .populate("productionRecipe")
+        .populate("tags");
+      return res.status(201).json({ success: true, data: { ...shown.toJSON(), saved: true }, copiedFrom: current._id });
+    }
+
     const ingredient = await Ingredient.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -401,6 +455,15 @@ router.delete("/:id", async (req, res) => {
   try {
     let ingredient;
 
+    // A food library food (anyone's), or a shared one for someone other than
+    // the admin: it isn't theirs to delete — it leaves their ingredients
+    // (unsaved), and stays in the library to find again.
+    const found = await Ingredient.findById(req.params.id);
+    if (found && found.owner == null && (found.source === "usda" || !currentScope()?.legacy)) {
+      await FoodSettings.updateOne({ kind: "ingredient", item: found._id }, { $set: { saved: false } }, { upsert: true, runValidators: true });
+      return res.status(200).json({ success: true, message: "Removed from your ingredients", removed: true });
+    }
+
     if (req.query.permanent === "true") {
       ingredient = await Ingredient.findByIdAndDelete(req.params.id);
     } else {
@@ -425,7 +488,7 @@ router.delete("/:id", async (req, res) => {
   } catch (error) {
     return res.status(400).json({
       success: false,
-      message: "Invalid ingredient ID",
+      message: error.name === "CastError" ? "Invalid ingredient ID" : error.message,
     });
   }
 });

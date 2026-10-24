@@ -17,6 +17,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Tap } from "@/src/components/ui/Tap";
+import { useAccount } from "@/src/components/auth/AuthGate";
+import { alwaysInMyIngredients, fromLibrary, inMyIngredients, libraryTagColors, setIngredientSaved } from "@/src/components/ingredients/foodLibrary";
 import { WebDangerButton, WebFormHeader } from "@/src/components/ingredients/web/WebFormHeader";
 import { Button } from "@/src/components/web/ui";
 import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
@@ -238,6 +240,9 @@ function IngredientDetail() {
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Putting a shared ingredient in your list or taking it out (below).
+  const [changingList, setChangingList] = useState(false);
+  const isAdmin = useAccount().account?.role === "admin";
   const [form, setForm] = useState<FormState | null>(null);
   const [brandDraft, setBrandDraft] = useState("");
   const [categoryDraft, setCategoryDraft] = useState("");
@@ -661,15 +666,41 @@ function IngredientDetail() {
     setIsEditing(false);
   }
 
+  // A shared ingredient (the food library's, or the catalog's) into your
+  // ingredients or out of them. Out, it's still there for whatever of yours
+  // uses it, and found again by the search.
+  async function handleToggleMyList() {
+    if (!currentIngredient || changingList) return;
+    const saved = !inMyIngredients(currentIngredient);
+    setChangingList(true);
+    try {
+      const updated = await setIngredientSaved(currentIngredient, saved);
+      setCurrentIngredient((prev) => (prev ? { ...prev, saved: updated.saved ?? saved } : prev));
+    } catch (err) {
+      Alert.alert(
+        saved ? "Couldn't add it" : "Couldn't remove it",
+        err instanceof Error ? err.message : "Something went wrong.",
+      );
+    } finally {
+      setChangingList(false);
+    }
+  }
+
   function handleDeleteIngredient() {
     if (!currentIngredient) return;
+    // (A library or shared food isn't one's own to delete: it leaves one's
+    // ingredients and stays in the library to add again — see the server's
+    // DELETE /api/ingredients/:id.)
+    const shared = !alwaysInMyIngredients(currentIngredient, isAdmin);
     Alert.alert(
-      "Delete ingredient",
-      `Delete "${currentIngredient.name}"? This will remove it and all its pantry entries.`,
+      shared ? "Remove from your ingredients" : "Delete ingredient",
+      shared
+        ? `Remove "${currentIngredient.name}" from your ingredients? It stays in the food library, to add again.`
+        : `Delete "${currentIngredient.name}"? This will remove it and all its pantry entries.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Delete",
+          text: shared ? "Remove" : "Delete",
           style: "destructive",
           onPress: async () => {
             try {
@@ -764,8 +795,20 @@ function IngredientDetail() {
         tags: tagIds,
       });
 
+      // A library or shared food isn't one's own to change: the edit came
+      // back as one's own copy, in its place (the server's PATCH). Its page.
+      if (updated._id !== id) {
+        Alert.alert(
+          "Saved as your own",
+          `"${currentIngredient?.name ?? updated.name}" is shared, so your changes were saved as your own ingredient. It takes its place in your ingredients, pantry and planned meals.`,
+        );
+        router.replace({ pathname: "/ingredients/edit/[id]", params: { id: updated._id } });
+        return;
+      }
+
       const updatedForm = ingredientToForm(updated);
-      setCurrentIngredient(updated);
+      // (Whether it's in your list doesn't change by editing it.)
+      setCurrentIngredient((prev) => ({ ...updated, saved: updated.saved ?? prev?.saved }));
       setForm(updatedForm);
       setBrandDraft(updatedForm.brandName);
       setCategoryDraft(updatedForm.categoryName);
@@ -1546,6 +1589,14 @@ function IngredientDetail() {
                       </Text>
                     </View>
                   ) : null}
+                  {/* Saved from the library rather than made (an edit makes one's own copy, untagged). */}
+                  {fromLibrary(ingredient, isAdmin) ? (
+                    <View className="mr-2 rounded-full px-3 py-1" style={{ backgroundColor: libraryTagColors(dark).backgroundColor }}>
+                      <Text className="text-sm font-medium" style={{ color: libraryTagColors(dark).color }}>
+                        Library
+                      </Text>
+                    </View>
+                  ) : null}
                   {categoryName ? (
                     <View className="mr-2 rounded-full bg-blue-50 px-3 py-1" style={o && { backgroundColor: o.pill }}>
                       <Text className="text-sm font-medium text-blue-700" style={o && { color: o.onPill }}>
@@ -1574,6 +1625,39 @@ function IngredientDetail() {
                     {ingredient.description}
                   </Text>
                 ) : null}
+
+                {/* A shared ingredient: in your list or not (your own always are) */}
+                {!alwaysInMyIngredients(ingredient, isAdmin) && (
+                  <View style={{ marginTop: 16, alignItems: "center" }}>
+                    {inMyIngredients(ingredient) ? (
+                      <Tap
+                        disabled={changingList}
+                        onPress={() => void handleToggleMyList()}
+                        accessibilityRole="button"
+                        style={{ height: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, borderRadius: 20, backgroundColor: o.surface, borderWidth: 1, borderColor: o.border, opacity: changingList ? 0.5 : 1 }}
+                        pressedStyle={{ backgroundColor: o.pill }}
+                      >
+                        <Ionicons name="remove-circle-outline" size={18} color={o.muted} />
+                        <Text style={{ fontSize: 14, fontWeight: "600", color: o.text }}>Remove from my ingredients</Text>
+                      </Tap>
+                    ) : (
+                      <Tap
+                        disabled={changingList}
+                        onPress={() => void handleToggleMyList()}
+                        accessibilityRole="button"
+                        style={{ height: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, borderRadius: 20, backgroundColor: o.ink, opacity: changingList ? 0.5 : 1 }}
+                        pressedStyle={{ opacity: 0.8 }}
+                      >
+                        <Ionicons name="add" size={18} color={o.onInk} />
+                        <Text style={{ fontSize: 14, fontWeight: "600", color: o.onInk }}>Add to my ingredients</Text>
+                      </Tap>
+                    )}
+                    <Text style={{ marginTop: 6, fontSize: 12, textAlign: "center", color: o.faint }}>
+                      {ingredient.source === "usda" ? "From the food library" : "From the shared catalog"}
+                      {inMyIngredients(ingredient) ? " · in your ingredients" : " · not in your ingredients"}
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {/* Stock summary */}

@@ -41,14 +41,25 @@ import {
 import {
   deleteIngredient,
   getIngredients,
+  saveIngredient,
   type Ingredient,
 } from "@/src/services/ingredientApi";
+import { useAccount } from "@/src/components/auth/AuthGate";
+import {
+  alwaysInMyIngredients,
+  fromLibrary,
+  libraryTagColors,
+  findIngredientByBarcode,
+  inMyIngredients,
+  setIngredientSaved,
+  useIngredientLibrarySearch,
+  withSaved,
+} from "@/src/components/ingredients/foodLibrary";
 
 import { deletePantryItem, getPantryItems, updatePantryItem } from "@/src/services/pantryApi";
 import { PantryItemCard } from "@/src/components/pantry/PantryItemCard";
 import { SplitPantryItemModal } from "@/src/components/pantry/SplitPantryItemModal";
 import type { PantryItem } from "@/src/types/pantry";
-import { barcodesMatch } from "@/src/utils/barcode";
 import { loadSettings } from "@/src/services/settingsService";
 import { convertUnits, getIngredientConversions, type CustomUnitConversion } from "@/src/utils/unitConversion";
 import { daysUntil } from "@/src/utils/date";
@@ -208,6 +219,7 @@ function PhonePantryMainPage() {
   const pillButton = { height: 40, borderRadius: 20, paddingHorizontal: 14, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: o.pill };
   const generic = { backgroundColor: tint("#F5F3FF", "rgba(139,92,246,0.18)"), color: tint("#7C3AED", "#C4B5FD") };
   const prepared = { backgroundColor: o.accentSoft, color: o.accent };
+  const library = libraryTagColors(dark);
 
   const [addMenuVisible, setAddMenuVisible] = useState(false);
   const [pantryAddMenuVisible, setPantryAddMenuVisible] = useState(false);
@@ -233,6 +245,17 @@ function PhonePantryMainPage() {
   const [savingLocation, setSavingLocation] = useState(false);
   const [splittingItem, setSplittingItem] = useState<PantryItem | null>(null);
   const [busyPantryItemId, setBusyPantryItemId] = useState<string | null>(null);
+  const isAdmin = useAccount().account?.role === "admin";
+
+  // The food library, searched as one types on the Ingredients page: what
+  // isn't already shown from your list, each with ✓ / + (foodLibrary.ts).
+  // `toggledIds`: ones put in or taken out during this search — they keep
+  // their place down there, with their new tick, rather than jumping up
+  // into your list.
+  const libraryQuery = isSearchActive && activePage === "ingredients" ? searchText : "";
+  const { results: libraryResults, setResults: setLibraryResults, loading: libraryLoading } =
+    useIngredientLibrarySearch(libraryQuery);
+  const [toggledIds, setToggledIds] = useState<Set<string>>(new Set());
 
   const toggleLocation = (id: string) => {
     setExpandedLocations((prev) => {
@@ -437,8 +460,11 @@ function PhonePantryMainPage() {
   // Okonomiyaki) isn't something you'd browse as a recipe component —
   // excluded from the Ingredients tab and its search entirely. It still
   // shows in the Pantry tab (by location), which isn't filtered from this.
+  // And only your ingredients (the rest of `ingredients` is there for the
+  // stock totals and what the pantry points at; the food library is
+  // reached by the search).
   const browsableIngredients = useMemo(
-    () => ingredients.filter((ingredient) => !ingredient.isMealPrep),
+    () => ingredients.filter((ingredient) => !ingredient.isMealPrep && inMyIngredients(ingredient)),
     [ingredients],
   );
 
@@ -593,11 +619,42 @@ function PhonePantryMainPage() {
     });
   }, [filteredMealPreps]);
 
+  // The search on the Ingredients page: your ingredients that match (less
+  // any just put in or taken out), then the rest of the food library's.
+  const searchedIngredients = useMemo(
+    () => filteredIngredients.filter((ingredient) => !toggledIds.has(ingredient._id)),
+    [filteredIngredients, toggledIds],
+  );
+  const moreFromLibrary = useMemo(() => {
+    const shown = new Set(searchedIngredients.map((ingredient) => ingredient._id));
+    return (libraryResults ?? []).filter((food) => !shown.has(food._id) && !food.isMealPrep);
+  }, [libraryResults, searchedIngredients]);
+
   const closeSearch = () => {
     Keyboard.dismiss();
     setIsSearchActive(false);
     setSearchText("");
+    setToggledIds(new Set());
   };
+
+  // A library food into your ingredients or out, at once — put back if the
+  // server says no. (Your own, and the admin's catalog, stay.)
+  async function toggleSaved(food: Ingredient) {
+    if (alwaysInMyIngredients(food, isAdmin)) return;
+    const saved = !inMyIngredients(food);
+    const swap = (to: boolean) => {
+      setIngredients((prev) => (to || prev.some((i) => i._id === food._id) ? withSaved(prev, food, to) : prev));
+      setLibraryResults((prev) => prev && prev.map((i) => (i._id === food._id ? { ...i, saved: to } : i)));
+    };
+    setToggledIds((prev) => new Set(prev).add(food._id));
+    swap(saved);
+    try {
+      await setIngredientSaved(food, saved);
+    } catch (error) {
+      swap(!saved);
+      Alert.alert("Couldn't change your ingredients", error instanceof Error ? error.message : "Something went wrong.");
+    }
+  }
 
   const handleDeleteIngredient = (id: string, name: string) => {
     Alert.alert(
@@ -630,6 +687,19 @@ function PhonePantryMainPage() {
       ],
     );
   };
+
+  // A shared ingredient out of your list (it stays in `ingredients` for
+  // whatever of yours points at it, and the search finds it again) — at
+  // once, put back if the server says no.
+  async function handleRemoveFromMyIngredients(ingredient: Ingredient) {
+    setIngredients((prev) => withSaved(prev, ingredient, false));
+    try {
+      await setIngredientSaved(ingredient, false);
+    } catch (error) {
+      setIngredients((prev) => withSaved(prev, ingredient, true));
+      Alert.alert("Couldn't remove it", error instanceof Error ? error.message : "Something went wrong.");
+    }
+  }
 
   function handleDeletePantryEntry(id: string) {
     Alert.alert("Delete entry", "Remove this pantry entry?", [
@@ -776,13 +846,26 @@ function PhonePantryMainPage() {
     // (Out of stock: the theme's grey, which reads in the dark too.)
     const statusDotStyle = !isAlwaysAvailable && !isInStock ? { backgroundColor: o.orbit } : undefined;
 
-    const deleteAction = (
+    // Swiped: your own is deleted; a shared one (the food library's, or
+    // the catalog's — the admin's catalog aside, theirs to delete) only
+    // leaves your list.
+    const deleteAction = alwaysInMyIngredients(ingredientItem, isAdmin) ? (
       <Tap
         style={{ alignItems: "center", justifyContent: "center", borderRadius: isChild ? 16 : 18, backgroundColor: "#EF4444", marginBottom: isChild ? 8 : 10, width: isChild ? 64 : 80 }}
         pressedStyle={{ backgroundColor: "#DC2626" }}
         onPress={() => handleDeleteIngredient(ingredientItem._id, ingredientItem.name)}
       >
         <Ionicons name="trash-outline" size={isChild ? 18 : 22} color="white" />
+      </Tap>
+    ) : (
+      <Tap
+        style={{ alignItems: "center", justifyContent: "center", borderRadius: isChild ? 16 : 18, backgroundColor: o.ink, marginBottom: isChild ? 8 : 10, width: isChild ? 64 : 80 }}
+        pressedStyle={{ opacity: 0.8 }}
+        accessibilityLabel={`Remove ${ingredientItem.name} from my ingredients`}
+        onPress={() => void handleRemoveFromMyIngredients(ingredientItem)}
+      >
+        <Ionicons name="remove-circle-outline" size={isChild ? 18 : 22} color={o.onInk} />
+        {!isChild && <Text style={{ marginTop: 2, fontSize: 11, fontWeight: "600", color: o.onInk }}>Remove</Text>}
       </Tap>
     );
 
@@ -819,7 +902,7 @@ function PhonePantryMainPage() {
           renderLeftActions={() => deleteAction}
         >
           <Tap
-            style={{ ...card, borderRadius: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10 }}
+            style={{ ...card, borderRadius: 16, marginBottom: 8, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 13 }}
             pressedStyle={{ backgroundColor: o.pill }}
             onPress={() => {
               router.push({
@@ -829,20 +912,30 @@ function PhonePantryMainPage() {
             }}
           >
             <View className="flex-1">
-              <View className="flex-row flex-wrap items-center">
-                <Text className="text-sm font-semibold text-slate-800" style={{ color: o.text }} numberOfLines={1}>
-                  {ingredientItem.name}
-                </Text>
+              <Text className="text-sm font-semibold text-slate-800" style={{ color: o.text }} numberOfLines={1}>
+                {ingredientItem.name}
+              </Text>
+              {/* Its tags, in a row under the name. */}
+              {(fromLibrary(ingredientItem, isAdmin) || !!ingredientItem.productionRecipe) && (
+              <View style={{ marginTop: 5, flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                {fromLibrary(ingredientItem, isAdmin) && (
+                  <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: library.backgroundColor }}>
+                    <Text className="text-[10px] font-bold uppercase tracking-wide" style={{ color: library.color }}>
+                      Library
+                    </Text>
+                  </View>
+                )}
                 {ingredientItem.productionRecipe && (
-                  <View className="ml-2 rounded-full bg-blue-50 px-2 py-0.5" style={{ backgroundColor: prepared.backgroundColor }}>
+                  <View className="rounded-full bg-blue-50 px-2 py-0.5" style={{ backgroundColor: prepared.backgroundColor }}>
                     <Text className="text-[10px] font-bold uppercase tracking-wide text-blue-600" style={{ color: prepared.color }}>
                       Prepared
                     </Text>
                   </View>
                 )}
               </View>
+              )}
               {subtitle ? (
-                <Text className="mt-0.5 text-xs text-slate-400" style={{ color: o.faint }} numberOfLines={1}>
+                <Text className="mt-0.5 text-xs text-slate-400" style={{ marginTop: 5, color: o.faint }} numberOfLines={1}>
                   {subtitle}
                 </Text>
               ) : null}
@@ -864,7 +957,7 @@ function PhonePantryMainPage() {
         renderLeftActions={() => deleteAction}
       >
         <Tap
-          style={{ ...card, marginBottom: 10, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 }}
+          style={{ ...card, marginBottom: 10, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 16 }}
           pressedStyle={{ backgroundColor: o.pill }}
           onPress={() => {
             router.push({
@@ -878,31 +971,43 @@ function PhonePantryMainPage() {
           </View>
 
           <View className="ml-3 flex-1">
-            <View className="flex-row flex-wrap items-center">
-              <Text
-                className="text-base font-bold text-slate-900"
-                style={{ fontSize: 15, fontWeight: "600", color: o.text }}
-                numberOfLines={1}
-              >
-                {ingredientItem.name}
-              </Text>
+            <Text
+              className="text-base font-bold text-slate-900"
+              style={{ fontSize: 15, fontWeight: "600", color: o.text }}
+              numberOfLines={1}
+            >
+              {ingredientItem.name}
+            </Text>
 
+            {/* Its tags, in a row under the name. */}
+            {(ingredientItem.isGeneric || fromLibrary(ingredientItem, isAdmin) || !!ingredientItem.productionRecipe) && (
+            <View style={{ marginTop: 6, flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
               {ingredientItem.isGeneric && (
-                <View className="ml-2 rounded-full bg-violet-50 px-2 py-0.5" style={{ backgroundColor: generic.backgroundColor }}>
+                <View className="rounded-full bg-violet-50 px-2 py-0.5" style={{ backgroundColor: generic.backgroundColor }}>
                   <Text className="text-[10px] font-bold uppercase tracking-wide text-violet-600" style={{ color: generic.color }}>
                     Generic
                   </Text>
                 </View>
               )}
 
+              {/* Saved from the library rather than made (an edit makes one's own copy, untagged). */}
+              {fromLibrary(ingredientItem, isAdmin) && (
+                <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: library.backgroundColor }}>
+                  <Text className="text-[10px] font-bold uppercase tracking-wide" style={{ color: library.color }}>
+                    Library
+                  </Text>
+                </View>
+              )}
+
               {ingredientItem.productionRecipe && (
-                <View className="ml-2 rounded-full bg-blue-50 px-2 py-0.5" style={{ backgroundColor: prepared.backgroundColor }}>
+                <View className="rounded-full bg-blue-50 px-2 py-0.5" style={{ backgroundColor: prepared.backgroundColor }}>
                   <Text className="text-[10px] font-bold uppercase tracking-wide text-blue-600" style={{ color: prepared.color }}>
                     Prepared
                   </Text>
                 </View>
               )}
             </View>
+            )}
 
             {!ingredientItem.isGeneric &&
               (() => {
@@ -913,7 +1018,7 @@ function PhonePantryMainPage() {
                 return subtitle ? (
                   <Text
                     className="mt-1 text-sm text-slate-500"
-                    style={{ marginTop: 2, fontSize: 13, color: o.muted }}
+                    style={{ marginTop: 6, fontSize: 13, color: o.muted }}
                     numberOfLines={1}
                   >
                     {subtitle}
@@ -932,6 +1037,76 @@ function PhonePantryMainPage() {
           />
         </Tap>
       </ReanimatedSwipeable>
+    );
+  }
+
+  // Under your ingredients in the search: the rest of what the food library
+  // has by that name, each ticked when it's in your list. The tick puts it
+  // in or takes it out; the row opens its page.
+  function renderLibraryResults() {
+    if (searchText.trim().length < 2) return null;
+    if (!moreFromLibrary.length) {
+      return libraryLoading ? <ActivityIndicator style={{ marginTop: 16 }} color={o.muted} /> : null;
+    }
+
+    return (
+      <View style={{ marginTop: searchedIngredients.length ? 12 : 0 }}>
+        <Text style={{ ...eyebrow, marginLeft: 4, marginBottom: 10 }}>
+          MORE FROM THE FOOD LIBRARY
+          <Text style={{ fontWeight: "600", color: o.orbit }}> · {moreFromLibrary.length}</Text>
+        </Text>
+
+        {moreFromLibrary.map((food) => {
+          const fixed = alwaysInMyIngredients(food, isAdmin);
+          const mine = fixed || inMyIngredients(food);
+          const subtitle = [getReferenceName(food.brand), getReferenceName(food.category)].filter(Boolean).join(" · ");
+          return (
+            <Tap
+              key={food._id}
+              style={{ marginBottom: 8, flexDirection: "row", alignItems: "center", borderRadius: 16, padding: 12, backgroundColor: o.canvas, borderWidth: 2, borderColor: mine ? o.ink : "transparent" }}
+              pressedStyle={{ backgroundColor: o.pill }}
+              onPress={() => {
+                closeSearch();
+                router.push({
+                  pathname: "/ingredients/edit/[id]",
+                  params: { id: food._id },
+                });
+              }}
+            >
+              <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: o.pill }}>
+                <Ionicons name="nutrition-outline" size={20} color={o.onPill} />
+              </View>
+
+              <View className="ml-3 flex-1">
+                <Text className="font-semibold" style={{ color: o.text }} numberOfLines={2}>
+                  {food.name}
+                </Text>
+                {subtitle ? (
+                  <Text className="mt-0.5 text-sm" style={{ color: o.muted }} numberOfLines={1}>
+                    {subtitle}
+                  </Text>
+                ) : null}
+              </View>
+
+              <Tap
+                onPress={() => void toggleSaved(food)}
+                disabled={fixed}
+                hitSlop={10}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: mine, disabled: fixed }}
+                accessibilityLabel={mine ? `Remove ${food.name} from your ingredients` : `Add ${food.name} to your ingredients`}
+                style={{ marginLeft: 8 }}
+              >
+                <Ionicons name={mine ? "checkmark-circle" : "add-circle-outline"} size={26} color={mine ? o.ink : o.faint} />
+              </Tap>
+            </Tap>
+          );
+        })}
+
+        {(libraryResults?.length ?? 0) >= 40 && (
+          <Text style={{ textAlign: "center", marginTop: 6, fontSize: 13, color: o.faint }}>Keep typing to narrow it down</Text>
+        )}
+      </View>
     );
   }
 
@@ -1275,7 +1450,7 @@ function PhonePantryMainPage() {
               </View>
 
               <Text className="mt-1 text-base text-slate-500" style={{ marginTop: 2, fontSize: 14, color: o.muted }}>
-                View every ingredient in one list
+                Your list — search to add more from the food library
               </Text>
 
               <View className="mt-3 flex-row items-center">
@@ -1310,7 +1485,7 @@ function PhonePantryMainPage() {
                   </Text>
 
                   <Text className="mt-2 text-center text-slate-500" style={{ color: o.muted }}>
-                    Add an ingredient to start building your pantry.
+                    Search to add foods from the food library, or add your own.
                   </Text>
                 </View>
               ) : (
@@ -1484,7 +1659,7 @@ function PhonePantryMainPage() {
                     ? "Search entire pantry"
                     : activePage === "mealPreps"
                       ? "Search meal preps"
-                      : "Search all ingredients"
+                      : "Search ingredients and the food library"
                 }
                 placeholderTextColor={o.faint}
                 className="ml-3 flex-1 text-base text-slate-900"
@@ -1522,7 +1697,7 @@ function PhonePantryMainPage() {
                     ? "Pantry"
                     : activePage === "mealPreps"
                       ? "Meal preps"
-                      : "All ingredients"}
+                      : "Your ingredients"}
                 </Text>
 
                 <Pressable onPress={closeSearch}>
@@ -1597,7 +1772,7 @@ function PhonePantryMainPage() {
                 />
               ) : (
                 <FlatList
-                  data={activePage === "mealPreps" ? filteredMealPreps : filteredIngredients}
+                  data={activePage === "mealPreps" ? filteredMealPreps : searchedIngredients}
                   keyExtractor={(ing) => ing._id}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
@@ -1666,16 +1841,19 @@ function PhonePantryMainPage() {
                       </Tap>
                     );
                   }}
+                  ListFooterComponent={activePage === "ingredients" ? renderLibraryResults() : null}
                   ListEmptyComponent={
-                    <View className="items-center px-6 py-16">
-                      <Ionicons name="search-outline" size={42} color={o.faint} />
-                      <Text className="mt-4 text-lg font-bold text-slate-900" style={{ color: o.text }}>
-                        No ingredients found
-                      </Text>
-                      <Text className="mt-2 text-center text-slate-500" style={{ color: o.muted }}>
-                        Try searching by name, brand, or category.
-                      </Text>
-                    </View>
+                    activePage === "ingredients" && (libraryLoading || moreFromLibrary.length > 0) ? null : (
+                      <View className="items-center px-6 py-16">
+                        <Ionicons name="search-outline" size={42} color={o.faint} />
+                        <Text className="mt-4 text-lg font-bold text-slate-900" style={{ color: o.text }}>
+                          No ingredients found
+                        </Text>
+                        <Text className="mt-2 text-center text-slate-500" style={{ color: o.muted }}>
+                          Try searching by name, brand, or category.
+                        </Text>
+                      </View>
+                    )
                   }
                 />
               )}
@@ -1868,7 +2046,7 @@ function PhonePantryMainPage() {
       <BarcodeScannerModal
         visible={scannerVisible}
         onClose={() => setScannerVisible(false)}
-        onProductFound={(product: ScannedProduct) => {
+        onProductFound={async (product: ScannedProduct) => {
           setScannerVisible(false);
 
           const scannedParams = {
@@ -1887,10 +2065,21 @@ function PhonePantryMainPage() {
             ...(product.nutrition ? { scannedNutrition: JSON.stringify(product.nutrition) } : {}),
           };
 
-          const match = ingredients.find((i) => barcodesMatch(i.barcode, product.barcode));
+          // The server's answer, not just this page's list: the list doesn't
+          // hold every shared product. One it brings is added to the list.
+          const match = await findIngredientByBarcode(ingredients, product.barcode);
+          if (match && !ingredients.some((i) => i._id === match._id)) {
+            setIngredients((prev) => (prev.some((i) => i._id === match._id) ? prev : [...prev, match]));
+          }
 
           if (scanContext === "pantry") {
             if (match) {
+              // Putting a shared product in the pantry puts it in your
+              // ingredients (and so in the list the next screen loads).
+              if (!inMyIngredients(match)) {
+                await saveIngredient(match._id).catch(() => undefined);
+                setIngredients((prev) => withSaved(prev, match, true));
+              }
               router.push({
                 pathname: "/pantry/add_by_ingredient",
                 params: {
@@ -1923,20 +2112,41 @@ function PhonePantryMainPage() {
           // match *before* navigating anywhere, so a duplicate never briefly
           // flashes the "create new" screen behind the alert.
           if (match) {
+            const viewIngredient = {
+              text: "View ingredient",
+              onPress: () =>
+                router.push({
+                  pathname: "/ingredients/edit/[id]",
+                  params: { id: match._id },
+                }),
+            };
+            // A shared product not in your list yet: offered to it, rather
+            // than made again.
+            if (!inMyIngredients(match)) {
+              Alert.alert(
+                "Already in the catalog",
+                `"${match.name}" is already an ingredient, but not one of yours yet.`,
+                [
+                  { text: "Cancel", style: "cancel" },
+                  viewIngredient,
+                  {
+                    text: "Add to my ingredients",
+                    onPress: () => {
+                      setIngredients((prev) => withSaved(prev, match, true));
+                      saveIngredient(match._id).catch((error: unknown) => {
+                        setIngredients((prev) => withSaved(prev, match, false));
+                        Alert.alert("Couldn't add it", error instanceof Error ? error.message : "Something went wrong.");
+                      });
+                    },
+                  },
+                ],
+              );
+              return;
+            }
             Alert.alert(
               "Already in your catalog",
               `"${match.name}" is already an ingredient.`,
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "View ingredient",
-                  onPress: () =>
-                    router.push({
-                      pathname: "/ingredients/edit/[id]",
-                      params: { id: match._id },
-                    }),
-                },
-              ],
+              [{ text: "Cancel", style: "cancel" }, viewIngredient],
             );
             return;
           }

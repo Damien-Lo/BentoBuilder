@@ -4,6 +4,7 @@ import AccessCode from "../models/AccessCode.js";
 import Session from "../models/Session.js";
 import User from "../models/User.js";
 import { deleteAccount } from "../services/accounts.js";
+import { giveStarterSet } from "../services/foodLibrary.js";
 import {
   attemptKeys,
   BLOCKED,
@@ -106,6 +107,8 @@ router.post("/signup", async (req, res) => {
       return fail(res, 400, "That invite code has just been used.");
     }
     await clearFailures(keys);
+    // (Their ingredient list starts with the everyday foods saved — see services/foodLibrary.js.)
+    await giveStarterSet(user._id).catch((error) => console.error("Starter set:", error.message));
     const { token } = await startSession(user, req.body.deviceName);
     return res.status(201).json({ success: true, data: { token, user: shownUser(user) } });
   } catch (error) {

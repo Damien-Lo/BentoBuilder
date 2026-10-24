@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { CreatableMultiTagDropdown, FieldLabel, FormCard, FormInput } from "@/src/components/forms";
+import { addIngredientTo, CreatableMultiTagDropdown, FieldLabel, FormCard, FormInput } from "@/src/components/forms";
 import { createMeal, type MealType } from "@/src/services/mealApi";
 import { createTag, getTags, type SelectOption } from "@/src/services/optionsApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
@@ -311,6 +311,7 @@ function AddMealPage() {
               onChange={setCourses}
               recipes={recipes}
               ingredients={ingredients}
+              onIngredientAdded={(ingredient) => setIngredients(addIngredientTo(ingredient))}
               onFieldFocus={coursesSection.trigger}
             />
           </View>

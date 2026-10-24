@@ -389,6 +389,7 @@ function PhoneMealTimesScreen() {
             // (After the picker has gone: iOS can't present over it.)
             setTimeout(() => setAdding(food), 350);
           }}
+          onAdded={(food) => setFoods((prev) => (prev ? [...prev, food] : prev))}
           onClose={() => setChoosing(false)}
         />
       )}

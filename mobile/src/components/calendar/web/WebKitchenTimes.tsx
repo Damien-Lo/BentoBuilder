@@ -301,6 +301,7 @@ export function WebMealTimesScreen() {
             setAdding({ slot: choosingFor, food });
             setChoosingFor(null);
           }}
+          onAdded={(food) => setFoods((prev) => (prev ? [...prev, food] : prev))}
           onClose={() => setChoosingFor(null)}
         />
       )}

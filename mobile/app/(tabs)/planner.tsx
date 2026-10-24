@@ -33,7 +33,7 @@ import {
   type RestaurantMeal,
 } from "@/src/services/restaurantMealApi";
 import { upsertMealPlanEntryContribution } from "@/src/services/groceryListApi";
-import { CreatableStringDropdown, FormInput, PriceInput } from "@/src/components/forms";
+import { addIngredientTo, addLibraryFood, CreatableStringDropdown, FoodLibraryHeading, FormInput, PriceInput, useLibraryMatches } from "@/src/components/forms";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { takePendingNewRestaurant } from "@/src/utils/pendingNewRestaurantStore";
 import type { SelectOption } from "@/src/services/optionsApi";
@@ -605,6 +605,20 @@ function PhonePlannerScreen() {
     if (!q) return sortByLastUsed(allIngredients, lastUsed.ingredient, i => i._id, i => i.name);
     return sortAlphabetically(allIngredients.filter(i => i.name.toLowerCase().includes(q)), i => i.name);
   }, [allIngredients, ingredientSearch, lastUsed.ingredient]);
+
+  // The food library's matches for the search, below one's own; one picked
+  // is saved and joins allIngredients before its amount is asked.
+  const library = useLibraryMatches(ingredientSearch, allIngredients, showAdd && addMode === "ingredient");
+
+  async function pickLibraryFood(ingredient: Ingredient) {
+    try {
+      const added = await addLibraryFood(ingredient);
+      setAllIngredients(addIngredientTo(added));
+      openIngredientQuantityStep(added);
+    } catch {
+      // (addLibraryFood said so)
+    }
+  }
 
   const filteredRestaurantMeals = useMemo(() => {
     const q = restaurantSearch.trim().toLowerCase();
@@ -2289,6 +2303,44 @@ function PhonePlannerScreen() {
       </View>
     );
   }
+  // An ingredient's card in the add sheet's list — one's own, or a food
+  // library match (with USDA's description after its portion).
+  function renderIngredientCard(ingredient: Ingredient, onPress: () => void, detail?: string | null) {
+    const portion = ingredient.defaultPortionAmount ?? 1;
+    const kcal = getIngredientKcal(ingredient, portion, ingredient.defaultPortionUnit);
+    const slotCfg = SLOT_MAP[addSlot];
+    return (
+      <Pressable
+        key={ingredient._id}
+        className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+        style={[addCell, o && listCard]}
+        disabled={saving}
+        onPress={onPress}
+      >
+        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`} style={o && { backgroundColor: o.pill }}>
+          <Ionicons name="nutrition-outline" size={18} color={o?.icon ?? slotCfg.iconColor} />
+        </View>
+        <View className="ml-3 flex-1">
+          <Text className="font-semibold text-slate-900" style={o && listTitle}>{ingredient.name}</Text>
+          <Text className="mt-0.5 text-sm text-slate-400" style={o && { fontSize: 13, color: o.muted }} numberOfLines={detail ? 1 : undefined}>
+            {portion}{ingredient.defaultPortionUnit ? ` ${ingredient.defaultPortionUnit}` : ""}{detail ? ` · ${detail}` : ""}
+          </Text>
+        </View>
+        {kcal != null && (
+          <Text className="mr-2 text-sm font-semibold text-slate-500" style={o && { fontSize: 13, color: o.muted }}>{kcal} kcal</Text>
+        )}
+        <Pressable
+          hitSlop={8}
+          onPress={() => openIngredientInfo(ingredient)}
+          className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
+          style={o && { backgroundColor: "transparent" }}
+        >
+          <Ionicons name="information-circle-outline" size={20} color={o?.faint ?? "#94A3B8"} />
+        </Pressable>
+        <Ionicons name="chevron-forward" size={20} color={o?.faint ?? "#94A3B8"} />
+      </Pressable>
+    );
+  }
   // Its Cancel.
   function cancelAddSheet() {
     setShowAdd(false);
@@ -3317,42 +3369,22 @@ function PhonePlannerScreen() {
                   keyExtractor={i => i._id}
                   keyboardShouldPersistTaps="handled"
                   contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 }}
-                  renderItem={({ item: ingredient }) => {
-                    const portion = ingredient.defaultPortionAmount ?? 1;
-                    const kcal = getIngredientKcal(ingredient, portion, ingredient.defaultPortionUnit);
-                    const slotCfg = SLOT_MAP[addSlot];
-                    return (
-                      <Pressable
-                        className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-                        style={[addCell, o && listCard]}
-                        disabled={saving}
-                        onPress={() => openIngredientQuantityStep(ingredient)}
-                      >
-                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`} style={o && { backgroundColor: o.pill }}>
-                          <Ionicons name="nutrition-outline" size={18} color={o?.icon ?? slotCfg.iconColor} />
-                        </View>
-                        <View className="ml-3 flex-1">
-                          <Text className="font-semibold text-slate-900" style={o && listTitle}>{ingredient.name}</Text>
-                          <Text className="mt-0.5 text-sm text-slate-400" style={o && { fontSize: 13, color: o.muted }}>
-                            {portion}{ingredient.defaultPortionUnit ? ` ${ingredient.defaultPortionUnit}` : ""}
-                          </Text>
-                        </View>
-                        {kcal != null && (
-                          <Text className="mr-2 text-sm font-semibold text-slate-500" style={o && { fontSize: 13, color: o.muted }}>{kcal} kcal</Text>
-                        )}
-                        <Pressable
-                          hitSlop={8}
-                          onPress={() => openIngredientInfo(ingredient)}
-                          className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
-                          style={o && { backgroundColor: "transparent" }}
-                        >
-                          <Ionicons name="information-circle-outline" size={20} color={o?.faint ?? "#94A3B8"} />
-                        </Pressable>
-                        <Ionicons name="chevron-forward" size={20} color={o?.faint ?? "#94A3B8"} />
-                      </Pressable>
-                    );
-                  }}
+                  renderItem={({ item: ingredient }) => renderIngredientCard(ingredient, () => openIngredientQuantityStep(ingredient))}
+                  ListFooterComponent={
+                    library.matches.length > 0 || library.searching ? (
+                      <View style={{ marginTop: filteredIngredients.length > 0 ? 12 : 0 }}>
+                        <FoodLibraryHeading searching={library.searching} className="mb-2 px-1" />
+                        {/* (In rows of three on a desktop, like the list above.) */}
+                        {(wideAdd ? chunk(library.matches, 3) : library.matches.map((match) => [match])).map((row) => (
+                          <View key={row[0]._id} style={wideAdd ? { flexDirection: "row", gap: 12 } : undefined}>
+                            {row.map((match) => renderIngredientCard(match, () => void pickLibraryFood(match), match.sourceName))}
+                          </View>
+                        ))}
+                      </View>
+                    ) : null
+                  }
                   ListEmptyComponent={
+                    library.matches.length > 0 || library.searching ? null : (
                     <View className="items-center py-16">
                       <Ionicons name="nutrition-outline" size={42} color={o?.faint ?? "#94A3B8"} />
                       <Text className="mt-4 text-lg font-bold text-slate-900" style={o && { color: o.text }}>No ingredients found</Text>
@@ -3360,6 +3392,7 @@ function PhonePlannerScreen() {
                         {ingredientSearch ? "Try a different search." : "Create ingredients in the Pantry tab first."}
                       </Text>
                     </View>
+                    )
                   }
                 />
               )}
@@ -3507,6 +3540,13 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
 });
+
+// A list in runs of `size` (the last one shorter).
+function chunk<T>(items: T[], size: number): T[][] {
+  const runs: T[][] = [];
+  for (let i = 0; i < items.length; i += size) runs.push(items.slice(i, i + size));
+  return runs;
+}
 
 // "2 of 3 meals eaten · 1 planned", or the like, under the day's name.
 function dayLine(entries: MealPlanEntry[], isToday: boolean, past: boolean): string {

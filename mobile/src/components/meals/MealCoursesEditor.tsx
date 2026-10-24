@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { CreatableStringDropdown, SegmentedToggle } from "@/src/components/forms";
+import { addLibraryFood, CreatableStringDropdown, FoodLibraryHeading, SegmentedToggle, useLibraryMatches } from "@/src/components/forms";
 import { Tap } from "@/src/components/ui/Tap";
 import type { Ingredient } from "@/src/services/ingredientApi";
 import type { CourseEntry, CourseInput } from "@/src/services/mealApi";
@@ -158,12 +158,16 @@ export function MealCoursesEditor({
   onChange,
   recipes,
   ingredients,
+  onIngredientAdded,
   onFieldFocus,
 }: {
   courses: CourseFormEntry[];
   onChange: (courses: CourseFormEntry[]) => void;
   recipes: Recipe[];
   ingredients: Ingredient[];
+  // A food picked from the library, just saved — for the form to add to
+  // `ingredients` (which the course looks it up in).
+  onIngredientAdded: (ingredient: Ingredient) => void;
   onFieldFocus?: () => void;
 }) {
   // (On an Orbit page, in its colours.)
@@ -183,6 +187,8 @@ export function MealCoursesEditor({
     () => ingredients.filter((i) => i.name.toLowerCase().includes(search)),
     [ingredients, search],
   );
+  // The food library's matches, below one's own ingredients.
+  const library = useLibraryMatches(pickerSearch, ingredients, pickerCourseId !== null && pickerKind === "ingredient");
 
   function updateCourse(courseId: string, patch: Partial<CourseFormEntry>) {
     onChange(courses.map((c) => (c.id === courseId ? { ...c, ...patch } : c)));
@@ -213,6 +219,17 @@ export function MealCoursesEditor({
       });
     }
     setPickerCourseId(null);
+  }
+
+  // One from the library: saved, added to the form's ingredients, then picked.
+  async function pickLibraryFood(ingredient: Ingredient) {
+    try {
+      const added = await addLibraryFood(ingredient);
+      onIngredientAdded(added);
+      pickIngredient(added);
+    } catch {
+      // (addLibraryFood said so)
+    }
   }
 
   return (
@@ -426,21 +443,40 @@ export function MealCoursesEditor({
                 <PickerRow
                   icon="nutrition-outline"
                   name={ingredient.name}
-                  detail={
-                    ingredient.nutrition?.calories != null
-                      ? `${Math.round(ingredient.nutrition.calories)} kcal / ${ingredient.defaultPortionAmount ?? 1} ${ingredient.defaultPortionUnit ?? ""}`.trim()
-                      : undefined
-                  }
+                  detail={ingredientDetail(ingredient)}
                   onPress={() => pickIngredient(ingredient)}
                 />
               )}
-              ListEmptyComponent={<PickerEmpty text="No ingredients found" />}
+              ListFooterComponent={
+                library.matches.length > 0 || library.searching ? (
+                  <View style={{ marginTop: pickerIngredients.length > 0 ? 12 : 0 }}>
+                    <FoodLibraryHeading searching={library.searching} className="mb-2 px-1" />
+                    {library.matches.map((match) => (
+                      <PickerRow
+                        key={match._id}
+                        icon="nutrition-outline"
+                        name={match.name}
+                        detail={[match.sourceName, ingredientDetail(match)].filter(Boolean).join(" · ") || undefined}
+                        onPress={() => void pickLibraryFood(match)}
+                      />
+                    ))}
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={library.matches.length > 0 || library.searching ? null : <PickerEmpty text="No ingredients found" />}
             />
           )}
         </SafeAreaView>
       </Modal>
     </>
   );
+}
+
+// An ingredient's calories per its own portion, for its picker row.
+function ingredientDetail(ingredient: Ingredient): string | undefined {
+  return ingredient.nutrition?.calories != null
+    ? `${Math.round(ingredient.nutrition.calories)} kcal / ${ingredient.defaultPortionAmount ?? 1} ${ingredient.defaultPortionUnit ?? ""}`.trim()
+    : undefined;
 }
 
 function PickerRow({

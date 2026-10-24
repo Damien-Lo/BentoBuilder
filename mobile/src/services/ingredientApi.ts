@@ -89,6 +89,21 @@ export interface Ingredient {
 
   isArchived?: boolean;
 
+  // The food library (server/services/foodLibrary.js): a USDA generic food,
+  // its id there and USDA's own description. The library is searched
+  // (searchIngredients), not listed: getIngredients brings only the library
+  // foods one has saved or that something of one's uses.
+  source?: "usda" | null;
+  fdcId?: number | null;
+  sourceName?: string | null;
+  // Other names it's found by ("scallion" for green onion).
+  aliases?: string[];
+  // In one's own list: one's own ingredients always; a shared one (from the
+  // library or the catalog) once saved. Lists of "your ingredients" show
+  // only these; everything else in getIngredients is there so recipes,
+  // meals and the pantry find what they point at.
+  saved?: boolean;
+
   // Raw rating history, most-recent last — same shape/convention as
   // Recipe.scores. Only meaningful for an ingredient actually logged as its
   // own meal-plan entry (eaten directly, e.g. a protein shake) rather than
@@ -233,6 +248,40 @@ export async function getIngredientById(
   const result = await parseResponse<IngredientResponse>(response);
 
   return result.data;
+}
+
+// Everything one can add, by name or alias: the food library, the rest of
+// the shared catalog and one's own (best first; each with `saved`). Two
+// letters at least.
+export async function searchIngredients(query: string, limit = 40): Promise<Ingredient[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const response = await fetch(`${API_BASE_URL}/api/ingredients/library?q=${encodeURIComponent(q)}&limit=${limit}`);
+  const result = await parseResponse<IngredientListResponse>(response);
+  return Array.isArray(result.data) ? result.data : [];
+}
+
+// A shared ingredient into one's own list (or out of it). Picking a library
+// food anywhere saves it.
+export async function saveIngredient(ingredientId: string): Promise<Ingredient> {
+  const response = await fetch(`${API_BASE_URL}/api/ingredients/${ingredientId}/save`, { method: "POST" });
+  return (await parseResponse<IngredientResponse>(response)).data;
+}
+
+export async function unsaveIngredient(ingredientId: string): Promise<Ingredient> {
+  const response = await fetch(`${API_BASE_URL}/api/ingredients/${ingredientId}/save`, { method: "DELETE" });
+  return (await parseResponse<IngredientResponse>(response)).data;
+}
+
+// The ingredient with this barcode — one's own or the shared catalog's,
+// saved or not — or null. (The list from getIngredients doesn't hold every
+// shared product, so a scan asks the server.)
+export async function getIngredientByBarcode(barcode: string): Promise<Ingredient | null> {
+  const code = barcode.trim();
+  if (!code) return null;
+  const response = await fetch(`${API_BASE_URL}/api/ingredients/barcode/${encodeURIComponent(code)}`);
+  if (response.status === 404) return null;
+  return (await parseResponse<IngredientResponse>(response)).data;
 }
 
 export async function getIngredientAvailability(

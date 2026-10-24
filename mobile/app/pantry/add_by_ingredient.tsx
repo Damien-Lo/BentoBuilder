@@ -15,7 +15,7 @@ import {
 } from "react-native";
 
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
+import { getIngredientById, getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 
 import {
   createStore,
@@ -38,6 +38,11 @@ import {
   SearchableObjectDropdown,
   SegmentedToggle,
   UnitFamilyDropdown,
+  addIngredientTo,
+  addLibraryFood,
+  FoodLibraryHeading,
+  libraryFoodDetail,
+  useLibraryMatches,
 } from "@/src/components/forms";
 import { loadSettings } from "@/src/services/settingsService";
 import { resolveOrCreateOption } from "@/src/utils/resolveOrCreateOption";
@@ -289,8 +294,13 @@ function AddPantryItemByIngredient() {
         setCustomUnitConversions(loadedSettings.unitConversions ?? []);
 
         if (ingredientId) {
-          const match = ingredientList.find((i) => i._id === ingredientId);
-          if (match) {
+          // (A shared product just scanned may not be in the list yet: fetched by itself.)
+          let match = ingredientList.find((i) => i._id === ingredientId);
+          if (!match) {
+            match = await getIngredientById(ingredientId).catch(() => undefined);
+            if (match && !cancelled) setIngredients([...ingredientList, match]);
+          }
+          if (match && !cancelled) {
             setSelectedIngredient(match);
             setQuantityRows([
               {
@@ -351,6 +361,21 @@ function AddPantryItemByIngredient() {
       );
     });
   }, [ingredients, searchText, browseKind]);
+
+  // The food library's matches for the search, below one's own ingredients
+  // (not for meal preps, which come only from recipes); one picked is saved
+  // and joins `ingredients` before it's chosen.
+  const library = useLibraryMatches(searchText, ingredients, !selectedIngredient && browseKind === "ingredient");
+
+  async function pickLibraryFood(ingredient: Ingredient) {
+    try {
+      const added = await addLibraryFood(ingredient);
+      setIngredients(addIngredientTo(added));
+      handleSelectIngredient(added);
+    } catch {
+      // (addLibraryFood said so)
+    }
+  }
 
   const selectedStorageLocation = useMemo(
     () =>
@@ -607,6 +632,65 @@ function AddPantryItemByIngredient() {
     }
   }
 
+  // An ingredient's row in the list to choose from — one's own (its brand
+  // and category under it), or a food library match (`detail`: USDA's
+  // description).
+  function renderIngredientRow(ingredient: Ingredient, onPress: () => void, detail?: string | null) {
+    const brandName = getReferenceName(ingredient.brand);
+
+    const categoryName = getReferenceName(ingredient.category);
+    const subtitle = detail !== undefined ? detail : [brandName, categoryName].filter(Boolean).join(" • ");
+
+    const row = (
+      <>
+        <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.pill }}>
+          <Ionicons
+            name="nutrition-outline"
+            size={18}
+            color={o?.onPill ?? "#2563EB"}
+          />
+        </View>
+
+        <View className="ml-3 flex-1">
+          <Text className="text-base font-bold text-slate-950" style={o && { fontSize: 15, fontWeight: "600", color: o.text }}>
+            {ingredient.name}
+          </Text>
+
+          {!!subtitle && (
+            <Text className="mt-1 text-sm text-slate-500" style={o && { marginTop: 2, fontSize: 13, color: o.muted }}>
+              {subtitle}
+            </Text>
+          )}
+        </View>
+
+        <Ionicons
+          name="chevron-forward"
+          size={o ? 18 : 21}
+          color={o?.faint ?? "#94A3B8"}
+        />
+      </>
+    );
+
+    return o ? (
+      <Tap
+        key={ingredient._id}
+        onPress={onPress}
+        style={{ marginBottom: 10, flexDirection: "row", alignItems: "center", borderRadius: 18, borderWidth: 1, borderColor: o.border, backgroundColor: o.surface, paddingHorizontal: 14, paddingVertical: 12 }}
+        pressedStyle={{ backgroundColor: o.pill }}
+      >
+        {row}
+      </Tap>
+    ) : (
+      <Pressable
+        key={ingredient._id}
+        className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+        onPress={onPress}
+      >
+        {row}
+      </Pressable>
+    );
+  }
+
   if (loading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-slate-50" style={o && { backgroundColor: o.canvas }}>
@@ -696,61 +780,17 @@ function AddPantryItemByIngredient() {
               contentContainerStyle={{
                 paddingBottom: 40,
               }}
-              renderItem={({ item: ingredient }) => {
-                const brandName = getReferenceName(ingredient.brand);
-
-                const categoryName = getReferenceName(ingredient.category);
-
-                const row = (
-                  <>
-                      <View className="h-10 w-10 items-center justify-center rounded-full bg-blue-50" style={o && { backgroundColor: o.pill }}>
-                        <Ionicons
-                          name="nutrition-outline"
-                          size={18}
-                          color={o?.onPill ?? "#2563EB"}
-                        />
-                      </View>
-
-                      <View className="ml-3 flex-1">
-                        <Text className="text-base font-bold text-slate-950" style={o && { fontSize: 15, fontWeight: "600", color: o.text }}>
-                          {ingredient.name}
-                        </Text>
-
-                        {(brandName || categoryName) && (
-                          <Text className="mt-1 text-sm text-slate-500" style={o && { marginTop: 2, fontSize: 13, color: o.muted }}>
-                            {[brandName, categoryName]
-                              .filter(Boolean)
-                              .join(" • ")}
-                          </Text>
-                        )}
-                      </View>
-
-                      <Ionicons
-                        name="chevron-forward"
-                        size={o ? 18 : 21}
-                        color={o?.faint ?? "#94A3B8"}
-                      />
-                  </>
-                );
-
-                return o ? (
-                  <Tap
-                    onPress={() => handleSelectIngredient(ingredient)}
-                    style={{ marginBottom: 10, flexDirection: "row", alignItems: "center", borderRadius: 18, borderWidth: 1, borderColor: o.border, backgroundColor: o.surface, paddingHorizontal: 14, paddingVertical: 12 }}
-                    pressedStyle={{ backgroundColor: o.pill }}
-                  >
-                    {row}
-                  </Tap>
-                ) : (
-                  <Pressable
-                    className="mb-2.5 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-                    onPress={() => handleSelectIngredient(ingredient)}
-                  >
-                    {row}
-                  </Pressable>
-                );
-              }}
+              renderItem={({ item: ingredient }) => renderIngredientRow(ingredient, () => handleSelectIngredient(ingredient))}
+              ListFooterComponent={
+                library.matches.length > 0 || library.searching ? (
+                  <View style={{ marginTop: filteredIngredients.length > 0 ? 8 : 0 }}>
+                    <FoodLibraryHeading searching={library.searching} className="mb-2 ml-1" />
+                    {library.matches.map((match) => renderIngredientRow(match, () => void pickLibraryFood(match), libraryFoodDetail(match)))}
+                  </View>
+                ) : null
+              }
               ListEmptyComponent={
+                library.matches.length > 0 || library.searching ? null : (
                 <View className="items-center px-6 py-16">
                   <Ionicons name="search-outline" size={44} color={o?.faint ?? "#94A3B8"} />
 
@@ -787,6 +827,7 @@ function AddPantryItemByIngredient() {
                     </Pressable>
                   ))}
                 </View>
+                )
               }
             />
           </View>

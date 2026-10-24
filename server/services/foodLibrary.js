@@ -69,7 +69,7 @@ const USES = [
   [Recipe, ["ingredientList.ingredient"]],
   [PantryItem, ["ingredient", "madeFrom.ingredient"]],
   [MealPlanEntry, ["ingredient", "manualPieceEntries.ingredient", "pieceSizes.ingredient"]],
-  [Meal, ["courses.ingredient", "sections.ingredient"]],
+  [Meal, ["courses.ingredient", "bentoLayout.sections.ingredient"]],
   [GroceryItem, ["ingredient"]],
   [UsualMeal, ["ingredient"]],
 ];
@@ -88,4 +88,36 @@ export async function libraryFoodsListed() {
   const ids = [...new Set(lists.flat().filter(Boolean).map(String))];
   if (!ids.length) return [];
   return Ingredient.distinct("_id", { _id: { $in: ids }, source: "usda" });
+}
+
+// What a new account starts with saved (data/usda-foods/starter.json): about
+// 260 everyday foods, so their list isn't empty on day one — library foods
+// by USDA id (an ingredient matched to one counts), and a few of the shared
+// catalog's own generics by name, for staples USDA doesn't have (udon,
+// mirin, gochujang…). One that isn't there is skipped.
+const STARTER = path.join(path.dirname(LIBRARY), "starter.json");
+
+export async function giveStarterSet(userId) {
+  const starter = JSON.parse(fs.readFileSync(STARTER, "utf8"));
+  const fdcIds = starter.filter((s) => s.fdcId).map((s) => s.fdcId);
+  const names = starter.filter((s) => s.catalog).map((s) => s.catalog);
+  const found = await Ingredient.find(
+    { owner: null, isArchived: false, $or: [{ fdcId: { $in: fdcIds } }, { alsoFdcIds: { $in: fdcIds } }, { isGeneric: true, name: { $in: names } }] },
+    "_id",
+  )
+    .setOptions({ anyOwner: true })
+    .lean();
+  if (!found.length) return { saved: 0, of: starter.length };
+  const now = new Date();
+  await FoodSettings.collection.bulkWrite(
+    found.map(({ _id }) => ({
+      updateOne: {
+        filter: { owner: userId, kind: "ingredient", item: _id },
+        update: { $set: { saved: true, updatedAt: now }, $setOnInsert: { createdAt: now } },
+        upsert: true,
+      },
+    })),
+    { ordered: false },
+  );
+  return { saved: found.length, of: starter.length };
 }

@@ -13,6 +13,10 @@ export interface IngredientOption
   barcode?: string | null;
   unit?: string;
   defaultPortionAmount?: number;
+  // Counted in pieces ("egg", "fillet") — see Ingredient.pieceLabel.
+  pieceLabel?: string | null;
+  // In one's own list (see Ingredient.saved).
+  saved?: boolean;
 
   isGeneric?: boolean;
 
