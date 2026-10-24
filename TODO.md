@@ -31,9 +31,9 @@ Everything is merged into `WorkingSave` and deployed (Render + bentobuilder.page
   - `GET /api/ingredients` returns today's list plus the library foods one has saved or uses (`libraryFoodsListed`), each with `saved`. The app finds every ingredient in that list (recipes don't come populated), so it can't be "saved only".
   - Receipts match against the same list.
 - **Next, in order:**
-  1. Move the admin's personal fields on shared records into Damien's FoodSettings, with `saved` on what he uses.
-  2. A starter set of about 150 staples for new accounts (Damien to trim).
-  3. The match list for his 394 ingredients (his review first; his name, nutrition and portions kept, gaps filled from USDA).
+  1. ~~Move the admin's personal fields on shared records into Damien's FoodSettings, with `saved` on what he uses.~~ Done Oct 23: 447 records (127 ingredients, 53 recipes), all 394 shared ingredients saved. `manual_controls/scripts/move_food_settings.js`; ids in `copy_20261023_foodsettings_ids`.
+  2. A starter set for new accounts: agreed Oct 23, 259 foods (225 from the library, 34 of the catalog's generics for staples USDA lacks: udon, mirin, gochujang, panko…). The list is still in the session's working files. It goes into the repo with the new-account setup.
+  3. ~~The match list for his ingredients.~~ Done Oct 23. 160 of his 266 generics are now library foods: USDA id set; his name, nutrition, portions and category kept; 567 blank nutrients, 589 unit weights and 185 aliases filled in. The other 106 have no library food, or duplicate one of his that does. The duplicates (Pepper / Black Pepper, the garlics, Light Soy / Soy, Spring / Green Onion, Macaroni / Spaghetti…) are to merge later. Files: `manual_controls/scripts/match_food_library.js` and `food_library_matches_20261023.json`; backup in `backup_20261023_foodlibrary_match`.
   4. The category tidy-up (approved): Snack → Snacks & Confectionery, Drinks → Beverages & Stock, Test Ingredients / Pancake / Sau / Uncategorized removed.
   5. Screens:
      - library search in every picker, saving on pick;
@@ -333,6 +333,7 @@ Reported by the user while using the app.
 1. Scanning a nutrition label image doesn't work: the API key is missing from the env. **Found Oct 11:** it's the live server only. `GOOGLE_AI_API_KEY` is set in `server/.env` (label scanning works locally) but not in the Render service's environment, so every scan through the installed phone app fails — receipts and meal-photo estimates too, which use the same key. Fix is in the Render dashboard (Environment → add `GOOGLE_AI_API_KEY`), not in code. **Fixed Oct 11:** the key was added on Render; a test scan against the live server now succeeds.
 
 2. **Sign-in page in dark mode** (noted Oct 23): the sign-in button's text is black on the dark button, unreadable. The loading animation needs work too. Later.
+3. **The unit converter loops forever on unit weights that never reach grams** (found Oct 23). Examples are Green Onion's "1 item = 1 stalk", Lemon's "1 piece = 1 item", and a "pack = 150 ml" with no density. `convertUnits` in `server/services/unitConversion.js` (and its copy, `mobile/src/utils/unitConversion.ts`) recurses between the two units until the stack overflows. Ten of the catalog's ingredients have weights like these. Fix: remember the units already tried. Then tidy those ten ingredients' weights.
 
 ## Known issues (pinned, not urgent)
 
