@@ -336,7 +336,7 @@ Reported by the user while using the app.
 
 1. Scanning a nutrition label image doesn't work: the API key is missing from the env. **Found Oct 11:** it's the live server only. `GOOGLE_AI_API_KEY` is set in `server/.env` (label scanning works locally) but not in the Render service's environment, so every scan through the installed phone app fails — receipts and meal-photo estimates too, which use the same key. Fix is in the Render dashboard (Environment → add `GOOGLE_AI_API_KEY`), not in code. **Fixed Oct 11:** the key was added on Render; a test scan against the live server now succeeds.
 
-2. **Sign-in page in dark mode** (noted Oct 23): the sign-in button's text is black on the dark button, unreadable. The loading animation needs work too. Later.
+2. ~~**Sign-in page in dark mode:** the sign-in button's text was black on the dark page.~~ Fixed Oct 24. The button's background was set with Pressable's style function, which NativeWind drops on the phone; it now uses `Tap`. **Still open:** the loading animation.
 3. ~~**The server's unit converter looped forever on unit weights that never reach grams**~~ (found and fixed Oct 23). Examples are Green Onion's "1 item = 1 stalk" and a "pack = 150 ml" with no density. `server/services/unitConversion.js` now remembers the units already tried, as the app's copy already did, so these count as not convertible. Still to tidy: those ten ingredients' weights.
 
 ## Known issues (pinned, not urgent)

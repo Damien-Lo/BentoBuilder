@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState, type ComponentProps } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+
+import { Tap } from "@/src/components/ui/Tap";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PrivacyPolicyModal } from "@/src/components/legal/PrivacyPolicy";
@@ -180,14 +182,18 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
               {newPassword && !error && <Text style={{ marginTop: 8, fontSize: 12.5, lineHeight: 18, color: colors.muted }}>A few words together works well. Common passwords aren&apos;t allowed.</Text>}
               {!!error && <Text style={{ marginTop: 16, fontSize: 14, color: colors.danger }}>{error}</Text>}
 
-              <Pressable
+              {/* (Tap, not Pressable's style function — dropped on the phone, which
+                  left the dark button text on the dark page.) */}
+              <Tap
                 onPress={() => void submit()}
                 disabled={busy}
-                style={({ pressed }) => ({ marginTop: 24, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 14, paddingVertical: 14, backgroundColor: colors.ink, opacity: busy ? 0.6 : pressed ? 0.85 : 1 })}
+                accessibilityRole="button"
+                style={{ marginTop: 24, flexDirection: "row", alignItems: "center", justifyContent: "center", borderRadius: 14, paddingVertical: 14, backgroundColor: colors.ink, opacity: busy ? 0.6 : 1 }}
+                pressedStyle={{ opacity: 0.85 }}
               >
                 {busy && <ActivityIndicator color={colors.onInk} style={{ marginRight: 8 }} />}
                 <Text style={{ fontSize: 16, fontWeight: "600", color: colors.onInk }}>{copy.button}</Text>
-              </Pressable>
+              </Tap>
             </View>
 
             <View className="mt-5 items-center gap-3">
