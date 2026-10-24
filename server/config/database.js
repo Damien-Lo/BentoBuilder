@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
 
 import { ensureExerciseCatalog } from "../services/exerciseCatalog.js";
+import { ensureFoodLibrary } from "../services/foodLibrary.js";
 
 // Which database the server works on.
 //
@@ -60,6 +61,8 @@ export async function connectDatabase(name) {
   // (Gym's exercise library, filled in or brought up to date: it doesn't
   // hold up the server if it fails.)
   await ensureExerciseCatalog().catch((error) => console.error("Exercise library:", error.message));
+  // (And the food library, the same way: what's missing added, nothing changed.)
+  await ensureFoodLibrary().catch((error) => console.error("Food library:", error.message));
   if (canSwitchDatabase()) {
     fs.mkdirSync(path.dirname(CHOICE_FILE), { recursive: true });
     fs.writeFileSync(CHOICE_FILE, target);
