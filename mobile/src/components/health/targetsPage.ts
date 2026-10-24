@@ -79,12 +79,14 @@ export function useTargetsPage(units: Units) {
   const plan = cal && differs(cal) ? workOutTargets({ ...data, units, settings: { ...settings, dailyCalorieLimit: cal.value } }).targets.map((t) => (t.key === "calories" ? cal : t)) : targets;
   const changes = plan.filter((t) => (SETTING[t.key] || t.current != null) && differs(t));
 
-  // A change: shown at once, then saved (put back if it isn't).
+  // A change: shown at once, then saved (put back if it isn't). A new goal
+  // weight is loaded again after, for where the server says it starts.
   async function save(fields: Partial<AppSettings>) {
     const before = settings;
     setData((d) => d && { ...d, settings: { ...d.settings, ...fields } });
     try {
       await saveSettings(fields);
+      if ("goalWeight" in fields) load();
     } catch (error) {
       setData((d) => d && { ...d, settings: before });
       Alert.alert("Couldn't save that", error instanceof Error ? error.message : "Something went wrong.");

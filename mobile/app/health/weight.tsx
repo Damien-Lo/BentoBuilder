@@ -24,6 +24,7 @@ import { formatDateDisplay, todayDateInputString } from "@/src/utils/date";
 import { SECTION_PALETTE } from "@/src/theme/orbit";
 
 import { toShown, toStored, useUnits } from "@/src/components/health/units";
+import { PastGoals } from "@/src/components/health/PastGoals";
 import { WeightPhone } from "@/src/components/health/WeightPhone";
 
 function round1(n: number): number {
@@ -88,6 +89,8 @@ function WeightDesk() {
 
   const changeFromStart = current != null && starting != null ? round1(current - starting) : null;
   const toGoal = current != null && goal != null ? round1(goal - current) : null;
+  // Past the goal: below it on a cut, above it on a bulk.
+  const pastGoal = toGoal != null && (settings?.goalDirection === "gain" ? toGoal < 0 : toGoal > 0);
 
   const rows = useMemo(
     () =>
@@ -175,7 +178,7 @@ function WeightDesk() {
           {/* ── Progress summary ── */}
           <View className="flex-row overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o && deskCard(o)}>
             <View className="flex-1 items-center border-r border-slate-100 py-4">
-              <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">Starting</Text>
+              <Text className="text-xs font-semibold uppercase tracking-wide text-slate-400">This goal started</Text>
               <Text className="mt-1 text-lg font-bold text-slate-900">{starting != null ? W(starting) : "—"}</Text>
             </View>
             <View className="flex-1 items-center border-r border-slate-100 py-4">
@@ -204,12 +207,14 @@ function WeightDesk() {
                 {changeFromStart != null && toGoal != null ? "  ·  " : ""}
                 {toGoal != null && (
                   <Text>
-                    {W(Math.abs(toGoal))} {U} {toGoal >= 0 ? "to go" : "past goal"}
+                    {W(Math.abs(toGoal))} {U} {pastGoal ? "past goal" : "to go"}
                   </Text>
                 )}
               </Text>
             </View>
           )}
+
+          {o && <PastGoals goals={settings?.pastGoals ?? []} units={units} colors={o} />}
 
           {/* In a desktop browser, logging and the history sit side by side. */}
           <View style={layout.columns}>

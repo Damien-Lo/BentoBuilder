@@ -1,5 +1,6 @@
 import express from "express";
 import UserProfile from "../models/UserProfile.js";
+import { fillGoalStart, goalChange } from "../services/weightGoal.js";
 
 const router = express.Router();
 
@@ -13,6 +14,8 @@ router.get("/", async (req, res) => {
     if (!profile) {
       profile = await UserProfile.create({});
     }
+    const filled = await fillGoalStart(profile);
+    if (filled) profile = await UserProfile.findOneAndUpdate({}, filled, { returnDocument: "after" });
     return res.status(200).json({ success: true, data: profile });
   } catch (error) {
     console.error("Get profile error:", error);
@@ -22,15 +25,19 @@ router.get("/", async (req, res) => {
 
 /**
  * PUT /api/profile
- * Upserts the single profile document.
+ * Upserts the single profile document. Where the goal weight started is
+ * the server's to keep (services/weightGoal.js): a goal weight sent sets it,
+ * and what's sent for it is ignored.
  */
 router.put("/", async (req, res) => {
   try {
     // Strip MongoDB internals so they can never be overwritten
-    const { _id, __v, createdAt, updatedAt, ...fields } = req.body;
+    const { _id, __v, createdAt, updatedAt, startingWeight, startingWeightDate, goalDirection, pastGoals, ...fields } = req.body;
+    const goal = "goalWeight" in fields ? await goalChange(await UserProfile.findOne().lean(), fields.goalWeight ?? null) : null;
+    delete fields.goalWeight;
     const profile = await UserProfile.findOneAndUpdate(
       {},
-      { $set: fields },
+      { $set: { ...fields, ...goal?.$set }, ...(goal?.$push ? { $push: goal.$push } : {}) },
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
     );
     return res.status(200).json({ success: true, data: profile });

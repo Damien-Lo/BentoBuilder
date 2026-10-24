@@ -25,11 +25,14 @@ export interface AppSettings {
   ratingSkipBackoffDays: number;
   // Custom conversions on top of the app's built-in mass/volume table.
   unitConversions: CustomUnitConversion[];
-  // Weight goal tracking — a single starting point and a target, not a full
-  // log of intermediate weigh-ins.
+  // The goal weight, and where this goal started — your weight when it was
+  // set, kept by the server (never sent: setting the goal sets it). Goals
+  // before this one, when it changed direction, are in pastGoals.
   startingWeight: number | null;
   startingWeightDate: string | null;
   goalWeight: number | null;
+  goalDirection: GoalDirection | null;
+  pastGoals: PastGoal[];
   // About you (Health → About you): what the health numbers are worked out
   // from. Height in cm; born "YYYY-MM-DD".
   sex: Sex | null;
@@ -51,6 +54,15 @@ export interface TargetPrefs {
   exercise?: number; // minutes a week
   workouts?: number; // a week
   sleep?: number; // minutes a night
+}
+export type GoalDirection = "lose" | "gain" | "stay";
+export interface PastGoal {
+  direction: GoalDirection | null;
+  goalWeight: number | null;
+  startWeight: number | null;
+  startDate: string | null;
+  endWeight: number | null;
+  endDate: string | null;
 }
 export type Units = "imperial" | "metric";
 export type Sex = "male" | "female";
@@ -75,6 +87,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   startingWeight: null,
   startingWeightDate: null,
   goalWeight: null,
+  goalDirection: null,
+  pastGoals: [],
   sex: null,
   birthDate: null,
   heightCm: null,
@@ -124,6 +138,8 @@ export async function loadSettings(): Promise<AppSettings> {
       startingWeight:     typeof d.startingWeight     === "number" ? d.startingWeight     : DEFAULTS.startingWeight,
       startingWeightDate: typeof d.startingWeightDate === "string" ? d.startingWeightDate : DEFAULTS.startingWeightDate,
       goalWeight:         typeof d.goalWeight         === "number" ? d.goalWeight         : DEFAULTS.goalWeight,
+      goalDirection: d.goalDirection === "lose" || d.goalDirection === "gain" || d.goalDirection === "stay" ? d.goalDirection : null,
+      pastGoals: Array.isArray(d.pastGoals) ? (d.pastGoals as PastGoal[]) : [],
       sex:           d.sex === "male" || d.sex === "female" ? d.sex : null,
       birthDate:     typeof d.birthDate === "string" ? d.birthDate : null,
       heightCm:      typeof d.heightCm === "number" ? d.heightCm : null,

@@ -5,7 +5,6 @@ import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Te
 import { healthyRange, KG_PER_LB } from "@/src/components/health/bodyStats";
 import { fit, KCAL_PER_KG_WEEK, PACES, type Aim, type Target } from "@/src/components/health/targets";
 import { showMeasure, toShown, toStored, UNIT_LABEL } from "@/src/components/health/units";
-import { DatePickerField } from "@/src/components/forms/DatePickerField";
 import { IconTile } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
 import type { AppSettings, Units } from "@/src/services/settingsService";
@@ -61,7 +60,10 @@ export function GoalCard({ aim, start, burn, units, onPace, onGoal, colors: c }:
   const away = aim.weightKg != null && aim.goalKg != null ? Math.abs(aim.weightKg - aim.goalKg) : null;
   const choices = dir === "stay" ? [] : PACES[dir][units];
   const chosen = Math.round(toShown("weight", aim.pace, units) * 100) / 100;
-  const when = aim.weeks != null ? new Date(Date.now() + aim.weeks * 7 * 86_400_000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : null;
+  const dateIn = (weeks: number | null) => (weeks != null ? new Date(Date.now() + weeks * 7 * 86_400_000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : null);
+  const when = dateIn(aim.weeks);
+  const trendWhen = dateIn(aim.trendWeeks);
+  const sinceStart = start && aim.weightKg != null ? aim.weightKg - start.kg : null;
   const tooFast = dir === "lose" && aim.weightKg != null && aim.pace > aim.weightKg * 0.01;
   return (
     <View style={{ padding: 14, borderRadius: 18, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
@@ -78,7 +80,18 @@ export function GoalCard({ aim, start, burn, units, onPace, onGoal, colors: c }:
             {dir === "lose" ? "Lose" : dir === "gain" ? "Gain" : "Stay at"} {dir === "stay" ? W(aim.goalKg) : away != null ? W(away) : ""}
           </Text>
           <Text style={{ marginTop: 2, fontSize: 13.5, color: c.muted }}>{aim.weightKg != null ? `${W(aim.weightKg)} now → ${W(aim.goalKg)}` : `Goal ${W(aim.goalKg)} — log a weigh-in to start`}</Text>
-          {start && <Text style={{ marginTop: 2, fontSize: 12.5, color: c.faint }}>Started at {W(start.kg)}{start.date ? ` on ${new Date(`${start.date}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : ""}</Text>}
+          {start && (
+            <Text style={{ marginTop: 2, fontSize: 12.5, color: c.faint }}>
+              {sinceStart != null && Math.abs(sinceStart) >= 0.05 ? `${sinceStart < 0 ? "−" : "+"}${W(Math.abs(sinceStart))} since ` : "Started "}
+              {start.date ? new Date(`${start.date}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "the start"} (from {W(start.kg)})
+            </Text>
+          )}
+          {aim.trend != null && (
+            <Text style={{ marginTop: 8, fontSize: 13.5, lineHeight: 19, color: c.text }}>
+              <Text style={{ fontWeight: "700" }}>Last 4 weeks: {Math.abs(aim.trend) < 0.05 ? "steady" : `${aim.trend < 0 ? "−" : "+"}${W(Math.abs(aim.trend), 2)} a week`}</Text>
+              {trendWhen ? ` · there around ${trendWhen} at this rate` : dir !== "stay" && Math.abs(aim.trend) >= 0.05 ? " · heading away from your goal" : ""}
+            </Text>
+          )}
         </>
       ) : (
         <Text style={{ marginTop: 6, fontSize: 14.5, color: c.muted }}>No goal weight — the calories keep you where you are.</Text>
@@ -105,7 +118,7 @@ export function GoalCard({ aim, start, burn, units, onPace, onGoal, colors: c }:
               {Math.round(aim.actualPace * KCAL_PER_KG_WEEK).toLocaleString()} kcal a day
             </Text>{" "}
             from your {Math.round(burn).toLocaleString()}
-            {when ? ` · there around ${when}` : ""}
+            {when ? ` · planned for around ${when}` : ""}
           </Text>
           {aim.actualPace < aim.pace - 0.01 && <Text style={{ marginTop: 6, fontSize: 12.5, lineHeight: 17, color: c.warning }}>Your calorie floor keeps this to {W(aim.actualPace, 2)} a week.</Text>}
           {tooFast && <Text style={{ marginTop: 6, fontSize: 12.5, lineHeight: 17, color: c.warning }}>More than 1% of your weight a week — harder to keep muscle and stick with.</Text>}
@@ -273,20 +286,17 @@ export function TargetEditor({ target: t, units, onSave, onClose, onAdd, colors:
   );
 }
 
-// Your goal weight, and where you started from (the Weight page's progress
-// runs from it) — typed in the page's units, kept in kilograms — with the
-// healthy weights for your height beside it.
-export type WeightGoal = { goalWeight: number | null; startingWeight: number | null; startingWeightDate: string | null };
+// Your goal weight — typed in the page's units, kept in kilograms — with the
+// healthy weights for your height beside it. Where it starts isn't typed:
+// it's your weight when you set it (the server keeps it — see
+// server/services/weightGoal.js).
+export type WeightGoal = { goalWeight: number | null };
 export function WeightGoalEditor({ open, value, heightCm, units, onSave, onClose, colors: c }: { open: boolean; value: WeightGoal; heightCm: number | null; units: Units; onSave: (v: WeightGoal) => void; onClose: () => void; colors: OrbitColors }) {
   const shown = (kg: number | null) => (kg == null ? "" : String(Math.round(toShown("weight", kg, units) * 10) / 10));
   const [goal, setGoal] = useState("");
-  const [startW, setStartW] = useState("");
-  const [startDate, setStartDate] = useState("");
   useEffect(() => {
     if (!open) return;
     setGoal(shown(value.goalWeight));
-    setStartW(shown(value.startingWeight));
-    setStartDate(value.startingWeightDate ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   if (!open) return null;
@@ -296,10 +306,8 @@ export function WeightGoalEditor({ open, value, heightCm, units, onSave, onClose
   const parse = (text: string) => (text.trim() ? Number(text.replace(/,/g, "")) : null);
   function save() {
     const g = parse(goal);
-    const st = parse(startW);
-    const bad = [g, st].some((v) => v != null && (!Number.isFinite(v) || toStored("weight", v, units) < 25 || toStored("weight", v, units) > 350));
-    if (bad) return Alert.alert("That weight doesn't look right", `Put in a weight in ${U === "kg" ? "kilograms" : "pounds"}.`);
-    onSave({ goalWeight: g == null ? null : toStored("weight", g, units), startingWeight: st == null ? null : toStored("weight", st, units), startingWeightDate: startDate || null });
+    if (g != null && (!Number.isFinite(g) || toStored("weight", g, units) < 25 || toStored("weight", g, units) > 350)) return Alert.alert("That weight doesn't look right", `Put in a weight in ${U === "kg" ? "kilograms" : "pounds"}.`);
+    onSave({ goalWeight: g == null ? null : toStored("weight", g, units) });
     onClose();
   }
   const field = (label: string, text: string, set: (v: string) => void, hint?: string) => (
@@ -338,9 +346,7 @@ export function WeightGoalEditor({ open, value, heightCm, units, onSave, onClose
                 </Tap>
               </View>
               {field("YOUR GOAL", goal, setGoal, range ? `Healthy for your height: ${showMeasure("weight", range.low, units, 0)}–${showMeasure("weight", range.high, units, 0)} (a BMI of 18.5–25)` : "Add your height in About you to see the healthy weights for it.")}
-              {field("STARTING WEIGHT", startW, setStartW, "Where your progress on the Weight page is measured from.")}
-              <Text style={{ marginTop: 14, marginBottom: 6, fontSize: 11, fontWeight: "700", letterSpacing: 1.2, color: c.faint }}>STARTED ON</Text>
-              <DatePickerField value={startDate} onChange={setStartDate} title="Started on" placeholder="Pick a date" clearable />
+              <Text style={{ marginTop: 14, fontSize: 12.5, lineHeight: 18, color: c.muted }}>Your progress is measured from your weight when you set a goal. Moving it the same way keeps that start; switching between losing, gaining and keeping starts a new goal, and the last one is kept in your Weight history.</Text>
               <Tap onPress={save} accessibilityRole="button" style={{ marginTop: 18, alignItems: "center", paddingVertical: 13, borderRadius: 14, backgroundColor: c.ink }} pressedStyle={{ opacity: 0.8 }}>
                 <Text style={{ fontSize: 15.5, fontWeight: "700", color: c.onInk }}>Save</Text>
               </Tap>

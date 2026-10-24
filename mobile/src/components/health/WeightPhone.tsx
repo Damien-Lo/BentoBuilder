@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressa
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DatePickerField } from "@/src/components/forms/DatePickerField";
+import { PastGoals } from "@/src/components/health/PastGoals";
 import { toShown, toStored, UnitsToggle, useUnits } from "@/src/components/health/units";
 import { WeightChart } from "@/src/components/health/WeightChart";
 import { PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
@@ -160,6 +161,8 @@ function Weight() {
   }
 
   const lost = current && start != null ? current.weight - start : null;
+  // Good is down on a cut, up on a bulk.
+  const gaining = settings?.goalDirection === "gain";
   const progress = current && start != null && goal != null && start !== goal ? Math.max(0, Math.min(1, (start - current.weight) / (start - goal))) : null;
   // (Rounded only once shown, in the page's units.)
   const toGo = current && goal != null ? current.weight - goal : null;
@@ -181,7 +184,7 @@ function Weight() {
             </Text>
             {lost != null && startDate && (
               <Text style={{ marginTop: 2, fontSize: 14, color: c.muted }}>
-                <Text style={{ fontWeight: "700", color: lost <= 0 ? c.success : c.danger }}>{signed(W(lost))} {U}</Text> since {dateText(startDate)}
+                <Text style={{ fontWeight: "700", color: (gaining ? lost >= 0 : lost <= 0) ? c.success : c.danger }}>{signed(W(lost))} {U}</Text> since {dateText(startDate)}
               </Text>
             )}
             {progress != null && goal != null && (
@@ -247,6 +250,8 @@ function Weight() {
             </View>
             <DatePickerField value={date} onChange={(d) => setDate(d || todayDateInputString())} title="When you weighed" />
           </View>
+
+          <PastGoals goals={settings?.pastGoals ?? []} units={units} colors={c} />
 
           {/* Every weigh-in */}
           {months.map((m) => (

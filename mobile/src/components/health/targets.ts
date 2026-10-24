@@ -97,6 +97,11 @@ export interface Aim {
   pace: number; // kg a week, as chosen
   actualPace: number; // after the calorie floor (kg a week)
   weeks: number | null; // to the goal, at that pace
+  // What the scale says: your weight trend over the last 4 weeks (kg a
+  // week, + gaining), with enough weigh-ins — and the weeks to the goal at
+  // it, while it's heading there.
+  trend: number | null;
+  trendWeeks: number | null;
 }
 
 // Your burn, and where it's from: measured; on its way (blending what the
@@ -178,6 +183,7 @@ export function workOutTargets({ settings, weights, metrics, intake, workoutsPer
   const raw = losing ? burn.value - shift : gaining ? burn.value + shift : burn.value;
   const kcal = to10(Math.max(floor, raw));
   const actualPace = Math.abs(kcal - burn.value) / KCAL_PER_KG_WEEK;
+  const trend = recentWeek && recentWeek.weighIns >= 4 && recentWeek.trendPerWeek != null ? recentWeek.trendPerWeek : null;
   const aim: Aim = {
     direction: losing ? "lose" : gaining ? "gain" : "stay",
     weightKg,
@@ -185,6 +191,8 @@ export function workOutTargets({ settings, weights, metrics, intake, workoutsPer
     pace,
     actualPace,
     weeks: goal != null && weightKg != null && (losing || gaining) && actualPace > 0 ? Math.abs(weightKg - goal) / actualPace : null,
+    trend,
+    trendWeeks: goal != null && weightKg != null && (losing || gaining) && trend != null && Math.abs(trend) >= 0.05 && (losing ? trend < 0 : trend > 0) ? Math.abs(weightKg - goal) / Math.abs(trend) : null,
   };
   const pacePart = { label: "Pace", value: pace ? `${showMeasure("weight", pace, units, 2)} a week` : "—", yours: true };
   targets.push({

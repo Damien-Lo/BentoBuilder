@@ -28,11 +28,29 @@ const userProfileSchema = new mongoose.Schema(
     // 0 = Sunday … 6 = Saturday, matching JS Date#getDay()
     weekStartDay:      { type: Number,  min: 0, max: 6, default: 1 },
 
-    // Weight goal tracking — a single starting point and a target, not a
-    // full log (there's no history of intermediate weigh-ins yet).
+    // The goal weight, and where this goal started: your weight when it was
+    // set (the latest weigh-in then) — kept by the server, not typed in
+    // (services/weightGoal.js). Moving the goal the same way keeps the
+    // start; one that turns losing into gaining (or keeping) starts again,
+    // and the goal before goes to `pastGoals`.
     startingWeight:     { type: Number, default: null },
     startingWeightDate: { type: String, default: null }, // YYYY-MM-DD
     goalWeight:         { type: Number, default: null },
+    goalDirection:      { type: String, enum: ["lose", "gain", "stay", null], default: null },
+    pastGoals: {
+      type: [
+        {
+          direction:   { type: String, enum: ["lose", "gain", "stay", null], default: null },
+          goalWeight:  { type: Number, default: null },
+          startWeight: { type: Number, default: null },
+          startDate:   { type: String, default: null },
+          endWeight:   { type: Number, default: null },
+          endDate:     { type: String, default: null },
+          _id: false,
+        },
+      ],
+      default: [],
+    },
 
     // About you (Health → About you): what your health numbers are worked
     // out from — BMI, the calories you burn, a calorie and protein target.
