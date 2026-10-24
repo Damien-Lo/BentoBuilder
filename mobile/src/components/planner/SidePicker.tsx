@@ -2,17 +2,42 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
+import { addLibraryFood, FoodLibraryHeading, libraryFoodDetail, useLibraryMatches } from "@/src/components/forms/useFoodLibrary";
 import { Tap } from "@/src/components/ui/Tap";
 import { Button, hoverable, WEB } from "@/src/components/web/ui";
+import type { Ingredient } from "@/src/services/ingredientApi";
 import { useOrbitPage } from "@/src/theme/orbit";
+import { scaleIngredientNutrition } from "@/src/utils/mealPlan";
 import type { Dish } from "@/src/utils/recommend";
 
 // What to put beside a suggestion's main: the likeliest few, or — typed
-// for — anything among your recipes, saved meals and ingredients.
+// for — anything among your recipes, saved meals and ingredients, then the
+// food library's (one picked from there is saved into your ingredients, as
+// in every other picker — forms/useFoodLibrary).
+const libraryDish = (ingredient: Ingredient): Dish => {
+  const n = scaleIngredientNutrition(ingredient, ingredient.defaultPortionAmount || 1);
+  return { key: `i:${ingredient._id}`, name: ingredient.name, ingredient, calories: n.calories ?? 0, protein: n.protein ?? 0, carbs: n.carbs ?? 0, fats: n.fats ?? 0 };
+};
+
 export function SidePicker({ title, likely, find, onPick, onClose }: { title: string; likely: Dish[]; find: (query: string) => Dish[]; onPick: (dish: Dish) => void; onClose: () => void }) {
   const [query, setQuery] = useState("");
   const searching = query.trim().length > 0;
   const rows = searching ? find(query).slice(0, 30) : likely;
+  const known = rows.flatMap((d) => (d.ingredient ? [d.ingredient] : []));
+  const { matches, searching: lookingUp } = useLibraryMatches(query, known, searching);
+  const library = searching ? matches.slice(0, 20).map(libraryDish) : [];
+  const [adding, setAdding] = useState<string | null>(null);
+  async function pickFromLibrary(dish: Dish) {
+    if (adding || !dish.ingredient) return;
+    setAdding(dish.key);
+    try {
+      onPick({ ...dish, ingredient: await addLibraryFood(dish.ingredient) });
+    } catch {
+      // (Said so already.)
+    } finally {
+      setAdding(null);
+    }
+  }
   const kind = (d: Dish) => (d.recipe ? "Recipe" : d.meal ? "Meal" : "Ingredient");
   // (On an Orbit page — the phone's Log — in its colours; elsewhere the
   // desktop's look.)
@@ -20,6 +45,27 @@ export function SidePicker({ title, likely, find, onPick, onClose }: { title: st
   const c = o
     ? { card: o.surface, text: o.text, muted: o.muted, faint: o.faint, body: o.muted, border: o.border, hover: o.pill, scrim: o.scrim }
     : { card: WEB.card, text: WEB.text, muted: WEB.muted, faint: WEB.faint, body: WEB.body, border: WEB.border, hover: WEB.blueSoft, scrim: "rgba(15,23,42,0.4)" };
+  // A dish to choose: its name, what it is, and its numbers.
+  const row = (dish: Dish, choose: () => void, detail?: string) => (
+    <Pressable
+      key={dish.key}
+      onPress={choose}
+      disabled={adding === dish.key}
+      accessibilityLabel={`Choose ${dish.name}`}
+      style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 8, borderRadius: 9, backgroundColor: hovered ? c.hover : "transparent", opacity: adding === dish.key ? 0.5 : 1 }))}
+    >
+      <View style={{ flex: 1 }}>
+        <Text numberOfLines={1} style={{ fontSize: o ? 15 : 14, fontWeight: "600", color: c.text }}>{dish.name}</Text>
+        <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 12, color: c.muted }}>
+          {detail ?? kind(dish)}
+          {dish.ingredient ? ` · ${dish.ingredient.defaultPortionAmount || 1} ${dish.ingredient.defaultPortionUnit ?? ""}`.trimEnd() : ""}
+        </Text>
+      </View>
+      <Text style={{ marginLeft: 10, fontSize: 12, color: c.body }}>
+        {Math.round(dish.calories)} kcal · P {Math.round(dish.protein)} g
+      </Text>
+    </Pressable>
+  );
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       {/* (On a phone it sits high, clear of the keyboard.) */}
@@ -41,26 +87,16 @@ export function SidePicker({ title, likely, find, onPick, onClose }: { title: st
           </View>
           <Text style={{ marginTop: 14, marginBottom: 4, fontSize: 11, fontWeight: "700", letterSpacing: o ? 1.2 : 0.4, color: o ? o.faint : WEB.muted }}>{searching ? "MATCHES" : "GOES WITH IT"}</Text>
           <ScrollView style={{ marginHorizontal: -8 }}>
-            {rows.map((dish) => (
-              <Pressable
-                key={dish.key}
-                onPress={() => onPick(dish)}
-                accessibilityLabel={`Choose ${dish.name}`}
-                style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 8, borderRadius: 9, backgroundColor: hovered ? c.hover : "transparent" }))}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text numberOfLines={1} style={{ fontSize: o ? 15 : 14, fontWeight: "600", color: c.text }}>{dish.name}</Text>
-                  <Text numberOfLines={1} style={{ marginTop: 1, fontSize: 12, color: c.muted }}>
-                    {kind(dish)}
-                    {dish.ingredient ? ` · ${dish.ingredient.defaultPortionAmount || 1} ${dish.ingredient.defaultPortionUnit ?? ""}`.trimEnd() : ""}
-                  </Text>
+            {rows.map((dish) => row(dish, () => onPick(dish)))}
+            {!rows.length && !library.length && !lookingUp && <Text style={{ paddingHorizontal: 8, paddingVertical: 10, fontSize: 13, color: c.muted }}>{searching ? "Nothing by that name." : "Nothing you've had beside it yet — search for something."}</Text>}
+            {searching && (library.length > 0 || lookingUp) && (
+              <>
+                <View style={{ paddingHorizontal: 8, marginTop: rows.length ? 12 : 4, marginBottom: 4 }}>
+                  <FoodLibraryHeading searching={lookingUp} />
                 </View>
-                <Text style={{ marginLeft: 10, fontSize: 12, color: c.body }}>
-                  {Math.round(dish.calories)} kcal · P {Math.round(dish.protein)} g
-                </Text>
-              </Pressable>
-            ))}
-            {!rows.length && <Text style={{ paddingHorizontal: 8, paddingVertical: 10, fontSize: 13, color: c.muted }}>{searching ? "Nothing by that name." : "Nothing you've had beside it yet — search for something."}</Text>}
+                {library.map((dish) => row(dish, () => void pickFromLibrary(dish), libraryFoodDetail(dish.ingredient) ?? "Ingredient"))}
+              </>
+            )}
           </ScrollView>
           <View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 12 }}>
             {o ? (
