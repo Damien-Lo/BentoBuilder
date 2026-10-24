@@ -69,6 +69,16 @@ module.exports = {
       ],
       "@react-native-community/datetimepicker",
       [
+        // Where a restaurant is: "use my location" when adding one, and
+        // restaurants near you. Only while the app's open, only when asked.
+        "expo-location",
+        {
+          locationWhenInUsePermission: "Orbit uses your location to find restaurants near you and to place one you add.",
+          isIosBackgroundLocationEnabled: false,
+          isAndroidBackgroundLocationEnabled: false,
+        },
+      ],
+      [
         // Apple Health (HealthKit): reading the Watch's and phone's health
         // data into Health, and writing weigh-ins, workouts and food back.
         // (Background delivery off for now: synced when the app opens.)

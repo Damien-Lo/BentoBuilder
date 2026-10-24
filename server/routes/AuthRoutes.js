@@ -36,7 +36,7 @@ const router = express.Router();
 const INVITE_DAYS = 7;
 const RESET_HOURS = 24;
 
-const shownUser = (user) => ({ _id: user._id, email: user.email, name: user.name, role: user.role, createdAt: user.createdAt, lastSignInAt: user.lastSignInAt, disabledAt: user.disabledAt ?? null });
+const shownUser = (user) => ({ _id: user._id, email: user.email, name: user.name, role: user.role, reviewer: user.role === "admin" || !!user.reviewer, createdAt: user.createdAt, lastSignInAt: user.lastSignInAt, disabledAt: user.disabledAt ?? null });
 const shownSession = (session, current) => ({ _id: session._id, deviceName: session.deviceName, createdAt: session.createdAt, lastUsedAt: session.lastUsedAt, current: String(session._id) === String(current?._id) });
 const shownCode = (code) => ({ _id: code._id, kind: code.kind, email: code.email, user: code.user, note: code.note, expiresAt: code.expiresAt, usedAt: code.usedAt, createdAt: code.createdAt });
 
@@ -400,6 +400,19 @@ router.post("/users/:id/enable", requireAdmin, async (req, res) => {
   const user = await otherAccount(req, res);
   if (!user) return;
   user.disabledAt = null;
+  await user.save();
+  return res.json({ success: true, data: shownUser(user) });
+});
+
+/**
+ * POST /api/auth/users/:id/reviewer  { reviewer: boolean } — whether a member
+ * reviews what others add to and change in the public restaurants (the
+ * admin always does).
+ */
+router.post("/users/:id/reviewer", requireAdmin, async (req, res) => {
+  const user = await otherAccount(req, res);
+  if (!user) return;
+  user.reviewer = req.body.reviewer === true;
   await user.save();
   return res.json({ success: true, data: shownUser(user) });
 });

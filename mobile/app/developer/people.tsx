@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, ScrollView, Share, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, Share, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAccount } from "@/src/components/auth/AuthGate";
@@ -15,6 +15,7 @@ import {
   makeResetCode,
   removeAccount,
   saveInviteLinks,
+  setReviewer,
   turnOffAccount,
   turnOnAccount,
   withdrawInvite,
@@ -28,7 +29,9 @@ import {
 // (through the phone's share sheet — Messages, WhatsApp — or copied): how
 // to register their iPhone, where to install the app, and the code. The two
 // links are set once, below, and go in every invite. Each person's account
-// can be given a reset code (a forgotten password), turned off, or removed.
+// can be given a reset code (a forgotten password), turned off, or removed,
+// and a member can be made a reviewer of the public restaurants (what others
+// add and suggest waits for a reviewer; the admin always is one).
 
 function inviteMessage(invite: AccessCodeInfo, links: InviteLinks, from: string) {
   const ways: string[] = [];
@@ -270,6 +273,26 @@ export default function PeopleScreen() {
                           act(removeAccount(person._id)),
                         )
                       }
+                    />
+                  </View>
+                )}
+                {!me && person.role !== "admin" && (
+                  <View className="ml-8 mt-2 flex-row items-center">
+                    <View className="flex-1">
+                      <Text className={`text-sm font-semibold ${off ? "text-slate-400" : "text-slate-700"}`}>Reviews restaurants</Text>
+                      <Text className="text-xs text-slate-400">Approves or rejects the restaurants, dishes and changes others send in.</Text>
+                    </View>
+                    <Switch
+                      value={!!person.reviewer}
+                      onValueChange={(on) => {
+                        // (Shown at once; put back if the server says no.)
+                        setPeople((prev) => prev?.map((p) => (p._id === person._id ? { ...p, reviewer: on } : p)) ?? prev);
+                        setReviewer(person._id, on).then(load, (err) => {
+                          setError(errorText(err));
+                          load();
+                        });
+                      }}
+                      accessibilityLabel={`${label} reviews restaurants`}
                     />
                   </View>
                 )}

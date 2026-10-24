@@ -195,7 +195,9 @@ export function WebWeekPlanScreen() {
     if (entry.recipe) router.push({ pathname: "/recipes/[id]", params: { id: entry.recipe._id } });
     else if (entry.meal) router.push({ pathname: "/meals/[id]", params: { id: entry.meal._id } });
     else if (entry.ingredient) router.push({ pathname: "/ingredients/edit/[id]", params: { id: entry.ingredient._id } });
-    else if (entry.restaurantMeal) router.push({ pathname: "/restaurant-meals/[id]", params: { id: entry.restaurantMeal._id } });
+    // (A visit: its public restaurant's page. Every old entry was moved to
+    // one, so `restaurant` is there; an old copy alone has no page now.)
+    else if (entry.restaurant) router.push({ pathname: "/restaurants/[id]", params: { id: entry.restaurant._id } });
   }
 
   function toggleEaten(entry: MealPlanEntry) {

@@ -26,17 +26,14 @@ import {
   getArchivedMeals,
   restoreMeal,
 } from "@/src/services/mealApi";
-import {
-  deleteRestaurantMealPermanently,
-  getArchivedRestaurantMeals,
-  restoreRestaurantMeal,
-} from "@/src/services/restaurantMealApi";
 import { useWideForm } from "@/src/components/forms/wideForm";
 import { dangerSoft, PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
 import { OrbitPage, OrbitSection, useOrbitTheme } from "@/src/theme/orbit";
 
-type ArchiveKind = "ingredients" | "recipes" | "meals" | "restaurantMeals";
+// (Not restaurants: they're shared by everyone now, and taking one off one's
+// own list is all that's done to it — see app/restaurants.)
+type ArchiveKind = "ingredients" | "recipes" | "meals";
 
 type ArchiveItem = { _id: string; name: string; subtitle?: string };
 
@@ -79,22 +76,12 @@ const ARCHIVE_CONFIG: Record<ArchiveKind, ArchiveConfig> = {
     restore: restoreMeal,
     removePermanently: deleteMealPermanently,
   },
-  restaurantMeals: {
-    label: "Eating Out",
-    singular: "restaurant meal",
-    get: async () => {
-      const items = await getArchivedRestaurantMeals();
-      return items.map((r) => ({ _id: r._id, name: r.restaurantName }));
-    },
-    restore: restoreRestaurantMeal,
-    removePermanently: deleteRestaurantMealPermanently,
-  },
 };
 
-const KIND_ORDER: ArchiveKind[] = ["ingredients", "recipes", "meals", "restaurantMeals"];
+const KIND_ORDER: ArchiveKind[] = ["ingredients", "recipes", "meals"];
 
 // The Kitchen's archive (from Settings → Kitchen): archived ingredients,
-// recipes, meals and eating-out visits — restored or deleted for good here.
+// recipes and meals — restored or deleted for good here.
 // In the Kitchen's Orbit look, light or dark (`o`: its colours) — in a
 // desktop browser too, the list down two columns.
 export default function ArchiveScreen() {

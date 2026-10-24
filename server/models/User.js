@@ -15,6 +15,10 @@ const userSchema = new mongoose.Schema(
     name: { type: String, trim: true, default: "" },
     passwordHash: { type: String, required: true, select: false },
     role: { type: String, enum: ["admin", "member"], default: "member" },
+    // Reviews what others add to or change in the public restaurants (see
+    // routes/RestaurantRoutes.js) — the admin always does; a member only when
+    // given this.
+    reviewer: { type: Boolean, default: false },
     household: { type: mongoose.Schema.Types.ObjectId, default: null },
     lastSignInAt: { type: Date, default: null },
     // Turned off by the admin: can't sign in, and is signed out everywhere.

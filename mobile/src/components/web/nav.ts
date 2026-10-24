@@ -54,7 +54,7 @@ export const WEB_SECTIONS: WebSection[] = [
     also: ["/kitchen"],
     tabs: [
       { label: "Log", path: "/planner" },
-      { label: "Recipes", path: "/RecipesMainPage", also: ["/recipes", "/meals", "/restaurant-meals", "/archive"] },
+      { label: "Recipes", path: "/RecipesMainPage", also: ["/recipes", "/meals", "/restaurants", "/restaurant-meals", "/archive"] },
       { label: "Pantry", path: "/PantryMainPage", also: ["/pantry", "/ingredients", "/receipts"] },
       { label: "Plan", path: "/plan", also: ["/kitchen", "/overview", "/menu", "/grocery-list"] },
     ],
@@ -184,6 +184,9 @@ const DESKTOP_PAGES_UNDER = [
   "/recipes/",
   "/meals/",
   "/restaurant-meals",
+  "/restaurants",
+  // (Reviewers only: what members have added to them or suggested.)
+  "/restaurants/review",
   "/ingredients/",
   "/receipts/review",
   "/archive",

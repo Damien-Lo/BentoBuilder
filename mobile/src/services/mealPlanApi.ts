@@ -1,3 +1,5 @@
+import type { PartialNutrition } from "@/src/types/nutrition";
+import type { Restaurant } from "@/src/services/restaurantApi";
 import { API_BASE_URL } from "@/src/config/api";
 import type { Meal } from "./mealApi";
 import type { Recipe } from "./recipeApi";
@@ -42,12 +44,17 @@ export interface ManualPieceEntry {
 // before this field existed.
 export type ConfirmedNutrition = NutritionTotals;
 
-// Which dish (by RestaurantMeal.dishes subdocument _id) and how many of it
-// were had on one specific visit — quantity defaults to 1 server-side, but
-// is always present once populated back from the API.
+// Which dish (a public RestaurantDish's id — or, before restaurants were
+// public, a RestaurantMeal.dishes subdocument's) and how many of it were had
+// on one specific visit — quantity defaults to 1 server-side, but is always
+// present once populated back from the API. `name` and `nutrition` are a copy
+// of the dish when it was added, so a later correction to the public dish
+// never changes this meal: the day's totals use the copy × quantity.
 export interface RestaurantDishSelection {
   dish: string;
   quantity: number;
+  name?: string;
+  nutrition?: PartialNutrition;
 }
 
 export interface MealPlanEntry {
@@ -69,6 +76,9 @@ export interface MealPlanEntry {
   ingredientUnit?: string;
 
   // A restaurant/eating-out visit — no ingredients, no pantry deduction.
+  // The public restaurant (see restaurantApi.ts), with its chain's name.
+  restaurant?: Pick<Restaurant, "_id" | "name" | "cuisine" | "address" | "location" | "googlePlaceId"> & { chain?: { _id: string; name: string } | null };
+  // (Before restaurants were public: one's own copy. Old entries only.)
   restaurantMeal?: RestaurantMeal;
   // Which dish(es) from restaurantMeal.dishes were actually eaten, and how
   // many of each — a restaurant can have several independent dishes, so
@@ -119,8 +129,8 @@ export interface CreateMealPlanEntryInput {
   ingredientQuantity?: number;
   ingredientUnit?: string;
 
-  restaurantMeal?: string; // restaurant meal _id
-  restaurantDishSelections?: RestaurantDishSelection[]; // which of restaurantMeal's dishes were eaten, and how many of each
+  restaurant?: string; // public restaurant _id
+  restaurantDishSelections?: RestaurantDishSelection[]; // which dishes were eaten, how many of each, each with its copy
 
   notes?: string;
   // An accepted suggestion (see utils/recommend.ts).
@@ -168,9 +178,10 @@ export interface LastUsedMap {
   recipe: Record<string, string>;
   ingredient: Record<string, string>;
   restaurantMeal: Record<string, string>;
+  restaurant: Record<string, string>;
 }
 
-const EMPTY_LAST_USED: LastUsedMap = { meal: {}, recipe: {}, ingredient: {}, restaurantMeal: {} };
+const EMPTY_LAST_USED: LastUsedMap = { meal: {}, recipe: {}, ingredient: {}, restaurantMeal: {}, restaurant: {} };
 
 export async function getLastUsedMap(): Promise<LastUsedMap> {
   const res = await fetch(`${API_BASE_URL}/api/meal-plan/last-used`);

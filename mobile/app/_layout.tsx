@@ -263,7 +263,16 @@ export default function RootLayout() {
           }}
         />
 
-        {/* Restaurant meals — logged eating-out visits */}
+        {/* Restaurants — public, built up by everyone: yours and a search,
+            a restaurant's page (its menu), and adding or correcting one */}
+        <Stack.Screen name="restaurants/index" options={{ headerShown: false }} />
+        <Stack.Screen name="restaurants/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="restaurants/add" options={{ headerShown: false }} />
+        <Stack.Screen name="restaurants/edit/[id]" options={{ headerShown: false }} />
+        {/* Reviewers only: what members have added or suggested */}
+        <Stack.Screen name="restaurants/review" options={{ headerShown: false }} />
+
+        {/* (Before restaurants were public: these now send you to the above.) */}
         <Stack.Screen
           name="restaurant-meals/index"
           options={{

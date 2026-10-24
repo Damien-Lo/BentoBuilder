@@ -37,6 +37,12 @@ const restaurantDishSchema = new mongoose.Schema(
     addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     history: { type: [historySchema], default: [] },
     mergedInto: { type: mongoose.Schema.Types.ObjectId, ref: "RestaurantDish", default: null },
+    // Reviewed before anyone else sees it: one added by a member waits
+    // ("pending" — seen by them, usable and loggable by them) until a reviewer
+    // approves it, or rejects it (with a reason). One from before reviews, or
+    // added by a reviewer, is approved.
+    status: { type: String, enum: ["approved", "pending", "rejected"], default: "approved" },
+    reviewNote: { type: String, trim: true, default: "" },
     isArchived: { type: Boolean, default: false },
   },
   { timestamps: true },

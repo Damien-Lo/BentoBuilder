@@ -12,7 +12,8 @@ import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getMeals, type Meal } from "@/src/services/mealApi";
 import { addToMenu, getMenu, removeFromMenu, type MenuItem } from "@/src/services/menuApi";
 import { getRecipes, type Recipe } from "@/src/services/recipeApi";
-import { getRestaurantMeals, type RestaurantMeal } from "@/src/services/restaurantMealApi";
+import { addToMine, confirmRemoveFromMine, errorText, isMine, MineToggle, restaurantLine, StatusChip, useNearMe, usePublicRestaurants } from "@/src/components/restaurants/parts";
+import { getMyRestaurants, type Restaurant } from "@/src/services/restaurantApi";
 import { loadSettings } from "@/src/services/settingsService";
 import { nutrientColor, type MainNutrient } from "@/src/theme/nutrients";
 import { OrbitPage, SECTION_PALETTE, useOrbitTheme } from "@/src/theme/orbit";
@@ -57,7 +58,12 @@ export function WebRecipesScreen() {
   const [search, setSearch] = useState("");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [meals, setMeals] = useState<Meal[]>([]);
-  const [restaurants, setRestaurants] = useState<RestaurantMeal[]>([]);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  // Eating out: every restaurant in Orbit matching the search (or near you),
+  // as well as yours.
+  const nearMe = useNearMe();
+  const publicRestaurants = usePublicRestaurants(search, nearMe.near, kind === "eating");
+  const [addingRestaurant, setAddingRestaurant] = useState<string | null>(null);
   const [conversions, setConversions] = useState<CustomUnitConversion[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [groupBy, setGroupBy] = useState<GroupBy>("category");
@@ -102,7 +108,7 @@ export function WebRecipesScreen() {
     useCallback(() => {
       getRecipes().then(setRecipes).catch(() => {});
       getMeals().then(setMeals).catch(() => {});
-      getRestaurantMeals().then(setRestaurants).catch(() => {});
+      getMyRestaurants().then(setRestaurants).catch(() => {});
       getIngredients().then(setIngredients).catch(() => {});
       loadSettings().then((s) => setConversions(s.unitConversions)).catch(() => {});
       loadMenu();
@@ -115,7 +121,42 @@ export function WebRecipesScreen() {
 
   const shownRecipes = byName(recipes.filter((r) => has(r.name, r.description, nameOf(r.recipeCategory))), (r) => r.name);
   const shownMeals = byName(meals.filter((m) => has(m.name, ...(m.courses ?? []).map(courseName))), (m) => m.name);
-  const shownRestaurants = byName(restaurants.filter((r) => has(r.restaurantName, ...r.dishes.map((d) => d.name))), (r) => r.restaurantName);
+  const myRestaurantIds = new Set(restaurants.map((r) => r._id));
+  const shownRestaurants = nearMe.near ? [] : byName(restaurants.filter((r) => has(r.name, r.chainName ?? "", r.cuisine)), (r) => r.name);
+  const otherRestaurants = publicRestaurants.found.filter((r) => nearMe.near || !myRestaurantIds.has(r._id));
+  function addRestaurant(restaurant: Restaurant) {
+    setAddingRestaurant(restaurant._id);
+    addToMine(restaurant)
+      .then((added) => setRestaurants((prev) => (prev.some((r) => r._id === added._id) ? prev : [...prev, added])))
+      .catch((err) => Alert.alert("Couldn't add it", errorText(err)))
+      .finally(() => setAddingRestaurant(null));
+  }
+  const restaurantTile = (restaurant: Restaurant, searched: boolean) => (
+    <Tile
+      key={restaurant._id}
+      icon="storefront-outline"
+      title={restaurant.name}
+      tag={restaurantLine(restaurant, searched)}
+      kcal={null}
+      lines={[restaurant.address ?? ""]}
+      badge={<StatusChip status={restaurant.status} style={{ marginTop: 4 }} />}
+      onPress={() => router.push({ pathname: "/restaurants/[id]", params: { id: restaurant._id } })}
+      actions={
+        searched && !isMine(restaurant, myRestaurantIds) ? (
+          <MineToggle mine={false} onAdd={() => addRestaurant(restaurant)} busy={addingRestaurant === restaurant._id} />
+        ) : (
+          // (No swiping with a mouse: taking it out of your list is a button.)
+          <Pressable
+            onPress={() => confirmRemoveFromMine(restaurant, () => setRestaurants((prev) => prev.filter((r) => r._id !== restaurant._id)))}
+            accessibilityLabel={`Take ${restaurant.name} out of your list`}
+            style={hoverable(({ hovered }) => ({ width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: hovered ? c.pill : "transparent" }))}
+          >
+            <Ionicons name="remove-circle-outline" size={17} color={c.faint} />
+          </Pressable>
+        )
+      }
+    />
+  );
 
   // The recipes in their groups, in the order shown.
   const idOf = (value: unknown) => (typeof value === "string" ? value : ((value as { _id?: string } | null)?._id ?? ""));
@@ -138,8 +179,8 @@ export function WebRecipesScreen() {
 
   const allFolded = recipeGroups.length > 0 && recipeGroups.every((group) => folded.includes(group.name));
 
-  const add = kind === "recipes" ? "/recipes/add" : kind === "meals" ? "/meals/add" : "/restaurant-meals/add";
-  const count = kind === "recipes" ? shownRecipes.length : kind === "meals" ? shownMeals.length : shownRestaurants.length;
+  const add = kind === "recipes" ? "/recipes/add" : kind === "meals" ? "/meals/add" : "/restaurants/add";
+  const count = kind === "recipes" ? shownRecipes.length : kind === "meals" ? shownMeals.length : shownRestaurants.length + otherRestaurants.length;
 
 
   return (
@@ -181,7 +222,24 @@ export function WebRecipesScreen() {
               style={{ flex: 1, marginLeft: 8, fontSize: 14, color: c.text, outlineStyle: "none" } as object}
             />
           </View>
+          {kind === "eating" && nearMe.available && (
+            <Pressable
+              onPress={nearMe.toggle}
+              disabled={nearMe.locating}
+              accessibilityState={{ selected: !!nearMe.near }}
+              style={hoverable(({ hovered }) => ({ height: 36, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: nearMe.near ? c.ink : hovered ? c.selectedRing : c.border, backgroundColor: nearMe.near ? c.ink : c.surface }))}
+            >
+              <Ionicons name="navigate" size={14} color={nearMe.near ? c.onInk : c.ink} />
+              <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: "600", color: nearMe.near ? c.onInk : c.text }}>{nearMe.locating ? "Finding you…" : "Near me"}</Text>
+            </Pressable>
+          )}
           <Text style={{ fontSize: 12, color: c.faint }}>{count} shown</Text>
+          {kind === "eating" && (
+            <Pressable onPress={() => router.push("/restaurants")} style={hoverable(({ hovered }) => ({ flexDirection: "row", alignItems: "center", marginLeft: "auto", opacity: hovered ? 0.7 : 1 }))}>
+              <Text style={{ fontSize: 12, fontWeight: "600", color: c.accent }}>All restaurants</Text>
+              <Ionicons name="chevron-forward" size={13} color={c.accent} style={{ marginLeft: 2 }} />
+            </Pressable>
+          )}
           {kind === "recipes" && (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginLeft: "auto" }}>
               {groupBy !== "none" && (
@@ -306,20 +364,24 @@ export function WebRecipesScreen() {
               />
             ))}
 
-          {kind === "eating" &&
-            shownRestaurants.map((restaurant) => (
-              <Tile
-                key={restaurant._id}
-                icon="storefront-outline"
-                title={restaurant.restaurantName}
-                tag={`${restaurant.dishes.length} dish${restaurant.dishes.length === 1 ? "" : "es"}`}
-                kcal={null}
-                lines={restaurant.dishes.slice(0, 3).map((d) => `${d.name}${d.nutrition?.calories != null ? ` · ${Math.round(d.nutrition.calories)} kcal` : ""}`)}
-                onPress={() => router.push({ pathname: "/restaurant-meals/[id]", params: { id: restaurant._id } })}
-              />
-            ))}
+          {kind === "eating" && shownRestaurants.map((restaurant) => restaurantTile(restaurant, false))}
         </View>
         </TileWidth.Provider>
+
+        {/* Every other restaurant in Orbit that matches (or the nearest) */}
+        {kind === "eating" && (otherRestaurants.length > 0 || publicRestaurants.searching) && (
+          <View style={{ marginTop: 22 }}>
+            <Text style={{ marginBottom: 10, fontSize: 12, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase", color: c.muted }}>
+              {nearMe.near && !q ? "Near you" : "In Orbit"}
+              <Text style={{ fontWeight: "500", letterSpacing: 0, textTransform: "none", color: c.faint }}>{publicRestaurants.searching ? "  searching…" : `  ${otherRestaurants.length}`}</Text>
+            </Text>
+            <TileWidth.Provider value={columnWidth(270, 14)}>
+              <View onLayout={measureGrid} style={{ flexDirection: "row", flexWrap: "wrap", gap: 14 }}>
+                {otherRestaurants.map((restaurant) => restaurantTile(restaurant, true))}
+              </View>
+            </TileWidth.Provider>
+          </View>
+        )}
 
         {planning && (
           <PlanRecipeModal
@@ -414,6 +476,7 @@ function Tile({
   lines,
   onPress,
   actions,
+  badge,
 }: {
   // A photo, shown in place of the icon.
   photo?: string;
@@ -427,6 +490,8 @@ function Tile({
   onPress: () => void;
   // Quick actions, at the bottom right.
   actions?: ReactNode;
+  // Under the title (a restaurant still waiting for review).
+  badge?: ReactNode;
 }) {
   const { colors: c } = useOrbitTheme();
   const width = useContext(TileWidth);
@@ -460,6 +525,7 @@ function Tile({
             {title}
           </Text>
           {!!tag && <Text style={{ marginTop: 2, fontSize: 12, color: c.muted }}>{tag}</Text>}
+          {badge}
         </View>
       </View>
       {kcal != null && <Kcal kcal={kcal} note={kcalNote} top={12} />}

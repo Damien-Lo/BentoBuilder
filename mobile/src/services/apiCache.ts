@@ -32,7 +32,7 @@ const REMEMBER_MS = 20_000;
 const PRELOAD_MS = 120_000;
 
 const REMEMBERED = [
-  /^\/api\/(ingredients|recipes|meals|restaurant-meals|pantry|profile|storage-locations|stores|brands|categories|tags|recipe-categories|menu|usual-meals|grocery-list|weight-entries)(\?|$)/,
+  /^\/api\/(ingredients|recipes|meals|restaurant-meals|restaurants|pantry|profile|storage-locations|stores|brands|categories|tags|recipe-categories|menu|usual-meals|grocery-list|weight-entries)(\?|$)/,
   /^\/api\/meal-plan\/(range|last-used|last-entries)(\?|$)/,
   /^\/api\/calendar\/(events|calendars|meal-times)(\?|$)/,
   /^\/api\/todo\/(calendar|dashboard|overview|tasks)(\?|$)/,

@@ -4,7 +4,6 @@ import type { CourseEntry, Meal, MealIngredientRef, MealRecipeRef } from "@/src/
 import type { MealPlanEntry, MealSlot, RestaurantDishSelection } from "@/src/services/mealPlanApi";
 import type { Recipe } from "@/src/services/recipeApi";
 import type { Ingredient } from "@/src/services/ingredientApi";
-import type { RestaurantMeal } from "@/src/services/restaurantMealApi";
 import type { PantryItem } from "@/src/types/pantry";
 import type { NullableNutrition, NutritionTotals, PartialNutrition } from "@/src/types/nutrition";
 import { countQualifyingPantryPieces, getIngredientStockInUnit } from "./ingredientStock";
@@ -170,20 +169,22 @@ export function getMealKcal(meal: Meal, conversions: CustomUnitConversion[] = []
 // A restaurant visit has no "servings" to scale — each dish's manual
 // nutrition estimate is multiplied by how many of that dish were had (1 if
 // unspecified) and summed. `selections` filters to just those dishes (e.g.
-// what a specific meal-plan entry actually logged) — *omitting the
-// argument entirely* means "every dish, one each," for browsing a
-// restaurant's full menu before picking anything. An explicit empty array
-// is a different thing entirely — a real entry (or a live pick-in-progress)
-// that has selected nothing yet — and must total to null/0, not silently
-// fall back to the whole menu (that used to conflate the two: a fresh visit
-// with no dishes picked showed the previous, unrelated full-menu total).
-export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal, selections?: RestaurantDishSelection[]): number | null {
+// what a specific pick-in-progress has chosen) — *omitting the argument
+// entirely* means "every dish, one each," for browsing a restaurant's full
+// menu before picking anything. An explicit empty array is a different
+// thing entirely — a pick that has selected nothing yet — and must total to
+// null/0, not silently fall back to the whole menu. Works on a public
+// restaurant's menu (RestaurantDetail) and on an old per-account
+// RestaurantMeal alike. (A logged visit totals its own copies instead — see
+// visitDishes / getVisitKcal.)
+type MenuDish = { _id: string; nutrition?: PartialNutrition | null };
+export function getRestaurantMealKcal(restaurant: { dishes?: MenuDish[] }, selections?: RestaurantDishSelection[]): number | null {
   const quantityByDish = selections
     ? new Map(selections.map(s => [s.dish, s.quantity]))
     : null;
   const dishes = quantityByDish
-    ? restaurantMeal.dishes?.filter(d => quantityByDish.has(d._id))
-    : restaurantMeal.dishes;
+    ? restaurant.dishes?.filter(d => quantityByDish.has(d._id))
+    : restaurant.dishes;
   if (!dishes?.length) return null;
   let total = 0;
   let hasAny = false;
@@ -201,13 +202,79 @@ export function getRestaurantMealKcal(restaurantMeal: RestaurantMeal, selections
 // "450 kcal" when its dishes agree (or there's one), "450–1,200 kcal" when
 // they don't. (The whole menu summed reads as one meal's worth — it isn't:
 // you have a dish or two of it.) Null when no dish has a calorie estimate.
-export function restaurantKcalRange(restaurantMeal: RestaurantMeal): string | null {
-  const values = (restaurantMeal.dishes ?? []).map((d) => d.nutrition?.calories).filter((c): c is number => c != null);
+// A public restaurant's menu or an old RestaurantMeal's dishes alike.
+export function restaurantKcalRange(restaurant: { dishes?: { nutrition?: PartialNutrition | null }[] }): string | null {
+  const values = (restaurant.dishes ?? []).map((d) => d.nutrition?.calories).filter((c): c is number => c != null);
   if (!values.length) return null;
   const low = Math.round(Math.min(...values));
   const high = Math.round(Math.max(...values));
   return low === high ? `${low.toLocaleString()} kcal` : `${low.toLocaleString()}–${high.toLocaleString()} kcal`;
 }
+
+// A dish picked for a visit, with its copy: its name and nutrition as they
+// are now, so a later correction to the public dish never changes the meal.
+export function dishSelection(dish: { _id: string; name: string; nutrition?: PartialNutrition | null }, quantity: number): RestaurantDishSelection {
+  return { dish: dish._id, quantity, name: dish.name, nutrition: dish.nutrition ?? {} };
+}
+
+// Whether an entry is a restaurant visit — the public restaurant, or (old
+// entries) one's own copy from before restaurants were public.
+export function isRestaurantVisit(entry: Pick<MealPlanEntry, "restaurant" | "restaurantMeal">): boolean {
+  return !!(entry.restaurant || entry.restaurantMeal);
+}
+
+// Its restaurant's name, either way.
+export function visitRestaurantName(entry: Pick<MealPlanEntry, "restaurant" | "restaurantMeal">): string {
+  return entry.restaurant?.name ?? entry.restaurantMeal?.restaurantName ?? "Restaurant";
+}
+
+// What was had on a visit, each dish as it was when added: the selection's
+// own copy. A very old selection without a copy falls back to the dish on
+// the old per-account record (its nutrition then, whatever it is now).
+export type VisitDish = { dish: string; quantity: number; name: string; nutrition: PartialNutrition };
+export function visitDishes(entry: Pick<MealPlanEntry, "restaurantDishSelections" | "restaurantMeal">): VisitDish[] {
+  const oldDishes = new Map((entry.restaurantMeal?.dishes ?? []).map(d => [d._id, d]));
+  return (entry.restaurantDishSelections ?? []).map((s) => {
+    const old = oldDishes.get(s.dish);
+    return {
+      dish: s.dish,
+      quantity: s.quantity ?? 1,
+      name: s.name || old?.name || "Dish",
+      nutrition: s.nutrition ?? old?.nutrition ?? {},
+    };
+  });
+}
+
+// "Wagaya: Katsu curry, Gyoza" — the restaurant and what was had there
+// ("Wagaya" alone doesn't say what was ordered).
+export function visitName(entry: Pick<MealPlanEntry, "restaurant" | "restaurantMeal" | "restaurantDishSelections">): string {
+  const names = visitDishes(entry).map(d => d.name);
+  return names.length ? `${visitRestaurantName(entry)}: ${names.join(", ")}` : visitRestaurantName(entry);
+}
+
+// A visit's (or a pick's) nutrition: each dish's copy × how many were had.
+export function selectionsNutrition(selections: { quantity: number; nutrition?: PartialNutrition | null }[]): NutritionTotals {
+  const totals = emptyNutritionTotals();
+  for (const s of selections) addNutrition(totals, scaleNutrition(s.nutrition, s.quantity ?? 1));
+  return roundNutritionTotals(totals);
+}
+
+// Its calories — null when nothing picked has a calorie estimate.
+export function selectionsKcal(selections: { quantity: number; nutrition?: PartialNutrition | null }[]): number | null {
+  let total = 0;
+  let hasAny = false;
+  for (const s of selections) {
+    const cal = s.nutrition?.calories;
+    if (cal != null) {
+      total += cal * (s.quantity ?? 1);
+      hasAny = true;
+    }
+  }
+  return hasAny ? Math.round(total) : null;
+}
+
+// A logged or planned visit's calories, from its copies.
+export const getVisitKcal = (entry: Pick<MealPlanEntry, "restaurantDishSelections" | "restaurantMeal">) => selectionsKcal(visitDishes(entry));
 
 // ── Recipe nutrition scaling (per-serving nutrition × servings eaten) ──────────
 
@@ -450,16 +517,14 @@ export function computeDayNutrition(entries: MealPlanEntry[], conversions: Custo
       ));
       continue;
     }
-    if (entry.restaurantMeal) {
+    if (isRestaurantVisit(entry)) {
       // A day total is always entry-specific — unlike getRestaurantMealKcal,
       // there's no legitimate "show the whole menu" case here, so an
-      // entry with no selections recorded contributes nothing rather than
-      // ever falling back to every dish on the restaurant's record.
-      const selections = entry.restaurantDishSelections ?? [];
-      const quantityByDish = new Map(selections.map(s => [s.dish, s.quantity]));
-      const dishes = entry.restaurantMeal.dishes?.filter(d => quantityByDish.has(d._id));
-      for (const dish of dishes ?? []) {
-        addNutrition(totals, scaleNutrition(dish.nutrition, quantityByDish.get(dish._id) ?? 1));
+      // entry with no selections recorded contributes nothing. Each dish
+      // counts as it was when added (its copy × how many), never as the
+      // public dish reads now.
+      for (const dish of visitDishes(entry)) {
+        addNutrition(totals, scaleNutrition(dish.nutrition, dish.quantity));
       }
       continue;
     }

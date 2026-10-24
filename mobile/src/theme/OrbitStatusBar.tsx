@@ -7,7 +7,7 @@ import { useOrbitTheme } from "@/src/theme/orbit";
 // paths exactly, and everything under the prefixes (a recipe's page is
 // "/recipes/<its id>").
 const ORBIT_PAGES = new Set(["/", "/plan", "/planner", "/grocery-list", "/menu", "/RecipesMainPage", "/PantryMainPage"]);
-const ORBIT_PREFIXES = ["/lists", "/settings-section", "/health-section", "/gym", "/manage-lists", "/archive", "/calendar", "/kitchen/", "/recipes/", "/pantry/", "/ingredients/", "/meals/", "/restaurant-meals", "/receipts"];
+const ORBIT_PREFIXES = ["/lists", "/settings-section", "/health-section", "/gym", "/manage-lists", "/archive", "/calendar", "/kitchen/", "/recipes/", "/pantry/", "/ingredients/", "/meals/", "/restaurant-meals", "/restaurants", "/receipts"];
 
 // The phone's clock and battery, readable over the page showing: light over
 // a redesigned page in dark mode, dark over everything else — the pages not

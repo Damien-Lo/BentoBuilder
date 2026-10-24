@@ -17,6 +17,9 @@ export interface Account {
   email: string;
   name: string;
   role: "admin" | "member";
+  // Reviews what others add to and change in the public restaurants (always,
+  // for the admin; a member when the admin's said so).
+  reviewer?: boolean;
   createdAt?: string;
   lastSignInAt?: string | null;
   // Turned off by the admin.
@@ -225,4 +228,5 @@ export const getInviteLinks = () => call<InviteLinks>("/invite-links");
 export const saveInviteLinks = (links: InviteLinks) => call<InviteLinks>("/invite-links", { method: "PUT", body: JSON.stringify(links) });
 export const turnOffAccount = (userId: string) => call<Account>(`/users/${userId}/disable`, { method: "POST" });
 export const turnOnAccount = (userId: string) => call<Account>(`/users/${userId}/enable`, { method: "POST" });
+export const setReviewer = (userId: string, reviewer: boolean) => call<Account>(`/users/${userId}/reviewer`, { method: "POST", body: JSON.stringify({ reviewer }) });
 export const removeAccount = (userId: string) => call<{ removed: Record<string, number> }>(`/users/${userId}`, { method: "DELETE" });

@@ -1,7 +1,7 @@
 import type { EventOccurrence } from "@/src/services/calendarApi";
 import type { MealPlanEntry } from "@/src/services/mealPlanApi";
 import type { NutritionTotals } from "@/src/types/nutrition";
-import { computeDayNutrition } from "@/src/utils/mealPlan";
+import { computeDayNutrition, isRestaurantVisit, visitName } from "@/src/utils/mealPlan";
 import type { CustomUnitConversion } from "@/src/utils/unitConversion";
 
 // What a meal event shows from the Kitchen planner: the food planned (or
@@ -21,8 +21,10 @@ export interface MealFood {
 
 export const mealKey = (date: string, slot: string) => `${date}|${slot}`;
 
+// A restaurant visit: "Wagaya: Katsu curry, Gyoza", from the dishes' copies
+// (the public restaurant, or an old entry's own copy of it).
 export function entryName(entry: MealPlanEntry): string {
-  return entry.meal?.name ?? entry.recipe?.name ?? entry.ingredient?.name ?? entry.restaurantMeal?.restaurantName ?? "Food";
+  return entry.meal?.name ?? entry.recipe?.name ?? entry.ingredient?.name ?? (isRestaurantVisit(entry) ? visitName(entry) : "Food");
 }
 
 // The planner's entries, grouped into the food of each day's slots. Uses

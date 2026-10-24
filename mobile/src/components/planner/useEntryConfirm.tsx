@@ -8,7 +8,7 @@ import { confirmMealPlanEntry, type ConfirmedNutrition, type MealPlanEntry } fro
 import { addRecipeScore, type Recipe } from "@/src/services/recipeApi";
 import type { AppSettings } from "@/src/services/settingsService";
 import type { PantryItem } from "@/src/types/pantry";
-import { computeConfirmNutrition } from "@/src/utils/mealPlan";
+import { computeConfirmNutrition, isRestaurantVisit, selectionsNutrition, visitDishes } from "@/src/utils/mealPlan";
 import {
   applyAmountOverrides,
   buildIngredientRequirements,
@@ -190,6 +190,13 @@ export function useEntryConfirm({
   // pendingRateFirst) so piece-size resolution always happens before
   // rating, never after.
   function handleConfirmEntry(entry: MealPlanEntry, rateFirst = false) {
+    // A restaurant visit: nothing comes out of the pantry, and what was had
+    // is the dishes as they were when added (each copy × how many) — not
+    // needing the kitchen to have loaded.
+    if (isRestaurantVisit(entry)) {
+      finishConfirm(entry, [], [], selectionsNutrition(visitDishes(entry)), rateFirst);
+      return;
+    }
     if (!ready) {
       // Not everything has loaded: hold it until it has (see `queued`).
       onStart?.(entry);

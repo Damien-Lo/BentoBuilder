@@ -13,6 +13,8 @@ export interface UsualMeal {
   meal?: { _id: string; name: string } | null;
   recipe?: { _id: string; name: string } | null;
   ingredient?: { _id: string; name: string } | null;
+  // A restaurant (the public one; before restaurants were public, one's own copy).
+  restaurant?: { _id: string; name: string } | null;
   restaurantMeal?: { _id: string; restaurantName: string } | null;
   startDate: string;
   endDate: string | null;
@@ -22,7 +24,7 @@ export interface UsualMeal {
 }
 
 export function usualName(usual: UsualMeal): string {
-  return usual.meal?.name ?? usual.recipe?.name ?? usual.ingredient?.name ?? usual.restaurantMeal?.restaurantName ?? "Food";
+  return usual.meal?.name ?? usual.recipe?.name ?? usual.ingredient?.name ?? usual.restaurant?.name ?? usual.restaurantMeal?.restaurantName ?? "Food";
 }
 
 // Whether `usual` applies on `date` (it's on, covers that weekday, and the

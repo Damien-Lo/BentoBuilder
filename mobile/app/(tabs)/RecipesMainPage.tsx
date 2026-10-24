@@ -35,11 +35,8 @@ import {
 } from "@/src/services/recipeApi";
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { deleteMeal, getMeals, type Meal } from "@/src/services/mealApi";
-import {
-  deleteRestaurantMeal,
-  getRestaurantMeals,
-  type RestaurantMeal,
-} from "@/src/services/restaurantMealApi";
+import { getMyRestaurants, type Restaurant } from "@/src/services/restaurantApi";
+import { addToMine, confirmRemoveFromMine, errorText, isMine, MineToggle, restaurantLine, StatusChip, usePublicRestaurants } from "@/src/components/restaurants/parts";
 import { getLastUsedMap, type LastUsedMap } from "@/src/services/mealPlanApi";
 import { sortAlphabetically, sortByLastUsed } from "@/src/utils/lastUsedSort";
 import { getPantryItems } from "@/src/services/pantryApi";
@@ -195,8 +192,8 @@ function PhoneRecipesMainPage() {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [restaurantSearchText, setRestaurantSearchText] = useState("");
   const [isRestaurantSearchActive, setIsRestaurantSearchActive] = useState(false);
-  const [restaurantMeals, setRestaurantMeals] = useState<RestaurantMeal[]>([]);
-  const [lastUsed, setLastUsed] = useState<LastUsedMap>({ meal: {}, recipe: {}, ingredient: {}, restaurantMeal: {} });
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [lastUsed, setLastUsed] = useState<LastUsedMap>({ meal: {}, recipe: {}, ingredient: {}, restaurantMeal: {}, restaurant: {} });
 
   const isFirstLoad = useRef(true);
 
@@ -407,8 +404,8 @@ function PhoneRecipesMainPage() {
 
   useFocusEffect(
     useCallback(() => {
-      getRestaurantMeals()
-        .then(setRestaurantMeals)
+      getMyRestaurants()
+        .then(setRestaurants)
         .catch(() => {});
     }, []),
   );
@@ -440,22 +437,27 @@ function PhoneRecipesMainPage() {
     return sortAlphabetically(list, m => m.name);
   }, [meals, mealSearchText]);
 
-  const restaurantMealsForBrowse = useMemo(
-    () => sortByLastUsed(restaurantMeals, lastUsed.restaurantMeal, r => r._id, r => r.restaurantName),
-    [restaurantMeals, lastUsed.restaurantMeal],
+  // Your restaurants (saved, or logged), most recently eaten at first.
+  const restaurantsForBrowse = useMemo(
+    () => sortByLastUsed(restaurants, lastUsed.restaurant ?? {}, r => r._id, r => r.name),
+    [restaurants, lastUsed.restaurant],
   );
 
-  const filteredRestaurantMeals = useMemo(() => {
+  // Searching: yours that match, then every other public one in Orbit that
+  // does (with a + to add it to yours).
+  const myRestaurantIds = useMemo(() => new Set(restaurants.map(r => r._id)), [restaurants]);
+  const publicRestaurants = usePublicRestaurants(restaurantSearchText, null, isRestaurantSearchActive);
+  const [addingRestaurant, setAddingRestaurant] = useState<string | null>(null);
+  const filteredRestaurants = useMemo(() => {
     const query = restaurantSearchText.trim().toLowerCase();
     const list = !query
-      ? restaurantMeals
-      : restaurantMeals.filter(
-          r =>
-            r.restaurantName.toLowerCase().includes(query) ||
-            r.dishes.some(d => d.name.toLowerCase().includes(query)),
+      ? restaurants
+      : restaurants.filter(r =>
+          [r.name, r.chainName ?? "", r.cuisine ?? ""].some(v => v.toLowerCase().includes(query)),
         );
-    return sortAlphabetically(list, r => r.restaurantName);
-  }, [restaurantMeals, restaurantSearchText]);
+    const others = publicRestaurants.found.filter(r => !myRestaurantIds.has(r._id));
+    return [...sortAlphabetically(list, r => r.name), ...others];
+  }, [restaurants, restaurantSearchText, publicRestaurants.found, myRestaurantIds]);
 
   const handleDeleteMeal = (id: string, name: string) => {
     Alert.alert("Delete meal", `Delete "${name}"? This cannot be undone.`, [
@@ -474,21 +476,16 @@ function PhoneRecipesMainPage() {
     ]);
   };
 
-  const handleArchiveRestaurantMeal = (item: RestaurantMeal) => {
-    Alert.alert(`Archive "${item.restaurantName}"?`, "You can restore it later from Settings > Archive.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Archive",
-        style: "destructive",
-        onPress: () => {
-          void deleteRestaurantMeal(item._id)
-            .then(() => setRestaurantMeals(prev => prev.filter(r => r._id !== item._id)))
-            .catch((err: unknown) => {
-              Alert.alert("Error", err instanceof Error ? err.message : "Could not archive.");
-            });
-        },
-      },
-    ]);
+  // Out of your list (it stays in Orbit for everyone).
+  const handleRemoveRestaurant = (item: Restaurant) =>
+    confirmRemoveFromMine(item, () => setRestaurants(prev => prev.filter(r => r._id !== item._id)));
+
+  const handleAddRestaurant = (item: Restaurant) => {
+    setAddingRestaurant(item._id);
+    addToMine(item)
+      .then(added => setRestaurants(prev => (prev.some(r => r._id === added._id) ? prev : [...prev, added])))
+      .catch((err: unknown) => Alert.alert("Couldn't add it", errorText(err)))
+      .finally(() => setAddingRestaurant(null));
   };
 
   if (isLoading) {
@@ -717,10 +714,10 @@ function PhoneRecipesMainPage() {
           style={{ flex: 1 }}
           onMomentumScrollEnd={handleHorizontalScrollEnd}
         >
-          {/* Page 1: Restaurant meals */}
+          {/* Page 1: Restaurants (yours) */}
           <View style={{ width: screenWidth, flex: 1 }}>
             <FlatList
-              data={restaurantMealsForBrowse}
+              data={restaurantsForBrowse}
               keyExtractor={(r) => r._id}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{
@@ -730,35 +727,41 @@ function PhoneRecipesMainPage() {
               }}
               ListHeaderComponent={
                 <View style={{ marginBottom: 16 }}>
-                  {pageTitle("Restaurants", `${restaurantMeals.length} ${restaurantMeals.length === 1 ? "restaurant" : "restaurants"}`)}
+                  {pageTitle("Restaurants", `${restaurants.length} ${restaurants.length === 1 ? "restaurant" : "restaurants"}`)}
                   <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center" }}>
                     {dots(0)}
-                    <Text style={hint}>Swipe left for meals</Text>
+                    <Text style={[hint, { flex: 1 }]}>Swipe left for meals</Text>
+                    {/* Every restaurant in Orbit, and near me */}
+                    <Tap onPress={() => router.push("/restaurants")} hitSlop={8} style={{ flexDirection: "row", alignItems: "center" }} pressedStyle={{ opacity: 0.6 }}>
+                      <Text style={{ fontSize: 13, fontWeight: "600", color: c.accent }}>All restaurants</Text>
+                      <Ionicons name="chevron-forward" size={13} color={c.accent} />
+                    </Tap>
                   </View>
                 </View>
               }
               ListEmptyComponent={emptyCard(
                 "storefront-outline",
-                restaurantSearchText ? "No restaurants found" : "No restaurant meals yet",
-                restaurantSearchText ? "Try a different search term." : "Tap + to log a visit.",
+                restaurantSearchText ? "No restaurants found" : "No restaurants yet",
+                restaurantSearchText ? "Try a different search term." : "Search for one in Orbit, or tap + to add it.",
               )}
               renderItem={({ item }) => (
                 <ReanimatedSwipeable
                   key={item._id}
                   friction={2}
                   rightThreshold={40}
-                  renderLeftActions={() => swipeAction("archive-outline", () => handleArchiveRestaurantMeal(item))}
+                  renderLeftActions={() => swipeAction("remove-circle-outline", () => handleRemoveRestaurant(item))}
                 >
                   <Tap
                     style={row}
                     pressedStyle={{ backgroundColor: c.pill }}
-                    onPress={() => router.push({ pathname: "/restaurant-meals/[id]", params: { id: item._id } })}
+                    onPress={() => router.push({ pathname: "/restaurants/[id]", params: { id: item._id } })}
                   >
                     {tile("storefront-outline")}
                     <View style={{ marginLeft: 14, flex: 1 }}>
-                      <Text style={nameText}>{item.restaurantName}</Text>
+                      <Text style={nameText}>{item.name}</Text>
+                      <StatusChip status={item.status} style={{ marginTop: 3 }} />
                       <Text style={detail} numberOfLines={1}>
-                        {item.dishes.map((d) => d.name).join(", ") || "No dishes yet"}
+                        {restaurantLine(item)}
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={c.faint} />
@@ -1015,38 +1018,49 @@ function PhoneRecipesMainPage() {
             value: restaurantSearchText,
             onChangeText: setRestaurantSearchText,
             onFocus: () => setIsRestaurantSearchActive(true),
-            placeholder: "Search restaurants or dishes",
-            onAdd: () => router.push("/restaurant-meals/add"),
+            placeholder: "Search restaurants in Orbit",
+            onAdd: () => router.push("/restaurants/add"),
             title: "Restaurants",
             onCancel: closeRestaurantSearch,
             results: (
               <FlatList
-                data={filteredRestaurantMeals}
+                data={filteredRestaurants}
                 keyExtractor={(r) => r._id}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
-                renderItem={({ item }) => (
-                  <Tap
-                    style={searchRow}
-                    pressedStyle={{ backgroundColor: c.pill }}
-                    onPress={() => {
-                      setIsRestaurantSearchActive(false);
-                      setRestaurantSearchText("");
-                      Keyboard.dismiss();
-                      router.push({ pathname: "/restaurant-meals/[id]", params: { id: item._id } });
-                    }}
-                  >
-                    {tile("storefront-outline", 44)}
-                    <View style={{ marginLeft: 12, flex: 1 }}>
-                      <Text style={{ fontSize: 15, fontWeight: "600", color: c.text }}>{item.restaurantName}</Text>
-                      <Text style={detail} numberOfLines={1}>
-                        {item.dishes.map((d) => d.name).join(", ") || "No dishes yet"}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={c.faint} />
-                  </Tap>
-                )}
-                ListEmptyComponent={searchEmpty("No restaurants found")}
+                renderItem={({ item }) => {
+                  const yours = isMine(item, myRestaurantIds);
+                  return (
+                    <Tap
+                      style={searchRow}
+                      pressedStyle={{ backgroundColor: c.pill }}
+                      onPress={() => {
+                        setIsRestaurantSearchActive(false);
+                        setRestaurantSearchText("");
+                        Keyboard.dismiss();
+                        router.push({ pathname: "/restaurants/[id]", params: { id: item._id } });
+                      }}
+                    >
+                      {tile("storefront-outline", 44)}
+                      <View style={{ marginLeft: 12, flex: 1 }}>
+                        <Text style={{ fontSize: 15, fontWeight: "600", color: c.text }}>{item.name}</Text>
+                        <StatusChip status={item.status} style={{ marginTop: 3 }} />
+                        <Text style={detail} numberOfLines={1}>
+                          {restaurantLine(item)}
+                        </Text>
+                      </View>
+                      {yours ? (
+                        <Ionicons name="chevron-forward" size={18} color={c.faint} />
+                      ) : (
+                        <MineToggle mine={false} onAdd={() => handleAddRestaurant(item)} busy={addingRestaurant === item._id} />
+                      )}
+                    </Tap>
+                  );
+                }}
+                ListFooterComponent={
+                  publicRestaurants.searching ? <ActivityIndicator color={c.muted} style={{ marginVertical: 12 }} /> : null
+                }
+                ListEmptyComponent={publicRestaurants.searching ? null : searchEmpty("No restaurants found")}
               />
             ),
           })}

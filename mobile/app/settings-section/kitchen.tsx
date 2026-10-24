@@ -26,6 +26,7 @@ import { DEFAULT_RATING_PROMPT_TIMING, updateRatingPrompt } from "@/src/utils/ra
 import { useScrollFocusSection } from "@/src/hooks/useScrollFocusSection";
 import { eyebrow, PageHeader, useGoBack } from "@/src/components/settings/AccountParts";
 import { Tap } from "@/src/components/ui/Tap";
+import { useIsReviewer } from "@/src/components/restaurants/parts";
 import { Button as WebButton } from "@/src/components/web/ui";
 import { OrbitPage, useOrbitTheme, type OrbitColors } from "@/src/theme/orbit";
 
@@ -71,6 +72,8 @@ function WeekStartPicker({
 // two columns, beside the Settings list (settings/web/WebSettingsFrame).
 export default function SettingsScreen() {
   const router = useRouter();
+  // (Reviewers: the restaurants, dishes and changes members send in.)
+  const reviewer = useIsReviewer();
   const back = useGoBack("/settings-section");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -341,7 +344,8 @@ export default function SettingsScreen() {
           {sectionHeader("Lists")}
           <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={card}>
             {linkRow("pricetag-outline", "Manage tags, categories, brands & stores", () => router.push("/manage-lists"))}
-            {linkRow("restaurant-outline", "Manage eating-out visits", () => router.push("/restaurant-meals"))}
+            {linkRow("restaurant-outline", "Restaurants", () => router.push("/restaurants"))}
+            {reviewer && linkRow("shield-checkmark-outline", "Review restaurants", () => router.push("/restaurants/review"))}
             {linkRow("archive-outline", "Archived ingredients, recipes & meals", () => router.push("/archive"), true)}
           </View>
 

@@ -542,7 +542,7 @@ export function suggestMeals({
     const begun = new Map<MealSlot, { dishes: Dish[]; calories: number; main: Dish | null }>();
     for (const s of started.filter((x) => x.date === date)) {
       // (A meal out comes as it comes: nothing is offered beside it.)
-      if (dayEntries.some((e) => e.slot === s.slot && e.restaurantMeal)) continue;
+      if (dayEntries.some((e) => e.slot === s.slot && (e.restaurant || e.restaurantMeal))) continue;
       const dishes = dayEntries.filter((e) => e.slot === s.slot).map(entryDish);
       const main = dishes.filter((d) => d.protein >= (s.slot === "breakfast" ? 8 : 12) && d.calories >= 150).sort((x, y) => y.calories - x.calories)[0] ?? null;
       begun.set(s.slot, { dishes, calories: sum(dishes).calories, main });

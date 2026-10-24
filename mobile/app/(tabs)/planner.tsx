@@ -5,7 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,19 +24,20 @@ import { getRecipeById, getRecipes, type Recipe } from "@/src/services/recipeApi
 import { getIngredients, type Ingredient } from "@/src/services/ingredientApi";
 import { getPantryItems } from "@/src/services/pantryApi";
 import {
-  estimateDishesFromPhoto,
-  getRestaurantMeals,
-  updateRestaurantMeal,
-  type Dish,
-  type DishInput,
+  getMyRestaurants,
+  getRestaurant,
+  mapsUrl,
+  searchRestaurants,
   type DishNutrition,
-  type RestaurantMeal,
-} from "@/src/services/restaurantMealApi";
+  type Restaurant,
+  type RestaurantDetail,
+  type RestaurantDish,
+} from "@/src/services/restaurantApi";
+import { canUseLocation, currentPosition, distanceLabel, type Position } from "@/src/utils/location";
 import { upsertMealPlanEntryContribution } from "@/src/services/groceryListApi";
-import { addIngredientTo, addLibraryFood, CreatableStringDropdown, FoodLibraryHeading, FormInput, PriceInput, useLibraryMatches } from "@/src/components/forms";
-import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
+import { addIngredientTo, addLibraryFood, CreatableStringDropdown, FoodLibraryHeading, useLibraryMatches } from "@/src/components/forms";
+import { DishEditor } from "@/src/components/restaurants/DishEditor";
 import { takePendingNewRestaurant } from "@/src/utils/pendingNewRestaurantStore";
-import type { SelectOption } from "@/src/services/optionsApi";
 import type { PantryItem } from "@/src/types/pantry";
 import {
   createMealPlanEntry,
@@ -86,8 +87,15 @@ import {
   courseNutrition,
   getMealKcal,
   getRecipeKcal,
-  getRestaurantMealKcal,
+  dishSelection,
+  getVisitKcal,
+  isRestaurantVisit,
   restaurantKcalRange,
+  selectionsKcal,
+  selectionsNutrition,
+  visitDishes,
+  visitName,
+  visitRestaurantName,
   getRollingDates,
   parseLocalDate,
   scaleIngredientNutrition,
@@ -220,8 +228,18 @@ function PhonePlannerScreen() {
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
   const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
   const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
-  const [allRestaurantMeals, setAllRestaurantMeals] = useState<RestaurantMeal[]>([]);
-  const [lastUsed, setLastUsed] = useState<LastUsedMap>({ meal: {}, recipe: {}, ingredient: {}, restaurantMeal: {} });
+  // One's own restaurants (saved, or any one's been to) for Eating Out.
+  const [myRestaurants, setMyRestaurants] = useState<Restaurant[]>([]);
+  // Everyone's restaurants matching the search (or near where one is), from
+  // the server; shown under one's own.
+  const [restaurantResults, setRestaurantResults] = useState<Restaurant[]>([]);
+  const [searchingRestaurants, setSearchingRestaurants] = useState(false);
+  // "Near me": where one is, once asked (null: not asked, or turned off),
+  // and whether it can be asked here at all.
+  const [nearMe, setNearMe] = useState<Position | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [canNearMe, setCanNearMe] = useState(false);
+  const [lastUsed, setLastUsed] = useState<LastUsedMap>({ meal: {}, recipe: {}, ingredient: {}, restaurantMeal: {}, restaurant: {} });
   const [lastEntryBySlot, setLastEntryBySlot] = useState<LastEntryBySlot | null>(null);
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
@@ -257,36 +275,20 @@ function PhonePlannerScreen() {
   const [pendingQuantity, setPendingQuantity] = useState("1");
   const [pendingUnit, setPendingUnit] = useState("");
 
-  // Restaurant dish-selection step — set once a user picks a restaurant,
-  // cleared to go back to the restaurants list. Starts with nothing
-  // selected (not "all dishes") so logging a visit is always a deliberate
-  // choice of what was actually eaten, not an accidental full-menu count.
-  const [pendingRestaurantMeal, setPendingRestaurantMeal] = useState<RestaurantMeal | null>(null);
-  // dish _id -> quantity; presence in the map is "selected", same role the
-  // old Set<string> played, but now carries how many of each too. Keyed by
-  // a staged dish's temp key (see stagedNewDishes) until confirm remaps it
-  // to the real id the server assigns.
+  // Restaurant dish-selection step — set once a user picks a restaurant
+  // (with its menu: its own dishes, or its chain's), cleared to go back to
+  // the restaurants list. Starts with nothing selected (not "all dishes") so
+  // logging a visit is always a deliberate choice of what was actually
+  // eaten, not an accidental full-menu count.
+  const [pendingRestaurant, setPendingRestaurant] = useState<RestaurantDetail | null>(null);
+  // The restaurant whose menu is being fetched, having been tapped.
+  const [openingRestaurant, setOpeningRestaurant] = useState<string | null>(null);
+  // dish _id -> quantity; presence in the map is "selected", and how many
+  // of each.
   const [selectedDishQuantities, setSelectedDishQuantities] = useState<Map<string, number>>(new Map());
-  // A dish ordered today that isn't on this restaurant's menu yet, typed
-  // inline while picking what was eaten — kept purely local (never written
-  // to the restaurant record) until the whole visit is actually confirmed,
-  // so backing out of the add-to-plan flow never leaves an orphaned menu
-  // item behind for something that was never actually logged.
-  const [stagedNewDishes, setStagedNewDishes] = useState<
-    { key: string; name: string; price: string; nutrition: DishNutrition }[]
-  >([]);
+  // A dish had today that isn't on the menu yet, being added to the
+  // restaurant's public menu (see DishEditor).
   const [showAddDishForm, setShowAddDishForm] = useState(false);
-  const [newDishName, setNewDishName] = useState("");
-  const [newDishPrice, setNewDishPrice] = useState("");
-  // The visible/editable calories text mirrors newDishNutrition.calories;
-  // the rest of newDishNutrition only ever gets filled by a photo estimate
-  // (this lightweight form has no fields for protein/carbs/fats/fiber/
-  // sodium) but is still carried through to the staged dish so that data
-  // isn't thrown away just because the form doesn't display it.
-  const [newDishCalories, setNewDishCalories] = useState("");
-  const [newDishNutrition, setNewDishNutrition] = useState<DishNutrition>({});
-  const [showDishScanModal, setShowDishScanModal] = useState(false);
-  const [estimatingDish, setEstimatingDish] = useState(false);
 
   // Tapping an ingredient/recipe entry opens this overlay instead of
   // navigating straight to the catalog page - shows and lets you edit how
@@ -303,6 +305,9 @@ function PhonePlannerScreen() {
   // - same dish-id -> quantity map shape as the add-flow's
   // selectedDishQuantities, seeded from the entry's existing selections.
   const [editDishQuantities, setEditDishQuantities] = useState<Map<string, number>>(new Map());
+  // That restaurant's menu now, for the entry being edited (`entry`: its
+  // id) — the other dishes there, to add one that was had too.
+  const [editMenu, setEditMenu] = useState<{ entry: string; dishes: RestaurantDish[] } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
 
   // Expanded info overlay for a meal/recipe/ingredient row
@@ -310,7 +315,7 @@ function PhonePlannerScreen() {
     | { type: "meal"; data: Meal }
     | { type: "recipe"; data: Recipe }
     | { type: "ingredient"; data: Ingredient }
-    | { type: "restaurant"; data: RestaurantMeal }
+    | { type: "restaurant"; data: Restaurant | RestaurantDetail }
     | null
   >(null);
   const [infoLoading, setInfoLoading] = useState(false);
@@ -394,28 +399,26 @@ function PhonePlannerScreen() {
           },
         );
       void loadKitchen();
-      getRestaurantMeals().then(setAllRestaurantMeals).catch(() => {});
+      getMyRestaurants().then(setMyRestaurants).catch(() => {});
       getLastUsedMap().then(setLastUsed).catch(() => {});
 
       // Coming back from "Add a new restaurant" specifically when it was
-      // reached from this screen's own add-to-plan flow (restaurant-meals/
-      // add.tsx only stashes a hand-off when it was opened with
-      // ?from=planner, not from the Eating Out catalog or Recipes tab) -
+      // reached from this screen's own add-to-plan flow (restaurants/add
+      // only stashes a hand-off when it was opened with ?from=planner) -
       // reopen straight into the dish-picker instead of leaving the user
-      // to find and re-tap the restaurant they just created. Whatever was
-      // entered as the menu while creating it is almost always also what
-      // was actually ordered today, so it's pre-selected (still freely
-      // editable) rather than making the user re-check it all.
+      // to find and re-tap the restaurant they just created. Nothing is
+      // ticked: it may be one already in Orbit (picked at the duplicate
+      // prompt) or a chain location, with a whole menu already.
       const newRestaurant = takePendingNewRestaurant();
       if (newRestaurant) {
-        resetDishPickerDrafts();
-        setSelectedDishQuantities(new Map(newRestaurant.dishes.map(d => [d._id, 1])));
-        setPendingRestaurantMeal(newRestaurant);
         setShowAdd(true);
+        void openRestaurantStep(newRestaurant);
       }
       return () => {
         if (kitchenRetry.current) clearTimeout(kitchenRetry.current);
       };
+      // (openRestaurantStep only uses state setters: on every focus, as is.)
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []),
   );
 
@@ -620,30 +623,73 @@ function PhonePlannerScreen() {
     }
   }
 
-  const filteredRestaurantMeals = useMemo(() => {
+  // One's own restaurants: most recently been to first, or — searching —
+  // those whose name (or chain, or cuisine) matches, by name.
+  const filteredRestaurants = useMemo(() => {
     const q = restaurantSearch.trim().toLowerCase();
-    if (!q) return sortByLastUsed(allRestaurantMeals, lastUsed.restaurantMeal, r => r._id, r => r.restaurantName);
+    if (!q) return sortByLastUsed(myRestaurants, lastUsed.restaurant, r => r._id, r => r.name);
     return sortAlphabetically(
-      allRestaurantMeals.filter(
-        r =>
-          r.restaurantName.toLowerCase().includes(q) ||
-          r.dishes.some(d => d.name.toLowerCase().includes(q)),
-      ),
-      r => r.restaurantName,
+      myRestaurants.filter(r => [r.name, r.chainName, r.cuisine].some(text => text?.toLowerCase().includes(q))),
+      r => r.name,
     );
-  }, [allRestaurantMeals, restaurantSearch, lastUsed.restaurantMeal]);
+  }, [myRestaurants, restaurantSearch, lastUsed.restaurant]);
 
-  // Local-only dish-picker state (staged new dishes + the inline form that
-  // stages them) - reset everywhere selectedDishQuantities itself resets,
-  // so a leftover draft never carries over into a different restaurant or
-  // a later add-to-plan session.
+  // Everyone's others that match (or are near), under one's own — and how
+  // far each is, one's own included, once "near me" is on.
+  const otherRestaurants = useMemo(() => {
+    const mine = new Set(myRestaurants.map(r => r._id));
+    return restaurantResults.filter(r => !mine.has(r._id));
+  }, [myRestaurants, restaurantResults]);
+  const restaurantDistance = useMemo(
+    () => new Map(restaurantResults.filter(r => r.distance != null).map(r => [r._id, r.distance!])),
+    [restaurantResults],
+  );
+
+  // Typing, or "near me": every public restaurant that matches, from the
+  // server — a moment after the last key, so each letter isn't a search.
+  useEffect(() => {
+    const q = restaurantSearch.trim();
+    if (!showAdd || addMode !== "restaurant" || (!q && !nearMe)) {
+      setRestaurantResults([]);
+      setSearchingRestaurants(false);
+      return;
+    }
+    let current = true;
+    setSearchingRestaurants(true);
+    const timer = setTimeout(() => {
+      searchRestaurants(q, nearMe)
+        .then(found => current && setRestaurantResults(found), () => current && setRestaurantResults([]))
+        .finally(() => current && setSearchingRestaurants(false));
+    }, q ? 300 : 0);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [restaurantSearch, nearMe, showAdd, addMode]);
+
+  // Whether "near me" can be offered here (a browser that shares where it
+  // is, or an app with location built in).
+  useEffect(() => {
+    canUseLocation().then(setCanNearMe, () => setCanNearMe(false));
+  }, []);
+
+  function toggleNearMe() {
+    if (nearMe) {
+      setNearMe(null);
+      return;
+    }
+    setLocating(true);
+    currentPosition()
+      .then(setNearMe)
+      .catch(err => Alert.alert("Couldn't find where you are", err instanceof Error ? err.message : "Please try again."))
+      .finally(() => setLocating(false));
+  }
+
+  // Local-only dish-picker state (the new-dish editor) - reset everywhere
+  // selectedDishQuantities itself resets, so it never carries over into a
+  // different restaurant or a later add-to-plan session.
   function resetDishPickerDrafts() {
-    setStagedNewDishes([]);
     setShowAddDishForm(false);
-    setNewDishName("");
-    setNewDishPrice("");
-    setNewDishCalories("");
-    setNewDishNutrition({});
   }
 
   function openAdd(slot: MealSlot) {
@@ -656,7 +702,7 @@ function PhonePlannerScreen() {
     setIngredientSearch("");
     setRestaurantSearch("");
     setPendingIngredient(null);
-    setPendingRestaurantMeal(null);
+    setPendingRestaurant(null);
     setPendingPieces(null);
     setSelectedDishQuantities(new Map());
     resetDishPickerDrafts();
@@ -677,8 +723,34 @@ function PhonePlannerScreen() {
     setInfoItem({ type: "ingredient", data: ingredient });
   }
 
-  function openRestaurantInfo(restaurantMeal: RestaurantMeal) {
-    setInfoItem({ type: "restaurant", data: restaurantMeal });
+  // Its menu comes a moment later (a list row has only how many dishes).
+  async function openRestaurantInfo(restaurant: Restaurant) {
+    setInfoItem({ type: "restaurant", data: restaurant });
+    try {
+      setInfoLoading(true);
+      const full = await getRestaurant(restaurant._id);
+      setInfoItem(cur => (cur?.type === "restaurant" && cur.data._id === restaurant._id ? { type: "restaurant", data: full } : cur));
+    } catch {
+      // keep showing what the list had
+    } finally {
+      setInfoLoading(false);
+    }
+  }
+
+  // Picking a restaurant: its menu (its own dishes, or its chain's) is
+  // fetched, then what was had is picked from it.
+  async function openRestaurantStep(restaurant: Pick<Restaurant, "_id">) {
+    setOpeningRestaurant(restaurant._id);
+    try {
+      const detail = await getRestaurant(restaurant._id);
+      resetDishPickerDrafts();
+      setSelectedDishQuantities(new Map());
+      setPendingRestaurant(detail);
+    } catch (err) {
+      Alert.alert("Couldn't open it", err instanceof Error ? err.message : "Its menu didn't load. Please try again.");
+    } finally {
+      setOpeningRestaurant(null);
+    }
   }
 
   async function openRecipeInfo(recipe: Recipe) {
@@ -793,18 +865,42 @@ function PhonePlannerScreen() {
     }
   }
 
-  async function handleAddRestaurantEntry(restaurantMeal: RestaurantMeal, selections: RestaurantDishSelection[]) {
-    if (saving || selections.length === 0) return;
+  // A dish had today that wasn't on the menu: DishEditor has put it on the
+  // restaurant's public menu (its chain's, for a chain location) — for
+  // everyone, as it's a real dish there — and here it's ticked for this
+  // visit.
+  function handleNewDishSaved(dish: RestaurantDish) {
+    setPendingRestaurant(prev => (prev ? { ...prev, dishes: [...prev.dishes, dish] } : prev));
+    setSelectedDishQuantities(prev => new Map(prev).set(dish._id, 1));
+    setShowAddDishForm(false);
+  }
+
+  // The picked dishes, each with its copy: its name and nutrition as they
+  // are now, so a later correction to the public dish never changes this
+  // meal.
+  function pickedDishSelections(): RestaurantDishSelection[] {
+    if (!pendingRestaurant) return [];
+    const byId = new Map(pendingRestaurant.dishes.map(d => [d._id, d]));
+    return [...selectedDishQuantities.entries()].flatMap(([id, quantity]) => {
+      const dish = byId.get(id);
+      return dish ? [dishSelection(dish, quantity)] : [];
+    });
+  }
+
+  async function handleConfirmRestaurantVisit() {
+    if (!pendingRestaurant || saving) return;
+    const selections = pickedDishSelections();
+    if (selections.length === 0) return;
     try {
       setSaving(true);
       await createEntry({
         date: selectedDate,
         slot: addSlot,
         status: addStatus,
-        restaurantMeal: restaurantMeal._id,
+        restaurant: pendingRestaurant._id,
         restaurantDishSelections: selections,
       });
-      setPendingRestaurantMeal(null);
+      setPendingRestaurant(null);
       setSelectedDishQuantities(new Map());
       resetDishPickerDrafts();
       setShowAdd(false);
@@ -813,121 +909,6 @@ function PhonePlannerScreen() {
     } finally {
       setSaving(false);
     }
-  }
-
-  // Stages a dish typed inline (not yet on this restaurant's menu) as
-  // "selected" under a temp key, same as tapping an existing dish's
-  // checkbox — nothing is written to the restaurant record until confirm.
-  function addStagedDish() {
-    const name = newDishName.trim();
-    if (!name) return;
-    const key = `staged-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    setStagedNewDishes(prev => [...prev, { key, name, price: newDishPrice, nutrition: newDishNutrition }]);
-    setSelectedDishQuantities(prev => {
-      const next = new Map(prev);
-      next.set(key, 1);
-      return next;
-    });
-    setNewDishName("");
-    setNewDishPrice("");
-    setNewDishCalories("");
-    setNewDishNutrition({});
-    setShowAddDishForm(false);
-  }
-
-  // singleDish: true tells the model this photo is of exactly the one dish
-  // being staged (same signal add.tsx's per-dish-card scan button sends),
-  // not a possible multi-dish table spread.
-  function handleDishPhotoCaptured(photoUri: string) {
-    setShowDishScanModal(false);
-    setEstimatingDish(true);
-    estimateDishesFromPhoto(photoUri, pendingRestaurantMeal?.restaurantName, true)
-      .then((estimated) => {
-        if (estimated.length === 0) {
-          Alert.alert(
-            "No dish recognized",
-            "Couldn't identify any food in that photo — try again, or fill this in manually.",
-          );
-          return;
-        }
-        const [d] = estimated;
-        setNewDishName(d.name);
-        setNewDishNutrition(d.estimatedNutrition);
-        setNewDishCalories(d.estimatedNutrition.calories != null ? String(d.estimatedNutrition.calories) : "");
-        setShowAddDishForm(true);
-      })
-      .catch((error) => {
-        Alert.alert(
-          "Couldn't estimate photo",
-          error instanceof Error ? error.message : "Something went wrong reading that photo.",
-        );
-      })
-      .finally(() => setEstimatingDish(false));
-  }
-
-  function removeStagedDish(key: string) {
-    setStagedNewDishes(prev => prev.filter(d => d.key !== key));
-    setSelectedDishQuantities(prev => {
-      const next = new Map(prev);
-      next.delete(key);
-      return next;
-    });
-  }
-
-  // Confirms the current restaurant dish-picker step: if anything was
-  // staged inline, persists those to the restaurant's actual menu FIRST
-  // (a single PATCH replacing dishes with the existing list + the staged
-  // ones appended — the route does a full replace, not a push), remaps
-  // selectedDishQuantities from each staged dish's temp key to the real id
-  // the server assigns, then hands off to handleAddRestaurantEntry exactly
-  // as if every dish had already existed on the menu.
-  async function handleConfirmRestaurantVisit() {
-    if (!pendingRestaurantMeal || saving) return;
-
-    let restaurantMeal = pendingRestaurantMeal;
-    let quantities = selectedDishQuantities;
-
-    if (stagedNewDishes.length > 0) {
-      setSaving(true);
-      try {
-        // Existing dishes are passed through completely unchanged (real
-        // _id and scores included) - the route replaces the whole array,
-        // so sending anything less would silently mint fresh ids for
-        // every dish already on the menu and orphan every past visit's
-        // restaurantDishSelections that reference the old ones.
-        const dishInputs: (DishInput | Dish)[] = [
-          ...pendingRestaurantMeal.dishes,
-          ...stagedNewDishes.map((d): DishInput => ({
-            name: d.name,
-            price: d.price.trim() ? Number(d.price) : undefined,
-            nutrition: d.nutrition,
-          })),
-        ];
-        restaurantMeal = await updateRestaurantMeal(pendingRestaurantMeal._id, { dishes: dishInputs });
-        setAllRestaurantMeals(prev => prev.map(r => (r._id === restaurantMeal._id ? restaurantMeal : r)));
-
-        // The route replaces the whole array, but preserves order - the
-        // newly-created dishes are exactly the tail past the original count.
-        const newRealDishes = restaurantMeal.dishes.slice(pendingRestaurantMeal.dishes.length);
-        quantities = new Map(selectedDishQuantities);
-        stagedNewDishes.forEach((staged, i) => {
-          const qty = quantities.get(staged.key);
-          quantities.delete(staged.key);
-          const real = newRealDishes[i];
-          if (real && qty != null) quantities.set(real._id, qty);
-        });
-      } catch (err) {
-        Alert.alert("Error", err instanceof Error ? err.message : "Could not save the new dish.");
-        setSaving(false);
-        return;
-      }
-      setSaving(false);
-    }
-
-    await handleAddRestaurantEntry(
-      restaurantMeal,
-      [...quantities.entries()].map(([dish, quantity]) => ({ dish, quantity })),
-    );
   }
 
   async function handleAddIngredientEntry() {
@@ -1037,15 +1018,7 @@ function PhonePlannerScreen() {
   function entryDisplayName(entry: MealPlanEntry): string {
     if (entry.recipe) return entry.recipe.name;
     if (entry.ingredient) return entry.ingredient.name;
-    if (entry.restaurantMeal) {
-      const quantityByDish = new Map((entry.restaurantDishSelections ?? []).map(s => [s.dish, s.quantity]));
-      const dishNames = (entry.restaurantMeal.dishes ?? [])
-        .filter(d => quantityByDish.has(d._id))
-        .map(d => d.name);
-      return dishNames.length
-        ? `${entry.restaurantMeal.restaurantName}: ${dishNames.join(", ")}`
-        : entry.restaurantMeal.restaurantName;
-    }
+    if (isRestaurantVisit(entry)) return visitName(entry);
     return entry.meal?.name ?? "";
   }
 
@@ -1069,9 +1042,10 @@ function PhonePlannerScreen() {
         input.ingredient = lastEntry.ingredient._id;
         input.ingredientQuantity = lastEntry.ingredientQuantity;
         input.ingredientUnit = lastEntry.ingredientUnit;
-      } else if (lastEntry.restaurantMeal) {
-        input.restaurantMeal = lastEntry.restaurantMeal._id;
-        input.restaurantDishSelections = lastEntry.restaurantDishSelections;
+      } else if (lastEntry.restaurant) {
+        // The same dishes, each with the copy it had then: what was had.
+        input.restaurant = lastEntry.restaurant._id;
+        input.restaurantDishSelections = visitDishes(lastEntry).map(({ dish, quantity, name, nutrition }) => ({ dish, quantity, name, nutrition }));
       } else if (lastEntry.meal) {
         input.meal = lastEntry.meal._id;
       }
@@ -1152,9 +1126,18 @@ function PhonePlannerScreen() {
       setEditEntry(entry);
       setEditQuantity(String(entry.ingredientQuantity ?? 1));
       setEditUnit(entry.ingredientUnit ?? "");
-    } else if (entry.restaurantMeal) {
+    } else if (isRestaurantVisit(entry)) {
       setEditEntry(entry);
-      setEditDishQuantities(new Map((entry.restaurantDishSelections ?? []).map(s => [s.dish, s.quantity])));
+      setEditDishQuantities(new Map(visitDishes(entry).map(d => [d.dish, d.quantity])));
+      // (Its menu now, a moment later: the other dishes there, to add one.)
+      setEditMenu(null);
+      const restaurantId = entry.restaurant?._id;
+      if (restaurantId) {
+        getRestaurant(restaurantId).then(
+          detail => setEditMenu({ entry: entry._id, dishes: detail.dishes }),
+          () => {},
+        );
+      }
     } else if (entry.meal) {
       router.push({ pathname: "/meals/[id]", params: { id: entry.meal._id } });
     }
@@ -1189,21 +1172,38 @@ function PhonePlannerScreen() {
       });
     } else if (editEntry.ingredient) {
       router.push({ pathname: "/ingredients/edit/[id]", params: { id: editEntry.ingredient._id } });
-    } else if (editEntry.restaurantMeal) {
-      router.push({ pathname: "/restaurant-meals/[id]", params: { id: editEntry.restaurantMeal._id } });
+    } else if (editEntry.restaurant) {
+      router.push({ pathname: "/restaurants/[id]", params: { id: editEntry.restaurant._id } });
     }
     setEditEntry(null);
+  }
+
+  // A visit being edited: its dishes as had (each keeps the copy it was
+  // added with), then the restaurant's other dishes now, to add one.
+  function editDishChoices(entry: MealPlanEntry): { _id: string; name: string; nutrition?: DishNutrition | null }[] {
+    const had = visitDishes(entry).map(d => ({ _id: d.dish, name: d.name, nutrition: d.nutrition }));
+    const hadIds = new Set(had.map(d => d._id));
+    const menu = editMenu?.entry === entry._id ? editMenu.dishes.filter(d => !hadIds.has(d._id)) : [];
+    return [...had, ...menu];
+  }
+
+  // What's ticked, with the copies: an old dish's own, a newly ticked one's
+  // as it is now.
+  function editedDishSelections(entry: MealPlanEntry): RestaurantDishSelection[] {
+    const byId = new Map(editDishChoices(entry).map(d => [d._id, d]));
+    return [...editDishQuantities.entries()].flatMap(([id, quantity]) => {
+      const dish = byId.get(id);
+      return dish ? [dishSelection(dish, quantity)] : [];
+    });
   }
 
   async function handleSaveEntryQuantity() {
     if (!editEntry || editSaving) return;
 
     let updatedPromise: Promise<MealPlanEntry>;
-    if (editEntry.restaurantMeal) {
-      if (editDishQuantities.size === 0) return;
-      const selections: RestaurantDishSelection[] = [...editDishQuantities.entries()].map(
-        ([dish, quantity]) => ({ dish, quantity }),
-      );
+    if (isRestaurantVisit(editEntry)) {
+      const selections = editedDishSelections(editEntry);
+      if (selections.length === 0) return;
       updatedPromise = updateMealPlanEntryQuantity(editEntry._id, { restaurantDishSelections: selections });
     } else {
       const q = Number(editQuantity);
@@ -1262,20 +1262,16 @@ function PhonePlannerScreen() {
         entry.ingredientUnit,
         getIngredientConversions(entry.ingredient, appSettings?.unitConversions ?? []),
       );
-    } else if (entry.restaurantMeal) {
-      const selections = entry.restaurantDishSelections ?? [];
-      const quantityByDish = new Map(selections.map(s => [s.dish, s.quantity]));
-      const eatenDishes = (entry.restaurantMeal.dishes ?? []).filter(d => quantityByDish.has(d._id));
-      title = entry.restaurantMeal.restaurantName;
+    } else if (isRestaurantVisit(entry)) {
+      // (Each dish as it was when added: its copy.)
+      const eatenDishes = visitDishes(entry);
+      title = visitRestaurantName(entry);
       subtitle = eatenDishes.length
         ? `Eating out · ${eatenDishes
-            .map(d => {
-              const qty = quantityByDish.get(d._id) ?? 1;
-              return qty !== 1 ? `${d.name} ×${qty}` : d.name;
-            })
+            .map(d => (d.quantity !== 1 ? `${d.name} ×${d.quantity}` : d.name))
             .join(", ")}`
         : "Eating out";
-      kcal = getRestaurantMealKcal(entry.restaurantMeal, selections);
+      kcal = getVisitKcal(entry);
     } else {
       const courseCount = entry.meal?.courses?.length ?? 0;
       title = entry.meal?.name ?? "";
@@ -1564,32 +1560,71 @@ function PhonePlannerScreen() {
     );
   }
 
-  function renderRestaurantMealInfo(restaurantMeal: RestaurantMeal) {
-    const kcal = restaurantKcalRange(restaurantMeal);
-    const tags = (restaurantMeal.tags ?? []).filter((t): t is SelectOption => typeof t !== "string");
+  // A restaurant: what it is and where (with Google Maps), one's own notes
+  // on it, its menu once fetched, and its own page.
+  function renderRestaurantInfo(restaurant: Restaurant | RestaurantDetail) {
+    const dishes = "dishes" in restaurant ? restaurant.dishes : null;
+    const kcal = dishes ? restaurantKcalRange({ dishes }) : null;
+    const chain = restaurant.chainName ?? (restaurant.chain && typeof restaurant.chain !== "string" ? restaurant.chain.name : null);
+    const distance = restaurant.distance ?? restaurantDistance.get(restaurant._id);
     return (
       <View>
-        {tags.length > 0 && (
+        {(!!restaurant.cuisine || (!!chain && chain !== restaurant.name)) && (
           <View className="mb-4 flex-row flex-wrap gap-1.5">
-            {tags.map(tag => infoChip(tag._id, tag.name, "bg-emerald-50", "text-emerald-700"))}
+            {!!restaurant.cuisine && infoChip("cuisine", restaurant.cuisine, "bg-slate-100", "text-slate-600")}
+            {!!chain && chain !== restaurant.name && infoChip("chain", chain, "bg-slate-100", "text-slate-600")}
           </View>
         )}
 
-        {!!restaurantMeal.notes && (
-          <Text className="mb-4 text-sm leading-5 text-slate-600" style={o && { color: o.muted }}>{restaurantMeal.notes}</Text>
+        {!!restaurant.mine?.notes && (
+          <Text className="mb-4 text-sm leading-5 text-slate-600" style={o && { color: o.muted }}>{restaurant.mine.notes}</Text>
         )}
 
+        {infoRow("Address", restaurant.address)}
+        {infoRow("Distance", distance != null ? distanceLabel(distance) : null)}
         {infoRow("Per dish", kcal)}
 
-        {infoHeading(`Dishes (${restaurantMeal.dishes.length})`)}
-        {restaurantMeal.dishes.map(dish => (
-          <View key={dish._id} className="mb-2 rounded-2xl bg-slate-50 px-4 py-3" style={o && { ...sheetCard, borderRadius: 16 }}>
-            <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>{dish.name}</Text>
-            {dish.nutrition?.calories != null && (
-              <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>{dish.nutrition.calories} kcal</Text>
+        <View style={{ marginTop: 14, flexDirection: "row", gap: 8 }}>
+          {(!!restaurant.address || !!restaurant.location || !!restaurant.googlePlaceId) && (
+            <Tap
+              onPress={() => void Linking.openURL(mapsUrl(restaurant))}
+              accessibilityRole="link"
+              style={{ flex: 1, height: 44, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: oc.surface, borderWidth: 1, borderColor: oc.border }}
+              pressedStyle={{ backgroundColor: oc.pill }}
+            >
+              <Ionicons name="map-outline" size={16} color={oc.text} />
+              <Text style={{ marginLeft: 6, fontSize: 14, fontWeight: "600", color: oc.text }}>Open in Google Maps</Text>
+            </Tap>
+          )}
+          <Tap
+            onPress={() => {
+              setInfoItem(null);
+              router.push({ pathname: "/restaurants/[id]", params: { id: restaurant._id } });
+            }}
+            style={{ flex: 1, height: 44, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: oc.pill }}
+            pressedStyle={{ opacity: 0.85 }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: "600", color: oc.onPill }}>Its page</Text>
+            <Ionicons name="chevron-forward" size={15} color={oc.onPill} style={{ marginLeft: 3 }} />
+          </Tap>
+        </View>
+
+        {dishes && (
+          <>
+            {infoHeading(`Menu (${dishes.length})`)}
+            {dishes.length === 0 && (
+              <Text className="text-sm text-slate-500" style={o && { color: o.muted, paddingHorizontal: 4 }}>No dishes yet.</Text>
             )}
-          </View>
-        ))}
+            {dishes.map(dish => (
+              <View key={dish._id} className="mb-2 rounded-2xl bg-slate-50 px-4 py-3" style={o && { ...sheetCard, borderRadius: 16 }}>
+                <Text className="text-sm font-semibold text-slate-900" style={o && { color: o.text }}>{dish.name}</Text>
+                {dish.nutrition?.calories != null && (
+                  <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>{Math.round(dish.nutrition.calories)} kcal</Text>
+                )}
+              </View>
+            ))}
+          </>
+        )}
       </View>
     );
   }
@@ -1601,7 +1636,7 @@ function PhonePlannerScreen() {
       : infoItem.type === "recipe" ? "book-outline"
       : infoItem.type === "restaurant" ? "restaurant-outline"
       : "nutrition-outline";
-    const title = infoItem.type === "restaurant" ? infoItem.data.restaurantName : infoItem.data.name;
+    const title = infoItem.data.name;
 
     return (
       <View className="absolute inset-0">
@@ -1654,7 +1689,7 @@ function PhonePlannerScreen() {
             {infoItem.type === "meal" && renderMealInfo(infoItem.data)}
             {infoItem.type === "recipe" && renderRecipeInfo(infoItem.data)}
             {infoItem.type === "ingredient" && renderIngredientInfo(infoItem.data)}
-            {infoItem.type === "restaurant" && renderRestaurantMealInfo(infoItem.data)}
+            {infoItem.type === "restaurant" && renderRestaurantInfo(infoItem.data)}
             {infoLoading && (
               <View className="mt-3 flex-row items-center justify-center">
                 <ActivityIndicator size="small" color={o?.muted ?? "#2563EB"} />
@@ -1803,9 +1838,9 @@ function PhonePlannerScreen() {
   function renderEditEntryOverlay() {
     if (!editEntry) return null;
     const isIngredient = !!editEntry.ingredient;
-    const isRestaurant = !!editEntry.restaurantMeal;
+    const isRestaurant = isRestaurantVisit(editEntry);
     const title = isRestaurant
-      ? editEntry.restaurantMeal!.restaurantName
+      ? visitRestaurantName(editEntry)
       : isIngredient
         ? editEntry.ingredient!.name
         : editEntry.recipe!.name;
@@ -1843,28 +1878,26 @@ function PhonePlannerScreen() {
       : null;
 
     // Restaurant nutrition is computed from the whole selection map (each
-    // dish x its own quantity), not a single scalar like the other two types.
-    const restaurantDishes = isRestaurant ? editEntry.restaurantMeal!.dishes : [];
-    const restaurantSelections: RestaurantDishSelection[] = [...editDishQuantities.entries()].map(
-      ([dish, quantity]) => ({ dish, quantity }),
-    );
-    const selectedRestaurantDishes = restaurantDishes.filter(d => editDishQuantities.has(d._id));
-    const restaurantQtyOf = (d: { _id: string }) => editDishQuantities.get(d._id) ?? 1;
-    const restaurantKcal = isRestaurant
-      ? getRestaurantMealKcal(editEntry.restaurantMeal!, restaurantSelections)
-      : null;
+    // dish's copy x its own quantity), not a single scalar like the other
+    // two types. The dishes: those had (as they were then), then the rest of
+    // the menu now.
+    const restaurantDishes = isRestaurant ? editDishChoices(editEntry) : [];
+    const hadCount = isRestaurant ? visitDishes(editEntry).length : 0;
+    const restaurantSelections = isRestaurant ? editedDishSelections(editEntry) : [];
+    const restaurantTotals = selectionsNutrition(restaurantSelections);
+    const restaurantKcal = selectionsKcal(restaurantSelections);
 
     // Label, true (logged) value, unit, and — only for a confirmed recipe
     // with a real logged total — the recipe's own original assumed value,
     // rendered as "original → true log" so it's obvious the two can differ.
     const rows: [string, number | null | undefined, string, number | null | undefined][] = isRestaurant
       ? [
-          ["Calories", restaurantKcal, "kcal", undefined],
-          ["Protein",  selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.protein ?? 0) * restaurantQtyOf(d), 0), "g", undefined],
-          ["Carbs",    selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.carbs ?? 0) * restaurantQtyOf(d), 0),   "g", undefined],
-          ["Fats",     selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.fats ?? 0) * restaurantQtyOf(d), 0),    "g", undefined],
-          ["Fiber",    selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.fiber ?? 0) * restaurantQtyOf(d), 0),   "g", undefined],
-          ["Sodium",   selectedRestaurantDishes.reduce((s, d) => s + (d.nutrition?.sodium ?? 0) * restaurantQtyOf(d), 0),  "mg", undefined],
+          ["Calories", restaurantKcal,           "kcal", undefined],
+          ["Protein",  restaurantTotals.protein, "g", undefined],
+          ["Carbs",    restaurantTotals.carbs,   "g", undefined],
+          ["Fats",     restaurantTotals.fats,    "g", undefined],
+          ["Fiber",    restaurantTotals.fiber,   "g", undefined],
+          ["Sodium",   restaurantTotals.sodium,  "mg", undefined],
         ]
       : loggedNutrition
         ? [
@@ -1896,7 +1929,7 @@ function PhonePlannerScreen() {
     const recipeConfirmedLocked = !isIngredient && !isRestaurant && editEntry.status === "confirmed"
       && !!editEntry.stockDeductions?.length;
 
-    const canSave = isRestaurant ? editDishQuantities.size > 0 : validQty;
+    const canSave = isRestaurant ? restaurantSelections.length > 0 : validQty;
 
     // In Orbit's look, like Log under it.
     const eaten = editEntry.status === "confirmed";
@@ -1956,59 +1989,64 @@ function PhonePlannerScreen() {
 
             {isRestaurant ? (
               <>
-                <Text style={eyebrow}>WHAT DID YOU GET?</Text>
-                <View style={[card, { marginBottom: 20 }]}>
-                  {restaurantDishes.map((dish, i) => {
-                    const qty = editDishQuantities.get(dish._id);
-                    const checked = qty != null;
-                    return (
-                      <View key={dish._id} style={{ paddingHorizontal: 16, paddingVertical: 13, borderTopWidth: i ? 1 : 0, borderTopColor: oc.border }}>
-                        <Pressable
-                          accessibilityRole="checkbox"
-                          accessibilityState={{ checked }}
-                          style={{ flexDirection: "row", alignItems: "center" }}
-                          onPress={() => {
-                            setEditDishQuantities(prev => {
-                              const next = new Map(prev);
-                              if (next.has(dish._id)) next.delete(dish._id);
-                              else next.set(dish._id, 1);
-                              return next;
-                            });
-                          }}
-                        >
-                          <View style={{ width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: checked ? oc.ink : "transparent", borderWidth: checked ? 0 : 1.5, borderColor: oc.faint }}>
-                            {checked && <Ionicons name="checkmark" size={14} color={oc.onInk} />}
-                          </View>
-                          <View style={{ flex: 1, marginLeft: 12 }}>
-                            <Text style={{ fontSize: 15, fontWeight: "600", color: oc.text }}>{dish.name}</Text>
-                            {dish.nutrition?.calories != null && (
-                              <Text style={{ marginTop: 2, fontSize: 12, color: oc.muted }}>{dish.nutrition.calories} kcal each</Text>
-                            )}
-                          </View>
-                        </Pressable>
-
-                        {checked && (
-                          <View style={{ marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "flex-end" }}>
-                            <Text style={{ marginRight: 8, fontSize: 12, color: oc.faint }}>Quantity</Text>
-                            <DishQuantityStepper
-                              value={qty}
-                              onChange={next =>
-                                setEditDishQuantities(prev => new Map(prev).set(dish._id, next))
-                              }
-                              onRemove={() =>
+                {([
+                  ["WHAT DID YOU GET?", restaurantDishes.slice(0, hadCount)],
+                  ["ALSO ON THE MENU", restaurantDishes.slice(hadCount)],
+                ] as const).map(([heading, dishes]) => dishes.length > 0 && (
+                  <View key={heading}>
+                    <Text style={eyebrow}>{heading}</Text>
+                    <View style={[card, { marginBottom: 20 }]}>
+                      {dishes.map((dish, i) => {
+                        const qty = editDishQuantities.get(dish._id);
+                        const checked = qty != null;
+                        return (
+                          <View key={dish._id} style={{ paddingHorizontal: 16, paddingVertical: 13, borderTopWidth: i ? 1 : 0, borderTopColor: oc.border }}>
+                            <Tap
+                              accessibilityRole="checkbox"
+                              accessibilityState={{ checked }}
+                              style={{ flexDirection: "row", alignItems: "center" }}
+                              onPress={() => {
                                 setEditDishQuantities(prev => {
                                   const next = new Map(prev);
-                                  next.delete(dish._id);
+                                  if (next.has(dish._id)) next.delete(dish._id);
+                                  else next.set(dish._id, 1);
                                   return next;
-                                })
-                              }
-                            />
+                                });
+                              }}
+                            >
+                              {orbitCheck(checked)}
+                              <View style={{ flex: 1, marginLeft: 12 }}>
+                                <Text style={{ fontSize: 15, fontWeight: "600", color: oc.text }}>{dish.name}</Text>
+                                {dish.nutrition?.calories != null && (
+                                  <Text style={{ marginTop: 2, fontSize: 12, color: oc.muted }}>{Math.round(dish.nutrition.calories)} kcal each</Text>
+                                )}
+                              </View>
+                            </Tap>
+
+                            {checked && (
+                              <View style={{ marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "flex-end" }}>
+                                <Text style={{ marginRight: 8, fontSize: 12, color: oc.faint }}>Quantity</Text>
+                                <DishQuantityStepper
+                                  value={qty}
+                                  onChange={next =>
+                                    setEditDishQuantities(prev => new Map(prev).set(dish._id, next))
+                                  }
+                                  onRemove={() =>
+                                    setEditDishQuantities(prev => {
+                                      const next = new Map(prev);
+                                      next.delete(dish._id);
+                                      return next;
+                                    })
+                                  }
+                                />
+                              </View>
+                            )}
                           </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
               </>
             ) : (
               <>
@@ -2235,11 +2273,11 @@ function PhonePlannerScreen() {
 
   // The add sheet on one of its steps (an ingredient's amount, a
   // restaurant's dishes, a recipe's piece), not its lists.
-  const addStep = !!(pendingIngredient || pendingRestaurantMeal || pendingPieces);
+  const addStep = !!(pendingIngredient || pendingRestaurant || pendingPieces);
   // Its Back, from a step to the lists.
   function backInAddSheet() {
     setPendingIngredient(null);
-    setPendingRestaurantMeal(null);
+    setPendingRestaurant(null);
     setPendingPieces(null);
     setSelectedDishQuantities(new Map());
     resetDishPickerDrafts();
@@ -2301,6 +2339,52 @@ function PhonePlannerScreen() {
       <View style={{ width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: checked ? oc.ink : "transparent", borderWidth: checked ? 0 : 1.5, borderColor: oc.faint }}>
         {checked && <Ionicons name="checkmark" size={14} color={oc.onInk} />}
       </View>
+    );
+  }
+  // A restaurant's card in the add sheet's list — one's own, or everyone's:
+  // its cuisine, where it is (how far, with "near me" on) and its menu's size.
+  function renderRestaurantCard(restaurant: Restaurant) {
+    const slotCfg = SLOT_MAP[addSlot];
+    const distance = restaurant.distance ?? restaurantDistance.get(restaurant._id);
+    const dishCount = restaurant.dishCount ?? 0;
+    const chain = restaurant.chainName && restaurant.chainName !== restaurant.name ? restaurant.chainName : null;
+    const detail = [restaurant.cuisine, chain, restaurant.address].filter(Boolean).join(" · ");
+    const opening = openingRestaurant === restaurant._id;
+    return (
+      <Pressable
+        key={restaurant._id}
+        className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
+        style={[addCell, o && listCard]}
+        disabled={saving || !!openingRestaurant}
+        onPress={() => void openRestaurantStep(restaurant)}
+      >
+        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`} style={o && { backgroundColor: o.pill }}>
+          <Ionicons name="restaurant-outline" size={18} color={o?.icon ?? slotCfg.iconColor} />
+        </View>
+        <View className="ml-3 flex-1">
+          <Text className="font-semibold text-slate-900" style={o && listTitle}>{restaurant.name}</Text>
+          <Text className="mt-0.5 text-sm text-slate-400" numberOfLines={1} style={o && { fontSize: 13, color: o.muted }}>
+            {detail || (dishCount ? `${dishCount} ${dishCount === 1 ? "dish" : "dishes"}` : "No dishes yet")}
+          </Text>
+        </View>
+        {distance != null && (
+          <Text className="mr-2 text-sm font-semibold text-slate-500" style={o && { fontSize: 13, color: o.muted }}>{distanceLabel(distance)}</Text>
+        )}
+        <Tap
+          hitSlop={8}
+          onPress={() => void openRestaurantInfo(restaurant)}
+          accessibilityLabel={`About ${restaurant.name}`}
+          style={{ marginRight: 4, width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" }}
+          pressedStyle={{ backgroundColor: oc.pill }}
+        >
+          <Ionicons name="information-circle-outline" size={20} color={o?.faint ?? "#94A3B8"} />
+        </Tap>
+        {opening ? (
+          <ActivityIndicator size="small" color={o?.ink ?? "#2563EB"} style={{ width: 22 }} />
+        ) : (
+          <Ionicons name="add-circle-outline" size={22} color={o?.ink ?? "#2563EB"} />
+        )}
+      </Pressable>
     );
   }
   // An ingredient's card in the add sheet's list — one's own, or a food
@@ -2764,7 +2848,7 @@ function PhonePlannerScreen() {
                 <Text className="font-semibold text-white" style={o && { fontSize: 16, color: o.onInk }}>{saving ? "Adding…" : "Add to plan"}</Text>
               </Pressable>
             </ScrollView>
-          ) : pendingRestaurantMeal ? (
+          ) : pendingRestaurant ? (
             /* ── Restaurant dish-selection step ── which dish(es) from this
                visit were actually eaten, so nutrition doesn't count the
                whole menu. Starts empty; nothing pre-checked. */
@@ -2773,23 +2857,27 @@ function PhonePlannerScreen() {
               contentContainerStyle={{ padding: 16, paddingBottom: 40, ...(wideAdd ? { width: "100%", maxWidth: 640, alignSelf: "center" } : {}) }}
               keyboardShouldPersistTaps="handled"
             >
-              {addStepCard("restaurant-outline", pendingRestaurantMeal.restaurantName, "Select what you actually ate")}
+              {addStepCard("restaurant-outline", pendingRestaurant.name, "Select what you actually ate")}
 
               {o ? <Text style={sheetEyebrow}>WHAT DID YOU GET?</Text> : <Text className="mb-1.5 text-sm font-semibold text-slate-700">Dishes</Text>}
+              {pendingRestaurant.dishes.length > 0 && (
               <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white" style={o && { ...sheetCard, overflow: "hidden", marginBottom: 12 }}>
-                {pendingRestaurantMeal.dishes.map((dish, i) => {
+                {pendingRestaurant.dishes.map((dish, i) => {
                   const qty = selectedDishQuantities.get(dish._id);
                   const checked = qty != null;
+                  const price = dish.mine?.price;
                   return (
                     <View
                       key={dish._id}
                       className={`px-4 py-3.5 ${
-                        i < pendingRestaurantMeal.dishes.length - 1 ? "border-b border-slate-100" : ""
+                        i < pendingRestaurant.dishes.length - 1 ? "border-b border-slate-100" : ""
                       }`}
                       style={o && { borderBottomColor: o.border }}
                     >
-                      <Pressable
-                        className="flex-row items-center justify-between active:opacity-70"
+                      <Tap
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked }}
+                        style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
                         onPress={() => {
                           setSelectedDishQuantities(prev => {
                             const next = new Map(prev);
@@ -2810,14 +2898,15 @@ function PhonePlannerScreen() {
                           <View className="ml-3 flex-1">
                             <Text className="font-semibold text-slate-900" style={o && { fontSize: 15, color: o.text }}>{dish.name}</Text>
                             {dish.nutrition?.calories != null && (
-                              <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.muted }}>{dish.nutrition.calories} kcal each</Text>
+                              <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.muted }}>{Math.round(dish.nutrition.calories)} kcal each</Text>
                             )}
                           </View>
                         </View>
-                        {dish.price != null && (
-                          <Text className="text-sm font-semibold text-slate-500" style={o && { color: o.muted }}>${dish.price.toFixed(2)}</Text>
+                        {/* (What one paid for it, if noted: one's own.) */}
+                        {price != null && (
+                          <Text className="text-sm font-semibold text-slate-500" style={o && { color: o.muted }}>${price.toFixed(2)}</Text>
                         )}
-                      </Pressable>
+                      </Tap>
 
                       {checked && (
                         <View className="mt-2 flex-row items-center justify-end">
@@ -2840,162 +2929,45 @@ function PhonePlannerScreen() {
                     </View>
                   );
                 })}
-
-                {/* Staged locally — not yet on this restaurant's real menu.
-                    Saved to the restaurant record only once the visit is
-                    actually confirmed below. */}
-                {stagedNewDishes.map((dish, i) => {
-                  const qty = selectedDishQuantities.get(dish.key) ?? 1;
-                  return (
-                    <View
-                      key={dish.key}
-                      className={`bg-blue-50/40 px-4 py-3.5 ${
-                        i < stagedNewDishes.length - 1 || pendingRestaurantMeal.dishes.length > 0
-                          ? "border-b border-slate-100"
-                          : ""
-                      }`}
-                      style={o && { backgroundColor: o.accentSoft, borderBottomColor: o.border }}
-                    >
-                      <View className="flex-row items-center justify-between">
-                        <View className="flex-1 flex-row items-center">
-                          {o ? orbitCheck(true) : <Ionicons name="checkbox" size={22} color="#2563EB" />}
-                          <View className="ml-3 flex-1">
-                            <View className="flex-row items-center">
-                              <Text className="font-semibold text-slate-900" style={o && { fontSize: 15, color: o.text }}>{dish.name}</Text>
-                              <Text className="ml-1.5 text-[10px] font-bold uppercase tracking-wide text-blue-600" style={o && { color: o.accent }}>
-                                New
-                              </Text>
-                            </View>
-                            {dish.nutrition.calories != null && (
-                              <Text className="mt-0.5 text-xs text-slate-400" style={o && { color: o.muted }}>{dish.nutrition.calories} kcal each</Text>
-                            )}
-                          </View>
-                        </View>
-                        {!!dish.price.trim() && (
-                          <Text className="text-sm font-semibold text-slate-500" style={o && { color: o.muted }}>
-                            ${Number(dish.price).toFixed(2)}
-                          </Text>
-                        )}
-                        <Pressable hitSlop={8} className="ml-2" onPress={() => removeStagedDish(dish.key)} accessibilityLabel="Remove">
-                          <Ionicons name="close-circle-outline" size={20} color={o?.faint ?? "#94A3B8"} />
-                        </Pressable>
-                      </View>
-
-                      <View className="mt-2 flex-row items-center justify-end">
-                        <Text className="mr-2 text-xs font-medium text-slate-400" style={o && { color: o.faint }}>Quantity</Text>
-                        <DishQuantityStepper
-                          value={qty}
-                          onChange={next =>
-                            setSelectedDishQuantities(prev => new Map(prev).set(dish.key, next))
-                          }
-                        />
-                      </View>
-                    </View>
-                  );
-                })}
               </View>
-
-              {showAddDishForm ? (
-                <View className="mb-6 rounded-2xl border border-dashed border-slate-300 bg-white p-4" style={o && { ...sheetCard, borderStyle: "dashed", borderColor: o.orbit, marginBottom: 20 }}>
-                  <View className="mb-2 flex-row items-center justify-between">
-                    <Text className="flex-1 text-xs font-semibold text-slate-500" style={o && { color: o.muted }}>
-                      Not on the menu yet — add what you ordered
-                    </Text>
-                    <Pressable hitSlop={8} onPress={() => setShowDishScanModal(true)} accessibilityLabel="Estimate from a photo">
-                      <Ionicons name="camera-outline" size={20} color={o?.ink ?? "#2563EB"} />
-                    </Pressable>
-                  </View>
-                  <FormInput value={newDishName} placeholder="Dish name" onChangeText={setNewDishName} />
-                  <View className="mt-2 flex-row gap-3">
-                    <View className="flex-1">
-                      <FormInput
-                        value={newDishCalories}
-                        placeholder="Calories (optional)"
-                        keyboardType="decimal-pad"
-                        onChangeText={(text) => {
-                          setNewDishCalories(text);
-                          setNewDishNutrition(prev => ({
-                            ...prev,
-                            calories: text.trim() ? Number(text) : undefined,
-                          }));
-                        }}
-                      />
-                    </View>
-                    <View className="flex-1">
-                      <PriceInput value={newDishPrice} onChangeText={setNewDishPrice} />
-                    </View>
-                  </View>
-                  {(newDishNutrition.protein != null
-                    || newDishNutrition.carbs != null
-                    || newDishNutrition.fats != null) && (
-                    <Text className="mt-2 text-xs text-slate-400" style={o && { color: o.faint }}>
-                      From photo estimate: {newDishNutrition.protein ?? "—"}g protein, {newDishNutrition.carbs ?? "—"}g carbs, {newDishNutrition.fats ?? "—"}g fat
-                    </Text>
-                  )}
-                  <View className="mt-3 flex-row gap-3">
-                    <Pressable
-                      className="flex-1 items-center rounded-xl bg-slate-100 py-2.5 active:bg-slate-200"
-                      style={o && { height: 44, justifyContent: "center", paddingVertical: 0, borderRadius: 14, backgroundColor: o.pill }}
-                      onPress={() => {
-                        setShowAddDishForm(false);
-                        setNewDishName("");
-                        setNewDishPrice("");
-                        setNewDishCalories("");
-                        setNewDishNutrition({});
-                      }}
-                    >
-                      <Text className="text-sm font-semibold text-slate-600" style={o && { color: o.onPill }}>Cancel</Text>
-                    </Pressable>
-                    <Pressable
-                      disabled={!newDishName.trim()}
-                      className={`flex-1 items-center rounded-xl py-2.5 ${
-                        newDishName.trim() ? "bg-blue-600 active:bg-blue-700" : "bg-blue-300"
-                      }`}
-                      style={o && { ...sheetPrimary(!newDishName.trim()), height: 44, borderRadius: 14 }}
-                      onPress={addStagedDish}
-                    >
-                      <Text className="text-sm font-semibold text-white" style={o && { color: o.onInk }}>Add dish</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ) : (
-                <Pressable
-                  className="mb-6 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3.5 active:bg-slate-100"
-                  style={o && { height: 50, paddingVertical: 0, borderRadius: 16, borderColor: o.orbit, backgroundColor: "transparent", marginBottom: 20 }}
-                  onPress={() => setShowAddDishForm(true)}
-                >
-                  <Ionicons name="add" size={18} color={o?.ink ?? "#2563EB"} />
-                  <Text className="ml-2 font-semibold text-blue-700" style={o && { fontSize: 15, color: o.ink }}>Add a dish not on this list</Text>
-                </Pressable>
               )}
 
-              {/* Live nutrition preview — sum of selected dishes (existing +
-                  staged), each scaled by quantity. Computed directly rather
-                  than via getRestaurantMealKcal since a staged dish isn't
-                  part of pendingRestaurantMeal.dishes yet. */}
+              {/* A dish not on the menu yet: DishEditor (the dish library at
+                  a size, a photo estimate, or typed in) puts it on the
+                  restaurant's public menu, and it's ticked here. */}
+              <Tap
+                style={{ height: 50, borderRadius: 16, borderWidth: 1, borderStyle: "dashed", borderColor: oc.orbit, flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 20 }}
+                pressedStyle={{ backgroundColor: oc.pill }}
+                onPress={() => setShowAddDishForm(true)}
+              >
+                <Ionicons name="add" size={18} color={o?.ink ?? "#2563EB"} />
+                <Text className="ml-2 font-semibold text-blue-700" style={o && { fontSize: 15, color: o.ink }}>
+                  {pendingRestaurant.dishes.length ? "Add a dish not on this list" : "Add what you had"}
+                </Text>
+              </Tap>
+              {showAddDishForm && (
+                <DishEditor
+                  restaurant={pendingRestaurant}
+                  sections={pendingRestaurant.dishes.map(d => d.section ?? "")}
+                  onSaved={handleNewDishSaved}
+                  onCancel={() => setShowAddDishForm(false)}
+                />
+              )}
+
+              {/* Live nutrition preview — the picked dishes, each as it is
+                  now (what's copied onto the meal) × its quantity. */}
               {(() => {
-                const qtyOf = (key: string) => selectedDishQuantities.get(key) ?? 1;
-                const selectedReal = pendingRestaurantMeal.dishes.filter(d => selectedDishQuantities.has(d._id));
-                const selectedStaged = stagedNewDishes.filter(d => selectedDishQuantities.has(d.key));
-                // A staged dish can carry a full breakdown (from a photo
-                // estimate) or just calories (typed manually) - sum
-                // whatever each one actually has, same as a real dish.
-                const sumField = (field: keyof DishNutrition) =>
-                  selectedReal.reduce((s, d) => s + (d.nutrition?.[field] ?? 0) * qtyOf(d._id), 0)
-                  + selectedStaged.reduce((s, d) => s + (d.nutrition[field] ?? 0) * qtyOf(d.key), 0);
-                const hasAnyCalorieData = selectedReal.some(d => d.nutrition?.calories != null)
-                  || selectedStaged.some(d => d.nutrition.calories != null);
-                const kcal = hasAnyCalorieData ? Math.round(sumField("calories")) : null;
+                const picked = pickedDishSelections();
+                const n = selectionsNutrition(picked);
                 const rows: [string, number | null | undefined, string][] = [
-                  ["Calories", kcal, "kcal"],
-                  ["Protein",  sumField("protein"), "g"],
-                  ["Carbs",    sumField("carbs"),   "g"],
-                  ["Fats",     sumField("fats"),    "g"],
-                  ["Fiber",    sumField("fiber"),   "g"],
-                  ["Sodium",   sumField("sodium"),  "mg"],
+                  ["Calories", selectionsKcal(picked), "kcal"],
+                  ["Protein",  n.protein, "g"],
+                  ["Carbs",    n.carbs,   "g"],
+                  ["Fats",     n.fats,    "g"],
+                  ["Fiber",    n.fiber,   "g"],
+                  ["Sodium",   n.sodium,  "mg"],
                 ];
-                const selected = [...selectedReal, ...selectedStaged];
-                if (o) return addStepNutrition(selected.length ? rows : rows.map(([label, , unit]): [string, null, string] => [label, null, unit]));
+                if (o) return addStepNutrition(picked.length ? rows : rows.map(([label, , unit]): [string, null, string] => [label, null, unit]));
                 return (
                   <View className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                     {rows.map(([label, value, unit], i) => (
@@ -3007,7 +2979,7 @@ function PhonePlannerScreen() {
                       >
                         <Text className="text-base text-slate-600">{label}</Text>
                         <Text className="text-base font-semibold text-slate-900">
-                          {selected.length && value != null ? `${Math.round(value * 10) / 10} ${unit}` : "—"}
+                          {picked.length && value != null ? `${Math.round(value * 10) / 10} ${unit}` : "—"}
                         </Text>
                       </View>
                     ))}
@@ -3149,7 +3121,7 @@ function PhonePlannerScreen() {
                       addMode === "meal" ? "Search meals…"
                       : addMode === "recipe" ? "Search recipes…"
                       : addMode === "ingredient" ? "Search ingredients…"
-                      : "Search restaurants or dishes…"
+                      : "Search restaurants…"
                     }
                     placeholderTextColor={o?.faint ?? "#94A3B8"}
                     className="ml-3 flex-1 text-base text-slate-900"
@@ -3401,79 +3373,84 @@ function PhonePlannerScreen() {
                 <FlatList
                   key={wideAdd ? "grid" : "list"}
                   {...addGrid}
-                  data={filteredRestaurantMeals}
+                  data={filteredRestaurants}
                   keyExtractor={r => r._id}
                   keyboardShouldPersistTaps="handled"
                   contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 }}
                   ListHeaderComponent={
                     <>
-                      {filteredRestaurantMeals.length > 0 && (
+                      {filteredRestaurants.length > 0 && (
                         <Text className="mb-2 px-1 text-xs font-medium text-slate-400" style={o && { color: o.faint }}>
                           Been here before? Tap it below — you&apos;ll pick just what you had.
                         </Text>
                       )}
-                      <Pressable
-                        className="mb-2 flex-row items-center justify-center rounded-2xl border border-dashed border-slate-300 py-3.5 active:bg-slate-100"
-                        style={o && { height: 50, paddingVertical: 0, borderRadius: 16, borderColor: o.orbit, backgroundColor: "transparent" }}
-                        onPress={() => {
-                          setShowAdd(false);
-                          router.push({ pathname: "/restaurant-meals/add", params: { from: "planner" } });
-                        }}
-                      >
-                        <Ionicons name="add" size={18} color={o?.ink ?? "#2563EB"} />
-                        <Text className="ml-2 font-semibold text-blue-700" style={o && { fontSize: 15, color: o.ink }}>
-                          {restaurantSearch.trim() ? `Add "${restaurantSearch.trim()}" as a new restaurant` : "Add a new restaurant"}
-                        </Text>
-                      </Pressable>
+                      <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+                        <Tap
+                          style={{ flex: 1, height: 50, borderRadius: 16, borderWidth: 1, borderStyle: "dashed", borderColor: oc.orbit, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 12 }}
+                          pressedStyle={{ backgroundColor: oc.pill }}
+                          onPress={() => {
+                            setShowAdd(false);
+                            router.push({ pathname: "/restaurants/add", params: { from: "planner" } });
+                          }}
+                        >
+                          <Ionicons name="add" size={18} color={o?.ink ?? "#2563EB"} />
+                          <Text numberOfLines={1} className="ml-2 font-semibold text-blue-700" style={o && { flexShrink: 1, fontSize: 15, color: o.ink }}>
+                            {restaurantSearch.trim() ? `Add "${restaurantSearch.trim()}" as a new restaurant` : "Add a new restaurant"}
+                          </Text>
+                        </Tap>
+                        {/* Near me: the restaurants nearest where one is, from everyone's. */}
+                        {canNearMe && (
+                          <Tap
+                            disabled={locating}
+                            onPress={toggleNearMe}
+                            accessibilityRole="switch"
+                            accessibilityState={{ checked: !!nearMe }}
+                            accessibilityLabel="Restaurants near me"
+                            style={{ height: 50, borderRadius: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 14, backgroundColor: nearMe ? oc.ink : oc.surface, borderWidth: nearMe ? 0 : 1, borderColor: oc.border }}
+                          >
+                            {locating ? (
+                              <ActivityIndicator size="small" color={nearMe ? oc.onInk : oc.muted} />
+                            ) : (
+                              <Ionicons name={nearMe ? "navigate" : "navigate-outline"} size={16} color={nearMe ? oc.onInk : oc.text} />
+                            )}
+                            <Text style={{ marginLeft: 6, fontSize: 14, fontWeight: "600", color: nearMe ? oc.onInk : oc.text }}>Near me</Text>
+                          </Tap>
+                        )}
+                      </View>
+                      {filteredRestaurants.length > 0 && (restaurantSearch.trim() || nearMe) && (
+                        <Text style={{ ...sheetEyebrow, marginTop: 8 }}>YOURS</Text>
+                      )}
                     </>
                   }
-                  renderItem={({ item: restaurantMeal }) => {
-                    // (A dish's worth, not the whole menu summed.)
-                    const kcal = restaurantKcalRange(restaurantMeal);
-                    const slotCfg = SLOT_MAP[addSlot];
-                    return (
-                      <Pressable
-                        className="mb-2 flex-row items-center rounded-2xl border border-slate-200 bg-white p-4 active:bg-slate-50"
-                        style={[addCell, o && listCard]}
-                        disabled={saving}
-                        onPress={() => {
-                          setSelectedDishQuantities(new Map());
-                          resetDishPickerDrafts();
-                          setPendingRestaurantMeal(restaurantMeal);
-                        }}
-                      >
-                        <View className={`h-11 w-11 items-center justify-center rounded-full ${slotCfg.chipBg}`} style={o && { backgroundColor: o.pill }}>
-                          <Ionicons name="restaurant-outline" size={18} color={o?.icon ?? slotCfg.iconColor} />
+                  renderItem={({ item }) => renderRestaurantCard(item)}
+                  ListFooterComponent={
+                    otherRestaurants.length > 0 || searchingRestaurants ? (
+                      <View style={{ marginTop: filteredRestaurants.length > 0 ? 12 : 0 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                          <Text style={{ ...sheetEyebrow, flex: 1 }}>{nearMe && !restaurantSearch.trim() ? "NEAR YOU" : "IN ORBIT"}</Text>
+                          {searchingRestaurants && <ActivityIndicator size="small" color={oc.faint} style={{ marginBottom: 8 }} />}
                         </View>
-                        <View className="ml-3 flex-1">
-                          <Text className="font-semibold text-slate-900" style={o && listTitle}>{restaurantMeal.restaurantName}</Text>
-                          <Text className="mt-0.5 text-sm text-slate-400" numberOfLines={1} style={o && { fontSize: 13, color: o.muted }}>
-                            {restaurantMeal.dishes.map(d => d.name).join(", ") || "No dishes yet"}
-                          </Text>
-                        </View>
-                        {kcal != null && (
-                          <Text className="mr-2 text-sm font-semibold text-slate-500" style={o && { fontSize: 13, color: o.muted }}>{kcal}</Text>
-                        )}
-                        <Pressable
-                          hitSlop={8}
-                          onPress={() => openRestaurantInfo(restaurantMeal)}
-                          className="mr-1 h-8 w-8 items-center justify-center rounded-full active:bg-slate-100"
-                          style={o && { backgroundColor: "transparent" }}
-                        >
-                          <Ionicons name="information-circle-outline" size={20} color={o?.faint ?? "#94A3B8"} />
-                        </Pressable>
-                        <Ionicons name="add-circle-outline" size={22} color={o?.ink ?? "#2563EB"} />
-                      </Pressable>
-                    );
-                  }}
+                        {/* (In rows of three on a desktop, like the list above.) */}
+                        {(wideAdd ? chunk(otherRestaurants, 3) : otherRestaurants.map((r) => [r])).map((row) => (
+                          <View key={row[0]._id} style={wideAdd ? { flexDirection: "row", gap: 12 } : undefined}>
+                            {row.map((r) => renderRestaurantCard(r))}
+                          </View>
+                        ))}
+                      </View>
+                    ) : null
+                  }
                   ListEmptyComponent={
+                    otherRestaurants.length > 0 || searchingRestaurants ? null : (
                     <View className="items-center py-16">
                       <Ionicons name="restaurant-outline" size={42} color={o?.faint ?? "#94A3B8"} />
-                      <Text className="mt-4 text-lg font-bold text-slate-900" style={o && { color: o.text }}>No restaurant meals yet</Text>
+                      <Text className="mt-4 text-lg font-bold text-slate-900" style={o && { color: o.text }}>
+                        {restaurantSearch || nearMe ? "No restaurants found" : "No restaurants yet"}
+                      </Text>
                       <Text className="mt-2 text-center text-slate-500" style={o && { color: o.muted }}>
-                        {restaurantSearch ? "Try a different search." : "Log a visit above to see it here next time."}
+                        {restaurantSearch ? "Try a different search, or add it above." : "Search for one above, or add it — the ones you've been to show here next time."}
                       </Text>
                     </View>
+                    )
                   }
                 />
               )}
@@ -3504,22 +3481,6 @@ function PhonePlannerScreen() {
       {/* (Rating and what was used, in Orbit's look on the phone too.) */}
       <OrbitPage on={!!o}>{confirmModals}</OrbitPage>
 
-      <PhotoCaptureModal
-        visible={showDishScanModal}
-        onClose={() => setShowDishScanModal(false)}
-        onCaptured={handleDishPhotoCaptured}
-        subject="dish photo"
-        instructions="Fit just this one dish in frame."
-      />
-
-      <Modal visible={estimatingDish} transparent animationType="fade">
-        <View className="flex-1 items-center justify-center bg-black/50" style={o && { backgroundColor: o.scrim }}>
-          <View className="items-center rounded-3xl bg-white px-8 py-6" style={o && { backgroundColor: o.surface, borderWidth: 1, borderColor: o.border, borderRadius: 24 }}>
-            <ActivityIndicator size="large" color={o?.muted} />
-            <Text className="mt-3 text-base font-semibold text-slate-700" style={o && { color: o.text }}>Estimating nutrition...</Text>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
