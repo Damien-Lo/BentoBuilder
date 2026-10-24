@@ -45,6 +45,7 @@ export function useHomeOrbHidden() {
 }
 
 const ORB = 96;
+const CENTRE_Y = 0.42; // the orb's height on the screen, as a share of it
 const RX = 92; // the orbit, across
 const RY = 26; // and deep (it's seen from a little above)
 const TILT = -16; // degrees
@@ -61,7 +62,7 @@ export function LoadingOrbit({ from, name, progress, leaving, onGone }: { from: 
   const still = useReducedMotion();
   const { width, height } = useWindowDimensions();
   const cx = width / 2;
-  const cy = height * 0.42;
+  const cy = height * CENTRE_Y;
 
   // Coming down from the sign-in page's orb, growing to size.
   const start = from && !still ? { dx: from.x + from.size / 2 - cx, dy: from.y + from.size / 2 - cy, scale: from.size / ORB } : { dx: 0, dy: 0, scale: 1 };
@@ -165,6 +166,20 @@ export function LoadingOrbit({ from, name, progress, leaving, onGone }: { from: 
           <View style={{ height: "100%", borderRadius: 2, backgroundColor: colors.ink, width: `${Math.max(8, Math.round(progress * 100))}%` }} />
         </View>
       </Animated.View>
+    </View>
+  );
+}
+
+// Just the orb, where the loading screen has it: while the app is still
+// checking who's signed in, before LoadingOrbit takes over around it.
+export function LoadingOrb() {
+  const { colors, dark } = useOrbitTheme();
+  const { width, height } = useWindowDimensions();
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.canvas }}>
+      <View style={{ position: "absolute", left: width / 2 - ORB / 2, top: height * CENTRE_Y - ORB / 2 }}>
+        <OrbSphere size={ORB} label="Orbit" colors={colors} dark={dark} />
+      </View>
     </View>
   );
 }

@@ -1,15 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { reloadAppAsync } from "expo";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Platform, View } from "react-native";
+import { Platform, View } from "react-native";
 
 import { preload } from "@/src/services/apiCache";
 
 import { getMe, installAuthFetch, loadToken, onSessionEnded, signOut as endSession, type Account } from "@/src/services/authApi";
 
-import { useOrbitTheme } from "@/src/theme/orbit";
 
-import { LoadingOrbit, type OrbStart } from "./LoadingOrbit";
+import { LoadingOrb, LoadingOrbit, type OrbStart } from "./LoadingOrbit";
 import { SignInScreen } from "./SignInScreen";
 
 // The app, once this device is signed in — the sign-in page until then.
@@ -22,17 +21,17 @@ import { SignInScreen } from "./SignInScreen";
 // fetched up front (services/apiCache.ts: preload) behind a short loading
 // screen, so screens open already filled in. The app is drawn underneath
 // meanwhile — its screens share those requests — and the cover lifts when
-// they're in, or after WARM_UP_MS whatever happens. A quick start shows no
-// cover at all — except just after signing in, when the sign-in page's orb
-// comes down into it (LoadingOrbit) and it stays at least SIGNED_IN_MS, so
-// that's seen whole.
+// they're in, or after WARM_UP_MS whatever happens. It's Orbit's orb
+// (LoadingOrbit), from the first moment — while it's still checking who's
+// here, the orb alone in the same place — and it stays at least OPENED_MS,
+// so its landing on home is seen; just after signing in, the sign-in page's
+// orb comes down into it, and it stays SIGNED_IN_MS.
 
 installAuthFetch();
 
 const ACCOUNT_KEY = "bentobuilder.account";
 const WARM_UP_MS = 6000;
-// (No cover for a start quicker than this: no flash.)
-const COVER_AFTER_MS = 300;
+const OPENED_MS = 1200;
 const SIGNED_IN_MS = 2400;
 
 interface AuthValue {
@@ -44,7 +43,6 @@ const AuthContext = createContext<AuthValue>({ account: null, setAccount: () => 
 export const useAccount = () => useContext(AuthContext);
 
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { colors } = useOrbitTheme();
   const [state, setState] = useState<"checking" | "signedOut" | "signedIn">("checking");
   const [account, setAccountState] = useState<Account | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -118,16 +116,16 @@ export function AuthGate({ children }: { children: ReactNode }) {
       over = true;
       setLeaving(true);
     };
-    const cover = signedIn ? undefined : setTimeout(() => !over && setCovered(true), COVER_AFTER_MS);
+    const openedAt = Date.now();
+    setCovered(true);
     const limit = setTimeout(finish, WARM_UP_MS);
     void preload((done, total) => !over && setProgress({ done, total })).finally(() => {
-      const wait = signedIn ? SIGNED_IN_MS - (Date.now() - signedInAt.current) : 0;
+      const wait = signedIn ? SIGNED_IN_MS - (Date.now() - signedInAt.current) : OPENED_MS - (Date.now() - openedAt);
       if (wait > 0) setTimeout(finish, wait);
       else finish();
     });
     return () => {
       over = true;
-      clearTimeout(cover);
       clearTimeout(limit);
     };
   }, [state, accountId]);
@@ -137,13 +135,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
     setFrom(null);
   }, []);
 
-  if (state === "checking") {
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.canvas }}>
-        <ActivityIndicator color={colors.muted} />
-      </View>
-    );
-  }
+  // (Checking who's here: the orb, where the loading screen has it.)
+  if (state === "checking") return <LoadingOrb />;
   if (state === "signedOut") {
     return (
       <SignInScreen
