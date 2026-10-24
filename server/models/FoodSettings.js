@@ -28,6 +28,10 @@ const foodSettingsSchema = new mongoose.Schema(
     item: { type: mongoose.Schema.Types.ObjectId, required: true },
 
     // Both
+    // In their own list (a shared ingredient they've saved from the food
+    // library or the catalog; the rest of the shared catalog they only find
+    // by searching).
+    saved: { type: Boolean, default: false },
     notes: { type: String, trim: true, default: "" },
     scores: { type: [scoreEntrySchema], default: [] },
     ratingPrompt: { type: ratingPromptSchema, default: () => ({}) },

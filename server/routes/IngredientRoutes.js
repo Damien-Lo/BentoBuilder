@@ -1,12 +1,15 @@
 import express from "express";
 import { ratingPromptHandler } from "../services/ratingPrompt.js";
 import { copyForMe } from "../services/catalog.js";
+import FoodSettings from "../models/FoodSettings.js";
 import Ingredient from "../models/Ingredient.js";
 import Recipe from "../models/Recipe.js";
 import { getAvailableStock } from "../services/ingredientAvailability.js";
 import { parseNutritionLabel } from "../services/nutritionLabelParsing.js";
 import { wouldCreateCycle } from "../services/productionCycle.js";
 import { aiAllowance } from "../services/aiAllowance.js";
+import { libraryFoodsListed } from "../services/foodLibrary.js";
+import { currentScope } from "../services/ownership.js";
 
 const router = express.Router();
 
@@ -65,13 +68,19 @@ async function resolveGenericParent({
 
 /**
  * GET /api/ingredients
- * Return all non-archived ingredients. Pass ?archived=true to list only
- * archived ones instead (the Archive view's recovery list).
+ * Return all non-archived ingredients one can see — one's own and the shared
+ * catalog's — but of the food library only the foods one has saved or
+ * something of one's uses (the rest are searched: GET /library). Pass
+ * ?archived=true to list only archived ones instead (the Archive view's
+ * recovery list). Each comes with `saved`: in one's own list (one's own
+ * always are, and for the admin the shared catalog, theirs).
  */
 router.get("/", async (req, res) => {
   try {
+    const library = await libraryFoodsListed();
     const ingredients = await Ingredient.find({
       isArchived: req.query.archived === "true",
+      $or: [{ source: { $ne: "usda" } }, { _id: { $in: library } }],
     })
       .populate("category")
       .populate("brand")
@@ -80,10 +89,17 @@ router.get("/", async (req, res) => {
       .populate("tags")
       .sort({ name: 1 });
 
+    const admin = !!currentScope()?.legacy;
+    const saved = new Set((await FoodSettings.distinct("item", { kind: "ingredient", saved: true })).map(String));
+    const data = ingredients.map((ingredient) => ({
+      ...ingredient.toJSON(),
+      saved: ingredient.owner != null || saved.has(String(ingredient._id)) || (admin && ingredient.source !== "usda"),
+    }));
+
     return res.status(200).json({
       success: true,
-      count: ingredients.length,
-      data: ingredients,
+      count: data.length,
+      data,
     });
   } catch (error) {
     console.error("Get ingredients error:", error);
@@ -92,6 +108,55 @@ router.get("/", async (req, res) => {
       success: false,
       message: "Failed to retrieve ingredients",
     });
+  }
+});
+
+/**
+ * GET /api/ingredients/library?q=rib eye
+ * Searches everything one can add: the food library, the rest of the shared
+ * catalog and one's own — by name and aliases, each word matching the start
+ * of a word ("gre oni" finds green onion). Best first: names starting with
+ * what was typed (as a whole word first), then plain foods before branded
+ * ones, then shorter names.
+ * Each comes with `saved`: whether it's in one's own list (one's own always
+ * are).
+ */
+router.get("/library", async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim().toLowerCase();
+    const limit = Math.min(Number(req.query.limit) || 40, 100);
+    if (q.length < 2) return res.status(200).json({ success: true, data: [] });
+    const words = q.split(/\s+/).filter(Boolean).slice(0, 6);
+    const each = words.map((word) => {
+      const start = new RegExp(`(^|[^a-z])${escapeRegex(word)}`, "i");
+      return { $or: [{ name: start }, { aliases: start }] };
+    });
+    const found = await Ingredient.find({ isArchived: false, isMealPrep: { $ne: true }, $and: each })
+      .populate("category")
+      .populate("brand")
+      .limit(500)
+      .lean();
+
+    const shared = found.filter((ingredient) => ingredient.owner == null).map((ingredient) => ingredient._id);
+    const saved = new Set((await FoodSettings.find({ kind: "ingredient", item: { $in: shared }, saved: true }, "item").lean()).map((s) => String(s.item)));
+    // ("egg": "Egg, raw" before "Eggnog".)
+    const whole = new RegExp(`^${escapeRegex(q)}($|[^a-z])`, "i");
+    const rank = (ingredient) => {
+      const name = ingredient.name.toLowerCase();
+      return [whole.test(name) ? 0 : name.startsWith(q) ? 1 : name.startsWith(words[0]) ? 2 : 3, ingredient.brand ? 1 : 0, name.length];
+    };
+    const order = (a, b) => {
+      const [x, y] = [rank(a), rank(b)];
+      return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.name.localeCompare(b.name);
+    };
+    const data = found
+      .sort(order)
+      .slice(0, limit)
+      .map((ingredient) => ({ ...ingredient, saved: ingredient.owner != null || saved.has(String(ingredient._id)) }));
+    return res.status(200).json({ success: true, count: data.length, data });
+  } catch (error) {
+    console.error("Search ingredients error:", error);
+    return res.status(500).json({ success: false, message: "Failed to search ingredients" });
   }
 });
 
@@ -468,5 +533,25 @@ router.post("/:id/copy", async (req, res) => {
     return res.status(400).json({ success: false, message: error.message });
   }
 });
+
+/**
+ * POST /api/ingredients/:id/save, DELETE /api/ingredients/:id/save
+ * A shared ingredient (from the food library or the catalog) into, or out
+ * of, one's own list. One's own ingredients are always in it.
+ */
+async function setSaved(req, res, saved) {
+  try {
+    const ingredient = await Ingredient.findById(req.params.id);
+    if (!ingredient) return res.status(404).json({ success: false, message: "Ingredient not found" });
+    if (ingredient.owner == null) {
+      await FoodSettings.updateOne({ kind: "ingredient", item: ingredient._id }, { $set: { saved } }, { upsert: true, runValidators: true });
+    }
+    return res.status(200).json({ success: true, data: { ...ingredient.toObject(), saved: ingredient.owner != null || saved } });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+}
+router.post("/:id/save", (req, res) => setSaved(req, res, true));
+router.delete("/:id/save", (req, res) => setSaved(req, res, false));
 
 export default router;

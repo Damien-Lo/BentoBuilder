@@ -96,6 +96,37 @@ const ingredientSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // The food library (services/foodLibrary.js): a generic food from USDA
+    // FoodData Central — its id there, the other USDA records merged into it,
+    // and USDA's own description — loaded once and never overwritten, so an
+    // ingredient matched to one keeps its own name and numbers. Listed for a
+    // person only once they've saved it (FoodSettings.saved); searched by
+    // everyone. Null for everything else.
+    source: {
+      type: String,
+      enum: ["usda", null],
+      default: null,
+    },
+    fdcId: {
+      type: Number,
+      default: null,
+    },
+    alsoFdcIds: {
+      type: [Number],
+      default: undefined,
+    },
+    sourceName: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
+    // Other names it's searched by ("scallion" for green onion).
+    aliases: {
+      type: [String],
+      default: [],
+    },
+
     defaultPortionAmount: {
       type: Number,
       min: 0,
@@ -264,6 +295,8 @@ ingredientSchema.pre("validate", function () {
 });
 
 ingredientSchema.index({ genericParent: 1 });
+// (One library food per USDA record.)
+ingredientSchema.index({ fdcId: 1 }, { unique: true, partialFilterExpression: { fdcId: { $type: "number" } } });
 
 // Prevent one person's (or the shared catalog's) ingredients from using the
 // same barcode twice.

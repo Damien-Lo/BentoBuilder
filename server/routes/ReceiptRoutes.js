@@ -10,6 +10,7 @@ import ReceiptDraft from "../models/ReceiptDraft.js";
 import { photoUrl } from "./PhotoRoutes.js";
 import { canSwitchDatabase } from "../config/database.js";
 import { aiAllowance } from "../services/aiAllowance.js";
+import { libraryFoodsListed } from "../services/foodLibrary.js";
 
 const router = express.Router();
 
@@ -20,10 +21,13 @@ const router = express.Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LAST_PARSE_PATH = path.join(__dirname, "../tmp/last-receipt-parse.json");
 
-// The receipt reader, given the catalog to match lines against.
+// The receipt reader, given the catalog to match lines against: one's own
+// ingredient list (of the food library, only what one's saved or uses —
+// see GET /api/ingredients).
 async function readReceipt(imageBase64, mediaType) {
+  const library = await libraryFoodsListed();
   const [existingIngredients, existingCategories] = await Promise.all([
-    Ingredient.find({ isArchived: false })
+    Ingredient.find({ isArchived: false, $or: [{ source: { $ne: "usda" } }, { _id: { $in: library } }] })
       .select("name isGeneric category brand genericParent")
       .populate("category", "name")
       .populate("brand", "name")

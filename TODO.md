@@ -22,6 +22,28 @@ Everything is merged into `WorkingSave` and deployed (Render + bentobuilder.page
 3. **Calorie sources list:** which sources count for burned calories, per reading type — Apple devices + known wearables (Garmin, Fitbit, Oura, Whoop, Polar) on, scale and food apps off — shown on Your burn with switches. Today it's Apple devices only.
 4. **First run for someone new** (polish #7): About you, connect Apple Health, what each section is for.
 
+**In progress: the food library (branch `FoodLibrary`, started Oct 23).** USDA FoodData Central's generic foods (SR Legacy + Foundation, public domain) as shared ingredients, searched like Gym's exercise library and saved into one's own list.
+- **Done (not live):**
+  - `server/data/usda-foods/foods.json` holds 3,270 foods: renamed, sorted into the clean categories, portioned by the agreed convention, with unit conversions and the 37 nutrients. Its README says what was done.
+  - The loader `services/foodLibrary.js` inserts by USDA id and never overwrites. It is **not yet run at startup**.
+  - Ingredient has `source` / `fdcId` / `alsoFdcIds` / `sourceName` / `aliases`. FoodSettings has `saved`.
+  - New routes: `GET /api/ingredients/library?q=` (search) and `POST`/`DELETE /:id/save`.
+  - `GET /api/ingredients` returns today's list plus the library foods one has saved or uses (`libraryFoodsListed`), each with `saved`. The app finds every ingredient in that list (recipes don't come populated), so it can't be "saved only".
+  - Receipts match against the same list.
+- **Next, in order:**
+  1. Move the admin's personal fields on shared records into Damien's FoodSettings, with `saved` on what he uses.
+  2. A starter set of about 150 staples for new accounts (Damien to trim).
+  3. The match list for his 394 ingredients (his review first; his name, nutrition and portions kept, gaps filled from USDA).
+  4. The category tidy-up (approved): Snack → Snacks & Confectionery, Drinks → Beverages & Stock, Test Ingredients / Pancake / Sau / Uncategorized removed.
+  5. Screens:
+     - library search in every picker, saving on pick;
+     - "your ingredients" filtered on `saved`;
+     - a server barcode lookup (the cached list no longer holds every shared product);
+     - receipts: fetch a matched id that isn't in the list instead of dropping it.
+  6. Then wire the loader into `config/database.js` and deploy all of it together.
+- **Careful:** a local nodemon server is often on the real database, and server edits restart it. Test the loader on a throwaway database (done Oct 23: all 3,270 load, a rerun adds 0).
+- **Later:** recipes from a library.
+
 **Open, after that:**
 1. Docs section (files, notes, documents, plans).
 2. Per-set heart rate on a session (sets are timed since Oct 23).
@@ -309,6 +331,8 @@ Reported by the user while using the app.
 ## To fix (noted Oct 11, not started)
 
 1. Scanning a nutrition label image doesn't work: the API key is missing from the env. **Found Oct 11:** it's the live server only. `GOOGLE_AI_API_KEY` is set in `server/.env` (label scanning works locally) but not in the Render service's environment, so every scan through the installed phone app fails — receipts and meal-photo estimates too, which use the same key. Fix is in the Render dashboard (Environment → add `GOOGLE_AI_API_KEY`), not in code. **Fixed Oct 11:** the key was added on Render; a test scan against the live server now succeeds.
+
+2. **Sign-in page in dark mode** (noted Oct 23): the sign-in button's text is black on the dark button, unreadable. The loading animation needs work too. Later.
 
 ## Known issues (pinned, not urgent)
 
