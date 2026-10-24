@@ -8,7 +8,7 @@ import { getAvailableStock } from "../services/ingredientAvailability.js";
 import { parseNutritionLabel } from "../services/nutritionLabelParsing.js";
 import { wouldCreateCycle } from "../services/productionCycle.js";
 import { aiAllowance } from "../services/aiAllowance.js";
-import { libraryFoodsListed } from "../services/foodLibrary.js";
+import { libraryFoodsListed, searchFoods } from "../services/foodLibrary.js";
 import { currentScope } from "../services/ownership.js";
 
 const router = express.Router();
@@ -123,37 +123,7 @@ router.get("/", async (req, res) => {
  */
 router.get("/library", async (req, res) => {
   try {
-    const q = String(req.query.q ?? "").trim().toLowerCase();
-    const limit = Math.min(Number(req.query.limit) || 40, 100);
-    if (q.length < 2) return res.status(200).json({ success: true, data: [] });
-    const words = q.split(/\s+/).filter(Boolean).slice(0, 6);
-    const each = words.map((word) => {
-      const start = new RegExp(`(^|[^a-z])${escapeRegex(word)}`, "i");
-      return { $or: [{ name: start }, { aliases: start }] };
-    });
-    const found = await Ingredient.find({ isArchived: false, isMealPrep: { $ne: true }, $and: each })
-      .populate("category")
-      .populate("brand")
-      .limit(500)
-      .lean();
-
-    const admin = !!currentScope()?.legacy;
-    const shared = found.filter((ingredient) => ingredient.owner == null).map((ingredient) => ingredient._id);
-    const saved = new Set((await FoodSettings.find({ kind: "ingredient", item: { $in: shared }, saved: true }, "item").lean()).map((s) => String(s.item)));
-    // ("egg": "Egg, raw" before "Eggnog".)
-    const whole = new RegExp(`^${escapeRegex(q)}($|[^a-z])`, "i");
-    const rank = (ingredient) => {
-      const name = ingredient.name.toLowerCase();
-      return [whole.test(name) ? 0 : name.startsWith(q) ? 1 : name.startsWith(words[0]) ? 2 : 3, ingredient.brand ? 1 : 0, name.length];
-    };
-    const order = (a, b) => {
-      const [x, y] = [rank(a), rank(b)];
-      return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.name.localeCompare(b.name);
-    };
-    const data = found
-      .sort(order)
-      .slice(0, limit)
-      .map((ingredient) => ({ ...ingredient, saved: ingredient.owner != null || saved.has(String(ingredient._id)) || (admin && ingredient.source !== "usda") }));
+    const data = await searchFoods(req.query.q, { limit: Math.min(Number(req.query.limit) || 40, 100) });
     return res.status(200).json({ success: true, count: data.length, data });
   } catch (error) {
     console.error("Search ingredients error:", error);

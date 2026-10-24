@@ -78,7 +78,7 @@ import {
 } from "@/src/services/receiptApi";
 import type { SelectOption } from "@/src/types/options";
 import type { PantryItem } from "@/src/types/pantry";
-import { findIngredientByBarcode, inMyIngredients, useIngredientLibrarySearch } from "@/src/components/ingredients/foodLibrary";
+import { findIngredientByBarcode, inMyIngredients, libraryTagColors, useIngredientLibrarySearch } from "@/src/components/ingredients/foodLibrary";
 import {
   recentPantryEntries,
   referenceId,
@@ -151,9 +151,24 @@ function orbitTones(o: OrbitColors, dark: boolean) {
   };
 }
 
+// What the parse says of a line and the food library (receiptApi's types
+// don't name it yet): the line matched to a library food by the server
+// (`matchedFrom`), or, unmatched, up to three library foods it suggests.
+interface LibrarySuggestion {
+  _id: string;
+  name: string;
+  sourceName?: string | null;
+}
+type ParsedLine = ReceiptLineItem & { matchedFrom?: "library" | null; librarySuggestions?: LibrarySuggestion[] };
+
 interface ReviewRow {
   key: string;
   lineItem: ReceiptLineItem;
+  // The library food the server matched this line to — tagged "Library"
+  // while it's still the match — and, while unmatched, the library foods it
+  // suggests (chips under the name; gone once one's picked).
+  libraryMatchId: string | null;
+  librarySuggestions: LibrarySuggestion[];
   checked: boolean;
   // Set once this row has actually been added to the pantry — keeps a retry
   // after a partial failure from reprocessing (and duplicating) rows that
@@ -438,6 +453,16 @@ function normalizeDraftRow(row: Partial<ReviewRow>): ReviewRow {
     submitted: row.submitted ?? false,
     matchedIngredientId: row.matchedIngredientId ?? null,
     matchedGroceryItemId: row.matchedGroceryItemId ?? null,
+    // (A draft from before these: what its line says.)
+    libraryMatchId:
+      row.libraryMatchId !== undefined
+        ? row.libraryMatchId
+        : (row.lineItem as ParsedLine | undefined)?.matchedFrom === "library"
+          ? (row.lineItem?.matchedIngredientId ?? null)
+          : null,
+    librarySuggestions: Array.isArray(row.librarySuggestions)
+      ? row.librarySuggestions
+      : ((row.lineItem as ParsedLine | undefined)?.librarySuggestions ?? []),
     name: text(row.name),
     quantity: text(row.quantity),
     unit: text(row.unit),
@@ -742,6 +767,22 @@ function StatusBadge({ row, isNew, incomplete = false }: { row: ReviewRow; isNew
   );
 }
 
+// Matched by the server to a food library food, and still matched to it
+// (the tag goes once the person changes the match).
+const isLibraryMatch = (row: ReviewRow) => !!row.libraryMatchId && row.matchedIngredientId === row.libraryMatchId;
+
+// The small green "Library" tag beside a line the server matched to the
+// food library.
+function LibraryTag() {
+  const { dark } = useOrbitTheme();
+  const tone = libraryTagColors(dark);
+  return (
+    <View style={{ borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: tone.backgroundColor }}>
+      <Text style={{ fontSize: 10, fontWeight: "700", letterSpacing: 0.4, color: tone.color }}>LIBRARY</Text>
+    </View>
+  );
+}
+
 function CardLabel({ children, first = false }: { children: string; first?: boolean }) {
   const o = useOrbitPage();
   return (
@@ -761,8 +802,10 @@ interface RowCallbacks {
   purchaseDate: string;
   updateRow: (key: string, updates: Partial<ReviewRow>) => void;
   applyIngredientMatch: (rowKey: string, ingredient: Ingredient) => void;
-  // A food from the library (one the list doesn't hold), picked for a line.
+  // A food from the library (one the list doesn't hold), picked for a line;
+  // and one of the parse's suggestions for it, tapped.
   pickLibraryFood: (rowKey: string, food: Ingredient) => void;
+  pickLibrarySuggestion: (rowKey: string, suggestion: LibrarySuggestion) => Promise<void>;
   handleNameChange: (rowKey: string, value: string) => void;
   onScanBarcode: (rowKey: string) => void;
   // Photograph this row's nutrition label to fill its nutrition + serving.
@@ -834,6 +877,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
     updateRow,
     applyIngredientMatch,
     pickLibraryFood,
+    pickLibrarySuggestion,
     handleNameChange,
     onScanBarcode,
     onScanLabel,
@@ -844,6 +888,8 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
   // What's been typed in the name field, for the food library's matches
   // under it (cleared once something's picked).
   const [libraryQuery, setLibraryQuery] = useState("");
+  // The library suggestion being fetched to match, if any.
+  const [pickingSuggestion, setPickingSuggestion] = useState<string | null>(null);
 
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [showMoreNutrients, setShowMoreNutrients] = useState(false);
@@ -1058,6 +1104,7 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
             {row.barcode ? ` · ${row.barcode}` : ""}
           </Text>
 
+          {isLibraryMatch(row) && <LibraryTag />}
           <StatusBadge row={row} isNew={isNew} />
         </View>
 
@@ -1087,6 +1134,41 @@ function ReceiptRowDetail({ row, callbacks }: { row: ReviewRow; callbacks: RowCa
                 </Text>
               )}
             />
+            {/* The parse's suggestions from the food library, for a line it
+                couldn't match outright */}
+            {isNew && !row.submitted && row.librarySuggestions.length > 0 && (
+              <View className="mt-2">
+                <Text className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400" style={o && { color: o.faint }}>
+                  From the food library
+                </Text>
+                <View className="flex-row flex-wrap gap-1.5">
+                  {row.librarySuggestions.map((suggestion) => (
+                    <Press
+                      key={suggestion._id}
+                      disabled={!!pickingSuggestion}
+                      accessibilityLabel={`Match to ${suggestion.name}`}
+                      onPress={() => {
+                        setPickingSuggestion(suggestion._id);
+                        void pickLibrarySuggestion(row.key, suggestion).finally(() => setPickingSuggestion(null));
+                      }}
+                      className="flex-row items-center rounded-full bg-emerald-50 px-3 py-1.5 active:bg-emerald-100"
+                      style={{ opacity: pickingSuggestion && pickingSuggestion !== suggestion._id ? 0.5 : 1 }}
+                      orbit={o && { backgroundColor: libraryTagColors(dark).backgroundColor }}
+                      held={o && { opacity: 0.7 }}
+                    >
+                      {pickingSuggestion === suggestion._id ? (
+                        <ActivityIndicator size="small" color={libraryTagColors(dark).color} />
+                      ) : (
+                        <Ionicons name="add" size={14} color={libraryTagColors(dark).color} />
+                      )}
+                      <Text className="ml-1 text-xs font-semibold text-emerald-700" numberOfLines={1} style={o && { color: libraryTagColors(dark).color }}>
+                        {suggestion.name}
+                      </Text>
+                    </Press>
+                  ))}
+                </View>
+              </View>
+            )}
             {isNew && !row.submitted && (
               <LibraryMatches
                 query={libraryQuery}
@@ -1597,9 +1679,12 @@ function ReceiptRowSummary({
       </View>
 
       <View className="ml-3 flex-1">
-        <Text className="text-[15px] font-semibold text-slate-900" numberOfLines={1} style={o && { color: o.text }}>
-          {row.name || "Unnamed item"}
-        </Text>
+        <View className="flex-row items-center gap-1.5">
+          <Text className="shrink text-[15px] font-semibold text-slate-900" numberOfLines={1} style={o && { color: o.text }}>
+            {row.name || "Unnamed item"}
+          </Text>
+          {isLibraryMatch(row) && <LibraryTag />}
+        </View>
         <Text className="mt-0.5 text-xs text-slate-500" style={o && { color: o.muted }}>
           {row.quantity} {row.unit}
           {row.price ? `  ·  $${row.price}` : ""}
@@ -1905,6 +1990,8 @@ function ReceiptReview() {
               checked: lineItem.confidence !== "low",
               matchedIngredientId: matched?._id ?? null,
               matchedGroceryItemId: groceryMatch,
+              libraryMatchId: matched && (lineItem as ParsedLine).matchedFrom === "library" ? matched._id : null,
+              librarySuggestions: matched ? [] : ((lineItem as ParsedLine).librarySuggestions ?? []),
               name: matched?.name ?? proposal?.name ?? lineItem.rawText,
               quantity: String(resultingQuantity),
               unit: resultingUnit,
@@ -2248,19 +2335,40 @@ function ReceiptReview() {
     });
   }
 
-  // A food from the library picked for a line: into the list here and into
-  // one's own ingredients (saved), then matched like any other. Its full
-  // record (the search's has fewer details filled in) replaces it when it
-  // comes.
-  function pickLibraryFood(rowKey: string, food: Ingredient) {
-    setIngredients((prev) => (prev.some((ing) => ing._id === food._id) ? prev : [...prev, { ...food, saved: true }]));
+  // A food from the library picked for a line: into the list here, matched
+  // like any other, and into one's own ingredients in the background (if
+  // that fails, Confirm saves it — see handleConfirm). A search result's
+  // record has fewer details filled in: the full one replaces it when it
+  // comes (`complete`: it's the full one already).
+  function pickLibraryFood(rowKey: string, food: Ingredient, complete = false) {
+    const markSaved = () => setIngredients((prev) => prev.map((ing) => (ing._id === food._id ? { ...ing, saved: true } : ing)));
+    setIngredients((prev) => (prev.some((ing) => ing._id === food._id) ? prev : [...prev, food]));
     applyIngredientMatch(rowKey, food);
     if (!inMyIngredients(food)) {
-      saveIngredient(food._id).catch((error: unknown) => console.error("Couldn't save the library food:", error));
+      saveIngredient(food._id)
+        .then(markSaved)
+        .catch((error: unknown) => console.error("Couldn't save the library food:", error));
     }
-    getIngredientById(food._id)
-      .then((full) => setIngredients((prev) => prev.map((ing) => (ing._id === full._id ? { ...full, saved: true } : ing))))
-      .catch(() => undefined);
+    if (!complete) {
+      getIngredientById(food._id)
+        .then((full) =>
+          setIngredients((prev) => prev.map((ing) => (ing._id === full._id ? { ...full, saved: ing.saved === true || full.saved === true } : ing))),
+        )
+        .catch(() => undefined);
+    }
+  }
+
+  // One of the parse's library suggestions for a line, tapped: its full
+  // record (from the list, or fetched), then picked as above — and the
+  // suggestions go.
+  async function pickLibrarySuggestion(rowKey: string, suggestion: LibrarySuggestion) {
+    try {
+      const food = ingredients.find((ing) => ing._id === suggestion._id) ?? (await getIngredientById(suggestion._id));
+      pickLibraryFood(rowKey, food, true);
+      updateRow(rowKey, { librarySuggestions: [] });
+    } catch (error) {
+      Alert.alert("Couldn't use that food", error instanceof Error ? error.message : "Something went wrong.");
+    }
   }
 
   // The name field doubles as a manual matching control: typing something
@@ -2537,6 +2645,8 @@ function ReceiptReview() {
       submitted: false,
       matchedIngredientId: null,
       matchedGroceryItemId: null,
+      libraryMatchId: null,
+      librarySuggestions: [],
       name: "",
       quantity: "1",
       unit: "item",
@@ -2852,7 +2962,8 @@ function ReceiptReview() {
     purchaseDate,
     updateRow,
     applyIngredientMatch,
-    pickLibraryFood,
+    pickLibraryFood: (rowKey: string, food: Ingredient) => pickLibraryFood(rowKey, food),
+    pickLibrarySuggestion,
     handleNameChange,
     // (On the phone: its own camera. In a browser: the paired phone, or
     // this computer's webcam.)

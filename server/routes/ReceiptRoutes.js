@@ -10,7 +10,7 @@ import ReceiptDraft from "../models/ReceiptDraft.js";
 import { photoUrl } from "./PhotoRoutes.js";
 import { canSwitchDatabase } from "../config/database.js";
 import { aiAllowance } from "../services/aiAllowance.js";
-import { libraryFoodsListed } from "../services/foodLibrary.js";
+import { matchReceiptToLibrary, savedIngredientFilter } from "../services/foodLibrary.js";
 
 const router = express.Router();
 
@@ -21,13 +21,13 @@ const router = express.Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LAST_PARSE_PATH = path.join(__dirname, "../tmp/last-receipt-parse.json");
 
-// The receipt reader, given the catalog to match lines against: one's own
-// ingredient list (of the food library, only what one's saved or uses —
-// see GET /api/ingredients).
+// The receipt reader: each line matched first to one's own ingredient list
+// (what one's made or saved — the reader is given only those), then what it
+// couldn't match tried against the food library (matchReceiptToLibrary);
+// what's left is proposed as a new ingredient, to fill in.
 async function readReceipt(imageBase64, mediaType) {
-  const library = await libraryFoodsListed();
   const [existingIngredients, existingCategories] = await Promise.all([
-    Ingredient.find({ isArchived: false, $or: [{ source: { $ne: "usda" } }, { _id: { $in: library } }] })
+    Ingredient.find({ isArchived: false, ...(await savedIngredientFilter()) })
       .select("name isGeneric category brand genericParent")
       .populate("category", "name")
       .populate("brand", "name")
@@ -35,7 +35,7 @@ async function readReceipt(imageBase64, mediaType) {
       .lean(),
     IngredientCategory.find({ isArchived: false }).select("name").lean(),
   ]);
-  return parseReceiptImage({ imageBase64, mediaType, existingIngredients, existingCategories });
+  return matchReceiptToLibrary(await parseReceiptImage({ imageBase64, mediaType, existingIngredients, existingCategories }));
 }
 
 /**
