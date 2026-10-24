@@ -51,9 +51,11 @@ function shade(r: number, STOPS: [number, string][]) {
   const mix = (j: number) => Math.round(parseInt(from.slice(j, j + 2), 16) * (1 - local) + parseInt(to.slice(j, j + 2), 16) * local);
   return `rgb(${mix(1)}, ${mix(3)}, ${mix(5)})`;
 }
-export function OrbSphere({ size, onPress, onLongPress, label = "Ask or add something", colors, dark }: { size: number; onPress?: () => void; onLongPress?: () => void; label?: string; colors: OrbitColors; dark: boolean }) {
+// (`turnMs`: how long the main orb's colours take to go round once — slow
+// unless it's busy, as while the app loads.)
+export function OrbSphere({ size, onPress, onLongPress, label = "Ask or add something", colors, dark, turnMs }: { size: number; onPress?: () => void; onLongPress?: () => void; label?: string; colors: OrbitColors; dark: boolean; turnMs?: number }) {
   const { orbHue } = useOrbitTheme();
-  if (orbHue === "main") return <MainOrb size={size} onPress={onPress} onLongPress={onLongPress} label={label} dark={dark} />;
+  if (orbHue === "main") return <MainOrb size={size} onPress={onPress} onLongPress={onLongPress} label={label} dark={dark} turnMs={turnMs} />;
   return <HueOrb hue={HUES[orbHue]} size={size} onPress={onPress} onLongPress={onLongPress} label={label} colors={colors} dark={dark} />;
 }
 
@@ -100,15 +102,22 @@ function HueOrb({ hue, size, onPress, onLongPress, label, colors, dark }: { hue:
 // the colours round it, three soft patches over them (these two turn), and
 // a white highlight with a darker edge on top. On the phone, with no
 // gradients to draw with, each soft patch is a stack of faint circles.
-function MainOrb({ size, onPress, onLongPress, label, dark }: { size: number; onPress?: () => void; onLongPress?: () => void; label: string; dark: boolean }) {
+const SLOW_TURN_MS = 24000;
+function MainOrb({ size, onPress, onLongPress, label, dark, turnMs = SLOW_TURN_MS }: { size: number; onPress?: () => void; onLongPress?: () => void; label: string; dark: boolean; turnMs?: number }) {
   const still = useReducedMotion();
   const breath = useSharedValue(1);
   const spin = useSharedValue(0);
   useEffect(() => {
     if (still) return;
     breath.value = withRepeat(withTiming(1.035, { duration: 2600, easing: Easing.inOut(Easing.sin) }), -1, true);
-    spin.value = withRepeat(withTiming(360, { duration: 24000, easing: Easing.linear }), -1, false);
-  }, [still, breath, spin]);
+  }, [still, breath]);
+  // (On from wherever it's got to, at the new speed.)
+  useEffect(() => {
+    if (still) return;
+    const from = spin.value % 360;
+    spin.value = from;
+    spin.value = withRepeat(withTiming(from + 360, { duration: turnMs, easing: Easing.linear }), -1, false);
+  }, [still, spin, turnMs]);
   const breathing = useAnimatedStyle(() => ({ transform: [{ scale: breath.value }] }));
   const turning = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
   const web = Platform.OS === "web";

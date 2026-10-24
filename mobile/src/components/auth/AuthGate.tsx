@@ -1,15 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { reloadAppAsync } from "expo";
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { ActivityIndicator, Platform, Text, View } from "react-native";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { ActivityIndicator, Platform, View } from "react-native";
 
 import { preload } from "@/src/services/apiCache";
 
 import { getMe, installAuthFetch, loadToken, onSessionEnded, signOut as endSession, type Account } from "@/src/services/authApi";
 
-import { OrbSphere } from "@/src/components/ui/OrbSphere";
 import { useOrbitTheme } from "@/src/theme/orbit";
 
+import { LoadingOrbit, type OrbStart } from "./LoadingOrbit";
 import { SignInScreen } from "./SignInScreen";
 
 // The app, once this device is signed in — the sign-in page until then.
@@ -23,7 +23,9 @@ import { SignInScreen } from "./SignInScreen";
 // screen, so screens open already filled in. The app is drawn underneath
 // meanwhile — its screens share those requests — and the cover lifts when
 // they're in, or after WARM_UP_MS whatever happens. A quick start shows no
-// cover at all.
+// cover at all — except just after signing in, when the sign-in page's orb
+// comes down into it (LoadingOrbit) and it stays at least SIGNED_IN_MS, so
+// that's seen whole.
 
 installAuthFetch();
 
@@ -31,6 +33,7 @@ const ACCOUNT_KEY = "bentobuilder.account";
 const WARM_UP_MS = 6000;
 // (No cover for a start quicker than this: no flash.)
 const COVER_AFTER_MS = 300;
+const SIGNED_IN_MS = 2400;
 
 interface AuthValue {
   account: Account | null;
@@ -97,30 +100,42 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }, []);
 
   // Fetching what's usually needed, up front, once per person signed in.
-  const [warming, setWarming] = useState(false);
+  // (Just signed in: when, and where the sign-in page's orb was — `from`.)
+  const signedInAt = useRef(0);
+  const [from, setFrom] = useState<OrbStart | null>(null);
   const [covered, setCovered] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const accountId = account?._id;
   useEffect(() => {
     if (state !== "signedIn" || !accountId) return;
     let over = false;
-    setWarming(true);
+    const signedIn = Date.now() - signedInAt.current < SIGNED_IN_MS;
+    setLeaving(false);
     setProgress(null);
     const finish = () => {
       if (over) return;
       over = true;
-      setWarming(false);
-      setCovered(false);
+      setLeaving(true);
     };
-    const cover = setTimeout(() => !over && setCovered(true), COVER_AFTER_MS);
+    const cover = signedIn ? undefined : setTimeout(() => !over && setCovered(true), COVER_AFTER_MS);
     const limit = setTimeout(finish, WARM_UP_MS);
-    void preload((done, total) => !over && setProgress({ done, total })).finally(finish);
+    void preload((done, total) => !over && setProgress({ done, total })).finally(() => {
+      const wait = signedIn ? SIGNED_IN_MS - (Date.now() - signedInAt.current) : 0;
+      if (wait > 0) setTimeout(finish, wait);
+      else finish();
+    });
     return () => {
       over = true;
       clearTimeout(cover);
       clearTimeout(limit);
     };
   }, [state, accountId]);
+  const gone = useCallback(() => {
+    setCovered(false);
+    setLeaving(false);
+    setFrom(null);
+  }, []);
 
   if (state === "checking") {
     return (
@@ -133,8 +148,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return (
       <SignInScreen
         notice={notice}
-        onSignedIn={(next) => {
+        onSignedIn={(next, at) => {
           setNotice(null);
+          signedInAt.current = Date.now();
+          setFrom(at);
+          setCovered(true);
           setAccount(next);
         }}
       />
@@ -144,24 +162,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{ account, setAccount, signOut }}>
       <View style={{ flex: 1 }}>
         {children}
-        {warming && covered && <WarmUp progress={progress} name={account?.name.split(" ")[0] ?? ""} />}
+        {covered && <LoadingOrbit from={from} name={account?.name.split(" ")[0] ?? ""} progress={progress && progress.total ? progress.done / progress.total : 0} leaving={leaving} onGone={gone} />}
       </View>
     </AuthContext.Provider>
-  );
-}
-
-// The cover while the day's things are fetched: Orbit's orb, on its canvas.
-function WarmUp({ progress, name }: { progress: { done: number; total: number } | null; name: string }) {
-  const { colors, dark } = useOrbitTheme();
-  const share = progress && progress.total ? progress.done / progress.total : 0;
-  return (
-    <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", paddingHorizontal: 40, backgroundColor: colors.canvas }}>
-      <OrbSphere size={64} label="Orbit" colors={colors} dark={dark} />
-      <Text style={{ marginTop: 22, fontSize: 24, fontWeight: "800", letterSpacing: -0.4, color: colors.text }}>{name ? `Hi, ${name}` : "Welcome back"}</Text>
-      <Text style={{ marginTop: 6, textAlign: "center", fontSize: 14, color: colors.muted }}>Getting your day ready…</Text>
-      <View style={{ marginTop: 24, height: 6, width: 192, overflow: "hidden", borderRadius: 3, backgroundColor: colors.track }}>
-        <View style={{ height: "100%", borderRadius: 3, backgroundColor: colors.ink, width: `${Math.max(8, Math.round(share * 100))}%` }} />
-      </View>
-    </View>
   );
 }

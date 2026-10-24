@@ -9,6 +9,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
 import { useAccount } from "@/src/components/auth/AuthGate";
+import { registerHomeOrb, useHomeOrbHidden } from "@/src/components/auth/LoadingOrbit";
 import { OrbSphere } from "@/src/components/ui/OrbSphere";
 import { QuickActions } from "@/src/components/ui/QuickActions";
 import { Tap } from "@/src/components/ui/Tap";
@@ -348,6 +349,20 @@ export function OrbitHome() {
   const t = useToday();
   const [units] = useUnits("weight");
   const { width } = useWindowDimensions();
+  // (Where the orb is, for the loading screen to land on — LoadingOrbit.)
+  const orbRef = useRef<View>(null);
+  const orbHidden = useHomeOrbHidden();
+  useEffect(
+    () =>
+      registerHomeOrb(
+        () =>
+          new Promise((done) => {
+            if (!orbRef.current) return done(null);
+            orbRef.current.measureInWindow((x, y, w) => done(Number.isFinite(x) && w > 0 ? { x, y, size: w } : null));
+          }),
+      ),
+    [],
+  );
   const [selected, setSelected] = useState<SectionId>("calendar");
   const [asking, setAsking] = useState(false);
   // The selected section's own nodes, fanned out above it — away only while
@@ -499,7 +514,9 @@ export function OrbitHome() {
           <View pointerEvents="none" style={{ position: "absolute", left: centre - radius, top: centre - radius, width: radius * 2, height: radius * 2, borderRadius: radius, borderWidth: 1.5, borderStyle: "dotted", borderColor: colors.orbit }} />
           <View style={{ position: "absolute", left: centre - ring / 2, top: centre - ring / 2, width: ring, height: ring, alignItems: "center", justifyContent: "center" }}>
             <Ring size={ring} value={focus.ring} colors={colors} />
-            <OrbSphere size={orb} onPress={() => setAsking(true)} colors={colors} dark={dark} />
+            <View ref={orbRef} collapsable={false} style={{ opacity: orbHidden ? 0 : 1 }}>
+              <OrbSphere size={orb} onPress={() => setAsking(true)} colors={colors} dark={dark} />
+            </View>
           </View>
           {ORBIT.map((section, index) => (
             <Node

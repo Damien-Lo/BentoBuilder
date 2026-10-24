@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useState, type ComponentProps } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { Tap } from "@/src/components/ui/Tap";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PrivacyPolicyModal } from "@/src/components/legal/PrivacyPolicy";
+import type { OrbStart } from "@/src/components/auth/LoadingOrbit";
 import { OrbSphere } from "@/src/components/ui/OrbSphere";
 import { joinWithInvite, resetPassword, signIn, type Account } from "@/src/services/authApi";
 import { getDatabaseState, switchDatabase, type DatabaseId, type DatabaseState } from "@/src/services/databaseApi";
@@ -59,7 +61,16 @@ function Field({ label, secureTextEntry, ...props }: { label: string } & Compone
   );
 }
 
-export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; onSignedIn: (account: Account) => void }) {
+// Signed in: everything but the orb fades, then where the orb is goes with
+// the account (`from`), for the loading screen to bring it down from there
+// (LoadingOrbit).
+const FADE_MS = 300;
+
+export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; onSignedIn: (account: Account, from: OrbStart | null) => void }) {
+  const still = useReducedMotion();
+  const orbRef = useRef<View>(null);
+  const page = useSharedValue(1);
+  const pageStyle = useAnimatedStyle(() => ({ opacity: page.value }));
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -110,7 +121,16 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
           : mode === "join"
             ? await joinWithInvite(code.trim(), name.trim(), email.trim(), password)
             : await resetPassword(code.trim(), email.trim(), password);
-      onSignedIn(account);
+      if (still || !orbRef.current) return onSignedIn(account, null);
+      Keyboard.dismiss();
+      page.value = withTiming(0, { duration: FADE_MS });
+      // (Once the keyboard's down and the page has settled.)
+      await new Promise((done) => setTimeout(done, FADE_MS + 20));
+      const at = await new Promise<OrbStart | null>((done) => {
+        if (!orbRef.current) return done(null);
+        orbRef.current.measureInWindow((x, y, width) => done(Number.isFinite(x) && width > 0 ? { x, y, size: width } : null));
+      });
+      onSignedIn(account, at);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setBusy(false);
@@ -128,10 +148,13 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
           <View style={{ width: "100%", maxWidth: 420, alignSelf: "center" }}>
             <View style={{ marginBottom: 24, alignItems: "center" }}>
               {/* Orbit's orb */}
-              <OrbSphere size={60} label="Orbit" colors={colors} dark={dark} />
-              <Text style={{ marginTop: 12, fontSize: 18, fontWeight: "800", color: colors.text }}>Orbit</Text>
+              <View ref={orbRef} collapsable={false}>
+                <OrbSphere size={60} label="Orbit" colors={colors} dark={dark} />
+              </View>
+              <Animated.Text style={[{ marginTop: 12, fontSize: 18, fontWeight: "800", color: colors.text }, pageStyle]}>Orbit</Animated.Text>
             </View>
 
+            <Animated.View style={pageStyle}>
             <View style={{ borderRadius: 24, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 24 }}>
               <Text style={{ fontSize: 26, fontWeight: "800", letterSpacing: -0.4, color: colors.text }}>{copy.title}</Text>
               <Text style={{ marginTop: 4, fontSize: 14, color: colors.muted }}>{copy.lead}</Text>
@@ -245,6 +268,7 @@ export function SignInScreen({ notice, onSignedIn }: { notice?: string | null; o
                 </Text>
               </View>
             )}
+            </Animated.View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
