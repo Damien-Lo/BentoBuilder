@@ -68,18 +68,24 @@ function builtInFactorToBase(unit) {
  * aren't convertible. `customConversions` is an array of
  * { unit, baseUnit, factor } meaning "1 unit = factor baseUnit".
  */
-export function convertUnits(amount, fromUnit, toUnit, customConversions = []) {
+export function convertUnits(amount, fromUnit, toUnit, customConversions = [], visited = new Set()) {
   const from = normalizeUnit(fromUnit);
   const to = normalizeUnit(toUnit);
 
   if (!from || !to) return null;
   if (from === to) return amount;
+  // (Units already tried on the way here: weights that never reach `toUnit`
+  // — "1 item = 1 stalk" — would otherwise go back and forth forever.)
+  if (visited.has(from)) return null;
 
   const fromBuiltIn = builtInFactorToBase(fromUnit);
   const toBuiltIn = builtInFactorToBase(toUnit);
   if (fromBuiltIn && toBuiltIn && fromBuiltIn.family === toBuiltIn.family) {
     return (amount * fromBuiltIn.factor) / toBuiltIn.factor;
   }
+
+  const nextVisited = new Set(visited);
+  nextVisited.add(from);
 
   for (const custom of customConversions) {
     const customUnit = normalizeUnit(custom.unit);
@@ -92,12 +98,12 @@ export function convertUnits(amount, fromUnit, toUnit, customConversions = []) {
       return amount / custom.factor;
     }
     if (customUnit === from) {
-      const viaBase = convertUnits(amount * custom.factor, custom.baseUnit, toUnit, customConversions);
+      const viaBase = convertUnits(amount * custom.factor, custom.baseUnit, toUnit, customConversions, nextVisited);
       if (viaBase != null) return viaBase;
     }
     if (customBase === from) {
       const inCustomUnit = amount / custom.factor;
-      const viaBase = convertUnits(inCustomUnit, custom.unit, toUnit, customConversions);
+      const viaBase = convertUnits(inCustomUnit, custom.unit, toUnit, customConversions, nextVisited);
       if (viaBase != null) return viaBase;
     }
   }
