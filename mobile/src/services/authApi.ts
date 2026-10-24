@@ -3,7 +3,7 @@ import { requireOptionalNativeModule } from "expo";
 import { Platform } from "react-native";
 
 import { API_BASE_URL } from "@/src/config/api";
-import { forgetAnswers, remembered, rememberedFetch, setPreloadFetcher } from "@/src/services/apiCache";
+import { forgetAnswers, forgetEverything, remembered, rememberedFetch, setPreloadFetcher } from "@/src/services/apiCache";
 
 // Signing in (see server/routes/AuthRoutes.js). The server hands this
 // device a session token when it signs in; it's kept here — in the phone's
@@ -96,13 +96,13 @@ export async function loadToken(): Promise<string | null> {
   return token;
 }
 async function keepToken(next: string) {
-  forgetAnswers();
+  await forgetEverything();
   token = next;
   loaded = true;
   await stored("set", next);
 }
 async function forgetToken() {
-  forgetAnswers();
+  await forgetEverything();
   token = null;
   loaded = true;
   await stored("delete");
@@ -150,12 +150,13 @@ export function installAuthFetch() {
     const path = url.slice(API_BASE_URL.length);
     if (method === "GET" && remembered(path)) return rememberedFetch(path, () => send(input, init, url));
     if (method === "GET") return send(input, init, url);
-    // A change: nothing kept from before it (or from while it was on its way).
-    forgetAnswers();
+    // A change: nothing kept from before it (or from while it was on its way),
+    // and the device's copy of the list it changed dropped.
+    forgetAnswers(path);
     try {
       return await send(input, init, url);
     } finally {
-      forgetAnswers();
+      forgetAnswers(path);
     }
   };
 

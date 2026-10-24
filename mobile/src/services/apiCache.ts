@@ -15,6 +15,13 @@ import { todayStr } from "@/src/utils/mealPlan";
 //     watched for a change (a photo the phone is taking, a receipt being
 //     read, signing in).
 //
+// The biggest of them, which change least — the ingredient and recipe lists
+// (ON_DEVICE) — are also kept on the device: the next time one's asked for
+// and isn't in memory, the device's copy answers at once while a fresh one
+// is fetched behind it (and replaces both). A change to that list sent from
+// here drops the device's copy, so it's never older than one's own last
+// change; signing in or out drops them all.
+//
 // It also learns which of them this device asks for (with dates kept
 // relative to today: "this week", "next week"), so that the next time the
 // app starts they can be fetched up front, behind a short loading screen
@@ -32,6 +39,10 @@ const REMEMBERED = [
 ];
 export const remembered = (path: string) => REMEMBERED.some((pattern) => pattern.test(path));
 
+// Kept on the device too (exact paths: not the archive's ?archived=true).
+const ON_DEVICE = /^\/api\/(ingredients|recipes)$/;
+const DEVICE_KEY = "orbit.kept:";
+
 interface Answer {
   status: number;
   contentType: string;
@@ -41,6 +52,9 @@ const kept = new Map<string, { until: number; answer: Promise<Answer> }>();
 
 const asResponse = (answer: Answer) => new Response(answer.text, { status: answer.status, headers: { "Content-Type": answer.contentType } });
 
+// (Counts changes: an answer fetched before one isn't kept after it.)
+let generation = 0;
+
 // A GET to the server, by its path ("/api/…?…"): shared or kept if it can be.
 export async function rememberedFetch(path: string, send: () => Promise<Response>, keepFor = REMEMBER_MS): Promise<Response> {
   learn(path);
@@ -48,12 +62,30 @@ export async function rememberedFetch(path: string, send: () => Promise<Response
   const hit = kept.get(path);
   if (hit && hit.until > now) return asResponse(await hit.answer);
 
+  const asked = generation;
   const answer = send().then(async (response) => ({ status: response.status, contentType: response.headers.get("Content-Type") ?? "application/json", text: await response.text() }));
+
+  // The device's copy, at once, while the fresh one comes.
+  const onDevice = ON_DEVICE.test(path) ? await readDevice(path) : null;
+  if (onDevice) {
+    kept.set(path, { until: now + keepFor, answer: Promise.resolve(onDevice) });
+    void answer.then(
+      (result) => {
+        if (result.status !== 200 || generation !== asked) return;
+        kept.set(path, { until: Date.now() + keepFor, answer: Promise.resolve(result) });
+        writeDevice(path, result);
+      },
+      () => {},
+    );
+    return asResponse(onDevice);
+  }
+
   kept.set(path, { until: now + keepFor, answer });
   try {
     const result = await answer;
     // (Only a good answer is kept.)
     if (result.status !== 200 && kept.get(path)?.answer === answer) kept.delete(path);
+    if (result.status === 200 && ON_DEVICE.test(path) && generation === asked) writeDevice(path, result);
     return asResponse(result);
   } catch (error) {
     if (kept.get(path)?.answer === answer) kept.delete(path);
@@ -61,9 +93,33 @@ export async function rememberedFetch(path: string, send: () => Promise<Response
   }
 }
 
-// Forgets everything kept: after a change, or when someone else signs in.
-export function forgetAnswers() {
+// Forgets everything kept in memory, after a change (`changed`: the path
+// it was sent to — that list's copy on the device goes too).
+export function forgetAnswers(changed?: string) {
+  generation++;
   kept.clear();
+  const list = changed?.match(/^\/api\/(ingredients|recipes)\b/)?.[0];
+  if (list) void AsyncStorage.removeItem(DEVICE_KEY + list).catch(() => {});
+}
+
+// Forgets the device's copies too: when someone signs in or out.
+export async function forgetEverything() {
+  forgetAnswers();
+  const keys = await AsyncStorage.getAllKeys().catch(() => [] as readonly string[]);
+  await AsyncStorage.multiRemove(keys.filter((key) => key.startsWith(DEVICE_KEY))).catch(() => {});
+}
+
+async function readDevice(path: string): Promise<Answer | null> {
+  try {
+    const text = await AsyncStorage.getItem(DEVICE_KEY + path);
+    return text ? { status: 200, contentType: "application/json", text } : null;
+  } catch {
+    return null;
+  }
+}
+function writeDevice(path: string, answer: Answer) {
+  // (Too big for the browser's storage, say: just not kept.)
+  void AsyncStorage.setItem(DEVICE_KEY + path, answer.text).catch(() => {});
 }
 
 // --- Learning what this device asks for, to fetch it up front next time ---

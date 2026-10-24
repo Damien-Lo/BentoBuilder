@@ -8,7 +8,7 @@ import { getAvailableStock } from "../services/ingredientAvailability.js";
 import { parseNutritionLabel } from "../services/nutritionLabelParsing.js";
 import { wouldCreateCycle } from "../services/productionCycle.js";
 import { aiAllowance } from "../services/aiAllowance.js";
-import { libraryFoodsListed, searchFoods } from "../services/foodLibrary.js";
+import { ingredientList, searchFoods } from "../services/foodLibrary.js";
 import { currentScope } from "../services/ownership.js";
 
 const router = express.Router();
@@ -77,25 +77,7 @@ async function resolveGenericParent({
  */
 router.get("/", async (req, res) => {
   try {
-    const library = await libraryFoodsListed();
-    const ingredients = await Ingredient.find({
-      isArchived: req.query.archived === "true",
-      $or: [{ source: { $ne: "usda" } }, { _id: { $in: library } }],
-    })
-      .populate("category")
-      .populate("brand")
-      .populate("genericParent").populate("defaultStorageLocation")
-      .populate("productionRecipe")
-      .populate("tags")
-      .sort({ name: 1 });
-
-    const admin = !!currentScope()?.legacy;
-    const saved = new Set((await FoodSettings.distinct("item", { kind: "ingredient", saved: true })).map(String));
-    const data = ingredients.map((ingredient) => ({
-      ...ingredient.toJSON(),
-      saved: ingredient.owner != null || saved.has(String(ingredient._id)) || (admin && ingredient.source !== "usda"),
-    }));
-
+    const data = await ingredientList({ archived: req.query.archived === "true" });
     return res.status(200).json({
       success: true,
       count: data.length,

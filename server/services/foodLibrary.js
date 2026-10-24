@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import mongoose from "mongoose";
+
 import FoodSettings from "../models/FoodSettings.js";
 import GroceryItem from "../models/GroceryItem.js";
 import Ingredient from "../models/Ingredient.js";
@@ -216,4 +218,46 @@ export async function matchReceiptToLibrary(parse) {
     }
   }
   return parse;
+}
+
+// An ingredient as read plainly (lean, which is about twice as quick to read
+// as full records) with what the model fills in when it isn't stored — empty
+// lists, unset nutrients, no owner — so it reads the same as a full record.
+let blank = null;
+function withDefaults(ingredient) {
+  if (!ingredient || typeof ingredient !== "object" || !ingredient.name) return ingredient;
+  blank ??= (() => {
+    const { _id, ...rest } = new Ingredient({ name: "-", category: new mongoose.Types.ObjectId() }).toObject();
+    delete rest.name;
+    delete rest.category;
+    return rest;
+  })();
+  const parent = ingredient.genericParent && typeof ingredient.genericParent === "object" && ingredient.genericParent.name ? withDefaults(ingredient.genericParent) : ingredient.genericParent;
+  return { ...structuredClone(blank), ...ingredient, nutrition: { ...blank.nutrition, ...(ingredient.nutrition ?? {}) }, genericParent: parent ?? null };
+}
+
+// One's ingredient list (GET /api/ingredients): the shared catalog and one's
+// own, and of the food library what one's saved or uses — read side by side
+// (the library foods in use are worked out while the rest is read), each
+// with `saved`, by name.
+export async function ingredientList({ archived = false } = {}) {
+  const read = (filter) =>
+    Ingredient.find({ isArchived: archived, ...filter })
+      .populate("category")
+      .populate("brand")
+      .populate("genericParent")
+      .populate("defaultStorageLocation")
+      .populate("productionRecipe")
+      .populate("tags")
+      .lean();
+  const [catalog, library, saved] = await Promise.all([
+    read({ source: { $ne: "usda" } }),
+    libraryFoodsListed().then((ids) => (ids.length ? read({ _id: { $in: ids } }) : [])),
+    FoodSettings.distinct("item", { kind: "ingredient", saved: true }).then((ids) => new Set(ids.map(String))),
+  ]);
+  const admin = isAdmin();
+  // (As the database sorted them: by name, capitals first.)
+  return [...catalog, ...library]
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .map((ingredient) => ({ ...withDefaults(ingredient), saved: ingredient.owner != null || saved.has(String(ingredient._id)) || (admin && ingredient.source !== "usda") }));
 }
