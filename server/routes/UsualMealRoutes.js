@@ -14,7 +14,8 @@ const populated = (query) =>
     .populate("meal", "name")
     .populate("recipe", "name")
     .populate("ingredient", "name")
-    .populate("restaurantMeal", "restaurantName dishes._id dishes.name");
+    .populate("restaurantMeal", "restaurantName dishes._id dishes.name")
+    .populate("restaurant", "name");
 
 const cleanDays = (days) => [...new Set((Array.isArray(days) ? days : []).map(Number))].filter((d) => d >= 0 && d <= 6).sort();
 

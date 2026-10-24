@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 import { ownedByUser } from "../services/ownership.js";
 import { ratingPromptSchema } from "../services/ratingPrompt.js";
 
-// One person's own side of a shared ingredient or recipe: how they rated
+// One person's own side of a shared ingredient or recipe (or a public
+// restaurant or one of its dishes): how they rated
 // it, their notes, when it counts as low in their kitchen, how they thaw it,
 // where they keep it, whether a recipe is one of their keepers.
 //
@@ -24,7 +25,7 @@ const scoreEntrySchema = new mongoose.Schema(
 
 const foodSettingsSchema = new mongoose.Schema(
   {
-    kind: { type: String, enum: ["ingredient", "recipe"], required: true },
+    kind: { type: String, enum: ["ingredient", "recipe", "restaurant", "dish"], required: true },
     item: { type: mongoose.Schema.Types.ObjectId, required: true },
 
     // Both
@@ -47,6 +48,11 @@ const foodSettingsSchema = new mongoose.Schema(
 
     // Recipes
     isConfirmed: { type: Boolean, default: false },
+
+    // Restaurant dishes (public, in RestaurantDish): what one paid for it.
+    // (A restaurant's or dish's notes and ratings are the fields above;
+    // `saved` marks a favourite.)
+    price: { type: Number, min: 0, default: null },
   },
   { timestamps: true },
 );

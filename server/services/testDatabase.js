@@ -19,7 +19,7 @@ import { TEST_DB_NAME } from "../config/database.js";
 //
 // The real database is only ever read here.
 const KEPT = ["users", "sessions", "accesscodes"];
-export const COPIED = ["brands", "eventcalendars", "ingredientcategories", "ingredients", "meals", "mealtags", "photos", "recipecategories", "recipes", "restaurantmeals", "storagelocations", "stores", "tags", "userprofiles"];
+export const COPIED = ["brands", "eventcalendars", "ingredientcategories", "ingredients", "meals", "mealtags", "photos", "recipecategories", "recipes", "restaurantmeals", "restaurants", "chains", "restaurantdishes", "storagelocations", "stores", "tags", "userprofiles"];
 
 export async function resetTestDatabase() {
   const uri = process.env.MONGODB_URI;

@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { ownedByUser } from "../services/ownership.js";
-import { createConfirmedNutritionSchema } from "./nutritionSchema.js";
+import { createConfirmedNutritionSchema, createNutritionSchema } from "./nutritionSchema.js";
 
 const stockDeductionSchema = new mongoose.Schema(
   {
@@ -33,9 +33,15 @@ const manualPieceEntrySchema = new mongoose.Schema(
 // re-deriving it from a partial view of the data.
 const confirmedNutritionSchema = createConfirmedNutritionSchema();
 
-const restaurantDishSelectionSchema = new mongoose.Schema(
+// A dish had at a restaurant on this visit. `name` and `nutrition` are a copy
+// of the (public, editable) dish when it was added — so someone correcting
+// the dish later never changes a meal already planned or logged; the day's
+// totals use the copy × quantity.
+export const restaurantDishSelectionSchema = new mongoose.Schema(
   {
-    dish: { type: mongoose.Schema.Types.ObjectId, required: true },
+    dish: { type: mongoose.Schema.Types.ObjectId, ref: "RestaurantDish", required: true },
+    name: { type: String, trim: true, default: "" },
+    nutrition: { type: createNutritionSchema(), default: undefined },
     // How many of this dish were had on this specific visit - lets "I got 2
     // tacos this time" scale just this one entry's nutrition without
     // touching the shared dish's base definition (still "1 taco") in the
@@ -63,16 +69,13 @@ const mealPlanEntrySchema = new mongoose.Schema(
     ingredientUnit:     { type: String, trim: true, default: "" },
 
     // A restaurant/eating-out visit — no ingredients, no pantry deduction.
+    // The restaurant is public (see Restaurant.js).
+    restaurant:         { type: mongoose.Schema.Types.ObjectId, ref: "Restaurant" },
+    // (Before restaurants were public: one's own copy. Kept until every
+    // entry's moved to `restaurant` — manual_controls/scripts/move_restaurants.js.)
     restaurantMeal:     { type: mongoose.Schema.Types.ObjectId, ref: "RestaurantMeal" },
-    // Which dish(es) from that restaurant's dish list were actually eaten,
-    // and how many of each — a restaurant can have several independent
-    // dishes (e.g. two separate orders logged under the same visit), and
-    // without this, nutrition calculations would sum every dish on the
-    // restaurant's menu instead of just what this entry represents. `dish`
-    // references a RestaurantMeal.dishes subdocument (not its own
-    // collection, so no `ref`/populate here — the client already has the
-    // full dish list from populating restaurantMeal and just filters it by
-    // these ids).
+    // Which dish(es) were actually eaten, and how many of each — with a copy
+    // of each dish's name and nutrition (see restaurantDishSelectionSchema).
     restaurantDishSelections: { type: [restaurantDishSelectionSchema], default: [] },
 
     // "planned" = tentative, not yet eaten; "confirmed" = logged as actually eaten
@@ -138,9 +141,9 @@ const mealPlanEntrySchema = new mongoose.Schema(
 );
 
 mealPlanEntrySchema.pre("validate", function () {
-  const count = [this.meal, this.recipe, this.ingredient, this.restaurantMeal].filter(Boolean).length;
+  const count = [this.meal, this.recipe, this.ingredient, this.restaurant ?? this.restaurantMeal].filter(Boolean).length;
   if (count !== 1) {
-    throw new Error("Exactly one of meal, recipe, ingredient, or restaurantMeal is required");
+    throw new Error("Exactly one of meal, recipe, ingredient, or restaurant is required");
   }
 });
 

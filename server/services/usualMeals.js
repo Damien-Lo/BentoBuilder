@@ -34,11 +34,15 @@ export function usualItemFields(source) {
     fields.ingredientQuantity = source.ingredientQuantity;
     fields.ingredientUnit = source.ingredientUnit ?? "";
   }
-  if (source.restaurantMeal) {
-    fields.restaurantMeal = source.restaurantMeal._id ?? source.restaurantMeal;
+  if (source.restaurant || source.restaurantMeal) {
+    if (source.restaurant) fields.restaurant = source.restaurant._id ?? source.restaurant;
+    else fields.restaurantMeal = source.restaurantMeal._id ?? source.restaurantMeal;
+    // (With the copy of each dish as it was — see MealPlanEntry.js.)
     fields.restaurantDishSelections = (source.restaurantDishSelections ?? []).map((s) => ({
-      dish: s.dish,
+      dish: s.dish?._id ?? s.dish,
       quantity: s.quantity ?? 1,
+      ...(s.name ? { name: s.name } : {}),
+      ...(s.nutrition ? { nutrition: s.nutrition } : {}),
     }));
   }
   return fields;
@@ -64,9 +68,9 @@ export async function syncUsualMeals(today) {
     // The same food already put in that slot by hand counts too: a usual
     // never doubles up something you'd planned or logged yourself.
     const byHand = await MealPlanEntry.find({ usual: null, isArchived: false, date: { $gte: today, $lte: horizon } })
-      .select("date slot meal recipe ingredient restaurantMeal")
+      .select("date slot meal recipe ingredient restaurant restaurantMeal")
       .lean();
-    const itemOf = (x) => String(x.meal ?? x.recipe ?? x.ingredient ?? x.restaurantMeal);
+    const itemOf = (x) => String(x.meal ?? x.recipe ?? x.ingredient ?? x.restaurant ?? x.restaurantMeal);
     const taken = new Set(byHand.map((e) => `${e.date}|${e.slot}|${itemOf(e)}`));
 
     const wanted = [];

@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+
+import { restaurantDishSelectionSchema } from "./MealPlanEntry.js";
 import { ownedByUser } from "../services/ownership.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -23,11 +25,10 @@ const usualMealSchema = new mongoose.Schema(
     ingredient: { type: mongoose.Schema.Types.ObjectId, ref: "Ingredient" },
     ingredientQuantity: { type: Number, min: 0 },
     ingredientUnit: { type: String, trim: true, default: "" },
+    restaurant: { type: mongoose.Schema.Types.ObjectId, ref: "Restaurant" },
+    // (Before restaurants were public — see MealPlanEntry.js.)
     restaurantMeal: { type: mongoose.Schema.Types.ObjectId, ref: "RestaurantMeal" },
-    restaurantDishSelections: {
-      type: [{ _id: false, dish: mongoose.Schema.Types.ObjectId, quantity: { type: Number, default: 1 } }],
-      default: [],
-    },
+    restaurantDishSelections: { type: [restaurantDishSelectionSchema], default: [] },
 
     // First and last day it applies ("YYYY-MM-DD"); no end = until stopped.
     startDate: { type: String, required: true, match: DATE_RE },
@@ -41,8 +42,8 @@ const usualMealSchema = new mongoose.Schema(
 );
 
 usualMealSchema.pre("validate", function () {
-  const count = [this.meal, this.recipe, this.ingredient, this.restaurantMeal].filter(Boolean).length;
-  if (count !== 1) throw new Error("A usual needs exactly one of meal, recipe, ingredient or restaurantMeal");
+  const count = [this.meal, this.recipe, this.ingredient, this.restaurant ?? this.restaurantMeal].filter(Boolean).length;
+  if (count !== 1) throw new Error("A usual needs exactly one of meal, recipe, ingredient or restaurant");
   if (!this.weekdays?.length) throw new Error("Pick at least one day of the week");
 });
 

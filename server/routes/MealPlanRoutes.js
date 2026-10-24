@@ -83,6 +83,8 @@ function populateEntry(query) {
       path: "restaurantMeal",
       populate: [{ path: "tags" }],
     })
+    // (A visit: the public restaurant — its dishes as had are copied on the entry.)
+    .populate({ path: "restaurant", select: "name cuisine chain address location googlePlaceId", populate: { path: "chain", select: "name" } })
     // So a confirmed entry's nutrition can be computed from exactly what
     // was really deducted (see mobile's computeDayNutrition) instead of
     // always falling back to the recipe's cached snapshot.
@@ -145,9 +147,10 @@ router.get("/range", async (req, res) => {
  */
 router.get("/by-restaurant/:restaurantMealId", async (req, res) => {
   try {
+    // (A public restaurant's id, or — before they were public — one's own copy's.)
     const entries = await populateEntry(
       MealPlanEntry.find({
-        restaurantMeal: req.params.restaurantMealId,
+        $or: [{ restaurant: req.params.restaurantMealId }, { restaurantMeal: req.params.restaurantMealId }],
         isArchived: false,
       }).sort({ date: -1, createdAt: -1 }),
     );
@@ -227,14 +230,15 @@ router.get("/last-used", async (req, res) => {
       return Object.fromEntries(rows.map(r => [String(r._id), r.lastUsed]));
     }
 
-    const [meal, recipe, ingredient, restaurantMeal] = await Promise.all([
+    const [meal, recipe, ingredient, restaurantMeal, restaurant] = await Promise.all([
       lastUsedByField("meal"),
       lastUsedByField("recipe"),
       lastUsedByField("ingredient"),
       lastUsedByField("restaurantMeal"),
+      lastUsedByField("restaurant"),
     ]);
 
-    return res.status(200).json({ success: true, data: { meal, recipe, ingredient, restaurantMeal } });
+    return res.status(200).json({ success: true, data: { meal, recipe, ingredient, restaurantMeal, restaurant } });
   } catch (error) {
     console.error("Get last-used meal plan map error:", error);
     return res.status(500).json({ success: false, message: "Failed to compute last-used data" });

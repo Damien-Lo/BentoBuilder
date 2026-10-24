@@ -2,7 +2,7 @@
 
 Working notes on what's in progress and what's deferred. Update this as things get done or new things come up — it's meant to be read, not just written.
 
-## Where things stand (Oct 23, 2026)
+## Where things stand (Oct 24, 2026)
 
 Everything is merged into `WorkingSave` and deployed (Render + bentobuilder.pages.dev); `main` matches it. Branches: just `main` and `WorkingSave`. The iPhone app ("Orbit", preview build Oct 23) has all of it, Apple Health included.
 
@@ -22,27 +22,31 @@ Everything is merged into `WorkingSave` and deployed (Render + bentobuilder.page
 3. **Calorie sources list:** which sources count for burned calories, per reading type — Apple devices + known wearables (Garmin, Fitbit, Oura, Whoop, Polar) on, scale and food apps off — shown on Your burn with switches. Today it's Apple devices only.
 4. **First run for someone new** (polish #7): About you, connect Apple Health, what each section is for.
 
-**In progress: the food library (branch `FoodLibrary`, started Oct 23).** USDA FoodData Central's generic foods (SR Legacy + Foundation, public domain) as shared ingredients, searched like Gym's exercise library and saved into one's own list.
-- **Done (not live):**
-  - `server/data/usda-foods/foods.json` holds 3,270 foods: renamed, sorted into the clean categories, portioned by the agreed convention, with unit conversions and the 37 nutrients. Its README says what was done.
-  - The loader `services/foodLibrary.js` inserts by USDA id and never overwrites. It is **not yet run at startup**.
-  - Ingredient has `source` / `fdcId` / `alsoFdcIds` / `sourceName` / `aliases`. FoodSettings has `saved`.
-  - New routes: `GET /api/ingredients/library?q=` (search) and `POST`/`DELETE /:id/save`.
-  - `GET /api/ingredients` returns today's list plus the library foods one has saved or uses (`libraryFoodsListed`), each with `saved`. The app finds every ingredient in that list (recipes don't come populated), so it can't be "saved only".
-  - Receipts match against the same list.
-- **Next, in order:**
-  1. ~~Move the admin's personal fields on shared records into Damien's FoodSettings, with `saved` on what he uses.~~ Done Oct 23: 447 records (127 ingredients, 53 recipes), all 394 shared ingredients saved. `manual_controls/scripts/move_food_settings.js`; ids in `copy_20261023_foodsettings_ids`.
-  2. A starter set for new accounts: agreed Oct 23, 259 foods (225 from the library, 34 of the catalog's generics for staples USDA lacks: udon, mirin, gochujang, panko…). The list is still in the session's working files. It goes into the repo with the new-account setup.
-  3. ~~The match list for his ingredients.~~ Done Oct 23. 160 of his 266 generics are now library foods: USDA id set; his name, nutrition, portions and category kept; 567 blank nutrients, 589 unit weights and 185 aliases filled in. The other 106 have no library food, or duplicate one of his that does. The duplicates (Pepper / Black Pepper, the garlics, Light Soy / Soy, Spring / Green Onion, Macaroni / Spaghetti…) are to merge later. Files: `manual_controls/scripts/match_food_library.js` and `food_library_matches_20261023.json`; backup in `backup_20261023_foodlibrary_match`.
-  4. ~~The category tidy-up.~~ Done Oct 23 (`manual_controls/scripts/tidy_ingredient_categories.js`). Snack → Snacks & Confectionery, Drinks → Beverages & Stock, Pancake's mix → Baking, the test ingredient → Essentials. Those four and the empty Sau, Uncategorized, Baked Goods & Pantry and Japanese are archived; the moves are recorded in `tidy_20261023_categories`.
-  5. Screens:
-     - library search in every picker, saving on pick;
-     - "your ingredients" filtered on `saved`;
-     - a server barcode lookup (the cached list no longer holds every shared product);
-     - receipts: fetch a matched id that isn't in the list instead of dropping it.
-  6. Then wire the loader into `config/database.js` and deploy all of it together.
-- **Careful:** a local nodemon server is often on the real database, and server edits restart it. Test the loader on a throwaway database (done Oct 23: all 3,270 load, a rerun adds 0).
-- **Later:** recipes from a library.
+**Done: the food library (live Oct 24).** USDA FoodData Central's generic foods (SR Legacy + Foundation, public domain) as shared ingredients, searched like Gym's exercise library and saved into one's own list.
+- **Data:**
+  - 3,270 foods in `server/data/usda-foods/foods.json`, loaded at startup by `services/foodLibrary.js`. It adds by USDA id and never overwrites.
+  - New accounts start with 259 saved (`starter.json`).
+  - Ingredients have `source` / `fdcId` / `alsoFdcIds` / `sourceName` / `aliases`. FoodSettings has `saved`.
+- **Rules:**
+  - Your list = what you made or saved, plus the library foods your things use. The library itself is searched (`GET /api/ingredients/library`).
+  - Editing a library or shared food's facts saves your own copy in its place. Deleting one removes it from your list.
+  - Add Ingredient fills in the form from any suggestion: saved as it is, or as your own if changed.
+  - The Library tag marks saved shared foods.
+- **Receipts:** matched to saved ingredients first, then the library (a clear name is matched; otherwise up to 3 suggestions), then a new ingredient to fill in.
+- **Speed:** the ingredient and recipe lists are kept on the device and refreshed behind the screen. The list is read lean, with defaults filled in.
+- **Damien's data:**
+  - His settings were copied into his account.
+  - 160 of his generics were matched to the library.
+  - The categories were tidied.
+  - Pepper, Spring Onion and Korean Spinach were merged into their twins.
+  - The produce and konjac jellies got gram weights.
+  - Scripts and backups are under `manual_controls/scripts/` and the `backup_2026102*` collections.
+- **Still open:**
+  - A phone list of receipt drafts (they show on the desktop only).
+  - Library search in the meal suggestion's side picker.
+  - Recipes from a library, later.
+
+**In progress: a restaurant library (branch `RestaurantLibrary`, started Oct 24).** A dish library from USDA's survey foods (FNDDS, public domain: generic "as eaten" dishes like pad thai or bibimbap) to fill in a restaurant dish's nutrition, plus restaurants shared like the ingredient catalog. Chain menus maybe later, through FatSecret's live search. (MenuStat stops at 2018: skipped.)
 
 **Open, after that:**
 1. Docs section (files, notes, documents, plans).
