@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import express from "express";
 import Device from "../models/Device.js";
+import Session from "../models/Session.js";
 
 // The phones and computers someone uses BentoBuilder on (see
 // models/Device.js). A device registers itself once, under the account
@@ -27,10 +28,18 @@ export async function deviceAuth(req, res, next) {
     // (Last seen, at most once a minute.)
     if (Date.now() - (device.lastSeenAt?.getTime() ?? 0) > 60_000) await Device.updateOne({ _id: device._id }, { lastSeenAt: new Date() });
     req.device = device;
+    await linkSession(req, device._id);
     next();
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
+}
+
+// The sign-in a request comes with, tied to the device it's on.
+async function linkSession(req, deviceId) {
+  if (!req.session || String(req.session.device ?? "") === String(deviceId)) return;
+  await Session.updateOne({ _id: req.session._id }, { device: deviceId });
+  req.session.device = deviceId;
 }
 
 const shown = (device) => ({ _id: device._id, kind: device.kind, name: device.name, lastSeenAt: device.lastSeenAt });
@@ -45,6 +54,7 @@ router.post("/", async (req, res) => {
     const kind = req.body.kind === "phone" ? "phone" : "computer";
     const secret = crypto.randomBytes(24).toString("hex");
     const device = await Device.create({ kind, name: String(req.body.name ?? "").slice(0, 60) || (kind === "phone" ? "Phone" : "Computer"), secret });
+    await linkSession(req, device._id);
     return res.status(201).json({ success: true, data: { ...shown(device), secret } });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });
@@ -52,11 +62,25 @@ router.post("/", async (req, res) => {
 });
 
 /**
- * GET /api/devices/me — this device, and the account's others.
+ * GET /api/devices/me — this device, and the account's others: each with
+ * whether it's signed in (and when it was last used), and the sign-ins not
+ * yet tied to a device (`elsewhere` — a device not heard from since, or one
+ * from before devices were kept).
  */
 router.get("/me", deviceAuth, async (req, res) => {
   const others = await Device.find({ _id: { $ne: req.device._id } }).sort({ lastSeenAt: -1 }).lean();
-  return res.json({ success: true, data: { ...shown(req.device), others: others.map(shown) } });
+  const sessions = req.user ? await Session.find({ user: req.user._id, expiresAt: { $gt: new Date() } }).lean() : [];
+  const known = new Set([req.device, ...others].map((d) => String(d._id)));
+  const latest = (list) => list.reduce((at, s) => (s.lastUsedAt > at ? s.lastUsedAt : at), null);
+  const withSessions = others.map((device) => {
+    const own = sessions.filter((s) => String(s.device) === String(device._id));
+    return { ...shown(device), signedIn: own.length > 0, lastUsedAt: latest(own) ?? device.lastSeenAt };
+  });
+  const elsewhere = sessions
+    .filter((s) => String(s._id) !== String(req.session?._id) && !known.has(String(s.device)))
+    .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
+    .map((s) => ({ _id: s._id, deviceName: s.deviceName, createdAt: s.createdAt, lastUsedAt: s.lastUsedAt }));
+  return res.json({ success: true, data: { ...shown(req.device), others: withSessions, elsewhere } });
 });
 
 /**
@@ -69,14 +93,15 @@ router.patch("/me", deviceAuth, async (req, res) => {
 });
 
 /**
- * DELETE /api/devices/:id — forgets another of the account's devices (one
- * no longer used). If it's used again, it registers afresh.
+ * DELETE /api/devices/:id — signs another of the account's devices out and
+ * forgets it. If it's used again, it signs in and registers afresh.
  */
 router.delete("/:id", deviceAuth, async (req, res) => {
   try {
     if (String(req.params.id) === String(req.device._id)) return res.status(400).json({ success: false, message: "That's this device." });
     const gone = await Device.deleteOne({ _id: req.params.id });
     if (!gone.deletedCount) return res.status(404).json({ success: false, message: "That device isn't there." });
+    if (req.user) await Session.deleteMany({ user: req.user._id, device: req.params.id });
     return res.json({ success: true });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });

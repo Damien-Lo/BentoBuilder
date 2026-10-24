@@ -17,9 +17,24 @@ export interface DeviceInfo {
   name: string;
   lastSeenAt?: string;
 }
+// Another of the account's devices: whether it's signed in, and when it was
+// last used.
+export interface OtherDevice extends DeviceInfo {
+  signedIn?: boolean;
+  lastUsedAt?: string;
+}
+// A sign-in not yet tied to a device (one not heard from since devices
+// were kept with their sign-ins).
+export interface ElsewhereSignIn {
+  _id: string;
+  deviceName: string;
+  createdAt: string;
+  lastUsedAt: string;
+}
 export interface ThisDevice extends DeviceInfo {
   // The account's other phones and computers.
-  others: DeviceInfo[];
+  others: OtherDevice[];
+  elsewhere?: ElsewhereSignIn[];
 }
 interface Identity {
   _id: string;
@@ -88,7 +103,7 @@ async function call<T>(path: string, init: RequestInit = {}, retried = false): P
 
 export const getThisDevice = () => call<ThisDevice>("/devices/me");
 export const renameThisDevice = (name: string) => call<void>("/devices/me", { method: "PATCH", body: JSON.stringify({ name }) });
-// Forgets another of the account's devices (one no longer used).
+// Signs another of the account's devices out and forgets it.
 export const forgetDevice = (id: string) => call<void>(`/devices/${id}`, { method: "DELETE" });
 // Whether the account has a phone to ask (none: open the app on one).
 export const hasPhone = async () => (await getThisDevice()).others.some((d) => d.kind === "phone") || thisKind === "phone";

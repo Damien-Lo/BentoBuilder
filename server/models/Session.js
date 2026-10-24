@@ -10,6 +10,10 @@ const sessionSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     tokenHash: { type: String, required: true, unique: true, select: false },
     deviceName: { type: String, trim: true, default: "" },
+    // The Device it's on (models/Device.js), once that device has been heard
+    // from while signed in (routes/DeviceRoutes.js) — so Settings → Devices
+    // lists each device once, signed in or not.
+    device: { type: mongoose.Schema.Types.ObjectId, ref: "Device", default: null },
     lastUsedAt: { type: Date, default: Date.now },
     expiresAt: { type: Date, required: true },
   },
